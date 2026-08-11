@@ -534,6 +534,13 @@ def download_range(
         _notify(on_day, result)
         del frame
 
+        # Rewritten after every day, not once at the end. The manifest is what
+        # makes a directory discoverable, so writing it last would leave an
+        # interrupted download as parquet files the rest of the pipeline cannot
+        # see — the exact situation resumability is meant to avoid. It is a few
+        # hundred bytes against a day of parsing, so the cost is irrelevant.
+        _write_manifest(spec, out_dir, results, grid=grid, start=start, end=end)
+
     _write_manifest(spec, out_dir, results, grid=grid, start=start, end=end)
     return results
 
