@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import urllib.error
 import zipfile
 from datetime import date
 
@@ -272,3 +273,49 @@ def test_iter_days_is_inclusive_at_both_ends() -> None:
 def test_reversed_range_is_rejected() -> None:
     with pytest.raises(ValueError, match="before start"):
         list(iter_days(date(2024, 3, 1), date(2024, 2, 1)))
+
+
+# ---------------------------------------------------------------------------
+# Network resilience
+# ---------------------------------------------------------------------------
+
+
+def test_dropped_connection_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 60-day download used to die on the first blip; it died at day 38."""
+    import http.client
+
+    from lobml.data import binance
+
+    calls = {"n": 0}
+
+    def flaky(url, timeout=0):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise http.client.RemoteDisconnected("Remote end closed connection")
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+    monkeypatch.setattr(binance.urllib.request, "urlopen", flaky)
+    monkeypatch.setattr(binance.time, "sleep", lambda _: None)
+
+    # Retries exhaust the transient failures, then the real 404 surfaces.
+    with pytest.raises(BinanceArchiveError, match="404"):
+        binance._fetch("https://example.invalid/x.zip")
+    assert calls["n"] == 3
+
+
+def test_missing_archive_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 means the day does not exist; asking again cannot help."""
+    from lobml.data import binance
+
+    calls = {"n": 0}
+
+    def missing(url, timeout=0):
+        calls["n"] += 1
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+    monkeypatch.setattr(binance.urllib.request, "urlopen", missing)
+    monkeypatch.setattr(binance.time, "sleep", lambda _: None)
+
+    with pytest.raises(BinanceArchiveError, match="404"):
+        binance._fetch("https://example.invalid/x.zip")
+    assert calls["n"] == 1

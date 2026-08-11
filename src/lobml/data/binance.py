@@ -49,7 +49,9 @@ parser — costs no bandwidth. Pass ``keep_raw=False`` to discard them.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import io
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -161,15 +163,52 @@ def list_available(spec: ArchiveSpec, frequency: Frequency) -> list[str]:
     return sorted(names)
 
 
-def _fetch(url: str, timeout: int = 900) -> bytes:
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            payload: bytes = response.read()
-            return payload
-    except urllib.error.HTTPError as exc:
-        raise BinanceArchiveError(f"{url}: HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise BinanceArchiveError(f"{url}: {exc.reason}") from exc
+#: Transient failures worth retrying. A dropped connection is not an
+#: application error and says nothing about whether the archive exists.
+_TRANSIENT: Final = (
+    http.client.HTTPException,  # includes RemoteDisconnected, BadStatusLine
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+
+
+def _fetch(url: str, timeout: int = 900, *, attempts: int = 4) -> bytes:
+    """Download one URL, retrying transient network failures.
+
+    Retries are not optional at this scale. Fetching two months of book data is
+    hours of transfer over hundreds of requests, and a single dropped
+    connection used to escape as ``RemoteDisconnected`` and end the whole run —
+    which is how a 60-day download stopped at day 38.
+
+    An HTTP error is *not* retried: a 404 means the archive does not exist for
+    that day, and asking again four times will not change that.
+    """
+    delay = 2.0
+    last: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                payload: bytes = response.read()
+                return payload
+        except urllib.error.HTTPError as exc:
+            raise BinanceArchiveError(f"{url}: HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            # URLError wraps both name-resolution failures and dropped sockets;
+            # only the latter is worth another try.
+            if not isinstance(exc.reason, _TRANSIENT) or attempt == attempts:
+                raise BinanceArchiveError(f"{url}: {exc.reason}") from exc
+            last = exc
+        except _TRANSIENT as exc:
+            if attempt == attempts:
+                raise BinanceArchiveError(f"{url}: {exc!r} after {attempts} attempt(s)") from exc
+            last = exc
+
+        time.sleep(delay)
+        delay *= 2
+
+    raise BinanceArchiveError(f"{url}: {last!r} after {attempts} attempt(s)")
 
 
 def fetch_archive(url: str, *, verify: bool = True) -> bytes:
