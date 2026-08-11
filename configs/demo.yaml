@@ -1,0 +1,49 @@
+# Synthetic demo run.
+#
+# Every assumption that moves a number lives here rather than in a default
+# buried in a function, and this file is copied into the run manifest so that a
+# report can always be traced back to the configuration that produced it.
+#
+# The data is generated, not observed. Nothing computed from this config says
+# anything about real markets.
+
+name: demo
+seed: 42
+output: runs/demo
+
+data:
+  source: synthetic
+  symbol: DEMOUSDT
+  plane: book
+  depth: 10
+
+synthetic:
+  n_steps: 20000
+  seed: 20260101
+
+# Populated as the feature registry lands. An empty list means "every
+# registered feature", which is fine for a demo and wrong for an experiment:
+# a real run names its features so the set cannot drift between runs.
+features: []
+
+label:
+  kind: directional
+  horizon: 20        # observations ahead
+  threshold_bp: 1.0  # below this, the move is not worth acting on
+
+split:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+  # Left unset on purpose: the pipeline derives the embargo from the label
+  # horizon above. An embargo chosen by hand is usually chosen too small.
+  embargo: null
+  n_folds: 5
+
+costs:
+  fee_bp_per_side: 2.0
+  slippage_bp: 0.5
+  cross_spread: true
+
+model:
+  name: logistic
+  params: {}

@@ -1,0 +1,240 @@
+# lob-ml-research
+
+**Leakage-aware ML research and backtesting for limit order books.**
+
+A research platform for short-horizon prediction on event-driven and
+limit-order-book market data. It covers the whole path from raw events to a
+trading result: data contracts, feature engineering, forward-looking labels,
+chronological validation with purging and embargo, model comparison, and a
+backtest that charges realistic transaction costs.
+
+The emphasis is on the parts that decide whether a result means anything —
+validation and cost accounting — rather than on the model. Most short-horizon
+strategies that look profitable are not: they leak future information into
+features, they tune on the data they report on, or they ignore what it costs to
+cross a spread two hundred times a day. This project is built so that each of
+those failure modes is a test that fails, not a caveat in a footnote.
+
+> **Status: early.** The data layer, the synthetic market and the CLI are in
+> place. Features, labels, validation, models and the backtest are being added
+> in that order. See the [roadmap](#roadmap).
+
+---
+
+## Why this project
+
+Three things here are deliberately stricter than the norm in public trading
+repositories:
+
+**1. No look-ahead, checked mechanically.** Every feature registers the number
+of observations it looks back. The test suite then mutates the data *after* a
+cutoff and asserts that no feature value *before* the cutoff moved. That catches
+centred rolling windows, backward fills and normalisation statistics fitted over
+the whole sample — the three ways look-ahead usually gets in, none of which
+makes anything visibly fail.
+
+**2. Purging and embargo, derived rather than guessed.** A label at time *t*
+reads prices up to *t + H*, so the tail of a training block overlaps the head of
+the block after it. The split derives the embargo from the label's declared
+horizon instead of leaving it to be set by hand, because an embargo set by hand
+is usually set too small.
+
+**3. Costs applied consistently.** The same cost model is used when labelling,
+when deciding to trade, and when computing profit and loss. Backtests routinely
+overstate results by labelling against a mid-price move that would not have
+survived the spread.
+
+The synthetic market underpins all of this. It contains a known, deliberately
+weak predictable component, so the test suite can assert both directions: that
+the pipeline finds the signal when there is one, and — with the signal switched
+off — that it finds nothing. A pipeline that reports an edge on data with no
+edge has a leak, and that is a test rather than a hope.
+
+---
+
+## Architecture
+
+```
+        data                features            labels           validation
+   ┌──────────────┐   ┌──────────────────┐  ┌─────────────┐  ┌────────────────┐
+   │ trade events │──▶│ registry of pure │─▶│ forward     │─▶│ chronological  │
+   │ book snaps   │   │ functions, each  │  │ returns,    │  │ splits, purge  │
+   │ + contracts  │   │ declaring its    │  │ declaring   │  │ + embargo from │
+   │ + validation │   │ lookback         │  │ its horizon │  │ label horizon  │
+   └──────────────┘   └──────────────────┘  └─────────────┘  └────────────────┘
+          │                                                          │
+          │                                                          ▼
+          │                             models              ┌────────────────┐
+          │                    ┌──────────────────────┐     │ walk-forward   │
+          └───────────────────▶│ naive · logistic ·   │◀────│ evaluation     │
+                               │ xgboost · sequence   │     └────────────────┘
+                               └──────────────────────┘
+                                          │
+                                          ▼
+                              backtest              reporting
+                        ┌────────────────────┐  ┌──────────────────┐
+                        │ costs in bp,       │─▶│ manifest, plots, │
+                        │ spread crossing,   │  │ cost attribution │
+                        │ slippage, fills    │  │ regime breakdown │
+                        └────────────────────┘  └──────────────────┘
+```
+
+Two data planes are modelled separately, because they have different
+availability:
+
+| Plane | Contents | Real data |
+|---|---|---|
+| **trades** | one row per trade or aggregated trade | public exchange archives |
+| **book** | one row per snapshot, *N* levels per side | requires a dedicated collector |
+
+A full order book cannot be reconstructed from public trade archives — the
+resting size that was never hit leaves no trace in the trade tape. The book
+plane is therefore defined and exercised against synthetic data from the start,
+so that book features and their tests exist before the collector does.
+
+---
+
+## Quickstart
+
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/organist/lob-ml-research
+cd lob-ml-research
+uv sync --all-extras
+```
+
+Generate a synthetic dataset and check it:
+
+```bash
+uv run lobml generate-demo-data --output data/demo
+uv run lobml validate-data --input data/demo
+uv run pytest
+```
+
+Inspect a data contract:
+
+```bash
+uv run lobml describe-schema book
+```
+
+Nothing here downloads anything or needs credentials. `make help` lists the
+common tasks.
+
+---
+
+## Data
+
+**Synthetic (default).** A generated market with volatility regimes, a
+liquidity state, a spread that widens under stress, geometric depth decay, and
+Poisson trade arrivals that execute against the book. It exists for tests, CI
+and the quickstart. It is *not* evidence about markets: every row is stamped
+`source="synthetic"` and every artefact carries a warning, because a synthetic
+backtest measures the agreement between a generator and a model and nothing
+else.
+
+**Public exchange data (in progress).** BTCUSDT from Binance's public archives,
+downloaded by an explicit command, checksum-verified and cached locally. Raw
+downloads are never committed. XRPUSDT follows, to test whether anything
+transfers across instruments.
+
+**Order-book collector (planned).** REST snapshot plus a websocket depth
+stream, applying updates in sequence order, detecting gaps and resynchronising
+after them. Sequence-gap handling is the part that matters: a single missed
+update silently corrupts every snapshot until the next resynchronisation, and
+nothing about the resulting prices looks wrong.
+
+---
+
+## Methodology
+
+Documented in [`docs/`](docs/) as it lands:
+
+| Document | Contents |
+|---|---|
+| `data_contract.md` | Column semantics, units, time conventions, quality rules |
+| `methodology.md` | Features, labels, splits, model comparison protocol |
+| `execution_assumptions.md` | Cost model, fills, what the backtest does and does not simulate |
+| `limitations.md` | What this does not establish |
+| `disclosure_policy.md` | What is public here and why, and what is not |
+
+---
+
+## Limitations
+
+Stated plainly, because the honest version is more useful than the flattering
+one:
+
+- **No profitability claim is made.** No result in this repository should be
+  read as evidence that any strategy is or was profitable.
+- **Synthetic results are circular.** They demonstrate that the pipeline works,
+  not that markets behave this way.
+- **The backtest is a simulation.** It does not model queue position, partial
+  fills against a real book, latency, market impact, or the fact that a real
+  order changes the book it is trading against.
+- **Public data is coarser than production data.** Exchange archives are
+  aggregated; a real system runs on a live feed with different timing.
+- **Short horizons are the hardest regime for this.** Costs dominate, edges are
+  thin, and results are unstable across periods. Where that shows up, it is
+  reported rather than tuned away.
+
+---
+
+## Reproducibility
+
+- One seed per run, recorded in the run manifest along with the full
+  configuration and the schema version.
+- Datasets are directories with a `manifest.json` describing provenance — for
+  synthetic data, the generator version and seed that produced it.
+- Every assumption that moves a number lives in the config file, not in a
+  default buried in a function.
+- CI runs lint, types, tests, the end-to-end demo, and a disclosure audit that
+  scans for private paths, credential-shaped strings, notebook outputs and
+  oversized binaries.
+
+---
+
+## Roadmap
+
+- [x] Package skeleton, tooling, CI, disclosure audit
+- [x] Data contracts for both planes, with quality validation
+- [x] Synthetic market with regimes and a known injected signal
+- [x] `generate-demo-data`, `validate-data`, `describe-schema`
+- [ ] Binance public-data downloader with checksums and manifests
+- [ ] Feature registry with declared lookbacks and automated look-ahead tests
+- [ ] Directional labels and purged walk-forward splits
+- [ ] Naive, logistic and gradient-boosted baselines
+- [ ] Cost model and execution-aware backtest, with oracle and random baselines
+- [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
+- [ ] BTC → XRP transfer experiment
+- [ ] Order-book collector with sequence-gap recovery
+- [ ] A single sequence model, compared against gradient boosting
+- [ ] Research assistant restricted to safe, auditable actions
+
+---
+
+## Relationship to prior closed-source work
+
+The author has worked on short-horizon prediction for order-book data in a
+commercial setting. This repository shares none of that code, data,
+configuration or results. It is an independent implementation, written from
+scratch, using public and generated data only, and it deliberately diverges
+where the public version can be stricter — the purging, embargo and automated
+look-ahead checks described above are additions, not reproductions.
+
+See [`docs/disclosure_policy.md`](docs/disclosure_policy.md).
+
+---
+
+## Disclaimer
+
+This is research and engineering code published as a portfolio and a teaching
+artefact. It is **not** investment advice, **not** a trading system, and
+**not** a claim about future returns. Backtested results — including any shown
+here — are computed with the benefit of hindsight under stated assumptions, and
+do not establish that a strategy would have been profitable in live trading or
+would be profitable in future.
+
+## License
+
+[MIT](LICENSE).

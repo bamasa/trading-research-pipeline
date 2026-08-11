@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: [--fix]
+
+  # Notebooks are demo clients of the public API, so they are committed without
+  # outputs: outputs embed figures, local paths and slices of real data.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+
+  - repo: local
+    hooks:
+      - id: disclosure-audit
+        name: disclosure audit
+        entry: python scripts/audit_repo.py
+        language: system
+        pass_filenames: false
+        always_run: true

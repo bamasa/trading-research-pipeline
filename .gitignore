@@ -1,0 +1,60 @@
+# --- OS / editors -----------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# --- Data, artifacts, runs --------------------------------------------------
+# Nothing that lands in these directories belongs in version control.
+#
+# The leading slash anchors each pattern to the repository root, and it is not
+# optional: an unanchored `data/` also matches `src/lobml/data/`, which would
+# silently exclude package source from every commit.
+/data/
+/artifacts/
+/models/
+/runs/
+/reports/
+
+# --- Binary / heavy formats -------------------------------------------------
+# Belt and braces: even outside the directories above, these never get committed.
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+*.onnx
+*.pth
+*.pt
+*.ckpt
+*.npy
+*.npz
+
+# --- Secrets ----------------------------------------------------------------
+.env
+.env.*
+*.env
+secrets.yaml
+credentials.json
+
+# --- Exceptions -------------------------------------------------------------
+# A tiny committed sample is allowed so that the docs can show real output
+# without anyone having to download or generate anything first.
+!tests/fixtures/**
