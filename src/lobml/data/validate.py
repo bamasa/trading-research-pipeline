@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Final
 
 import pandas as pd
 
@@ -300,8 +301,21 @@ def validate_trades(df: pd.DataFrame) -> ValidationReport:
 # ---------------------------------------------------------------------------
 
 
-def validate_book(df: pd.DataFrame, *, depth: int | None = None) -> ValidationReport:
-    """Check an order-book frame against the book contract and for usability."""
+def validate_book(
+    df: pd.DataFrame,
+    *,
+    depth: int | None = None,
+    sampled: bool = False,
+) -> ValidationReport:
+    """Check an order-book frame against the book contract and for usability.
+
+    Set ``sampled=True`` when the frame is a subsample of the update stream —
+    a resampled book, or snapshots taken on a grid. It only affects the
+    sequence-continuity check, and it matters: in a sample, skipped
+    ``sequence_id`` values are the intended result, not evidence of a lost
+    update. Reported as gaps they would produce one warning per row, and a real
+    gap would be invisible in the noise.
+    """
     report = ValidationReport(plane="book", rows=len(df))
     if not _check_empty(df, report):
         return report
@@ -333,7 +347,7 @@ def validate_book(df: pd.DataFrame, *, depth: int | None = None) -> ValidationRe
 
     _check_not_crossed(df, report)
     _check_level_ordering(df, resolved, report)
-    _check_sequence_ids(df, report)
+    _check_sequence_ids(df, report, sampled=sampled)
     _report_time_gaps(df, report)
     return report
 
@@ -403,13 +417,19 @@ def _check_level_ordering(df: pd.DataFrame, depth: int, report: ValidationReport
             )
 
 
-def _check_sequence_ids(df: pd.DataFrame, report: ValidationReport) -> None:
+def _check_sequence_ids(
+    df: pd.DataFrame, report: ValidationReport, *, sampled: bool = False
+) -> None:
     """Sequence ids must strictly increase; a jump marks an unreliable segment.
 
     This is the check the future LOB collector depends on. A local book is built
     by applying deltas in order, so a missed update means every later snapshot is
     wrong until the next resynchronisation — and nothing about the resulting
     prices looks wrong on its own.
+
+    Uniqueness and ordering are checked either way; only continuity is
+    conditional. In a sampled frame a skipped id carries no information, so the
+    gap count is reported once as context rather than as a finding per row.
     """
     for symbol, group in df.groupby("symbol", sort=False):
         seq = group["sequence_id"]
@@ -434,8 +454,19 @@ def _check_sequence_ids(df: pd.DataFrame, report: ValidationReport) -> None:
             )
 
         gaps = step[step > 1]
-        if not gaps.empty:
-            missing = int(gaps.sum() - len(gaps))
+        if gaps.empty:
+            continue
+
+        missing = int(gaps.sum() - len(gaps))
+        if sampled:
+            report.add(
+                "sequence_sampled",
+                Severity.INFO,
+                f"{symbol}: {len(gaps)} skipped sequence range(s) covering {missing} update(s), "
+                f"as expected for a sampled frame; continuity is not checked",
+                count=len(gaps),
+            )
+        else:
             report.add(
                 "sequence_gaps",
                 Severity.WARNING,
@@ -450,41 +481,89 @@ def _check_sequence_ids(df: pd.DataFrame, report: ValidationReport) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _report_time_gaps(df: pd.DataFrame, report: ValidationReport, *, factor: float = 50.0) -> None:
-    """Flag unusually long pauses between observations.
+#: A pause shorter than this is never interesting, whatever the instrument's
+#: usual rate. Well below any outage worth knowing about, well above the
+#: ordinary quiet spells in event data.
+MIN_INTERESTING_GAP: Final = pd.Timedelta(30, unit="s")
 
-    A gap is not an error — exchanges halt, collectors restart, weekends exist.
-    It is reported because rolling windows silently span it: a "60-observation"
-    window covering a two-hour outage measures something quite different from
-    the same window during normal trading. The threshold is relative to the
-    dataset's own median spacing, so it adapts to the instrument's activity
-    instead of assuming a tick rate.
+#: On a sample too short for the absolute floor to mean anything, a pause is
+#: judged against the period instead: swallowing this share of the data matters
+#: regardless of how few seconds it is.
+GAP_SHARE_OF_SPAN: Final = 0.05
+
+
+def _report_time_gaps(df: pd.DataFrame, report: ValidationReport) -> None:
+    """Flag pauses long enough to distort a window, and describe the rest.
+
+    A gap is not an error — exchanges halt, collectors restart, activity dries
+    up overnight. It matters because rolling windows silently span it: a
+    sixty-observation window covering a two-hour outage measures something quite
+    different from the same window in normal trading.
+
+    Picking the threshold is the whole problem. An earlier version used a
+    multiple of the median spacing, which fails badly on event data: trades
+    arrive in bursts, so the median is tiny and any multiple of it flags routine
+    quiet spells. On one day of real BTCUSDT trades that produced over a hundred
+    thousand warnings — noise that would hide the single outage worth finding.
+
+    So the test is absolute and scale-aware instead: a pause is reported when it
+    is long in human terms *or* covers a meaningful share of the sample. Shorter
+    pauses are summarised in one informational line, because the distribution of
+    spacing is worth knowing even when nothing is wrong.
     """
     for symbol, group in df.groupby("symbol", sort=False):
         if len(group) < 3:
             continue
+
         delta = group["timestamp"].diff().dropna()
-        median = pd.Timedelta(delta.median())
-        if median <= pd.Timedelta(0):
+        if delta.empty:
             continue
-        threshold = median * factor
+
+        # Whichever bar is easier to clear. On a long sample the absolute floor
+        # binds and routine quiet spells are ignored; on a sample so short that
+        # thirty seconds would cover most of it, the share binds instead. Taking
+        # the smaller of the two is what keeps both ends honest — an earlier
+        # version paired the floor with a 0.1% share, which on a six-minute demo
+        # set the bar at 0.4s and flagged 82% of the period.
+        span = group["timestamp"].iloc[-1] - group["timestamp"].iloc[0]
+        threshold = min(MIN_INTERESTING_GAP, span * GAP_SHARE_OF_SPAN)
+        threshold = max(threshold, pd.Timedelta(1, unit="ms"))
+
         gaps = delta[delta > threshold]
+        longest = pd.Timedelta(delta.max())
+        median = pd.Timedelta(delta.median())
+
         if gaps.empty:
+            report.add(
+                "spacing",
+                Severity.INFO,
+                f"{symbol}: median spacing {median}, longest pause {longest}; no gap above {threshold}",
+            )
             continue
+
+        lost = pd.Timedelta(gaps.sum())
+        share = lost / span if span > pd.Timedelta(0) else 0.0
+        biggest = gaps.nlargest(3)
         report.add(
             "time_gaps",
             Severity.WARNING,
-            f"{symbol}: {len(gaps)} gap(s) longer than {threshold} "
-            f"(median spacing {median}); longest {gaps.max()}. Rolling windows span these.",
+            f"{symbol}: {len(gaps)} pause(s) over {threshold}, {lost} total "
+            f"({share:.1%} of the period); longest {longest}. Rolling windows span these.",
             count=len(gaps),
-            examples=tuple(group["timestamp"][gaps.index][:3].astype(str)),
+            examples=tuple(group["timestamp"][biggest.index].astype(str)),
         )
 
 
-def validate(df: pd.DataFrame, plane: str, *, depth: int | None = None) -> ValidationReport:
+def validate(
+    df: pd.DataFrame,
+    plane: str,
+    *,
+    depth: int | None = None,
+    sampled: bool = False,
+) -> ValidationReport:
     """Dispatch to the right validator for a plane."""
     if plane == "trades":
         return validate_trades(df)
     if plane == "book":
-        return validate_book(df, depth=depth)
+        return validate_book(df, depth=depth, sampled=sampled)
     raise ValueError(f"unknown plane {plane!r}; expected 'trades' or 'book'")

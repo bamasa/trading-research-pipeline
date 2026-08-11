@@ -155,31 +155,61 @@ def validate_data(
         err_console.print(f"[red]No such directory:[/red] {input_dir}")
         raise typer.Exit(code=2)
 
-    reports: list[ValidationReport] = []
-    if store.has_plane(input_dir, "trades"):
-        reports.append(validate_trades(store.read_trades(input_dir)))
-    if store.has_plane(input_dir, "book"):
-        reports.append(validate_book(store.read_book(input_dir)))
-
-    if not reports:
-        err_console.print(f"[red]No recognised data planes in[/red] {input_dir}")
-        raise typer.Exit(code=2)
+    try:
+        datasets = store.discover(input_dir)
+    except store.DatasetNotFoundError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     failed = False
     warned = False
-    for report in reports:
-        console.print(f"\n[bold]{report.plane}[/bold]  {report.rows:,} rows")
-        if not report.findings:
-            console.print("  [green]all checks passed[/green]")
-        for finding in report:
-            style = {
-                Severity.ERROR: "red",
-                Severity.WARNING: "yellow",
-                Severity.INFO: "dim",
-            }[finding.severity]
-            console.print(f"  [{style}]{finding}[/{style}]")
-        failed |= not report.ok
-        warned |= bool(report.warnings)
+
+    for dataset in datasets:
+        label = dataset.manifest.get("symbol", "") or dataset.manifest.get("source", "")
+        header = f"\n[bold]{dataset.plane}[/bold]"
+        if label:
+            header += f"  {label}"
+        if dataset.sampled:
+            header += f"  [dim](sampled to {dataset.manifest['resample_grid']})[/dim]"
+        console.print(header)
+
+        total_rows = 0
+        previous_end = None
+        # Files are validated one at a time. Two months of book data is tens of
+        # millions of rows, and holding all of it just to check it would defeat
+        # the point of partitioning by day in the first place.
+        for file in dataset.files:
+            frame = store.read_plane(dataset, file)
+            report: ValidationReport = (
+                validate_trades(frame)
+                if dataset.plane == "trades"
+                else validate_book(frame, depth=dataset.depth, sampled=dataset.sampled)
+            )
+            total_rows += report.rows
+
+            if len(dataset.files) > 1:
+                _print_findings(report, prefix=f"  {file.stem}: ", quiet=True)
+            else:
+                _print_findings(report, prefix="  ")
+
+            failed |= not report.ok
+            warned |= bool(report.warnings)
+
+            # Partitioning by day only works if the days actually join up. A
+            # single file can be perfectly ordered while the sequence of files
+            # is not, and nothing inside one file can reveal that.
+            start = frame["timestamp"].iloc[0]
+            if previous_end is not None and start < previous_end:
+                err_console.print(
+                    f"  [red]{file.stem}: starts at {start}, before the previous file ended "
+                    f"at {previous_end}; the partitions overlap or are out of order[/red]"
+                )
+                failed = True
+            previous_end = frame["timestamp"].iloc[-1]
+            del frame
+
+        if len(dataset.files) > 1:
+            console.print(f"  {len(dataset.files)} file(s), {total_rows:,} rows total")
 
     console.print()
     if failed:
@@ -189,6 +219,138 @@ def validate_data(
         err_console.print("[yellow]Warnings present and --strict was given.[/yellow]")
         raise typer.Exit(code=1)
     console.print("[green]Validation passed.[/green]")
+
+
+@app.command("download")
+def download(
+    start: Annotated[str, typer.Option("--start", help="First day, YYYY-MM-DD.")],
+    end: Annotated[str, typer.Option("--end", help="Last day, inclusive, YYYY-MM-DD.")],
+    symbol: Annotated[
+        str, typer.Option("--symbol", "-s", help="Instrument, e.g. BTCUSDT.")
+    ] = "BTCUSDT",
+    kind: Annotated[
+        str,
+        typer.Option(
+            "--kind", "-k", help="Dataset: 'aggTrades' (trades) or 'bookTicker' (best bid/ask)."
+        ),
+    ] = "aggTrades",
+    market: Annotated[
+        str,
+        typer.Option(
+            "--market",
+            "-m",
+            help="'spot', 'futures-um' or 'futures-cm'. Only futures publish a book.",
+        ),
+    ] = "futures-um",
+    output: Annotated[Path, typer.Option("--output", "-o", help="Destination directory.")] = Path(
+        "data/raw"
+    ),
+    grid: Annotated[
+        str | None,
+        typer.Option(
+            "--grid",
+            help="Resample the book to this interval, e.g. '100ms'. Ignored for trades. "
+            "Without it the raw update stream is kept, which is very large.",
+        ),
+    ] = None,
+    keep_raw: Annotated[
+        bool,
+        typer.Option(
+            "--keep-raw/--no-keep-raw",
+            help="Keep the downloaded archives so a rerun costs nothing.",
+        ),
+    ] = True,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Reconvert days that are already present.")
+    ] = False,
+    no_verify: Annotated[
+        bool, typer.Option("--no-verify", help="Skip SHA-256 verification. Not recommended.")
+    ] = False,
+) -> None:
+    """Download public Binance market data and convert it to the project contract.
+
+    No credentials are involved: these are static files on a public endpoint.
+
+    Only the futures markets publish order-book data, and only the best bid and
+    ask. Depth beyond the touch is not published by any exchange for free and
+    needs the collector.
+    """
+    from datetime import date
+
+    from lobml.data.binance import ArchiveSpec, BinanceArchiveError, DayResult, download_range
+
+    try:
+        spec = ArchiveSpec(market=market, kind=kind, symbol=symbol.upper())  # type: ignore[arg-type]
+        first = date.fromisoformat(start)
+        last = date.fromisoformat(end)
+    except ValueError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+    if kind == "bookTicker" and market == "spot":
+        err_console.print("[red]Spot publishes no order-book data.[/red] Use --market futures-um.")
+        raise typer.Exit(code=2)
+
+    if kind == "bookTicker" and not grid:
+        console.print(
+            "[yellow]No --grid given: keeping the raw update stream "
+            "(~13.5M rows and ~110 MB per day for BTCUSDT).[/yellow]"
+        )
+
+    n_days = (last - first).days + 1
+    console.print(
+        f"[bold]{spec.symbol} {spec.kind}[/bold] ({spec.market}), {first} → {last}, {n_days} day(s)"
+    )
+    if grid:
+        console.print(
+            f"Book resampled to [bold]{grid}[/bold]; intra-interval updates are discarded."
+        )
+
+    downloaded = 0
+    rows = 0
+    failures: list[DayResult] = []
+
+    def report(result: DayResult) -> None:
+        nonlocal downloaded, rows
+        downloaded += result.bytes_downloaded
+        rows += result.rows
+        if result.output is None:
+            failures.append(result)
+            console.print(f"  [yellow]{result.day}  skipped: {result.skipped}[/yellow]")
+        elif result.skipped:
+            console.print(f"  [dim]{result.day}  {result.skipped}[/dim]")
+        else:
+            console.print(
+                f"  {result.day}  {result.rows:>10,} rows  "
+                f"[dim]{result.bytes_downloaded / 1e6:6.0f} MB  "
+                f"(total {downloaded / 1e9:.2f} GB)[/dim]"
+            )
+
+    try:
+        results = download_range(
+            spec,
+            first,
+            last,
+            output,
+            grid=grid,
+            keep_raw=keep_raw,
+            verify=not no_verify,
+            overwrite=overwrite,
+            on_day=report,
+        )
+    except BinanceArchiveError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    converted = [r for r in results if r.output and not r.skipped]
+    console.print(
+        f"\n[green]{len(converted)} day(s) converted[/green], {rows:,} rows, "
+        f"{downloaded / 1e9:.2f} GB downloaded → [bold]{Path(output) / spec.symbol / spec.kind}[/bold]"
+    )
+    if failures:
+        console.print(
+            f"[yellow]{len(failures)} day(s) unavailable — see the manifest for the list.[/yellow]"
+        )
 
 
 @app.command("describe-schema")
@@ -211,6 +373,23 @@ def describe_schema(
     for column in schema.columns:
         table.add_row(column.name, column.dtype, column.unit or "—", column.description)
     console.print(table)
+
+
+def _print_findings(report: ValidationReport, *, prefix: str = "", quiet: bool = False) -> None:
+    """Render one report's findings.
+
+    ``quiet`` suppresses informational lines, which is what makes a sixty-file
+    dataset readable: repeating the same coverage note per day buries the one
+    line that differs.
+    """
+    styles = {Severity.ERROR: "red", Severity.WARNING: "yellow", Severity.INFO: "dim"}
+    shown = [f for f in report if not (quiet and f.severity is Severity.INFO)]
+    if not shown:
+        if not quiet:
+            console.print(f"{prefix}[green]all checks passed[/green]")
+        return
+    for finding in shown:
+        console.print(f"{prefix}[{styles[finding.severity]}]{finding}[/{styles[finding.severity]}]")
 
 
 def _span(df: object) -> str:

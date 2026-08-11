@@ -82,6 +82,29 @@ def test_long_pause_is_reported_as_a_warning(book: pd.DataFrame) -> None:
     assert "time_gaps" in _checks(report, Severity.WARNING)
 
 
+def test_bursty_arrivals_do_not_count_as_gaps(trades: pd.DataFrame) -> None:
+    """Found on real data: the threshold used to scale off the median.
+
+    Trades arrive in bursts, so the median spacing is milliseconds and any
+    multiple of it flags ordinary quiet moments. One day of real BTCUSDT trades
+    produced 106,971 gap warnings — none of them an outage, and enough noise to
+    hide one. The check now uses an absolute floor instead.
+    """
+    report = validate_trades(trades)
+    assert "time_gaps" not in _checks(report, Severity.WARNING)
+    assert "spacing" in _checks(report, Severity.INFO)
+
+
+def test_short_sample_judges_gaps_against_its_own_span(book: pd.DataFrame) -> None:
+    """The absolute floor cannot bind on a sample shorter than the floor itself."""
+    short = book.head(200).copy()
+    seconds = np.where(np.arange(len(short)) >= 100, 20, 0)
+    short["timestamp"] = short["timestamp"] + pd.to_timedelta(seconds, unit="s")
+    report = validate_book(short)
+    # 20s is under the 30s floor but is most of a 40-second sample.
+    assert "time_gaps" in _checks(report, Severity.WARNING)
+
+
 # ---------------------------------------------------------------------------
 # Book invariants
 # ---------------------------------------------------------------------------
@@ -147,6 +170,27 @@ def test_sequence_gap_is_a_warning(book: pd.DataFrame) -> None:
     gapped.loc[idx, "sequence_id"] = gapped.loc[idx, "sequence_id"] + 500
     report = validate_book(gapped)
     assert "sequence_gaps" in _checks(report, Severity.WARNING)
+
+
+def test_sampled_frame_does_not_warn_about_skipped_sequences(book: pd.DataFrame) -> None:
+    """Found on real data: resampling skips ids by design, once per row.
+
+    A day of BTCUSDT reduced to a 100ms grid produced 759,138 sequence-gap
+    warnings out of 759,141 rows. Every one was correct and none was useful, and
+    a genuine gap could not have been seen among them.
+    """
+    sampled = book.iloc[::5].copy()
+    report = validate_book(sampled, sampled=True)
+    assert "sequence_gaps" not in _checks(report, Severity.WARNING)
+    assert "sequence_sampled" in _checks(report, Severity.INFO)
+
+
+def test_sampling_does_not_excuse_a_repeated_sequence(book: pd.DataFrame) -> None:
+    """Continuity is waived for a sample; uniqueness never is."""
+    sampled = book.iloc[::5].copy()
+    sampled.loc[sampled.index[8], "sequence_id"] = sampled["sequence_id"].iloc[7]
+    report = validate_book(sampled, sampled=True)
+    assert "sequence_unique" in _checks(report, Severity.ERROR)
 
 
 def test_repeated_sequence_id_is_an_error(book: pd.DataFrame) -> None:

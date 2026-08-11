@@ -17,7 +17,7 @@ silently degraded.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +114,83 @@ def read_latent(directory: Path | str) -> pd.DataFrame:
 def has_plane(directory: Path | str, plane: str) -> bool:
     filename = {"trades": TRADES_FILE, "book": BOOK_FILE, "latent": LATENT_FILE}[plane]
     return (Path(directory) / filename).exists()
+
+
+@dataclass(frozen=True)
+class DiscoveredDataset:
+    """One plane found on disk, with the files that make it up.
+
+    Two layouts exist and both are legitimate. A generated demo is a single
+    directory of whole planes; a download is partitioned by day so that a long
+    range is resumable and can be processed a day at a time. Rather than forcing
+    one to imitate the other, discovery reports what is there and hands back the
+    file list, which lets a caller stream day by day instead of loading a
+    two-month book into memory at once.
+    """
+
+    plane: str
+    files: tuple[Path, ...]
+    manifest: dict[str, Any]
+
+    @property
+    def sampled(self) -> bool:
+        """True when the frame is a subsample rather than a full update stream."""
+        return bool(self.manifest.get("resample_grid"))
+
+    @property
+    def depth(self) -> int | None:
+        value = self.manifest.get("depth")
+        return int(value) if isinstance(value, int) else None
+
+
+def discover(directory: Path | str) -> list[DiscoveredDataset]:
+    """Find the data planes stored under ``directory``.
+
+    Handles both layouts: a demo dataset written by :func:`write_dataset`, and
+    the day-partitioned output of the downloader, including the case where one
+    parent directory holds several symbols and datasets.
+    """
+    root = Path(directory)
+    if not root.is_dir():
+        raise DatasetNotFoundError(f"{root} is not a directory")
+
+    found: list[DiscoveredDataset] = []
+
+    # Layout 1: whole planes in one directory.
+    for plane, filename in (("trades", TRADES_FILE), ("book", BOOK_FILE)):
+        if (root / filename).exists():
+            manifest = read_manifest(root) if (root / MANIFEST_NAME).exists() else {}
+            plane_manifest = manifest.get("planes", {}).get(plane, {})
+            found.append(
+                DiscoveredDataset(
+                    plane=plane, files=(root / filename,), manifest={**manifest, **plane_manifest}
+                )
+            )
+    if found:
+        return found
+
+    # Layout 2: day-partitioned, identified by a manifest naming its plane.
+    for manifest_path in sorted(root.rglob(MANIFEST_NAME)):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        plane = manifest.get("plane")
+        if plane not in ("trades", "book"):
+            continue
+        files = tuple(sorted(manifest_path.parent.glob("*.parquet")))
+        if files:
+            found.append(DiscoveredDataset(plane=plane, files=files, manifest=manifest))
+
+    if not found:
+        raise DatasetNotFoundError(f"no recognised data planes under {root}")
+    return found
+
+
+def read_plane(dataset: DiscoveredDataset, file: Path) -> pd.DataFrame:
+    """Load one file of a discovered plane, restoring contract dtypes."""
+    df = _read(file)
+    if dataset.plane == "trades":
+        return _coerce(df, TRADE_SCHEMA)
+    depth = dataset.depth or infer_depth(df)
+    return _coerce(df, book_schema(max(depth, 1)))
 
 
 def _read(path: Path) -> pd.DataFrame:
