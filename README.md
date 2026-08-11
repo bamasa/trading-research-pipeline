@@ -15,9 +15,10 @@ features, they tune on the data they report on, or they ignore what it costs to
 cross a spread two hundred times a day. This project is built so that each of
 those failure modes is a test that fails, not a caveat in a footnote.
 
-> **Status: early.** The data layer, the synthetic market and the CLI are in
-> place. Features, labels, validation, models and the backtest are being added
-> in that order. See the [roadmap](#roadmap).
+> **Status: early.** The data layer, the synthetic market, the public-data
+> downloader, the feature registry with its look-ahead checks, and purged
+> walk-forward splits are in place. Models, the backtest and reporting come
+> next, in that order. See the [roadmap](#roadmap).
 
 ---
 
@@ -99,7 +100,7 @@ so that book features and their tests exist before the collector does.
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/organist/lob-ml-research
+git clone https://github.com/bamasa/lob-ml-research
 cd lob-ml-research
 uv sync --all-extras
 ```
@@ -200,9 +201,9 @@ one:
 - [x] Data contracts for both planes, with quality validation
 - [x] Synthetic market with regimes and a known injected signal
 - [x] `generate-demo-data`, `validate-data`, `describe-schema`
-- [ ] Binance public-data downloader with checksums and manifests
-- [ ] Feature registry with declared lookbacks and automated look-ahead tests
-- [ ] Directional labels and purged walk-forward splits
+- [x] Binance public-data downloader with checksums and manifests
+- [x] Feature registry with declared lookbacks and automated look-ahead tests
+- [x] Directional labels and purged walk-forward splits
 - [ ] Naive, logistic and gradient-boosted baselines
 - [ ] Cost model and execution-aware backtest, with oracle and random baselines
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes

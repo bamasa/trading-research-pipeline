@@ -30,6 +30,11 @@ venv/
 /runs/
 /reports/
 
+# Run logs. Tracebacks in these embed absolute local paths, which is how one
+# reached a commit before the audit was widened to read every file.
+/logs/
+*.log
+
 # --- Binary / heavy formats -------------------------------------------------
 # Belt and braces: even outside the directories above, these never get committed.
 *.parquet

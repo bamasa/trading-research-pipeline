@@ -35,25 +35,32 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # file that cannot audit itself.
 SELF = Path(__file__).resolve()
 
-# Text extensions worth scanning. Anything else is either checked by the binary
-# rule below or is not a plausible carrier of the patterns we care about.
-TEXT_SUFFIXES = frozenset(
+# Extensions skipped by the text scan, because they hold no readable text.
+#
+# An allowlist of "text extensions" was tried first and was the wrong shape for
+# a security check: anything not on the list went unscanned in silence, and the
+# first thing that fell through was a ``.log`` file carrying absolute local
+# paths. A check that fails open is worse than no check, because it is trusted.
+# So the default is now to read every file, and only known-binary formats are
+# skipped — a new extension is scanned automatically rather than ignored.
+SKIP_TEXT_SCAN = frozenset(
     {
-        ".py",
-        ".ipynb",
-        ".md",
-        ".txt",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".cfg",
-        ".ini",
-        ".json",
-        ".csv",
-        ".sh",
-        ".html",
-        ".rst",
-        "",  # extensionless files such as Makefile, LICENSE
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".ico",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".otf",
+        ".so",
+        ".dylib",
+        ".dll",
+        ".bin",
+        ".lock",  # uv.lock: machine-generated, thousands of hashes, no prose
     }
 )
 
@@ -329,7 +336,7 @@ def main() -> int:
 
     for path in paths:
         scan_binary(path, findings)
-        if path.suffix.lower() in TEXT_SUFFIXES:
+        if path.suffix.lower() not in SKIP_TEXT_SCAN:
             scan_text(path, findings)
         if path.suffix == ".ipynb":
             scan_notebook(path, findings)
