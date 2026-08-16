@@ -125,6 +125,36 @@ per trade. Small wins, large losses.
 The best figure in the study is 5.18 bp at two minutes — still half of what it
 needed. See §5 before taking it at face value.
 
+### Sequence model against the tabular ones
+
+One fold, one test block, all three models on identical data. The network is
+reported on one fold rather than seven — see
+[`limitations.md`](limitations.md).
+
+| Model | Cooldown | Trades | Hit | Gross/trade | Net/trade |
+|---|---:|---:|---:|---:|---:|
+| tcn | 0 | 78 | **55%** | **+1.63** | −10.06 |
+| tcn | 120 | 52 | 54% | −1.69 | −13.46 |
+| logistic | 0 | 91 | 51% | −0.28 | −11.46 |
+| logistic | 120 | 57 | 53% | **+1.81** | **−9.36** |
+| xgboost | 0 | 220 | 48% | −1.64 | −12.65 |
+| xgboost | 120 | 86 | **56%** | −1.29 | −12.31 |
+
+**Seeing a window did not change the picture.** The network's best gross figure
+is 1.63 bp against logistic regression's 1.81 — a difference well inside the
+noise of 78 trades, and both an order of magnitude short of the 11.02 bp a
+round trip costs.
+
+That is what the cost arithmetic predicted. Expected edge per trade is roughly
+the information coefficient times the volatility of the move, and no
+architecture changes that product; a sequence model can raise the coefficient,
+not multiply it by ten.
+
+Two smaller observations. Thinning helps the linear model and hurts the network
+— on a single fold that is noise rather than a finding, and it is recorded to
+stop it being read as one. And accuracy misleads once more: the best hit rate in
+the table belongs to the configuration with the second-worst gross edge.
+
 ### Wide generated features against hand-picked, two-minute horizon
 
 194 generated features — lags, differences, rolling and exponential statistics,
