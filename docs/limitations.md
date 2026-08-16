@@ -50,6 +50,26 @@ Every one of these pushes results in the optimistic direction. The accounting is
 honest about direction and cost per trade; it is not a simulation of a trading
 system.
 
+## The sequence model is under-evaluated
+
+The TCN is reported on a single fold, not the full seven-fold schedule that
+every other model runs. This is a compute limit rather than a choice about
+method, and it is worth stating rather than hiding behind a smaller table.
+
+On the machine this was run on, PyTorch's Metal backend hangs on tensors of the
+size a full training block produces with these operations, and the CPU fallback
+runs about twenty times slower than a same-sized benchmark suggested it should
+— a discrepancy that was not diagnosed. The network therefore trains on the
+tail of each training block rather than all of it.
+
+What that means for reading its result: it is a fair single observation, not a
+weaker version of the others. It cannot be compared fold-for-fold with the
+tabular models, and it says nothing about what a properly resourced sequence
+model would do. What bounds the answer is elsewhere — the expected edge per
+trade is roughly the information coefficient times the volatility of the move,
+and that product sits near 0.4 bp at every horizon against an 11 bp round trip.
+A sequence model can raise the coefficient. It cannot raise it twenty-five-fold.
+
 ## One period, two instruments
 
 Thirty-eight days of BTCUSDT and fifty-nine of XRPUSDT, from February and March
