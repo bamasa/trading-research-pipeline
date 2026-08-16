@@ -23,6 +23,18 @@ coefficient; it cannot raise it by a factor of twenty-five. It is here because
 "we tried a sequence model" is a question a reader will ask, and because a
 negative result from a fair attempt is worth more than an untested assumption.
 
+One process per model
+---------------------
+Do not fit this and XGBoost in the same interpreter. Both ship their own
+OpenMP runtime, and two of them in one macOS process do not coexist: measured
+here, the network fits 40k rows in 20 seconds on its own and never returns once
+XGBoost has run in the same process — not slower, stuck.
+
+The staged pipeline avoids this by construction, since ``train --model xgboost``
+and ``train --model tcn`` are separate invocations. It is worth knowing before
+writing a script that loops over models in one process, which is the obvious
+thing to write and the one that hangs.
+
 PyTorch is an optional dependency — ``uv sync --extra deep``.
 """
 

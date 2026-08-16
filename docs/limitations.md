@@ -56,11 +56,16 @@ The TCN is reported on a single fold, not the full seven-fold schedule that
 every other model runs. This is a compute limit rather than a choice about
 method, and it is worth stating rather than hiding behind a smaller table.
 
-On the machine this was run on, PyTorch's Metal backend hangs on tensors of the
-size a full training block produces with these operations, and the CPU fallback
-runs about twenty times slower than a same-sized benchmark suggested it should
-— a discrepancy that was not diagnosed. The network therefore trains on the
-tail of each training block rather than all of it.
+Two causes, both since identified. PyTorch's Metal backend hangs on tensors of
+the size a full training block produces with these operations, so the network
+runs on CPU. And XGBoost and PyTorch each bundle an OpenMP runtime which, in one
+macOS process, do not coexist: measured here, the network fits 40k rows in 20
+seconds alone and never returns once XGBoost has run in the same interpreter.
+
+The second is why a script looping over models in one process appeared to be
+merely slow. The staged pipeline avoids it by construction — each stage is its
+own invocation — but the comparison runs in this study were single scripts, and
+the network trains on the tail of each training block rather than all of it.
 
 What that means for reading its result: it is a fair single observation, not a
 weaker version of the others. It cannot be compared fold-for-fold with the
