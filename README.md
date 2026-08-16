@@ -51,6 +51,38 @@ the pipeline finds the signal when there is one, and — with the signal switche
 off — that it finds nothing. A pipeline that reports an edge on data with no
 edge has a leak, and that is a test rather than a hope.
 
+## The finding
+
+Run on 38 days of BTCUSDT and 59 of XRPUSDT futures from early 2024, the
+pipeline reaches a definite negative conclusion, and — more usefully — explains
+it.
+
+Short-horizon direction **is** predictable. Queue imbalance correlates with the
+next second's mid return at about 0.27, decaying to roughly 0.02 by ten
+minutes. That is real signal, and it is reproducible.
+
+It is also not enough. A taker round trip on Binance USD-M costs about 11 basis
+points: 5 bp of fee per side, plus the spread, plus slippage. Against that, the
+best gross edge observed was around 5 bp per trade, at a two-to-five minute
+horizon — short by a factor of about two. No fold, on either instrument, at any
+horizon tested, was profitable after costs.
+
+The mechanism is visible in one table. Signal strength falls with horizon at
+almost exactly the rate volatility rises, so their product — the expected gross
+edge per trade — barely moves, while the fee stays fixed. **The horizon where
+prediction works and the horizon where trading pays do not overlap.**
+
+Three obvious levers were tested and none of them helps. A longer horizon does
+not, because the edge is horizon-invariant. A wider feature set — 194 generated
+columns against 10 hand-picked — measurably made it worse. And a better fee
+tier falls short by about a factor of three: break-even needs 0.6 bp per side
+against roughly 1.7 at the top volume tiers, and even a zero fee leaves only
+about 1 bp per trade once the spread is paid.
+
+See [`docs/results.md`](docs/results.md) and
+[`docs/limitations.md`](docs/limitations.md). No result here should be read as
+evidence that any strategy is or was profitable.
+
 ---
 
 ## Architecture
@@ -204,10 +236,12 @@ one:
 - [x] Binance public-data downloader with checksums and manifests
 - [x] Feature registry with declared lookbacks and automated look-ahead tests
 - [x] Directional labels and purged walk-forward splits
-- [ ] Naive, logistic and gradient-boosted baselines
-- [ ] Cost model and execution-aware backtest, with oracle and random baselines
+- [x] Naive, logistic and gradient-boosted baselines
+- [x] Taker cost model and execution-aware evaluation
+- [x] Wide generated feature set with train-only selection
+- [x] Horizon diagnostics: predictability against tradeability
+- [x] BTC → XRP transfer experiment
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
-- [ ] BTC → XRP transfer experiment
 - [ ] Order-book collector with sequence-gap recovery
 - [ ] A single sequence model, compared against gradient boosting
 - [ ] Research assistant restricted to safe, auditable actions
