@@ -50,12 +50,10 @@ Every one of these pushes results in the optimistic direction. The accounting is
 honest about direction and cost per trade; it is not a simulation of a trading
 system.
 
-## The sequence model is under-evaluated
+## Running the models needs one process each
 
-The TCN is reported on a single fold, not the full seven-fold schedule that
-every other model runs. Worth stating rather than hiding behind a smaller
-table, and worth stating accurately: an earlier version of this section called
-it a compute limit, which was wrong.
+The TCN now runs the full seven-fold schedule, but only because each model gets
+its own interpreter.
 
 The real cause was process layout. XGBoost and PyTorch each bundle an OpenMP
 runtime, and in one macOS process they do not coexist: the network fits 40k rows
@@ -64,11 +62,13 @@ once XGBoost has run in the same interpreter. Not slow — stuck. Separately,
 PyTorch's Metal backend hangs on tensors this size, so it runs on CPU.
 
 The staged pipeline avoids the conflict by construction, since each stage is its
-own invocation. The comparison scripts in this study were not staged, which is
-how a layout problem spent an afternoon looking like a hardware one.
+own invocation. The comparison scripts in this study were not, which is how a
+layout problem spent an afternoon looking like a hardware one.
 
-What remains a genuine limit is the training size: the network sees the tail of
-each training block rather than all of it.
+What remains a genuine limit is training size: the network sees the tail of each
+training block — 60k rows of roughly 210k — rather than all of it. Given the
+gross edge it reaches, 0.91 bp against an 11 bp round trip, more data would have
+to change the result by an order of magnitude to matter.
 
 What that means for reading its result: it is a fair single observation, not a
 weaker version of the others. It cannot be compared fold-for-fold with the

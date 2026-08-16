@@ -127,33 +127,42 @@ needed. See §6 before taking it at face value.
 
 ### Sequence model against the tabular ones
 
-One fold, one test block, all three models on identical data. The network is
-reported on one fold rather than seven — see
-[`limitations.md`](limitations.md).
+Full seven-fold schedule, all three models, two-minute horizon, BTCUSDT. Each
+model in its own process — see [`limitations.md`](limitations.md) for why that
+is not optional.
 
-| Model | Cooldown | Trades | Hit | Gross/trade | Net/trade |
-|---|---:|---:|---:|---:|---:|
-| tcn | 0 | 78 | **55%** | **+1.63** | −10.06 |
-| tcn | 120 | 52 | 54% | −1.69 | −13.46 |
-| logistic | 0 | 91 | 51% | −0.28 | −11.46 |
-| logistic | 120 | 57 | 53% | **+1.81** | **−9.36** |
-| xgboost | 0 | 220 | 48% | −1.64 | −12.65 |
-| xgboost | 120 | 86 | **56%** | −1.29 | −12.31 |
+| Model | Cooldown | Trades | Hit | Gross/trade | Net/trade | Folds + |
+|---|---:|---:|---:|---:|---:|---:|
+| logistic | 0 | 185 | 50% | +0.20 | −10.94 | 0/7 |
+| **logistic** | 24 | 151 | 52% | **+2.00** | **−9.13** | 0/7 |
+| logistic | 120 | 109 | 53% | +0.30 | −10.83 | 0/7 |
+| tcn | 0 | 132 | 52% | −3.27 | −14.81 | 0/7 |
+| tcn | 24 | 109 | **55%** | +0.39 | −11.19 | 0/7 |
+| tcn | 120 | 84 | **55%** | +0.91 | −10.68 | 0/7 |
+| xgboost | 0 | 272 | 47% | −0.79 | −11.81 | 0/7 |
+| xgboost | 24 | 223 | 47% | −1.64 | −12.66 | 0/7 |
+| xgboost | 120 | 144 | 45% | −1.93 | −12.94 | 0/7 |
 
-**Seeing a window did not change the picture.** The network's best gross figure
-is 1.63 bp against logistic regression's 1.81 — a difference well inside the
-noise of 78 trades, and both an order of magnitude short of the 11.02 bp a
-round trip costs.
+**Nothing was profitable: zero positive folds out of twenty-one.**
 
-That is what the cost arithmetic predicted. Expected edge per trade is roughly
-the information coefficient times the volatility of the move, and no
-architecture changes that product; a sequence model can raise the coefficient,
-not multiply it by ten.
+**The simplest model won.** Logistic regression reaches 2.00 bp gross per trade,
+twice the network's best, and is the only one positive under all three thinning
+settings. Gradient boosting is negative everywhere.
 
-Two smaller observations. Thinning helps the linear model and hurts the network
-— on a single fold that is noise rather than a finding, and it is recorded to
-stop it being read as one. And accuracy misleads once more: the best hit rate in
-the table belongs to the configuration with the second-worst gross edge.
+**The network did not earn its complexity.** It trains about thirty times slower
+than the linear model, needs its own process, and produces less than half the
+edge. Seeing a window is worth something — its hit rate is the highest in the
+table — but not enough to matter against an 11 bp round trip.
+
+**Accuracy misleads again, most starkly here.** The TCN has the best hit rate in
+the study at 55% and half the gross edge of logistic regression at 52%. It is
+right more often and wrong more expensively.
+
+A note on reading single folds. An earlier version of this section reported the
+network on one fold, where it showed +1.63 bp gross with no cooldown. The full
+schedule gives −3.27 for that same configuration. The spread between folds is
+larger than the spread between models, which is worth remembering before any
+result here is quoted from one window.
 
 ### Wide generated features against hand-picked, two-minute horizon
 

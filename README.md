@@ -76,12 +76,15 @@ almost exactly the rate volatility rises, so their product — the expected gros
 edge per trade — barely moves, while the fee stays fixed. **The horizon where
 prediction works and the horizon where trading pays do not overlap.**
 
-Three obvious levers were tested and none of them helps. A longer horizon does
+Four obvious levers were tested and none of them helps. A longer horizon does
 not, because the edge is horizon-invariant. A wider feature set — 194 generated
-columns against 10 hand-picked — measurably made it worse. And a better fee
+columns against 10 hand-picked — measurably made it worse. A better fee
 tier falls short by about a factor of three: break-even needs 0.6 bp per side
 against roughly 1.7 at the top volume tiers, and even a zero fee leaves only
-about 1 bp per trade once the spread is paid.
+about 1 bp per trade once the spread is paid. And a sequence model does not:
+across twenty-one model-configuration-fold combinations, none was profitable,
+and the best gross edge belonged to plain logistic regression rather than to the
+network.
 
 See [`docs/results.md`](docs/results.md) and
 [`docs/limitations.md`](docs/limitations.md). No result here should be read as
