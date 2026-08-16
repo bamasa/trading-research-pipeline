@@ -154,7 +154,48 @@ More candidate features give it more ways to find structure that is not there.
 
 ---
 
-## 5. Stability
+## 5. Trade thinning
+
+Every result above charges a full round trip for each signal acted on.
+Consecutive observations carry almost the same view, so that pays for one
+opinion many times: on a 100 ms grid a two-minute horizon opens twelve hundred
+overlapping positions for a single sustained signal.
+
+Thinning fixes it with two rules — one position at a time, and an optional
+cooldown after closing. Two-minute horizon, hand-picked features:
+
+**BTCUSDT**, one model over five test days:
+
+| Rule | Trades | Gross/trade | Net/trade | Hit |
+|---|---:|---:|---:|---:|
+| every signal | 2,255 | **−0.15** | −11.19 | 49% |
+| one position at a time | 230 | **+1.13** | −9.98 | 51% |
+| + cooldown 24 | 189 | +1.02 | −10.09 | 53% |
+| + cooldown 120 | 124 | **+1.46** | −9.69 | **54%** |
+
+**XRPUSDT**, seven folds:
+
+| Model | Cooldown | Trades | Gross/trade | Net/trade | Folds + |
+|---|---:|---:|---:|---:|---:|
+| logistic | 0 | 121 | −1.75 | −14.84 | 0/7 |
+| logistic | 120 | 83 | −1.24 | −14.21 | 0/7 |
+| xgboost | 0 | 960 | −0.27 | −13.08 | 0/7 |
+| xgboost | 24 | 614 | **+0.26** | −12.54 | 0/7 |
+| xgboost | 120 | 280 | **+0.92** | −11.85 | 0/7 |
+
+Thinning does what it should: trading eighteen times less turns a negative gross
+edge into a positive one, and the hit rate rises with it. The signals that
+survive really are the better ones.
+
+It does not close the gap. The best gross figure here is 1.46 bp against an
+11 bp round trip, and no fold on either instrument was positive.
+
+One detail worth noting for anyone reading model comparisons: **the ranking
+flips between instruments.** Logistic regression is the better model on BTCUSDT
+and the worse one on XRPUSDT. Whatever separates them is smaller than the
+difference between two markets in the same month.
+
+## 6. Stability
 
 The two-minute, hand-picked, logistic configuration produced a gross edge of
 **5.18 bp** per trade in the horizon sweep and **2.24 bp** in the wide-feature
@@ -172,7 +213,7 @@ data. Seven agreeing folds are close to one observation repeated.
 
 ---
 
-## 6. Selection: three criteria, two of them wrong
+## 7. Selection: three criteria, two of them wrong
 
 The ranking stage was compared three ways on four days of BTCUSDT.
 
@@ -194,7 +235,7 @@ directional features on top and dropped the calendar terms entirely.
 
 ---
 
-## 7. Sensitivity to the fee
+## 8. Sensitivity to the fee
 
 The fee is the obvious lever, so it is worth checking properly rather than
 assuming. Costs are linear in the fee, so net profit per trade at any tier
@@ -231,7 +272,7 @@ figure from the horizon sweep, the break-even fee works out at 2.08 bp per side
 shows it falling to 2.24 bp once the sample is trimmed to the days the folds
 actually use. The lower number is the one to plan against.
 
-## 8. What would have to change
+## 9. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
@@ -245,8 +286,9 @@ actually use. The lower number is the one to plan against.
 
 Three things that would **not** close it, on this evidence: a longer horizon,
 since the edge is horizon-invariant (§3); more features, which measurably made
-it worse (§4); and a better fee tier, which falls short by a factor of three
-(§7).
+it worse (§4); trade thinning, which improves edge per trade but by about one
+basis point (§5); and a better fee tier, which falls short by a factor of three
+(§8).
 
 ---
 
