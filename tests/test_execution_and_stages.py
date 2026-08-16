@@ -13,6 +13,7 @@ unused — it was never loaded.
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -253,3 +254,45 @@ def test_the_final_position_is_not_double_counted() -> None:
     decision, forward, spread = signals([BUY, HOLD, HOLD, HOLD, HOLD])
     trades = thin(decision, forward, spread, ThinningRules(hold_periods=2))
     assert len(trades) == 1
+
+
+# ---------------------------------------------------------------------------
+# CLI defaults
+# ---------------------------------------------------------------------------
+
+
+def test_stage_defaults_chain_together() -> None:
+    """The quickstart copies these commands without paths, so the defaults have
+    to line up: one stage's output directory must be the next one's input.
+
+    Without this a rename in one command silently breaks the documented flow,
+    and the failure surfaces as 'run prepare first' on a directory that was in
+    fact prepared.
+    """
+    import inspect
+
+    from trading_research import cli
+
+    def default(command: str, parameter: str) -> str:
+        signature = inspect.signature(getattr(cli, command))
+        return str(signature.parameters[parameter].default)
+
+    assert default("prepare_cmd", "output") == default("select_cmd", "prepared")
+    assert default("prepare_cmd", "output") == default("train_cmd", "prepared")
+    assert default("prepare_cmd", "output") == default("predict_cmd", "prepared")
+    assert default("select_cmd", "output") == default("train_cmd", "features")
+    assert default("train_cmd", "output") == default("predict_cmd", "model")
+    assert default("predict_cmd", "output") == default("backtest_cmd", "predictions")
+
+
+def test_every_stage_writes_below_a_gitignored_directory() -> None:
+    """Stage output must land where it cannot be committed by accident."""
+    import inspect
+
+    from trading_research import cli
+
+    ignored = (Path(__file__).parent.parent / ".gitignore").read_text(encoding="utf-8")
+    for command in ("prepare_cmd", "select_cmd", "train_cmd", "predict_cmd", "backtest_cmd"):
+        out = str(inspect.signature(getattr(cli, command)).parameters["output"].default)
+        root = out.split("/")[0]
+        assert f"/{root}/" in ignored, f"{command} writes to {out}, which is not ignored"
