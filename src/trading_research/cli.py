@@ -21,6 +21,7 @@ absent, because it implies a capability the project does not have yet.
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -361,6 +362,209 @@ def download(
         console.print(
             f"[yellow]{len(failures)} day(s) unavailable — see the manifest for the list.[/yellow]"
         )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline stages
+# ---------------------------------------------------------------------------
+#
+# Each stage is its own command, reading and writing files. That is slower than
+# one in-process run and it is the point: a stage re-runs without repeating the
+# ones before it, and every intermediate can be looked at. A pipeline that only
+# emits a final number is one whose middle nobody checks.
+
+
+def _as_date(value: str, field: str) -> date:
+    from datetime import date as _date
+
+    try:
+        return _date.fromisoformat(value)
+    except ValueError as exc:
+        err_console.print(f"[red]{field} must be YYYY-MM-DD, got {value!r}[/red]")
+        raise typer.Exit(code=2) from exc
+
+
+@app.command("prepare")
+def prepare_cmd(
+    symbol: Annotated[str, typer.Option("--symbol", "-s", help="Instrument.")] = "BTCUSDT",
+    raw: Annotated[Path, typer.Option("--raw", help="Downloaded data directory.")] = Path(
+        "data/raw"
+    ),
+    output: Annotated[Path, typer.Option("--output", "-o", help="Where to write features.")] = Path(
+        "artifacts/prepared"
+    ),
+    horizon: Annotated[
+        int, typer.Option("--horizon", min=1, help="Label horizon in observations.")
+    ] = 1200,
+    subsample: Annotated[int, typer.Option("--subsample", min=1, help="Keep every Nth row.")] = 50,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Rebuild days already present.")
+    ] = False,
+) -> None:
+    """Build the feature matrix from raw data, one file per day.
+
+    Processed a day at a time because the full series does not fit in memory,
+    with rolling windows warmed from the previous day rather than restarted.
+    """
+    from trading_research.pipeline.stages import StageError, prepare
+
+    try:
+        out = prepare(
+            raw, output, symbol, horizon=horizon, subsample=subsample, overwrite=overwrite
+        )
+    except StageError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]prepared[/green] -> {out}")
+
+
+@app.command("select")
+def select_cmd(
+    train_start: Annotated[str, typer.Option("--train-start", help="YYYY-MM-DD.")],
+    train_end: Annotated[str, typer.Option("--train-end", help="YYYY-MM-DD, inclusive.")],
+    prepared: Annotated[Path, typer.Option("--prepared", help="Prepared features.")] = Path(
+        "artifacts/prepared"
+    ),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/features"),
+    threshold_bp: Annotated[float, typer.Option("--threshold-bp", help="Label threshold.")] = 11.02,
+    max_features: Annotated[int, typer.Option("--max-features", min=1)] = 40,
+    score_target: Annotated[
+        str, typer.Option("--score", help="Ranking criterion: 'ic', 'direction' or 'label'.")
+    ] = "ic",
+) -> None:
+    """Choose features on a training window and write the list.
+
+    Reads only the training window, so later data cannot influence which
+    features are chosen — selecting over the whole sample is one of the most
+    effective ways to manufacture an edge that is not there.
+    """
+    from trading_research.pipeline.stages import StageError, select
+
+    try:
+        out = select(
+            prepared,
+            output,
+            train_start=_as_date(train_start, "--train-start"),
+            train_end=_as_date(train_end, "--train-end"),
+            threshold_bp=threshold_bp,
+            max_features=max_features,
+            score_target=score_target,
+        )
+    except StageError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    from trading_research.pipeline.stages import StageManifest
+
+    report = StageManifest.read(out)["outputs"]
+    console.print(f"[green]selected[/green] {report['n_selected']} of {report['n_input']} -> {out}")
+
+
+@app.command("train")
+def train_cmd(
+    train_start: Annotated[str, typer.Option("--train-start", help="YYYY-MM-DD.")],
+    train_end: Annotated[str, typer.Option("--train-end", help="YYYY-MM-DD, inclusive.")],
+    prepared: Annotated[Path, typer.Option("--prepared")] = Path("artifacts/prepared"),
+    features: Annotated[Path, typer.Option("--features")] = Path("artifacts/features"),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/model"),
+    model: Annotated[
+        str, typer.Option("--model", "-m", help="always_hold, class_prior, logistic, xgboost, tcn.")
+    ] = "logistic",
+    threshold_bp: Annotated[float, typer.Option("--threshold-bp")] = 11.02,
+) -> None:
+    """Fit one model on the training window."""
+    from trading_research.pipeline.stages import StageError, train
+
+    try:
+        out = train(
+            prepared,
+            features,
+            output,
+            train_start=_as_date(train_start, "--train-start"),
+            train_end=_as_date(train_end, "--train-end"),
+            threshold_bp=threshold_bp,
+            model=model,
+        )
+    except (StageError, ImportError) as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]trained[/green] {model} -> {out}")
+
+
+@app.command("predict")
+def predict_cmd(
+    start: Annotated[str, typer.Option("--start", help="YYYY-MM-DD.")],
+    end: Annotated[str, typer.Option("--end", help="YYYY-MM-DD, inclusive.")],
+    prepared: Annotated[Path, typer.Option("--prepared")] = Path("artifacts/prepared"),
+    model: Annotated[Path, typer.Option("--model")] = Path("artifacts/model"),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/predictions"),
+) -> None:
+    """Score a fitted model over a period. Fits nothing."""
+    from trading_research.pipeline.stages import StageError, predict
+
+    try:
+        out = predict(
+            prepared,
+            model,
+            output,
+            start=_as_date(start, "--start"),
+            end=_as_date(end, "--end"),
+        )
+    except StageError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]predicted[/green] -> {out}")
+
+
+@app.command("backtest")
+def backtest_cmd(
+    predictions: Annotated[Path, typer.Option("--predictions")] = Path("artifacts/predictions"),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/backtest"),
+    min_confidence: Annotated[
+        float, typer.Option("--min-confidence", help="Chosen on validation, not here.")
+    ] = 0.5,
+    hold_periods: Annotated[
+        int, typer.Option("--hold", min=1, help="Rows to hold a position.")
+    ] = 24,
+    cooldown_periods: Annotated[int, typer.Option("--cooldown", min=0)] = 0,
+    fee_bp_per_side: Annotated[float, typer.Option("--fee-bp", min=0.0)] = 5.0,
+    slippage_bp: Annotated[float, typer.Option("--slippage-bp", min=0.0)] = 0.5,
+) -> None:
+    """Turn probabilities into trades and profit.
+
+    Chooses nothing: the confidence threshold arrives from whoever selected it
+    on validation. Keeping that decision outside this command is what stops it
+    from quietly being tuned on whatever period the backtest is run over.
+    """
+    from trading_research.pipeline.stages import StageError, StageManifest, backtest
+
+    try:
+        out = backtest(
+            predictions,
+            output,
+            min_confidence=min_confidence,
+            hold_periods=hold_periods,
+            cooldown_periods=cooldown_periods,
+            fee_bp_per_side=fee_bp_per_side,
+            slippage_bp=slippage_bp,
+        )
+    except StageError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    results = StageManifest.read(out)["outputs"]
+    table = Table(title="Backtest", title_justify="left", show_edge=False)
+    table.add_column("")
+    table.add_column("thinned", justify="right")
+    table.add_column("every signal", justify="right")
+    for key in ("trades", "gross_per_trade_bp", "net_per_trade_bp", "net_bp", "hit_rate"):
+        table.add_row(
+            key,
+            f"{results['thinned'][key]:,.2f}",
+            f"{results['every_signal'][key]:,.2f}",
+        )
+    console.print(table)
+    console.print(f"\n-> {out}")
 
 
 @app.command("describe-schema")

@@ -161,7 +161,7 @@ class TCNBaseline(Model):
                 # otherwise produce a step that undoes an epoch of progress.
                 torch.nn.utils.clip_grad_norm_(self.net_.parameters(), 1.0)
                 optimiser.step()
-                total += float(loss) * len(idx)
+                total += float(loss.detach()) * len(idx)
 
             self.net_.eval()
             with torch.no_grad():
