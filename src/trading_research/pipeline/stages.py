@@ -199,3 +199,312 @@ def feature_columns(frame: pd.DataFrame) -> list[str]:
     """The feature columns of a prepared frame, excluding bookkeeping."""
     reserved = {"timestamp", "forward_bp", "spread_bp_now", "label"}
     return [c for c in frame.columns if c not in reserved]
+
+
+# ---------------------------------------------------------------------------
+# Labelling helper, shared by the stages that need a target
+# ---------------------------------------------------------------------------
+
+
+def add_label(frame: pd.DataFrame, threshold_bp: float) -> pd.DataFrame:
+    """Attach the three-class label to a prepared frame.
+
+    Not done in ``prepare`` on purpose: the threshold belongs to the experiment,
+    not to the data. Baking it in would mean re-running feature generation —
+    minutes per instrument — to answer "what if we only traded larger moves".
+    """
+    move = frame["forward_bp"]
+    frame = frame.copy()
+    frame["label"] = np.where(move.isna(), np.nan, np.sign(move) * (move.abs() > threshold_bp))
+    return frame
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: select
+# ---------------------------------------------------------------------------
+
+
+def select(
+    prepared_dir: Path | str,
+    out_dir: Path | str,
+    *,
+    train_start: date,
+    train_end: date,
+    threshold_bp: float,
+    max_features: int = 40,
+    score_target: str = "ic",
+) -> Path:
+    """Choose features on a training window and write the list.
+
+    Reads only the training window. That is enforced by loading only those
+    files rather than by filtering afterwards, so later data is not merely
+    unused — it is never in memory. Selecting over the whole sample is one of
+    the most effective ways to manufacture an edge: with a few hundred
+    candidates, some will look predictive on the test period by chance, and
+    choosing them for that is choosing them for their test performance.
+    """
+    from trading_research.features.selection import FeatureSelector
+
+    out = Path(out_dir)
+    frame = add_label(load_prepared(prepared_dir, train_start, train_end), threshold_bp)
+    columns = feature_columns(frame)
+
+    usable = frame[columns].notna().all(axis=1) & frame["label"].notna()
+    if int(usable.sum()) < 1000:
+        raise StageError(
+            f"only {int(usable.sum())} complete rows in {train_start}..{train_end}; "
+            f"widen the window or shorten the longest feature window"
+        )
+
+    selector = FeatureSelector(max_features=max_features, score_target=score_target)
+    selector.fit(
+        frame.loc[usable, columns], frame.loc[usable, "label"], frame.loc[usable, "forward_bp"]
+    )
+    assert selector.report_ is not None
+
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "features.json").write_text(
+        json.dumps({"features": selector.selected_}, indent=2) + "\n", encoding="utf-8"
+    )
+    if selector.report_.scores is not None:
+        selector.report_.scores.rename("score").to_frame().to_csv(out / "scores.csv")
+
+    StageManifest(
+        stage="select",
+        inputs={"prepared_dir": str(prepared_dir), "train": [str(train_start), str(train_end)]},
+        params={
+            "threshold_bp": threshold_bp,
+            "max_features": max_features,
+            "score_target": score_target,
+        },
+        outputs=selector.report_.to_dict(),
+    ).write(out)
+    return out
+
+
+def load_selected(directory: Path | str) -> list[str]:
+    path = Path(directory) / "features.json"
+    if not path.exists():
+        raise StageError(f"no features.json in {directory}; run select first")
+    payload: dict[str, list[str]] = json.loads(path.read_text(encoding="utf-8"))
+    return payload["features"]
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: train
+# ---------------------------------------------------------------------------
+
+MODELS = {
+    "always_hold": "trading_research.models.base:AlwaysHold",
+    "class_prior": "trading_research.models.base:ClassPrior",
+    "logistic": "trading_research.models.linear:LogisticBaseline",
+    "xgboost": "trading_research.models.gbm:GradientBoostedBaseline",
+    "tcn": "trading_research.models.tcn:TCNBaseline",
+}
+
+
+def build_model(name: str, **params: Any) -> Any:
+    """Instantiate a model by name, so a config can select one as a string."""
+    if name not in MODELS:
+        raise StageError(f"unknown model {name!r}; known: {', '.join(sorted(MODELS))}")
+    module_path, class_name = MODELS[name].split(":")
+    import importlib
+
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)(**params)
+
+
+def train(
+    prepared_dir: Path | str,
+    features_dir: Path | str,
+    out_dir: Path | str,
+    *,
+    train_start: date,
+    train_end: date,
+    threshold_bp: float,
+    model: str = "logistic",
+    params: dict[str, Any] | None = None,
+) -> Path:
+    """Fit one model on the training window and write it to disk.
+
+    Like ``select``, this reads only the training window. Nothing later exists
+    as far as this stage is concerned.
+    """
+    import pickle
+
+    out = Path(out_dir)
+    columns = load_selected(features_dir)
+    frame = add_label(load_prepared(prepared_dir, train_start, train_end), threshold_bp)
+
+    missing = [c for c in columns if c not in frame.columns]
+    if missing:
+        raise StageError(f"selected features missing from prepared data: {missing[:5]}")
+
+    usable = frame[columns].notna().all(axis=1) & frame["label"].notna()
+    x, y = frame.loc[usable, columns], frame.loc[usable, "label"]
+    if len(x) < 500:
+        raise StageError(f"only {len(x)} usable training rows")
+
+    estimator = build_model(model, **(params or {}))
+    estimator.fit(x, y)
+
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / "model.pkl").open("wb") as handle:
+        pickle.dump({"model": estimator, "features": columns}, handle)
+
+    StageManifest(
+        stage="train",
+        inputs={
+            "prepared_dir": str(prepared_dir),
+            "features_dir": str(features_dir),
+            "train": [str(train_start), str(train_end)],
+        },
+        params={"model": model, "threshold_bp": threshold_bp, **(params or {})},
+        outputs={"n_rows": len(x), "n_features": len(columns), "model": estimator.describe()},
+    ).write(out)
+    return out
+
+
+def load_model(directory: Path | str) -> tuple[Any, list[str]]:
+    import pickle
+
+    path = Path(directory) / "model.pkl"
+    if not path.exists():
+        raise StageError(f"no model.pkl in {directory}; run train first")
+    with path.open("rb") as handle:
+        payload = pickle.load(handle)
+    return payload["model"], payload["features"]
+
+
+# ---------------------------------------------------------------------------
+# Stage 4: predict
+# ---------------------------------------------------------------------------
+
+
+def predict(
+    prepared_dir: Path | str,
+    model_dir: Path | str,
+    out_dir: Path | str,
+    *,
+    start: date,
+    end: date,
+) -> Path:
+    """Run a fitted model over a period and write the probabilities.
+
+    Fits nothing. Kept separate from ``train`` so that the same model can be
+    scored over validation and over test without any chance of the second run
+    differing from the first.
+    """
+    from trading_research.models.base import CLASSES
+
+    out = Path(out_dir)
+    estimator, columns = load_model(model_dir)
+    frame = load_prepared(prepared_dir, start, end)
+
+    usable = frame[columns].notna().all(axis=1)
+    proba = estimator.predict_proba(frame.loc[usable, columns])
+
+    result = pd.DataFrame(
+        {
+            "timestamp": frame.loc[usable, "timestamp"].to_numpy(),
+            "forward_bp": frame.loc[usable, "forward_bp"].to_numpy(),
+            "spread_bp_now": frame.loc[usable, "spread_bp_now"].to_numpy(),
+        }
+    )
+    for i, cls in enumerate(CLASSES):
+        result[f"p_{cls}"] = proba[:, i]
+
+    out.mkdir(parents=True, exist_ok=True)
+    result.to_parquet(out / "predictions.parquet", compression="zstd", index=False)
+
+    StageManifest(
+        stage="predict",
+        inputs={"prepared_dir": str(prepared_dir), "model_dir": str(model_dir)},
+        params={"start": str(start), "end": str(end)},
+        outputs={"n_rows": len(result), "dropped_incomplete": int((~usable).sum())},
+    ).write(out)
+    return out
+
+
+def load_predictions(directory: Path | str) -> pd.DataFrame:
+    path = Path(directory) / "predictions.parquet"
+    if not path.exists():
+        raise StageError(f"no predictions.parquet in {directory}; run predict first")
+    return pd.read_parquet(path)
+
+
+# ---------------------------------------------------------------------------
+# Stage 5: backtest
+# ---------------------------------------------------------------------------
+
+
+def backtest(
+    predictions_dir: Path | str,
+    out_dir: Path | str,
+    *,
+    min_confidence: float,
+    hold_periods: int,
+    cooldown_periods: int = 0,
+    fee_bp_per_side: float = 5.0,
+    slippage_bp: float = 0.5,
+    allow_reversal: bool = False,
+) -> Path:
+    """Turn probabilities into trades and profit.
+
+    Fits nothing and chooses nothing: ``min_confidence`` arrives from whoever
+    selected it on validation. Keeping the choice outside this stage is what
+    stops the threshold from quietly being tuned on whatever period the
+    backtest happens to be run over.
+    """
+    from trading_research.backtest.costs import TakerCosts
+    from trading_research.backtest.evaluate import decide
+    from trading_research.backtest.execution import ThinningRules, score, thin, trades_to_frame
+    from trading_research.models.base import CLASSES
+
+    out = Path(out_dir)
+    frame = load_predictions(predictions_dir)
+    proba = frame[[f"p_{c}" for c in CLASSES]].to_numpy()
+
+    costs = TakerCosts(fee_bp_per_side=fee_bp_per_side, slippage_bp=slippage_bp)
+    rules = ThinningRules(
+        hold_periods=hold_periods,
+        cooldown_periods=cooldown_periods,
+        allow_reversal=allow_reversal,
+    )
+
+    decision = decide(proba, min_confidence=min_confidence)
+    trades = thin(
+        decision,
+        frame["forward_bp"].to_numpy(),
+        frame["spread_bp_now"].to_numpy(),
+        rules,
+    )
+    summary = score(trades, costs)
+
+    # The same signals without thinning, for comparison. Reported together
+    # because the interesting number is not either total but what thinning did
+    # to profit *per trade*.
+    untinned = thin(
+        decision,
+        frame["forward_bp"].to_numpy(),
+        frame["spread_bp_now"].to_numpy(),
+        ThinningRules(hold_periods=1, cooldown_periods=0),
+    )
+    baseline = score(untinned, costs)
+
+    out.mkdir(parents=True, exist_ok=True)
+    trades_to_frame(trades).to_parquet(out / "trades.parquet", compression="zstd", index=False)
+
+    StageManifest(
+        stage="backtest",
+        inputs={"predictions_dir": str(predictions_dir)},
+        params={
+            "min_confidence": min_confidence,
+            "hold_periods": hold_periods,
+            "cooldown_periods": cooldown_periods,
+            "allow_reversal": allow_reversal,
+            "costs": costs.describe(),
+        },
+        outputs={"thinned": summary, "every_signal": baseline},
+    ).write(out)
+    return out
