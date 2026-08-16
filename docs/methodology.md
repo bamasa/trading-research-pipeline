@@ -4,6 +4,44 @@ How a result is produced here, and why each step is arranged the way it is. The
 short version: almost every decision in this document exists to stop a number
 from looking better than it is.
 
+## The pipeline as stages
+
+Five stages, each a command, each reading and writing files:
+
+```
+prepare  raw book + trades      ->  feature matrix, one file per day
+select   training window        ->  chosen feature list
+train    training window        ->  fitted model
+predict  any period             ->  class probabilities
+backtest probabilities          ->  trades and profit
+```
+
+Slower than one in-memory run, and the right trade. A stage re-runs without
+repeating what came before, which matters when feature building takes minutes
+and fitting takes seconds. More importantly every intermediate is inspectable: a
+pipeline that only emits a final number is one whose middle nobody checks, and
+the middle is where the mistakes in this kind of work live.
+
+Each stage writes a manifest recording its inputs, parameters and outputs, so a
+result traces back to what produced it rather than to a memory of how it was
+run.
+
+**What varies is chosen independently.** Instrument, feature set, target horizon
+and model are separate flags — `--symbol`, `--features`, `--horizon`, `--model` —
+so comparing combinations is the normal case rather than a special one. Models
+resolve through a registry, so adding one is an entry in a table rather than a
+branch in the caller:
+
+```
+--model always_hold | class_prior | logistic | xgboost | tcn
+```
+
+**The ordering guarantee.** Stages that fit anything — `select` and `train` —
+take an explicit date range and load only those files. Later data is not merely
+unused; it is never in memory. That is stronger than filtering after loading,
+because code cannot accidentally use what was never there. `predict` and
+`backtest` fit nothing at all.
+
 ## The order of operations
 
 ```
@@ -92,7 +130,7 @@ short-horizon result is overstated.
 
 ## Models
 
-Four, in increasing order of capacity:
+Five, in increasing order of capacity:
 
 | Model | Purpose |
 |---|---|
@@ -100,6 +138,16 @@ Four, in increasing order of capacity:
 | `class_prior` | Predicts training frequencies, ignores features |
 | `logistic` | Linear, readable coefficients |
 | `xgboost` | Finds interactions the linear model cannot |
+| `tcn` | Sees a window of past rows rather than one row |
+
+The sequence model is there because a per-row model only gets whatever the
+feature engineering managed to compress into that row, and shape — an imbalance
+that has been building versus one that just appeared — is not fully captured by
+rolling statistics. Dilated causal convolutions were chosen over a recurrent
+network because causality is then structural: the kernel cannot reach forward
+even if the data handed to it were misaligned. On a problem where look-ahead is
+the main hazard, an architecture that makes it impossible beats one that merely
+permits avoiding it.
 
 `always_hold` is not a formality. Trading is expensive, so doing nothing has a
 real expected value, and a model that does not beat it net of costs has not
@@ -134,8 +182,24 @@ Stated plainly, because these all push in the optimistic direction:
   the book it trades against.
 - No latency between the decision and the order arriving, beyond the flat
   slippage allowance.
-- Signals are not thinned. Consecutive observations produce highly overlapping
-  trades, so trade counts are larger than any real system would run.
+- No latency between decision and arrival beyond the flat slippage allowance.
+
+## Trade thinning
+
+Acting on every signal charges a full round trip for each one, and consecutive
+observations carry almost the same view: on a 100 ms grid a two-minute horizon
+opens twelve hundred overlapping positions for a single opinion.
+
+Two rules fix that. **One position at a time** — a signal arriving while a
+position is open is ignored. **A cooldown after closing** — having just traded
+on a view, wait before acting on it again, or the same slow-moving signal
+reopens immediately and the position is effectively never closed, only
+re-charged.
+
+Neither creates an edge. The total is what it is; thinning redistributes it
+across fewer trades. What it makes measurable is edge per *opinion*, which is
+the honest question — and on real data it moves the gross figure from −0.15 bp
+per trade to +1.46 while cutting trade count eighteenfold.
 
 These are simplifications of *execution*. They do not affect whether a
 directional edge exists at all, which is what the cost floor decides — and if an
