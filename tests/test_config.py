@@ -14,7 +14,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from lobml.config import RunConfig, dump_config, load_config
+from trading_research.config import RunConfig, dump_config, load_config
 
 
 def _write(tmp_path: Path, payload: dict) -> Path:

@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from lobml.labels.directional import BUY, HOLD, SELL
+from trading_research.labels.directional import BUY, HOLD, SELL
 
 #: Column order for probability output. Fixed once, here, because a silently
 #: reordered probability matrix turns buy signals into sell signals and nothing

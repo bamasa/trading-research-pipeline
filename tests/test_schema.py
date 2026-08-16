@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from lobml.data.schema import (
+from trading_research.data.schema import (
     SCHEMA_VERSION,
     TRADE_SCHEMA,
     DatasetManifest,

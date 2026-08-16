@@ -5,12 +5,12 @@ place is what keeps the rest of the pipeline honest: a feature cannot quietly
 depend on a column that exists for only one source, and a new source cannot
 silently change what a column means.
 
-Defined in [`src/lobml/data/schema.py`](../src/lobml/data/schema.py), checked by
-[`src/lobml/data/validate.py`](../src/lobml/data/validate.py). Print either
+Defined in [`src/trading_research/data/schema.py`](../src/trading_research/data/schema.py), checked by
+[`src/trading_research/data/validate.py`](../src/trading_research/data/validate.py). Print either
 contract with:
 
 ```bash
-uv run lobml describe-schema book
+uv run trading-research describe-schema book
 ```
 
 ## Conventions

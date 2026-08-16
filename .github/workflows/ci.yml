@@ -54,8 +54,8 @@ jobs:
       - run: uv sync --all-extras
       - name: Generate and validate the synthetic demo dataset
         run: |
-          uv run lobml generate-demo-data --output data/demo
-          uv run lobml validate-data --input data/demo
+          uv run trading-research generate-demo-data --output data/demo
+          uv run trading-research validate-data --input data/demo
 
   audit:
     name: disclosure audit

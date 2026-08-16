@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from lobml.data import synthetic
+from trading_research.data import synthetic
 
 
 @pytest.fixture(scope="session")

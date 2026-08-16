@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.reporting.diagnostics import (
+from trading_research.reporting.diagnostics import (
     breakeven_by_horizon,
     format_horizon_summary,
     forward_log_return,

@@ -16,10 +16,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.data.schema import mid_price
-from lobml.features import book as book_features  # noqa: F401  (registers features)
-from lobml.features.registry import Feature, Registry, build, feature
-from lobml.validation.leakage import (
+from trading_research.data.schema import mid_price
+from trading_research.features import book as book_features  # noqa: F401  (registers features)
+from trading_research.features.registry import Feature, Registry, build, feature
+from trading_research.validation.leakage import (
     LeakageError,
     assert_causal,
     assert_lookback_honest,
@@ -165,7 +165,7 @@ def test_all_registered_book_features_declare_enough_lookback(book: pd.DataFrame
 
 
 def test_registry_check_covers_every_book_feature(book: pd.DataFrame) -> None:
-    from lobml.features.registry import REGISTRY
+    from trading_research.features.registry import REGISTRY
 
     results = check_registry(book, plane="book")
     assert {r.name for r in results} == set(REGISTRY.names("book"))
@@ -256,13 +256,13 @@ def test_misaligned_feature_is_rejected(book: pd.DataFrame) -> None:
 
 
 def test_max_lookback_sizes_the_embargo() -> None:
-    from lobml.features.registry import REGISTRY
+    from trading_research.features.registry import REGISTRY
 
     assert REGISTRY.max_lookback(["spread_bp", "realized_vol_50_bp"]) == 51
 
 
 def _synthetic_book(n: int) -> pd.DataFrame:
     """A minimal valid book frame, for tests that need their own registry."""
-    from lobml.data.synthetic import SyntheticConfig, generate
+    from trading_research.data.synthetic import SyntheticConfig, generate
 
     return generate(SyntheticConfig(n_steps=n, depth=1, seed=3)).book

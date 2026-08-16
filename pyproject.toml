@@ -3,9 +3,9 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "lob-ml-research"
+name = "trading-research-pipeline"
 version = "0.1.0"
-description = "Leakage-aware ML research and backtesting for limit order books"
+description = "Leakage-aware research pipeline for systematic trading: instruments, features, targets and models compared under one honest cost model."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -53,14 +53,14 @@ dev = [
 ]
 
 [project.scripts]
-lobml = "lobml.cli:app"
+trading-research = "trading_research.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/bamasa/lob-ml-research"
-Issues = "https://github.com/bamasa/lob-ml-research/issues"
+Homepage = "https://github.com/bamasa/trading-research-pipeline"
+Issues = "https://github.com/bamasa/trading-research-pipeline/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lobml"]
+packages = ["src/trading_research"]
 
 # ---------------------------------------------------------------------------
 # Tooling
@@ -101,7 +101,7 @@ docstring-code-format = true
 # Matches .python-version. The package supports 3.11+, but the bundled numpy
 # stubs use 3.12 syntax, so analysing them as 3.11 fails before it starts.
 python_version = "3.12"
-files = ["src/lobml"]
+files = ["src/trading_research"]
 strict = false
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -122,10 +122,10 @@ markers = [
     "slow: tests that take more than a couple of seconds",
     "network: tests that require network access (skipped by default in CI)",
 ]
-filterwarnings = ["error::DeprecationWarning:lobml.*"]
+filterwarnings = ["error::DeprecationWarning:trading_research.*"]
 
 [tool.coverage.run]
-source = ["src/lobml"]
+source = ["src/trading_research"]
 branch = true
 
 [tool.coverage.report]

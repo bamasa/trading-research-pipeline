@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.data.schema import mid_price
-from lobml.labels.directional import (
+from trading_research.data.schema import mid_price
+from trading_research.labels.directional import (
     BUY,
     HOLD,
     SELL,
@@ -26,7 +26,7 @@ from lobml.labels.directional import (
     round_trip_cost_bp,
     threshold_for_share,
 )
-from lobml.validation.splits import (
+from trading_research.validation.splits import (
     Fold,
     SplitError,
     WalkForwardSpec,

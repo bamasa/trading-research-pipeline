@@ -25,8 +25,8 @@ cov:  ## Run the test suite with a coverage report
 	uv run pytest --cov --cov-report=term-missing
 
 demo:  ## Generate the synthetic demo dataset and validate it
-	uv run lobml generate-demo-data --output data/demo
-	uv run lobml validate-data --input data/demo
+	uv run trading-research generate-demo-data --output data/demo
+	uv run trading-research validate-data --input data/demo
 
 audit:  ## Scan the working tree for private paths, secrets and heavy files
 	uv run python scripts/audit_repo.py

@@ -23,7 +23,7 @@ from typing import Any
 
 import pandas as pd
 
-from lobml.data.schema import (
+from trading_research.data.schema import (
     BOOK_SCHEMA,
     TRADE_SCHEMA,
     DatasetManifest,

@@ -37,7 +37,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from lobml import __version__
+from trading_research import __version__
 
 MANIFEST = "manifest.json"
 
@@ -51,7 +51,7 @@ class StageManifest:
     """Provenance for one stage's output."""
 
     stage: str
-    lobml_version: str = __version__
+    trading_research_version: str = __version__
     inputs: dict[str, Any] = field(default_factory=dict)
     params: dict[str, Any] = field(default_factory=dict)
     outputs: dict[str, Any] = field(default_factory=dict)
@@ -97,8 +97,8 @@ def prepare(
     missing values or, worse, a window that quietly means something different
     from every other window.
     """
-    from lobml.features.generated import generate
-    from lobml.features.registry import REGISTRY
+    from trading_research.features.generated import generate
+    from trading_research.features.registry import REGISTRY
 
     raw = Path(raw_dir)
     out = Path(out_dir)

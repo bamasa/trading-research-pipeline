@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from lobml.models.base import CLASSES, Model
+from trading_research.models.base import CLASSES, Model
 
 
 class LogisticBaseline(Model):

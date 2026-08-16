@@ -11,9 +11,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from lobml.cli import app
-from lobml.data import store
-from lobml.data.validate import validate_book, validate_trades
+from trading_research.cli import app
+from trading_research.data import store
+from trading_research.data.validate import validate_book, validate_trades
 
 runner = CliRunner()
 
@@ -21,7 +21,7 @@ runner = CliRunner()
 def test_version_is_reported() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "lobml" in result.stdout
+    assert "trading-research" in result.stdout
 
 
 def test_generate_then_validate(tmp_path: Path) -> None:

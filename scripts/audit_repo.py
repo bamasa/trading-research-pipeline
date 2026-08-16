@@ -281,7 +281,7 @@ def check_ignore_rules(findings: Finding) -> None:
     """Confirm the generated-output directories are ignored, and anchored.
 
     The anchoring matters more than it looks. An unanchored ``data/`` pattern
-    matches at every level, so it also excludes ``src/lobml/data/`` — the
+    matches at every level, so it also excludes ``src/trading_research/data/`` — the
     package's own source. That failure is silent: tests still pass locally
     because the files are on disk, and the repository ships without them.
     """

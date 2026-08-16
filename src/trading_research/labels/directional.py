@@ -35,7 +35,7 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
-from lobml.data.schema import mid_price
+from trading_research.data.schema import mid_price
 
 BP: Final = 1e4
 

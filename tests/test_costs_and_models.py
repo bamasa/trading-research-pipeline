@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.backtest.costs import BINANCE_UM_TAKER_BP, TakerCosts, breakeven_share
-from lobml.backtest.evaluate import choose_confidence, decide, evaluate
-from lobml.labels.directional import BUY, HOLD, SELL
-from lobml.models.base import CLASSES, AlwaysHold, ClassPrior, clean
-from lobml.models.linear import LogisticBaseline
+from trading_research.backtest.costs import BINANCE_UM_TAKER_BP, TakerCosts, breakeven_share
+from trading_research.backtest.evaluate import choose_confidence, decide, evaluate
+from trading_research.labels.directional import BUY, HOLD, SELL
+from trading_research.models.base import CLASSES, AlwaysHold, ClassPrior, clean
+from trading_research.models.linear import LogisticBaseline
 
 COSTS = TakerCosts(fee_bp_per_side=5.0, slippage_bp=0.5)
 

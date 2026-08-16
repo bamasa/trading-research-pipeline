@@ -27,9 +27,9 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from lobml.backtest.costs import TakerCosts
-from lobml.labels.directional import BUY, HOLD, SELL
-from lobml.models.base import CLASSES
+from trading_research.backtest.costs import TakerCosts
+from trading_research.labels.directional import BUY, HOLD, SELL
+from trading_research.models.base import CLASSES
 
 
 def decide(proba: np.ndarray, *, min_confidence: float) -> np.ndarray:

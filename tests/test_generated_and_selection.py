@@ -20,16 +20,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.features.align import (
+from trading_research.features.align import (
     attach_to_book,
     build_trade_features,
     prepare_trades,
     rolling_trade_stats,
 )
-from lobml.features.generated import base_quantities, expand, generate, time_of_day
-from lobml.features.registry import Feature
-from lobml.features.selection import FeatureSelector
-from lobml.validation.leakage import check_feature
+from trading_research.features.generated import base_quantities, expand, generate, time_of_day
+from trading_research.features.registry import Feature
+from trading_research.features.selection import FeatureSelector
+from trading_research.validation.leakage import check_feature
 
 
 def make_book(n: int = 3000, seed: int = 0) -> pd.DataFrame:

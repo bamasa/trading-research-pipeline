@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.data.schema import ask_price_col, ask_size_col, bid_price_col, bid_size_col
-from lobml.features.registry import REGISTRY, build
+from trading_research.data.schema import ask_price_col, ask_size_col, bid_price_col, bid_size_col
+from trading_research.features.registry import REGISTRY, build
 
 # Features whose value must not depend on the instrument's price or size units.
 # A feature outside this list has to justify itself: raw ofi_1 and ofi_20 are

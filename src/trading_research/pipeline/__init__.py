@@ -8,7 +8,7 @@ only emits a final number is one whose middle nobody checks.
 
 from __future__ import annotations
 
-from lobml.pipeline.stages import (
+from trading_research.pipeline.stages import (
     StageError,
     StageManifest,
     feature_columns,

@@ -38,7 +38,7 @@ Two properties are enforced mechanically rather than by review:
 truncates the data at a cut and asserts that no value before the cut changed.
 This catches centred windows, backward fills and whole-sample normalisation —
 three ways look-ahead gets in, none of which makes anything visibly fail. See
-[`src/lobml/validation/leakage.py`](../src/lobml/validation/leakage.py).
+[`src/trading_research/validation/leakage.py`](../src/trading_research/validation/leakage.py).
 
 **Scale invariance.** A feature meant to transfer between instruments must not
 change when the instrument's units do. Every feature is classified as scale-free

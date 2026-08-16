@@ -9,8 +9,8 @@ fails loudly.
 
 from __future__ import annotations
 
-from lobml.features import book  # noqa: F401  (import registers the features)
-from lobml.features.registry import (
+from trading_research.features import book  # noqa: F401  (import registers the features)
+from trading_research.features.registry import (
     REGISTRY,
     Feature,
     FeatureError,

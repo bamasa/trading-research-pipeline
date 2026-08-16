@@ -13,9 +13,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from lobml.data import store
-from lobml.data.schema import TRADE_SCHEMA, book_schema
-from lobml.data.validate import validate_book, validate_trades
+from trading_research.data import store
+from trading_research.data.schema import TRADE_SCHEMA, book_schema
+from trading_research.data.validate import validate_book, validate_trades
 
 
 @pytest.fixture

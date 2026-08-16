@@ -37,8 +37,8 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from lobml.data.schema import mid_price
-from lobml.features.registry import REGISTRY, Registry
+from trading_research.data.schema import mid_price
+from trading_research.features.registry import REGISTRY, Registry
 
 #: Horizons in observations. On a 100 ms grid these span 0.1 s to 10 minutes.
 DEFAULT_HORIZONS: tuple[int, ...] = (1, 5, 10, 30, 50, 100, 300, 600, 1200, 3000, 6000)

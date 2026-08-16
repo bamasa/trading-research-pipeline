@@ -12,7 +12,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from lobml.reporting.report import ReportContext, summarise, to_markdown, write_report
+from trading_research.reporting.report import ReportContext, summarise, to_markdown, write_report
 
 
 def make_results(net_by_model: dict[str, list[float]]) -> pd.DataFrame:

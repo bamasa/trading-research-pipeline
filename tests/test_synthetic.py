@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.data.schema import (
+from trading_research.data.schema import (
     TRADE_SCHEMA,
     ask_price_col,
     ask_size_col,
@@ -29,8 +29,8 @@ from lobml.data.schema import (
     book_schema,
     mid_price,
 )
-from lobml.data.synthetic import SyntheticConfig, generate, replace_config
-from lobml.data.validate import validate_book, validate_trades
+from trading_research.data.synthetic import SyntheticConfig, generate, replace_config
+from trading_research.data.validate import validate_book, validate_trades
 
 # ---------------------------------------------------------------------------
 # Contracts

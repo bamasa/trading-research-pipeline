@@ -28,7 +28,7 @@ read later *rows*; it cannot say the data in those rows was correctly timed in
 the first place. A feature stamped with the moment a message was *received*
 rather than when the event *happened* is causal with respect to row order and
 still unusable in practice. That is a data-contract question, which is why
-:mod:`lobml.data.schema` is explicit that ``timestamp`` means the moment
+:mod:`trading_research.data.schema` is explicit that ``timestamp`` means the moment
 information became observable.
 """
 
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from lobml.features.registry import REGISTRY, Feature, Registry
+from trading_research.features.registry import REGISTRY, Feature, Registry
 
 
 @dataclass(frozen=True)

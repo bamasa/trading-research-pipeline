@@ -1,6 +1,6 @@
 """Dataset quality checks.
 
-:mod:`lobml.data.schema` answers "is this frame the right shape?". This module
+:mod:`trading_research.data.schema` answers "is this frame the right shape?". This module
 answers "is this data usable?", which is a different and more interesting
 question. Market data arrives with crossed books, repeated sequence numbers,
 clock jumps and silent gaps, and every one of those breaks a downstream result
@@ -29,7 +29,7 @@ from typing import Final
 
 import pandas as pd
 
-from lobml.data.schema import (
+from trading_research.data.schema import (
     TRADE_SCHEMA,
     Schema,
     SchemaError,

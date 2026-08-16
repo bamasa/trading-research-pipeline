@@ -22,7 +22,7 @@ venv/
 # Nothing that lands in these directories belongs in version control.
 #
 # The leading slash anchors each pattern to the repository root, and it is not
-# optional: an unanchored `data/` also matches `src/lobml/data/`, which would
+# optional: an unanchored `data/` also matches `src/trading_research/data/`, which would
 # silently exclude package source from every commit.
 /data/
 /artifacts/

@@ -14,7 +14,7 @@ a small, deliberately weak predictable component driven by order flow, with a
 tunable strength. That gives the test suite something it otherwise could not
 have: a dataset where the correct conclusion is known in advance. Set the
 signal to zero and any pipeline that still reports an edge has a leak — which
-is exactly the check :mod:`lobml.validation.leakage` performs.
+is exactly the check :mod:`trading_research.validation.leakage` performs.
 
 Model
 -----
@@ -49,8 +49,8 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
-from lobml import __version__
-from lobml.data.schema import (
+from trading_research import __version__
+from trading_research.data.schema import (
     SCHEMA_VERSION,
     DatasetManifest,
     ask_price_col,
@@ -59,7 +59,7 @@ from lobml.data.schema import (
     bid_size_col,
 )
 
-GENERATOR_NAME: Final = "lobml.synthetic.v1"
+GENERATOR_NAME: Final = "trading_research.synthetic.v1"
 
 #: Marker written into the ``source`` column of every generated row.
 SYNTHETIC_SOURCE: Final = "synthetic"
@@ -203,7 +203,7 @@ def generate(config: SyntheticConfig | None = None, **overrides: object) -> Synt
             end=str(timestamps[-1]),
             seed=cfg.seed,
             generator=GENERATOR_NAME,
-            lobml_version=__version__,
+            trading_research_version=__version__,
             extra={"note": "Synthetic data. Not a market. Results are not evidence of edge."},
         ),
         "book": DatasetManifest(
@@ -217,7 +217,7 @@ def generate(config: SyntheticConfig | None = None, **overrides: object) -> Synt
             depth=cfg.depth,
             seed=cfg.seed,
             generator=GENERATOR_NAME,
-            lobml_version=__version__,
+            trading_research_version=__version__,
             extra={"note": "Synthetic data. Not a market. Results are not evidence of edge."},
         ),
     }

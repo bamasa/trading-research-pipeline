@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from lobml.data.schema import ask_price_col, bid_price_col, bid_size_col
-from lobml.data.validate import (
+from trading_research.data.schema import ask_price_col, bid_price_col, bid_size_col
+from trading_research.data.validate import (
     DataQualityError,
     Severity,
     validate,

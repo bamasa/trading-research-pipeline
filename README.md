@@ -1,12 +1,16 @@
-# lob-ml-research
+# trading-research-pipeline
 
-**Leakage-aware ML research and backtesting for limit order books.**
+**A leakage-aware research pipeline for systematic trading.**
 
-A research platform for short-horizon prediction on event-driven and
-limit-order-book market data. It covers the whole path from raw events to a
-trading result: data contracts, feature engineering, forward-looking labels,
-chronological validation with purging and embargo, model comparison, and a
-backtest that charges realistic transaction costs.
+Instruments, features, targets and models are compared under one honest cost
+model, with look-ahead checked mechanically rather than promised. Demonstrated
+end to end on crypto limit-order-book data; the pipeline itself is not tied to
+that example.
+
+It covers the whole path from raw events to a trading result: data contracts,
+feature engineering, forward-looking labels, chronological validation with
+purging and embargo, model comparison, and a backtest that charges realistic
+transaction costs.
 
 The emphasis is on the parts that decide whether a result means anything —
 validation and cost accounting — rather than on the model. Most short-horizon
@@ -132,23 +136,23 @@ so that book features and their tests exist before the collector does.
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/bamasa/lob-ml-research
-cd lob-ml-research
+git clone https://github.com/bamasa/trading-research-pipeline
+cd trading-research-pipeline
 uv sync --all-extras
 ```
 
 Generate a synthetic dataset and check it:
 
 ```bash
-uv run lobml generate-demo-data --output data/demo
-uv run lobml validate-data --input data/demo
+uv run trading-research generate-demo-data --output data/demo
+uv run trading-research validate-data --input data/demo
 uv run pytest
 ```
 
 Inspect a data contract:
 
 ```bash
-uv run lobml describe-schema book
+uv run trading-research describe-schema book
 ```
 
 Nothing here downloads anything or needs credentials. `make help` lists the

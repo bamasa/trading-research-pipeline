@@ -18,7 +18,7 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from lobml.data.binance import (
+from trading_research.data.binance import (
     ArchiveSpec,
     BinanceArchiveError,
     epoch_unit,
@@ -28,8 +28,8 @@ from lobml.data.binance import (
     read_archive_csv,
     resample_book,
 )
-from lobml.data.schema import TRADE_SCHEMA, book_schema
-from lobml.data.validate import validate_book, validate_trades
+from trading_research.data.schema import TRADE_SCHEMA, book_schema
+from trading_research.data.validate import validate_book, validate_trades
 
 
 def make_archive(csv: str, name: str = "data.csv") -> bytes:
@@ -284,7 +284,7 @@ def test_dropped_connection_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 60-day download used to die on the first blip; it died at day 38."""
     import http.client
 
-    from lobml.data import binance
+    from trading_research.data import binance
 
     calls = {"n": 0}
 
@@ -305,7 +305,7 @@ def test_dropped_connection_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_missing_archive_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 404 means the day does not exist; asking again cannot help."""
-    from lobml.data import binance
+    from trading_research.data import binance
 
     calls = {"n": 0}
 

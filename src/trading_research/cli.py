@@ -8,9 +8,9 @@ at what actually went into a model instead of taking the pipeline's word for it.
 
 Commands available so far::
 
-    lobml generate-demo-data --output data/demo
-    lobml validate-data --input data/demo
-    lobml describe-schema
+    trading_research generate-demo-data --output data/demo
+    trading_research validate-data --input data/demo
+    trading_research describe-schema
 
 The remaining commands from the specification — ``download``, ``build-features``,
 ``train``, ``backtest``, ``report`` and ``run`` — arrive with the stages they
@@ -28,14 +28,19 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from lobml import __version__
-from lobml.data import store, synthetic
-from lobml.data.schema import BOOK_SCHEMA, TRADE_SCHEMA
-from lobml.data.validate import Severity, ValidationReport, validate_book, validate_trades
+from trading_research import __version__
+from trading_research.data import store, synthetic
+from trading_research.data.schema import BOOK_SCHEMA, TRADE_SCHEMA
+from trading_research.data.validate import (
+    Severity,
+    ValidationReport,
+    validate_book,
+    validate_trades,
+)
 
 app = typer.Typer(
-    name="lobml",
-    help="Leakage-aware ML research and backtesting for limit order books.",
+    name="trading-research",
+    help="Leakage-aware research pipeline for systematic trading.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -46,7 +51,7 @@ err_console = Console(stderr=True)
 
 def _version_callback(value: bool) -> None:
     if value:
-        console.print(f"lobml {__version__}")
+        console.print(f"trading-research {__version__}")
         raise typer.Exit
 
 
@@ -62,7 +67,7 @@ def main(
         ),
     ] = False,
 ) -> None:
-    """Leakage-aware ML research and backtesting for limit order books."""
+    """Leakage-aware research pipeline for systematic trading."""
 
 
 @app.command("generate-demo-data")
@@ -277,7 +282,12 @@ def download(
     """
     from datetime import date
 
-    from lobml.data.binance import ArchiveSpec, BinanceArchiveError, DayResult, download_range
+    from trading_research.data.binance import (
+        ArchiveSpec,
+        BinanceArchiveError,
+        DayResult,
+        download_range,
+    )
 
     try:
         spec = ArchiveSpec(market=market, kind=kind, symbol=symbol.upper())  # type: ignore[arg-type]

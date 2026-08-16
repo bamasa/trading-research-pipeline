@@ -1,6 +1,6 @@
 """A wide generated feature set, and the machinery that produces it.
 
-The hand-written features in :mod:`lobml.features.book` are a small set chosen
+The hand-written features in :mod:`trading_research.features.book` are a small set chosen
 for being individually checkable. This module takes the other approach: start
 from a handful of base quantities and expand them mechanically across
 transforms and windows, producing a few hundred columns, then let selection cut
@@ -10,7 +10,7 @@ Both approaches are in the project on purpose. The small set is what a person
 can reason about; the wide set is what actually gets used in practice, and it
 brings its own failure mode — with enough columns something always looks
 predictive on the training block. That is why the selection in
-:mod:`lobml.features.selection` is fitted strictly inside the training window,
+:mod:`trading_research.features.selection` is fitted strictly inside the training window,
 and why the wide set is never used without it.
 
 The expansion is deliberately generic: differences, log ratios, lags,
@@ -27,7 +27,13 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from lobml.data.schema import ask_price_col, ask_size_col, bid_price_col, bid_size_col, mid_price
+from trading_research.data.schema import (
+    ask_price_col,
+    ask_size_col,
+    bid_price_col,
+    bid_size_col,
+    mid_price,
+)
 
 #: Window lengths in observations. On a 100 ms grid: 0.5 s to 100 s.
 DEFAULT_WINDOWS: tuple[int, ...] = (5, 20, 50, 200, 1000)
@@ -193,7 +199,7 @@ def generate(
     parts = [expand(base, windows=windows, lags=lags)]
 
     if trades is not None and not trades.empty:
-        from lobml.features.align import build_trade_features
+        from trading_research.features.align import build_trade_features
 
         parts.append(build_trade_features(book, trades))
 

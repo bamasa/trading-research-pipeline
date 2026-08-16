@@ -17,8 +17,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from lobml.models.base import CLASSES, Model
-from lobml.models.linear import _align_columns
+from trading_research.models.base import CLASSES, Model
+from trading_research.models.linear import _align_columns
 
 
 class GradientBoostedBaseline(Model):

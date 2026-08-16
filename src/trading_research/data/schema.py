@@ -66,7 +66,7 @@ class Schema:
 
     ``validate`` only checks structure: presence, dtype and index. Semantic
     checks — monotone timestamps, positive prices, crossed books — live in
-    :mod:`lobml.data.validate`, because those are properties of a *dataset*
+    :mod:`trading_research.data.validate`, because those are properties of a *dataset*
     rather than of its type, and they need to report how badly a rule is broken
     rather than merely that it is.
     """
@@ -346,7 +346,7 @@ class DatasetManifest:
     depth: int | None = None
     seed: int | None = None
     generator: str | None = None
-    lobml_version: str | None = None
+    trading_research_version: str | None = None
     extra: dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
@@ -363,7 +363,7 @@ class DatasetManifest:
             ("depth", self.depth),
             ("seed", self.seed),
             ("generator", self.generator),
-            ("lobml_version", self.lobml_version),
+            ("trading_research_version", self.trading_research_version),
         ):
             if value is not None:
                 out[key] = value

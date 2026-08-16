@@ -28,14 +28,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from lobml.data.schema import (
+from trading_research.data.schema import (
     ask_price_col,
     ask_size_col,
     bid_price_col,
     bid_size_col,
     mid_price,
 )
-from lobml.features.registry import feature
+from trading_research.features.registry import feature
 
 BP: float = 1e4
 

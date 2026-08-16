@@ -29,7 +29,7 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from lobml.data.schema import TRADE_SCHEMA, signed_quantity
+from trading_research.data.schema import TRADE_SCHEMA, signed_quantity
 
 #: Windows used for trade-flow aggregation, as pandas offset strings.
 DEFAULT_WINDOWS: tuple[str, ...] = ("1s", "5s", "30s", "300s")

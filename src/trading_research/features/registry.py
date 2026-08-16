@@ -2,7 +2,7 @@
 
 The declaration is the point of this module. A feature that says
 ``lookback=20`` is making a checkable claim: its value at row *t* depends on
-rows *t-20…t* and on nothing after *t*. :mod:`lobml.validation.leakage` then
+rows *t-20…t* and on nothing after *t*. :mod:`trading_research.validation.leakage` then
 verifies that claim mechanically, by truncating the data and confirming that
 nothing before the cut moved.
 
@@ -227,7 +227,7 @@ def build(
     if len(planes) > 1:
         raise FeatureError(
             f"features span several planes ({sorted(planes)}); build each plane separately, "
-            f"then align them with lobml.features.align"
+            f"then align them with trading_research.features.align"
         )
 
     columns = {f.name: f(df) for f in selected}

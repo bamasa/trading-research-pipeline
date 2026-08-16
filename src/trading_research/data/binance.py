@@ -25,7 +25,7 @@ a minute, which is a slow liquidity context rather than a book.
 So features that need the touch (spread, microprice, queue imbalance, order flow
 imbalance at level 0) work on real data today. Features that need depth (level
 imbalance, book slope, concentration) need the collector, which records the
-websocket stream going forward. :func:`lobml.data.schema.book_schema` is
+websocket stream going forward. :func:`trading_research.data.schema.book_schema` is
 parameterised by depth precisely so both produce the same contract and the same
 feature code runs over either.
 
@@ -66,7 +66,7 @@ from typing import Final, Literal
 import numpy as np
 import pandas as pd
 
-from lobml.data.schema import TRADE_SCHEMA, book_schema
+from trading_research.data.schema import TRADE_SCHEMA, book_schema
 
 BASE_URL: Final = "https://data.binance.vision"
 LISTING_URL: Final = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
@@ -626,8 +626,8 @@ def _write_manifest(
     """
     import json
 
-    from lobml import __version__
-    from lobml.data.schema import SCHEMA_VERSION
+    from trading_research import __version__
+    from trading_research.data.schema import SCHEMA_VERSION
 
     converted = [r for r in results if r.output is not None and r.skipped is None]
     payload = {
@@ -637,7 +637,7 @@ def _write_manifest(
         "symbol": spec.symbol,
         "plane": "book" if spec.kind == "bookTicker" else "trades",
         "schema_version": SCHEMA_VERSION,
-        "lobml_version": __version__,
+        "trading_research_version": __version__,
         "requested_range": [start.isoformat(), end.isoformat()],
         "days_converted": len(converted),
         "days_missing": [r.day.isoformat() for r in results if r.output is None],
