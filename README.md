@@ -155,8 +155,40 @@ Inspect a data contract:
 uv run trading-research describe-schema book
 ```
 
-Nothing here downloads anything or needs credentials. `make help` lists the
-common tasks.
+Nothing here downloads anything or needs credentials.
+
+### The pipeline on real data
+
+Five stages, each a command, each writing files and a manifest. Download once,
+then run the rest as often as needed:
+
+```bash
+# once: public archives, checksum-verified, never committed
+uv run trading-research download --symbol BTCUSDT --kind bookTicker \
+    --start 2024-02-01 --end 2024-03-09 --grid 100ms
+uv run trading-research download --symbol BTCUSDT --kind aggTrades \
+    --start 2024-02-01 --end 2024-03-09
+
+# features, one file per day
+uv run trading-research prepare --symbol BTCUSDT --horizon 1200 --subsample 50
+
+# everything below reads only the window it is given
+uv run trading-research select --train-start 2024-02-01 --train-end 2024-02-14
+uv run trading-research train  --train-start 2024-02-01 --train-end 2024-02-14 \
+    --model logistic
+uv run trading-research predict --start 2024-02-22 --end 2024-02-28
+uv run trading-research backtest --min-confidence 0.62 --hold 24 --cooldown 120
+```
+
+The model is one flag — `--model logistic | xgboost | tcn` — and so are the
+instrument, the horizon and the feature set, so comparing combinations is the
+normal case rather than a special one.
+
+Run each model in its own invocation rather than looping inside one process:
+XGBoost and PyTorch each bundle an OpenMP runtime and deadlock together on
+macOS. The staged layout avoids this by construction.
+
+`make help` lists the common tasks.
 
 ---
 
