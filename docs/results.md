@@ -123,7 +123,7 @@ per trade. Small wins, large losses.
 | 2 min | xgboost | 45.4% | 0.94 | −11.57 | 0/7 |
 
 The best figure in the study is 5.18 bp at two minutes — still half of what it
-needed. See §5 before taking it at face value.
+needed. See §6 before taking it at face value.
 
 ### Sequence model against the tabular ones
 
@@ -298,7 +298,7 @@ negative, or smaller than the spread and slippage alone.
 
 This corrects an earlier reading of the same data. Taking the 5.18 bp gross
 figure from the horizon sweep, the break-even fee works out at 2.08 bp per side
-— reachable at a high volume tier. But that figure is the unstable one: §5
+— reachable at a high volume tier. But that figure is the unstable one: §6
 shows it falling to 2.24 bp once the sample is trimmed to the days the folds
 actually use. The lower number is the one to plan against.
 
