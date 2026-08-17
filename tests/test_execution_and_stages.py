@@ -148,6 +148,7 @@ def test_empty_trade_frame_keeps_its_columns() -> None:
         "direction",
         "entry_spread_bp",
         "move_bp",
+        "exit_reason",
     ]
 
 

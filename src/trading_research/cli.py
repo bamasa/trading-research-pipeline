@@ -471,6 +471,15 @@ def train_cmd(
         str, typer.Option("--model", "-m", help="always_hold, class_prior, logistic, xgboost, tcn.")
     ] = "logistic",
     threshold_bp: Annotated[float, typer.Option("--threshold-bp")] = 11.02,
+    calibrate: Annotated[
+        str | None,
+        typer.Option(
+            "--calibrate",
+            help="Calibrate probabilities: 'isotonic' or 'sigmoid'. Both are monotonic, "
+            "so a swept-threshold strategy trades identically either way; calibration "
+            "matters when the number is used as a number.",
+        ),
+    ] = None,
 ) -> None:
     """Fit one model on the training window."""
     from trading_research.pipeline.stages import StageError, train
@@ -484,6 +493,7 @@ def train_cmd(
             train_end=_as_date(train_end, "--train-end"),
             threshold_bp=threshold_bp,
             model=model,
+            calibrate=calibrate,
         )
     except (StageError, ImportError) as exc:
         err_console.print(f"[red]{exc}[/red]")
@@ -529,6 +539,14 @@ def backtest_cmd(
     cooldown_periods: Annotated[int, typer.Option("--cooldown", min=0)] = 0,
     fee_bp_per_side: Annotated[float, typer.Option("--fee-bp", min=0.0)] = 5.0,
     slippage_bp: Annotated[float, typer.Option("--slippage-bp", min=0.0)] = 0.5,
+    take_profit_bp: Annotated[
+        float | None,
+        typer.Option("--take-profit-bp", help="Close once this far in front. Caps winners."),
+    ] = None,
+    stop_loss_bp: Annotated[
+        float | None,
+        typer.Option("--stop-loss-bp", help="Close once this far behind. Realises dips."),
+    ] = None,
 ) -> None:
     """Turn probabilities into trades and profit.
 
@@ -547,6 +565,8 @@ def backtest_cmd(
             cooldown_periods=cooldown_periods,
             fee_bp_per_side=fee_bp_per_side,
             slippage_bp=slippage_bp,
+            take_profit_bp=take_profit_bp,
+            stop_loss_bp=stop_loss_bp,
         )
     except StageError as exc:
         err_console.print(f"[red]{exc}[/red]")
@@ -564,6 +584,9 @@ def backtest_cmd(
             f"{results['every_signal'][key]:,.2f}",
         )
     console.print(table)
+    reasons = results.get("exit_reasons") or {}
+    if reasons:
+        console.print("exits: " + ", ".join(f"{k} {v}" for k, v in reasons.items()))
     console.print(f"\n-> {out}")
 
 

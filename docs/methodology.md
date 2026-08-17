@@ -157,6 +157,56 @@ features from skill that comes from knowing most moments are HOLD.
 Hyperparameters are modest and fixed. A large search would make the comparison a
 comparison of search budgets.
 
+## Probability calibration
+
+`--calibrate isotonic` or `sigmoid` wraps any model, fitting the calibrator on
+the tail of the training block — data the model itself did not see, since a
+calibrator trained on the model's own fit learns to correct an overconfidence
+that only exists there.
+
+Both methods are **monotonic**, and that decides what calibration can do here.
+A strategy that trades whenever a score clears a threshold, and finds the
+threshold by sweeping it on validation, behaves identically before and after:
+the same trades are selected at a different numeric threshold. Observed
+directly — the same model calibrated and not produces the same ordering and a
+different confidence scale.
+
+It earns its place where the number is used as a number: sizing by expected
+value, comparing models on different scales, or any rule combining a
+probability with a payoff. Not for this pipeline's current decision rule, and
+saying so is more useful than adding it and implying otherwise.
+
+## Exit rules
+
+A position closes on the first of take-profit, stop-loss, and the clock. The
+clock alone is the default, and on this data it is also the best of the three:
+
+| Rule | Gross bp/trade | Hit rate |
+|---|---:|---:|
+| clock at H/4 | 0.73 | 58% |
+| clock at H/2 | 0.56 | 51% |
+| **clock at H** | **1.47** | 54% |
+| clock at 2H | 1.23 | 52% |
+| clock at 4H | −0.90 | 50% |
+| take-profit 5 bp | 0.60 | **69%** |
+| take-profit 50 bp | 2.00 | 54% |
+| stop-loss 5 bp | 1.00 | 42% |
+| stop-loss 20 bp | 1.70 | 54% |
+
+Holding for exactly the label horizon is right, which is unsurprising once
+stated: the model predicted a move over H, so a position held for less is
+closed before the prediction resolves and one held for longer is exposed to
+something the model said nothing about.
+
+A tight take-profit is the clearest trap in the table — 69% of trades win and
+the average outcome halves, because it caps the winners while the losers run
+their full course. A tight stop does the mirror image, converting ordinary
+noise into realised losses.
+
+These figures come from sweeping the rules over the test block, so they are an
+optimistic bound rather than a result. Choosing an exit rule properly means
+choosing it on validation, like the confidence threshold.
+
 ## Costs
 
 Taker on both legs: the published Binance USD-M rate of 0.05% per side, plus the

@@ -330,6 +330,7 @@ def train(
     threshold_bp: float,
     model: str = "logistic",
     params: dict[str, Any] | None = None,
+    calibrate: str | None = None,
 ) -> Path:
     """Fit one model on the training window and write it to disk.
 
@@ -352,6 +353,10 @@ def train(
         raise StageError(f"only {len(x)} usable training rows")
 
     estimator = build_model(model, **(params or {}))
+    if calibrate:
+        from trading_research.models.calibration import CalibratedModel
+
+        estimator = CalibratedModel(estimator, method=calibrate)
     estimator.fit(x, y)
 
     out.mkdir(parents=True, exist_ok=True)
@@ -365,7 +370,12 @@ def train(
             "features_dir": str(features_dir),
             "train": [str(train_start), str(train_end)],
         },
-        params={"model": model, "threshold_bp": threshold_bp, **(params or {})},
+        params={
+            "model": model,
+            "threshold_bp": threshold_bp,
+            "calibrate": calibrate,
+            **(params or {}),
+        },
         outputs={"n_rows": len(x), "n_features": len(columns), "model": estimator.describe()},
     ).write(out)
     return out
@@ -456,6 +466,8 @@ def backtest(
     fee_bp_per_side: float = 5.0,
     slippage_bp: float = 0.5,
     allow_reversal: bool = False,
+    take_profit_bp: float | None = None,
+    stop_loss_bp: float | None = None,
 ) -> Path:
     """Turn probabilities into trades and profit.
 
@@ -478,7 +490,16 @@ def backtest(
         hold_periods=hold_periods,
         cooldown_periods=cooldown_periods,
         allow_reversal=allow_reversal,
+        take_profit_bp=take_profit_bp,
+        stop_loss_bp=stop_loss_bp,
     )
+
+    mid = frame["mid"].to_numpy() if "mid" in frame.columns else None
+    if rules.needs_price_path and mid is None:
+        raise StageError(
+            "take-profit and stop-loss need the price path, which this prediction "
+            "file does not carry. Re-run prepare and predict to pick it up."
+        )
 
     decision = decide(proba, min_confidence=min_confidence)
     trades = thin(
@@ -486,6 +507,7 @@ def backtest(
         frame["forward_bp"].to_numpy(),
         frame["spread_bp_now"].to_numpy(),
         rules,
+        mid=mid,
     )
     summary = score(trades, costs)
 
@@ -511,8 +533,16 @@ def backtest(
             "hold_periods": hold_periods,
             "cooldown_periods": cooldown_periods,
             "allow_reversal": allow_reversal,
+            "take_profit_bp": take_profit_bp,
+            "stop_loss_bp": stop_loss_bp,
             "costs": costs.describe(),
         },
-        outputs={"thinned": summary, "every_signal": baseline},
+        outputs={
+            "thinned": summary,
+            "every_signal": baseline,
+            "exit_reasons": trades_to_frame(trades)["exit_reason"].value_counts().to_dict()
+            if trades
+            else {},
+        },
     ).write(out)
     return out
