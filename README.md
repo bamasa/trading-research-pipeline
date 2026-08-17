@@ -86,9 +86,16 @@ across twenty-one model-configuration-fold combinations, none was profitable,
 and the best gross edge belonged to plain logistic regression rather than to the
 network.
 
-See [`docs/results.md`](docs/results.md) and
-[`docs/limitations.md`](docs/limitations.md). No result here should be read as
-evidence that any strategy is or was profitable.
+![Gross against net](assets/bt_equity.png)
+
+The whole study in one figure: the model's calls are right often enough for the
+gross line to climb, and the fee takes it 1,200 basis points the other way.
+
+![Where the model traded](assets/bt_trades.png)
+
+See [`docs/results.md`](docs/results.md) for the full picture and
+[`docs/limitations.md`](docs/limitations.md) for what it does not establish. No
+result here should be read as evidence that any strategy is or was profitable.
 
 ---
 

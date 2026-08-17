@@ -144,6 +144,12 @@ def prepare(
 
         features.insert(0, "timestamp", book["timestamp"].iloc[warm_rows:])
         features["forward_bp"] = forward[warm_rows:]
+        # Carried for reporting only, and excluded from the feature columns: a
+        # model handed the price level learns "February 2024", not "markets".
+        # Charts of what a strategy did need the actual path, though, and
+        # reconstructing one afterwards is how a plausible-looking fabrication
+        # gets drawn.
+        features["mid"] = mid[warm_rows:]
         features["spread_bp_now"] = REGISTRY.get("spread_bp")(book).iloc[warm_rows:]
 
         features.iloc[::subsample].reset_index(drop=True).to_parquet(
@@ -197,7 +203,7 @@ def load_prepared(
 
 def feature_columns(frame: pd.DataFrame) -> list[str]:
     """The feature columns of a prepared frame, excluding bookkeeping."""
-    reserved = {"timestamp", "forward_bp", "spread_bp_now", "label"}
+    reserved = {"timestamp", "forward_bp", "spread_bp_now", "mid", "label"}
     return [c for c in frame.columns if c not in reserved]
 
 
@@ -411,6 +417,8 @@ def predict(
             "spread_bp_now": frame.loc[usable, "spread_bp_now"].to_numpy(),
         }
     )
+    if "mid" in frame.columns:
+        result["mid"] = frame.loc[usable, "mid"].to_numpy()
     for i, cls in enumerate(CLASSES):
         result[f"p_{cls}"] = proba[:, i]
 

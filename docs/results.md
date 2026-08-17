@@ -32,6 +32,19 @@ it would flatter every number below.
 
 ---
 
+## 0. The result, in two figures
+
+![Gross against net](../assets/bt_equity.png)
+
+![What a trade earned](../assets/bt_outcomes.png)
+
+The first shows a model whose calls are right often enough to climb gross, and a
+fee that takes it 1,200 bp the other way. The second shows why: the distribution
+of what a trade earns sits almost entirely inside the cost line, so most trades
+could never have paid for themselves however the direction turned out.
+
+Everything below is these two pictures in detail.
+
 ## 1. The ceiling, before any model
 
 Share of moments whose future move exceeds the round-trip cost — an upper bound
@@ -46,6 +59,8 @@ that already assumes the direction is predicted perfectly.
 | 1 min | 4.85% | 5.28% |
 | 5 min | 25.45% | 28.38% |
 | 10 min | 39.39% | 42.65% |
+
+![Room to trade](../assets/breakeven_share.png)
 
 Measured over the same ten days for both instruments, because comparing
 instruments over different windows measures the window. An earlier version of
@@ -64,6 +79,8 @@ Correlation of each feature with the forward return. BTCUSDT, 5.9M observations.
 | 1 min | 0.081 | 0.062 | 0.040 |
 | 5 min | 0.038 | 0.029 | 0.021 |
 | 10 min | 0.024 | 0.019 | 0.013 |
+
+![Signal decay](../assets/signal_decay.png)
 
 The signal is real and peaks around one second. Part of the sub-second figure is
 mechanical — the mid oscillates between bid and ask, and the microprice is
@@ -143,6 +160,8 @@ is not optional.
 | xgboost | 24 | 223 | 47% | −1.64 | −12.66 | 0/7 |
 | xgboost | 120 | 144 | 45% | −1.93 | −12.94 | 0/7 |
 
+![Every model against the cost](../assets/model_comparison.png)
+
 **Nothing was profitable: zero positive folds out of twenty-one.**
 
 **The simplest model won.** Logistic regression reaches 2.00 bp gross per trade,
@@ -221,6 +240,8 @@ cooldown after closing. Two-minute horizon, hand-picked features:
 | xgboost | 0 | 960 | −0.27 | −13.08 | 0/7 |
 | xgboost | 24 | 614 | **+0.26** | −12.54 | 0/7 |
 | xgboost | 120 | 280 | **+0.92** | −11.85 | 0/7 |
+
+![The effect of thinning](../assets/thinning.png)
 
 Thinning does what it should: trading eighteen times less turns a negative gross
 edge into a positive one, and the hit rate rises with it. The signals that
