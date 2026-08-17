@@ -128,6 +128,44 @@ fourteen days.
 applied unchanged to test. Choosing it on test is the most common way a
 short-horizon result is overstated.
 
+## How often to retrain
+
+The walk-forward above fits a model once per fold and uses it for a whole test
+week. That is a choice, not a fact, and by the seventh day the model is acting
+on a fortnight that ended a week ago. The alternative is to refit as you go, and
+three numbers describe any such scheme:
+
+| Parameter | Meaning | Trade-off |
+|---|---|---|
+| `train_days` | How much history the fit sees | Sample size against staleness |
+| `apply_days` | How long a fit is used before replacement | 1 means daily retraining |
+| `step_days` | How far the window moves each time | Equal to `apply_days` gives contiguous coverage, which is what a live system produces |
+
+None has an obvious value, so all three are searched — `trading-research
+retrain-search`. The span is split chronologically: the schedule is chosen on
+the first half and applied once to the second. A schedule is only eligible if it
+produced at least `--min-windows` refits on validation, because the best average
+over two windows is one lucky window with a decimal point.
+
+**Where the confidence threshold comes from.** A retraining scheme has no
+separate validation block — it has a training window and the days it trades. So
+the *tail of the training window* is reserved for the threshold sweep: the model
+fits on the front, the threshold is swept on the tail, and the days being traded
+see neither. That costs sample size and is the only arrangement in which
+everything configuring the trade decision comes from strictly before the first
+day it trades.
+
+**Windows that cannot be scored are counted, not hidden.** A training block with
+one class, or too few complete rows, is recorded as a skipped window rather than
+aborting the sweep — a schedule that fails half its windows is a finding about
+that schedule, and an exception would lose it.
+
+The search itself knows nothing about instruments, features or models: it is
+handed a callable that fits on one date range and scores another
+(`trading_research.validation.retrain`), and the pipeline builds that callable
+(`trading_research.pipeline.retraining`). Another instrument is a different
+prepared directory; another model is a different `--model`.
+
 ## Models
 
 Five, in increasing order of capacity:

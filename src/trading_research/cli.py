@@ -590,6 +590,173 @@ def backtest_cmd(
     console.print(f"\n-> {out}")
 
 
+@app.command("retrain-search")
+def retrain_search_cmd(
+    prepared: Annotated[Path, typer.Option("--prepared")] = Path("artifacts/prepared"),
+    features: Annotated[Path, typer.Option("--features")] = Path("artifacts/features"),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/retrain"),
+    model: Annotated[str, typer.Option("--model", help="One model per run.")] = "logistic",
+    threshold_bp: Annotated[float, typer.Option("--threshold-bp", min=0.0)] = 11.0,
+    hold_periods: Annotated[int, typer.Option("--hold", min=1)] = 24,
+    cooldown_periods: Annotated[int, typer.Option("--cooldown", min=0)] = 0,
+    fee_bp_per_side: Annotated[float, typer.Option("--fee-bp", min=0.0)] = 5.0,
+    slippage_bp: Annotated[float, typer.Option("--slippage-bp", min=0.0)] = 0.5,
+    train_days: Annotated[
+        str, typer.Option("--train-days", help="Comma-separated window lengths to try.")
+    ] = "3,7,14,21",
+    apply_days: Annotated[str, typer.Option("--apply-days")] = "1,3,7",
+    minimum_windows: Annotated[int, typer.Option("--min-windows", min=1)] = 3,
+    validation_fraction: Annotated[float, typer.Option("--validation-fraction")] = 0.5,
+    objective: Annotated[str, typer.Option("--objective")] = "net_per_trade_bp",
+    start: Annotated[
+        str | None,
+        typer.Option(
+            "--start", help="First day of the span. Days used to select features go before."
+        ),
+    ] = None,
+    end: Annotated[
+        str | None, typer.Option("--end", help="Last day of the span, inclusive.")
+    ] = None,
+    calibrate: Annotated[str | None, typer.Option("--calibrate")] = None,
+    max_train_rows: Annotated[
+        int | None, typer.Option("--max-train-rows", help="Keep only the tail. For the network.")
+    ] = None,
+) -> None:
+    """Search how often to retrain: window length, apply length, step.
+
+    The schedule is chosen on the first part of the span and applied once to the
+    rest. One model per run, because fitting a network in the same process as a
+    boosted tree deadlocks on macOS.
+    """
+    import json
+
+    import pandas as pd
+
+    from trading_research.backtest.costs import TakerCosts
+    from trading_research.pipeline.retraining import (
+        DayCache,
+        positive_window_share,
+        prepared_evaluator,
+        summarise,
+        trade_weighted,
+    )
+    from trading_research.pipeline.stages import StageError, StageManifest, load_selected
+    from trading_research.validation.retrain import ScheduleError, expand_grid, search, split_span
+
+    def numbers(text: str, flag: str) -> list[int]:
+        try:
+            return [int(part) for part in text.split(",") if part.strip()]
+        except ValueError as exc:
+            raise typer.BadParameter(f"{flag} must be comma-separated integers") from exc
+
+    try:
+        columns = load_selected(features)
+        cache = DayCache(prepared)
+        available = cache.available()
+        # The days that chose the features must not be scored, but they are in
+        # the past and a schedule may train on them — which is what lets a
+        # 21-day window trade from the first day of the span rather than the
+        # twenty-second.
+        span = available
+        if start is not None:
+            span = [d for d in span if d >= _as_date(start, "--start")]
+        if end is not None:
+            span = [d for d in span if d <= _as_date(end, "--end")]
+        history = [d for d in available if d < min(span)] if span else []
+        validation_days, test_days = split_span(span, validation_fraction=validation_fraction)
+        costs = TakerCosts(fee_bp_per_side=fee_bp_per_side, slippage_bp=slippage_bp)
+        evaluate = prepared_evaluator(
+            prepared,
+            columns,
+            threshold_bp=threshold_bp,
+            hold_periods=hold_periods,
+            cooldown_periods=cooldown_periods,
+            costs=costs,
+            model=model,
+            calibrate=calibrate,
+            max_train_rows=max_train_rows,
+        )
+        grid = expand_grid(numbers(train_days, "--train-days"), numbers(apply_days, "--apply-days"))
+        console.print(
+            f"{model}: {len(grid)} schedules, "
+            f"{len(validation_days)} validation days, {len(test_days)} test days"
+        )
+        outcome = search(
+            validation_days,
+            evaluate,
+            grid=grid,
+            objective=objective,
+            minimum_windows=minimum_windows,
+            test_days=test_days,
+            history=history,
+            aggregate=trade_weighted,
+            on_result=lambda r: console.print(
+                f"  {r.schedule.label}: {r.metrics['windows']:.0f} windows, "
+                f"{objective} {r.metrics.get(objective, float('nan')):.2f}"
+            ),
+        )
+    except (StageError, ScheduleError) as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"Retraining schedules on validation ({model})", show_edge=False)
+    ordered = summarise(outcome.validation, objective)
+    for column in ordered.columns:
+        table.add_column(column, justify="left" if column == "schedule" else "right")
+    for _, row in ordered.iterrows():
+        table.add_row(*[f"{v:,.2f}" if isinstance(v, float) else str(v) for v in row])
+    console.print(table)
+    console.print(f"\n[green]{outcome.summary()}[/green]")
+
+    out = Path(output)
+    out.mkdir(parents=True, exist_ok=True)
+    ordered.to_csv(out / "validation.csv", index=False)
+    test_outputs: dict[str, object] = {}
+    if outcome.test is not None:
+        pd.DataFrame(outcome.test.per_window).to_csv(out / "test_windows.csv", index=False)
+        test_outputs = {
+            "metrics": outcome.test.metrics,
+            "positive_window_share": positive_window_share(outcome.test),
+        }
+        console.print(
+            f"test: {outcome.test.metrics['windows']:.0f} windows, "
+            f"{positive_window_share(outcome.test):.0%} of them positive"
+        )
+    (out / "chosen.json").write_text(
+        json.dumps(
+            {
+                "chosen": outcome.chosen.label,
+                "objective": objective,
+                "train_days": outcome.chosen.train_days,
+                "apply_days": outcome.chosen.apply_days,
+                "step_days": outcome.chosen.step,
+                "test": test_outputs,
+            },
+            indent=2,
+            default=float,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    StageManifest(
+        stage="retrain-search",
+        inputs={"prepared_dir": str(prepared), "features_dir": str(features)},
+        params={
+            "model": model,
+            "threshold_bp": threshold_bp,
+            "hold_periods": hold_periods,
+            "cooldown_periods": cooldown_periods,
+            "objective": objective,
+            "grid": [s.label for s in grid],
+        },
+        outputs={
+            "chosen": outcome.chosen.label,
+            **({"test": test_outputs} if test_outputs else {}),
+        },
+    ).write(out)
+    console.print(f"\n-> {out}")
+
+
 @app.command("describe-schema")
 def describe_schema(
     plane: Annotated[

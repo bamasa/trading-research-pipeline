@@ -86,6 +86,13 @@ across twenty-one model-configuration-fold combinations, none was profitable,
 and the best gross edge belonged to plain logistic regression rather than to the
 network.
 
+One lever does move the number: **how often the model is retrained.** Fitting on
+a fortnight and refitting every day — schedule chosen on validation, applied
+once to test — raises XRP's gross edge to 12.31 bp against a 12.68 bp cost. That
+is a shortfall of 0.37 bp rather than the ~10 bp gap everywhere else, and it is
+still a loss: negative in sign, over 141 trades, with fewer than half its windows
+positive. It is the closest this study gets, and close is not across.
+
 ![Gross against net](assets/bt_equity.png)
 
 The whole study in one figure: the model's calls are right often enough for the
@@ -188,6 +195,11 @@ uv run trading-research train  --train-start 2024-02-01 --train-end 2024-02-14 \
     --model logistic
 uv run trading-research predict --start 2024-02-22 --end 2024-02-28
 uv run trading-research backtest --min-confidence 0.62 --hold 24 --cooldown 120
+
+# how often to retrain: window length, apply length and step, searched on the
+# first half of the span and applied once to the second
+uv run trading-research retrain-search --model logistic --start 2024-02-15 \
+    --train-days 3,7,14,21 --apply-days 1,3,7
 ```
 
 The model is one flag — `--model logistic | xgboost | tcn` — and so are the

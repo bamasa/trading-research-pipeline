@@ -559,3 +559,47 @@ def selection_leak(
         color=COLOURS["neutral"],
     )
     return _finish(fig, ax, "Why 'trade only the best signals' looks profitable", Path(path))
+
+
+def retrain_schedules(
+    results: pd.DataFrame,
+    path: Path | str,
+    *,
+    label: str = "",
+) -> Path:
+    """Net result per trade by retraining schedule, against break-even.
+
+    The chart the retraining sweep exists for. Grouped by how much history each
+    fit sees, one line per how long the fit is kept, so the two questions the
+    sweep asks are separated: does more history help, and does refitting more
+    often help.
+
+    Plotted net rather than gross because the comparison is between schedules
+    that trade very different amounts, and gross alone would flatter whichever
+    one traded least.
+    """
+    plt = _pyplot()
+    fig, ax = plt.subplots(figsize=(FIGSIZE[0], 4.2))
+
+    palette = [COLOURS["signal"], COLOURS["accent"], COLOURS["edge"]]
+    for i, (apply_days, group) in enumerate(results.groupby("apply_days")):
+        ordered = group.sort_values("train_days")
+        ax.plot(
+            ordered["train_days"],
+            ordered["net_per_trade_bp"],
+            marker="o",
+            markersize=5,
+            linewidth=1.8,
+            color=palette[i % len(palette)],
+            label=f"refit every {apply_days}d",
+        )
+
+    ax.axhline(0, color=COLOURS["cost"], linewidth=1.8, linestyle="--", label="break-even")
+    ax.set_xticks(sorted(results["train_days"].unique()))
+    ax.set_xlabel("days of history each fit sees")
+    ax.set_ylabel("net bp per trade")
+    ax.legend(frameon=False, fontsize=9)
+    title = "Retraining schedule against break-even"
+    if label:
+        title += f" — {label}"
+    return _finish(fig, ax, title, Path(path))

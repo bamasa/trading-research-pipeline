@@ -86,6 +86,19 @@ generalise, and the walk-forward folds overlap heavily, so the seven folds are
 not seven independent observations. They show stability across nearby windows,
 which is weaker than it looks.
 
+## The period was favourable, not unlucky
+
+The obvious objection to a negative result is that the window was quiet, and a
+strategy that needs a 12 bp move cannot find one in a flat market. It does not
+hold here. Realised daily volatility was measured across all 36 months of
+2023–2025 on the same instruments: the median month came to 219 bp, the range
+75–633 bp, and the window used here to 453 bp — **higher than 97% of the other
+months in three years**.
+
+So the period was among the most favourable available, which makes the negative
+result stronger rather than weaker. A quieter month would have less to trade,
+not more, and the cost line would not move.
+
 ## Class balance is extreme
 
 With the threshold at the cost floor, roughly 99% of moments are HOLD. Accuracy

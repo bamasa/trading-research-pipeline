@@ -4,7 +4,9 @@ BTCUSDT and XRPUSDT, Binance USD-M futures, February–March 2024. Best bid and
 ask sampled to a 100 ms grid, taker execution on both legs.
 
 **Nothing here was profitable.** Across two instruments, four horizons, two
-feature sets and four models, no walk-forward fold was positive after costs.
+feature sets and four models, no walk-forward fold was positive after costs. The
+nearest approach is XRP with daily retraining (§10), which earns 12.31 bp gross
+against a 12.68 bp cost — short by 0.37 bp, over 141 trades, and still negative.
 What follows is the evidence, and — more usefully — the mechanism.
 
 ---
@@ -23,6 +25,7 @@ Read these before the numbers. Every one of them moves the result.
 | Slippage | 0.5 bp per side |
 | Round trip | **11.02 bp** (BTCUSDT), **12.68 bp** (XRPUSDT) |
 | Validation | 14 train / 7 validation / 7 test days, stepped 1 day, 7 folds |
+| Retraining sweep (§10) | schedule searched on the first half of the span, applied once to the second |
 | Label threshold | the round-trip cost |
 
 Maker execution is not modelled. A resting order fills preferentially when the
@@ -370,7 +373,59 @@ figure from the horizon sweep, the break-even fee works out at 2.08 bp per side
 shows it falling to 2.24 bp once the sample is trimmed to the days the folds
 actually use. The lower number is the one to plan against.
 
-## 10. What would have to change
+## 10. How often to retrain
+
+Everything above fits a model once per fold and uses it for a whole test week.
+That is an assumption, and the most favourable reading of the negative result so
+far is that the model was simply stale. So the schedule was made a parameter:
+train on the last *W* days, act for the next *A*, move forward, refit. All three
+numbers were searched on validation and the winner applied once to test.
+
+![Retraining schedules, XRP](../assets/retrain_xrp.png)
+
+Every point is below the line, on both instruments and all three models. But the
+shape is real and it is not noise: **more history helps up to about a fortnight
+and then hurts**, and **refitting daily beats refitting weekly** at every window
+length. The peak at 14 days is the trade-off stated in the methodology showing
+up in the data — below it there is not enough to fit, above it the oldest days
+describe a different market.
+
+| Instrument | Model | Chosen on validation | Gross/trade | Net/trade | Trades | Positive windows |
+|---|---|---|---:|---:|---:|---:|
+| BTC | logistic | train21 / apply1 | +6.69 bp | **−4.72 bp** | 111 | 21% |
+| BTC | xgboost | train14 / apply1 | −1.17 bp | −12.26 bp | 336 | 8% |
+| BTC | tcn | train7 / apply3 | +0.37 bp | −10.80 bp | 353 | 0% |
+| XRP | logistic | train14 / apply1 | +12.31 bp | **−0.44 bp** | 141 | 47% |
+| XRP | xgboost | train7 / apply7 | +7.44 bp | −5.30 bp | 223 | 33% |
+| XRP | tcn | train21 / apply3 | +5.81 bp | −6.82 bp | 69 | 40% |
+
+Round trip is 11.02 bp on BTC and 12.68 bp on XRP. Schedules are chosen on the
+first half of each span and applied once to the second; the ten days before the
+span chose the features and are never scored.
+
+**This is the closest the project comes to break-even.** XRP with daily
+retraining earns 12.31 bp gross against a 12.68 bp cost — a shortfall of 0.37 bp
+rather than the ~10 bp gap everywhere else in this document. Refitting daily on
+a fortnight of history raises gross edge per trade by roughly an order of
+magnitude over the fixed-model walk-forward in §4.
+
+It is still not a profit, and the honest reading is narrower than it looks:
+
+- **The sign is negative.** Not marginally positive, not zero. Negative.
+- **141 trades.** The window-to-window spread puts the standard error near
+  3.8 bp, so −0.44 bp is indistinguishable from zero *and* from −8 bp. The
+  result rules nothing in.
+- **Fewer than half its windows made money** — 7 of 15. The aggregate is carried
+  by three good days out of fifteen.
+- **The gain is real but bounded.** It comes from trading far less (141 trades
+  over 25 days, against thousands in §4) on much better signals. That is the
+  same lever as §5 and §6, applied harder, and it runs out here.
+
+The linear model wins on both instruments. A boosted tree refitted daily on a
+week of data is fitting noise faster than the extra freshness is worth, and the
+network never had the sample size to justify itself.
+
+## 11. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
@@ -382,12 +437,18 @@ actually use. The lower number is the one to plan against.
   a lower or negative fee. It cannot be evaluated honestly without
   queue-position data, and is the only lever here large enough to matter.
 
-Three things that would **not** close it, on this evidence: a longer horizon,
-since the edge is horizon-invariant (§3); more features, which measurably made
-it worse (§4); trade thinning, which improves edge per trade but by about one
-basis point (§5); trading only the most confident signals, which is selection
-rather than edge (§6); and a better fee tier, which falls short by a factor of
-three (§9).
+Things that would **not** close it, on this evidence: a longer horizon, since
+the edge is horizon-invariant (§3); more features, which measurably made it
+worse (§4); trade thinning, which improves edge per trade but by about one basis
+point (§5); trading only the most confident signals, which is selection rather
+than edge (§6); and a better fee tier, which falls short by a factor of three
+(§9).
+
+Retraining frequency (§10) is the one lever that moved the number materially —
+it closed all but 0.37 bp of a 12.68 bp gap on XRP — and it still did not close
+it. That it got as far as it did is the strongest argument for the two levers
+above: a strategy this close to the line is one that maker execution or a real
+volume tier could plausibly push across.
 
 ---
 
