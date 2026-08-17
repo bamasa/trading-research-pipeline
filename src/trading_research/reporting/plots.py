@@ -501,3 +501,61 @@ def confidence_against_outcome(
     ax.set_ylabel("mean gross bp per trade")
     ax.legend(frameon=False, fontsize=9)
     return _finish(fig, ax, "Does confidence predict size?", Path(path))
+
+
+def selection_leak(
+    cutoffs: Sequence[str],
+    chosen_on_test: Sequence[float],
+    chosen_on_validation: Sequence[float],
+    path: Path | str,
+) -> Path:
+    """The same strategy scored two ways: cutoff picked on test, and honestly.
+
+    The most instructive figure here, and the one a reader is most likely to
+    need. Trading only the most confident signals looks profitable when the
+    cutoff is chosen after seeing how each one scored — the red line. Choose it
+    on validation and apply it once to test, which is the only version that
+    means anything, and the same strategy loses money.
+
+    Same code, same data, same model. The difference is entirely *when* the
+    cutoff was decided.
+    """
+    plt = _pyplot()
+    x = np.arange(len(cutoffs))
+
+    fig, ax = plt.subplots(figsize=(FIGSIZE[0], 4.2))
+    ax.plot(
+        x,
+        chosen_on_test,
+        marker="o",
+        markersize=6,
+        linewidth=2,
+        color=COLOURS["cost"],
+        label="cutoff chosen after seeing test",
+    )
+    ax.plot(
+        x,
+        chosen_on_validation,
+        marker="s",
+        markersize=6,
+        linewidth=2,
+        color=COLOURS["edge"],
+        label="cutoff chosen on validation",
+    )
+    ax.axhline(0, color=COLOURS["neutral"], linewidth=1.2)
+    ax.fill_between(x, chosen_on_test, chosen_on_validation, color=COLOURS["cost"], alpha=0.08)
+    ax.set_xticks(x)
+    ax.set_xticklabels(cutoffs)
+    ax.set_xlabel("how selective")
+    ax.set_ylabel("net bp per trade")
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    ax.text(
+        0.99,
+        0.04,
+        "same code, same data — only the timing of one decision differs",
+        transform=ax.transAxes,
+        ha="right",
+        fontsize=8,
+        color=COLOURS["neutral"],
+    )
+    return _finish(fig, ax, "Why 'trade only the best signals' looks profitable", Path(path))

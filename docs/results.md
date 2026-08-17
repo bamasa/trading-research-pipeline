@@ -140,7 +140,7 @@ per trade. Small wins, large losses.
 | 2 min | xgboost | 45.4% | 0.94 | −11.57 | 0/7 |
 
 The best figure in the study is 5.18 bp at two minutes — still half of what it
-needed. See §6 before taking it at face value.
+needed. See §7 before taking it at face value.
 
 ### Sequence model against the tabular ones
 
@@ -255,7 +255,45 @@ flips between instruments.** Logistic regression is the better model on BTCUSDT
 and the worse one on XRPUSDT. Whatever separates them is smaller than the
 difference between two markets in the same month.
 
-## 6. Stability
+## 6. Why "trade only the best signals" looks profitable
+
+The most tempting idea in this study, and the one that took the most care to
+answer. If the edge per trade is too small, trade less and pick better: act only
+on the signals the model is most confident about.
+
+![Selection leak](../assets/selection_leak.png)
+
+Both lines are the same strategy, the same code and the same data. The only
+difference is *when* the cutoff was decided.
+
+| Selectivity | Cutoff chosen on test | Cutoff chosen on validation |
+|---|---:|---:|
+| all signals | −11.19 | −11.19 |
+| top 1,000 | −6.47 | −6.20 |
+| top 300 | **+0.48** | −5.30 |
+| top 100 | **+7.44** | −4.84 |
+| top 30 | **+53.05** | −3.02 |
+
+Choosing the cutoff after seeing how each one scored produces a profitable
+strategy at any selectivity past a few hundred trades. Choosing it on
+validation and applying it once to test — the only version whose answer means
+anything — produces a losing one at every setting.
+
+Two further checks, in case the first looks like bad luck rather than
+selection. Ranking raw signal strength instead of model confidence, the mean
+outcome barely moves with selectivity at all: 0.65 bp in the top 10% of moments,
+0.74 in the top 1%, 0.56 in the top 0.01%, and −1.01 in the top 0.001%. The
+strongest signals are not the more profitable ones. And the validation-chosen
+cutoff jumps between 0.03% and 5% across folds that share 96% of their data,
+which is what fitting noise looks like from the outside.
+
+The reason this section exists: a strategy trading a handful of times a month
+cannot be distinguished from luck on this much data. Per-trade dispersion is
+about 8 bp against an edge under 1 bp, so establishing the edge is real takes
+thousands of trades. At three trades a month, a year of results is noise
+whichever way it comes out.
+
+## 7. Stability
 
 The two-minute, hand-picked, logistic configuration produced a gross edge of
 **5.18 bp** per trade in the horizon sweep and **2.24 bp** in the wide-feature
@@ -273,7 +311,7 @@ data. Seven agreeing folds are close to one observation repeated.
 
 ---
 
-## 7. Selection: three criteria, two of them wrong
+## 8. Selection: three criteria, two of them wrong
 
 The ranking stage was compared three ways on four days of BTCUSDT.
 
@@ -295,7 +333,7 @@ directional features on top and dropped the calendar terms entirely.
 
 ---
 
-## 8. Sensitivity to the fee
+## 9. Sensitivity to the fee
 
 The fee is the obvious lever, so it is worth checking properly rather than
 assuming. Costs are linear in the fee, so net profit per trade at any tier
@@ -328,11 +366,11 @@ negative, or smaller than the spread and slippage alone.
 
 This corrects an earlier reading of the same data. Taking the 5.18 bp gross
 figure from the horizon sweep, the break-even fee works out at 2.08 bp per side
-— reachable at a high volume tier. But that figure is the unstable one: §6
+— reachable at a high volume tier. But that figure is the unstable one: §7
 shows it falling to 2.24 bp once the sample is trimmed to the days the folds
 actually use. The lower number is the one to plan against.
 
-## 9. What would have to change
+## 10. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
@@ -347,8 +385,9 @@ actually use. The lower number is the one to plan against.
 Three things that would **not** close it, on this evidence: a longer horizon,
 since the edge is horizon-invariant (§3); more features, which measurably made
 it worse (§4); trade thinning, which improves edge per trade but by about one
-basis point (§5); and a better fee tier, which falls short by a factor of three
-(§8).
+basis point (§5); trading only the most confident signals, which is selection
+rather than edge (§6); and a better fee tier, which falls short by a factor of
+three (§9).
 
 ---
 
