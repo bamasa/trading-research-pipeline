@@ -27,6 +27,7 @@ from __future__ import annotations
 import warnings
 from itertools import product
 
+import numpy as np
 import pandas as pd
 
 from experiments._common import COSTS, RESULTS, emit, parser
@@ -38,12 +39,8 @@ from trading_research.pipeline.retraining import (
     trade_weighted,
 )
 from trading_research.pipeline.stages import load_selected
-from trading_research.validation.retrain import (
-    RetrainSchedule,
-    ScheduleError,
-    run_schedule,
-    split_span,
-)
+from trading_research.validation.retrain import RetrainSchedule, run_schedule, split_span
+from trading_research.validation.search import successive_halving
 
 #: Kept deliberately short. The schedule grid alone was twelve candidates and
 #: §13 showed what widening a search buys: a better validation figure and a
@@ -70,6 +67,13 @@ def main() -> None:
     p.add_argument("--min-windows", type=int, default=3)
     p.add_argument("--min-trades", type=int, default=50)
     p.add_argument("--max-train-rows", type=int, default=None)
+    p.add_argument(
+        "--candidates",
+        type=int,
+        default=48,
+        help="Configurations to sample. 0 keeps the whole space.",
+    )
+    p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
     warnings.filterwarnings("ignore")
 
@@ -86,15 +90,28 @@ def main() -> None:
         span = [d for d in available if d >= start]
         history = [d for d in available if d < start]
         validation_days, test_days = split_span(span)
-        scored = set(validation_days)
         print(
             f"{symbol} {args.model}: {len(combinations)} combinations, "
             f"{len(validation_days)} validation days, {len(test_days)} test days",
             flush=True,
         )
 
-        best: tuple[float, tuple] | None = None
-        for i, combination in enumerate(combinations, 1):
+        def score(
+            combination: tuple,
+            budget: int,
+            *,
+            prepared=prepared,
+            columns=columns,
+            cost=cost,
+            history=history,
+            validation_days=validation_days,
+        ) -> dict[str, float]:
+            """Score one configuration over the first ``budget`` validation days.
+
+            Budget is days rather than windows because that is what actually
+            costs time: a schedule refits once per apply window, and truncating
+            the span truncates the refits with it.
+            """
             gate, schedule, hold, cooldown, scale, objective = combination
             evaluate = prepared_evaluator(
                 prepared,
@@ -109,51 +126,50 @@ def main() -> None:
                 confidence_objective=objective,
                 hold_scale_by_confidence=scale,
             )
+            span_days = validation_days[:budget]
             lead = history[-schedule.train_days :] if history else []
-            try:
-                result = run_schedule(
-                    schedule,
-                    [*lead, *validation_days],
-                    evaluate,
-                    apply_within=scored,
-                    aggregate=trade_weighted,
-                )
-            except ScheduleError:
-                continue
-            if (
-                result.metrics["windows"] < args.min_windows
-                or result.metrics.get("trades", 0) < args.min_trades
-            ):
-                continue
-
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "model": args.model,
-                    "gate": gate.label,
-                    "schedule": schedule.label,
-                    "hold": hold,
-                    "cooldown": cooldown,
-                    "hold_scale": scale,
-                    "selectivity": objective,
-                    **{
-                        k: result.metrics.get(k)
-                        for k in (
-                            "trades",
-                            "hit_rate",
-                            "gross_per_trade_bp",
-                            "net_per_trade_bp",
-                            "net_bp",
-                            "confidence",
-                        )
-                    },
-                }
+            result = run_schedule(
+                schedule,
+                [*lead, *span_days],
+                evaluate,
+                apply_within=set(span_days),
+                aggregate=trade_weighted,
             )
-            value = float(result.metrics["net_per_trade_bp"])
-            if best is None or value > best[0]:
-                best = (value, combination)
-            if i % 20 == 0:
-                print(f"  {i}/{len(combinations)} ({len(rows)} scored)", flush=True)
+            return result.metrics
+
+        def label(combination: tuple) -> str:
+            gate, schedule, hold, cooldown, scale, objective = combination
+            return (
+                f"{gate.label} | {schedule.label} | hold{hold} | cd{cooldown} | "
+                f"scale{scale:g} | {objective}"
+            )
+
+        sampled = combinations
+        if args.candidates and args.candidates < len(combinations):
+            rng = np.random.default_rng(args.seed)
+            picked = rng.choice(len(combinations), size=args.candidates, replace=False)
+            sampled = [combinations[int(i)] for i in picked]
+
+        full = len(validation_days)
+        budgets = tuple(sorted({max(6, full // 4), max(8, full // 2), full}))
+        outcome = successive_halving(
+            sampled,
+            score,
+            objective="net_per_trade_bp",
+            budgets=budgets,
+            minimum_trades=args.min_trades,
+            label=label,
+            on_rung=lambda r: print(
+                f"  rung budget={r.budget}d: {r.candidates} candidates -> {r.survivors}",
+                flush=True,
+            ),
+        )
+        print(f"\n{outcome.summary()}", flush=True)
+        rows.extend(
+            {"symbol": symbol, "model": args.model, **row}
+            for row in outcome.table.to_dict("records")
+        )
+        best = (outcome.best_metrics["net_per_trade_bp"], outcome.best)
 
         if best is None:
             print(f"{symbol}: nothing scored", flush=True)

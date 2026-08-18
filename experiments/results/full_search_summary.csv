@@ -1,0 +1,5 @@
+symbol,model,chosen,test_gross,test_net,trades,pos_windows,single_lever_net,change
+BTCUSDT,logistic,vol>q0.7 | train7/apply1 | hold6 | cd24,0.95,-10.17,680,0.07,-4.72,-5.45
+BTCUSDT,order_flow,vol>q0.5/spread<q0.9 | train7/apply1 | hold6 | cd24,0.98,-10.03,3397,0.0,,
+XRPUSDT,logistic,no gate | train7/apply1 | hold6 | cd0,6.72,-5.9,690,0.36,-0.44,-5.46
+XRPUSDT,order_flow,vol>q0.7 | train14/apply1 | hold24 | scale1,0.17,-12.45,1722,0.0,,
