@@ -603,3 +603,69 @@ def retrain_schedules(
     if label:
         title += f" — {label}"
     return _finish(fig, ax, title, Path(path))
+
+
+def maker_tradeoff(results: pd.DataFrame, path: Path | str) -> Path:
+    """Fill rate against adverse selection, as patience is varied.
+
+    The figure behind the maker question. Waiting longer fills more orders, and
+    the extra fills are the ones the market had to move to reach — so the two
+    axes pull against each other and the chart is the shape of that pull rather
+    than a single number.
+
+    Fill rate on x because it is the quantity a strategy actually chooses: how
+    much of the signal it is willing to give up.
+    """
+    plt = _pyplot()
+    fig, ax = plt.subplots(figsize=(FIGSIZE[0], 4.2))
+
+    palette = [COLOURS["signal"], COLOURS["accent"]]
+    for i, (symbol, group) in enumerate(results.groupby("symbol")):
+        ordered = group.sort_values("fill_rate")
+        ax.plot(
+            ordered["fill_rate"] * 100,
+            ordered["adverse_selection_bp"],
+            marker="o",
+            markersize=5,
+            linewidth=1.8,
+            color=palette[i % len(palette)],
+            label=str(symbol),
+        )
+        for _, row in ordered.iterrows():
+            ax.annotate(
+                f"{row['patience_s']:g}s",
+                (row["fill_rate"] * 100, row["adverse_selection_bp"]),
+                textcoords="offset points",
+                xytext=(0, 7),
+                fontsize=7.5,
+                ha="center",
+                color=COLOURS["neutral"],
+            )
+
+    # One line per instrument: what posting saves depends on the spread, and a
+    # single line would invite reading XRPUSDT's points against BTCUSDT's
+    # threshold. The saving is the whole comparison, so it cannot be averaged.
+    for i, (symbol, group) in enumerate(results.groupby("symbol")):
+        saved = float(group["cost_saved_bp"].iloc[0])
+        ax.axhline(
+            saved,
+            color=palette[i % len(palette)],
+            linewidth=1.4,
+            linestyle="--",
+            alpha=0.8,
+            label=f"{symbol}: cost saved by posting ({saved:.1f} bp)",
+        )
+
+    ax.set_xlabel("% of posted orders that filled")
+    ax.set_ylabel("adverse selection, bp")
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    ax.text(
+        0.99,
+        0.04,
+        "below its own dashed line, posting pays for its adverse selection",
+        transform=ax.transAxes,
+        ha="right",
+        fontsize=8,
+        color=COLOURS["neutral"],
+    )
+    return _finish(fig, ax, "What posting costs, and what it saves", Path(path))

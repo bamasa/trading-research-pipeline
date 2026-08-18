@@ -28,10 +28,10 @@ Read these before the numbers. Every one of them moves the result.
 | Retraining sweep (§10) | schedule searched on the first half of the span, applied once to the second |
 | Label threshold | the round-trip cost |
 
-Maker execution is not modelled. A resting order fills preferentially when the
-market is about to move through it, and estimating that adverse selection needs
-queue-position data this project does not have. Quoting maker economics without
-it would flatter every number below.
+Maker execution is not modelled anywhere in §0–§10: every entry and every exit
+crosses the spread and pays the taker fee. §11 takes it up separately, with a
+queue model built from the aggressor side of each print, and treats the result
+as a bound rather than as a strategy.
 
 ---
 
@@ -151,34 +151,36 @@ Full seven-fold schedule, all three models, two-minute horizon, BTCUSDT. Each
 model in its own process — see [`limitations.md`](limitations.md) for why that
 is not optional.
 
-| Model | Cooldown | Trades | Hit | Gross/trade | Net/trade | Folds + |
+| Model | Cooldown | Trades/fold | Hit | Gross/trade | Net/trade | Folds + |
 |---|---:|---:|---:|---:|---:|---:|
-| logistic | 0 | 185 | 50% | +0.20 | −10.94 | 0/7 |
-| **logistic** | 24 | 151 | 52% | **+2.00** | **−9.13** | 0/7 |
-| logistic | 120 | 109 | 53% | +0.30 | −10.83 | 0/7 |
-| tcn | 0 | 132 | 52% | −3.27 | −14.81 | 0/7 |
-| tcn | 24 | 109 | **55%** | +0.39 | −11.19 | 0/7 |
-| tcn | 120 | 84 | **55%** | +0.91 | −10.68 | 0/7 |
-| xgboost | 0 | 272 | 47% | −0.79 | −11.81 | 0/7 |
-| xgboost | 24 | 223 | 47% | −1.64 | −12.66 | 0/7 |
-| xgboost | 120 | 144 | 45% | −1.93 | −12.94 | 0/7 |
+| logistic | 0 | 174 | 50% | −0.10 | −11.25 | 0/7 |
+| **logistic** | 24 | 143 | 51% | **+1.81** | **−9.32** | 0/7 |
+| logistic | 120 | 104 | 53% | +0.81 | −10.33 | 0/7 |
+| tcn | 0 | 122 | 48% | −1.85 | −13.22 | 0/7 |
+| tcn | 24 | 91 | 47% | −1.75 | −13.22 | 0/7 |
+| tcn | 120 | 65 | 46% | −1.81 | −13.29 | 0/7 |
+| xgboost | 0 | 233 | 47% | −0.63 | −11.64 | 0/7 |
+| xgboost | 24 | 194 | 46% | −1.73 | −12.75 | 0/7 |
+| xgboost | 120 | 132 | 46% | −1.49 | −12.51 | 0/7 |
 
 ![Every model against the cost](../assets/model_comparison.png)
 
 **Nothing was profitable: zero positive folds out of twenty-one.**
 
-**The simplest model won.** Logistic regression reaches 2.00 bp gross per trade,
-twice the network's best, and is the only one positive under all three thinning
-settings. Gradient boosting is negative everywhere.
+**The simplest model won.** Logistic regression reaches 1.81 bp gross per trade
+and is the only one of the three positive at any cooldown. Gradient boosting and
+the network are negative everywhere.
 
 **The network did not earn its complexity.** It trains about thirty times slower
-than the linear model, needs its own process, and produces less than half the
-edge. Seeing a window is worth something — its hit rate is the highest in the
-table — but not enough to matter against an 11 bp round trip.
+than the linear model, needs its own process, and is negative at every cooldown.
+Seeing a window of history is worth something in principle; it is not worth
+enough to matter against an 11 bp round trip.
 
-**Accuracy misleads again, most starkly here.** The TCN has the best hit rate in
-the study at 55% and half the gross edge of logistic regression at 52%. It is
-right more often and wrong more expensively.
+The network's figures move between runs — it is initialised randomly and the
+schedule is not seeded end to end — by more than the distance between the models
+in this table. An earlier run of the same script put it at +0.39 bp rather than
+−1.75. That instability is itself the finding: a model whose result swings by
+two basis points across runs cannot be said to have found a 0.4 bp edge.
 
 A note on reading single folds. An earlier version of this section reported the
 network on one fold, where it showed +1.63 bp gross with no cooldown. The full
@@ -271,23 +273,25 @@ difference is *when* the cutoff was decided.
 
 | Selectivity | Cutoff chosen on test | Cutoff chosen on validation |
 |---|---:|---:|
-| all signals | −11.19 | −11.19 |
-| top 1,000 | −6.47 | −6.20 |
-| top 300 | **+0.48** | −5.30 |
-| top 100 | **+7.44** | −4.84 |
-| top 30 | **+53.05** | −3.02 |
+| all signals | −10.54 | −10.54 |
+| top 1,000 | −9.92 | −10.47 |
+| top 300 | −7.25 | −9.90 |
+| top 100 | −7.05 | −7.29 |
+| top 30 | **+3.13** | −7.36 |
 
-Choosing the cutoff after seeing how each one scored produces a profitable
-strategy at any selectivity past a few hundred trades. Choosing it on
-validation and applying it once to test — the only version whose answer means
-anything — produces a losing one at every setting.
+Choosing the cutoff after seeing how each one scored turns a losing strategy
+into a profitable one at the tightest setting. Choosing it on validation and
+applying it once to test — the only version whose answer means anything —
+produces a loss at every setting, and the gap between the two columns widens as
+the selection gets tighter, which is what selection looks like from the outside.
 
-Two further checks, in case the first looks like bad luck rather than
-selection. Ranking raw signal strength instead of model confidence, the mean
-outcome barely moves with selectivity at all: 0.65 bp in the top 10% of moments,
-0.74 in the top 1%, 0.56 in the top 0.01%, and −1.01 in the top 0.001%. The
-strongest signals are not the more profitable ones. And the validation-chosen
-cutoff jumps between 0.03% and 5% across folds that share 96% of their data,
+Two further checks, in case the first looks like bad luck rather than selection.
+Ranking raw signal strength instead of model confidence, with no model and no
+fitted threshold anywhere, the mean outcome barely moves with selectivity at
+all: 0.71 bp in the top 10% of moments, 0.92 in the top 1%, 0.52 in the top
+0.1%, 0.91 in the top 0.01%. Every one of those is under a basis point against
+an 11 bp cost — the strongest signals are not the more profitable ones. And the
+validation-chosen cutoff jumps around across folds that share 96% of their data,
 which is what fitting noise looks like from the outside.
 
 The reason this section exists: a strategy trading a handful of times a month
@@ -425,7 +429,72 @@ The linear model wins on both instruments. A boosted tree refitted daily on a
 week of data is fitting noise faster than the extra freshness is worth, and the
 network never had the sample size to justify itself.
 
-## 11. What would have to change
+## 11. Posting instead of crossing
+
+Every number above crosses the spread. The last lever left is posting, and the
+standing reason not to model it is adverse selection: a resting order fills
+preferentially when the market is about to move through it. That objection is
+correct, and it is measurable here — `aggTrades` gives the aggressor side of
+every print and `bookTicker` gives the size at the touch, which together support
+a first-order queue model.
+
+A passive buy is posted at the best bid, waits behind the size already resting,
+and fills once enough sell-aggressor volume has cleared it. Adverse selection is
+then the difference between the forward move at all decision moments and the
+forward move at the moments that actually filled.
+
+![What posting costs and saves](../assets/maker_tradeoff.png)
+
+| Instrument | Patience | Filled | Median wait | Adverse selection | Cost saved | Net |
+|---|---:|---:|---:|---:|---:|---:|
+| BTCUSDT | 1 s | 13% | 0.4 s | 0.79 bp | 3.52 bp | **+2.73 bp** |
+| BTCUSDT | 10 s | 45% | 2.4 s | 0.88 bp | 3.52 bp | +2.64 bp |
+| BTCUSDT | 60 s | 73% | 6.0 s | 1.09 bp | 3.52 bp | +2.43 bp |
+| XRPUSDT | 1 s | 1.7% | 0.5 s | 0.16 bp | 5.18 bp | **+5.02 bp** |
+| XRPUSDT | 10 s | 14% | 4.4 s | 2.18 bp | 5.18 bp | +3.00 bp |
+| XRPUSDT | 60 s | 49% | 20.4 s | 2.84 bp | 5.18 bp | +2.34 bp |
+
+The trade-off is exactly the one the objection predicts, and it is visible in
+both directions: waiting longer fills more orders, and the extra fills are the
+ones the market had to move to reach. XRPUSDT shows it most sharply — adverse
+selection rises seventeen-fold, from 0.16 bp to 2.84 bp, as patience goes from
+one second to a minute.
+
+**But it never overtakes what posting saves.** Entering passively and exiting by
+crossing costs 7.5 bp against 11.02 and 12.68 taker, and the saving exceeds the
+adverse selection at every setting on both instruments. Net of both, posting is
+worth between +2.3 and +5.0 bp per trade.
+
+Set against §10, where daily retraining left XRPUSDT 0.37 bp short, that is more
+than enough to close the gap on paper.
+
+### Why this is a bound and not a result
+
+The gap it would close is 0.37 bp; the margin it claims is 2.3 bp. That is a
+comfortable-looking distance, and four things sit inside it:
+
+- **The adverse selection is measured at unconditional moments**, not at the
+  moments a model wants to trade. Those are precisely the moments the market is
+  about to move, which is the worst case for a resting order — you are run over
+  or you are missed. The figure here is a floor on the real one.
+- **The fill rate destroys the sample.** XRPUSDT at ten seconds fills 14% of
+  orders. The strategy that took 141 trades as a taker would take about twenty
+  as a maker, and twenty trades establish nothing.
+- **The queue model is optimistic.** The size ahead is taken as the touch size
+  and never grows, cancellations ahead are ignored, and the order's own size is
+  treated as negligible. Every one of those flatters the fill.
+- **Only the entry is passive.** A position held to a horizon must be closed
+  whether or not anyone comes to trade with it, so the exit still crosses. A
+  fully passive strategy needs the same analysis on the way out, where being
+  unable to fill is a risk rather than a missed opportunity.
+
+What this section establishes is narrower than "maker execution works": it is
+that the standard reason for dismissing it — adverse selection eats the saving —
+does not hold on this data at this horizon. Whether the remaining margin
+survives conditioning on a signal is a question this data can ask but the
+experiment here does not answer.
+
+## 12. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
@@ -433,9 +502,11 @@ network never had the sample size to justify itself.
 - **Trade thinning.** Every signal is treated as an independent round trip. A
   real system imposes a cooldown and does not hold overlapping positions,
   which raises edge per trade at the cost of trade count.
-- **Maker execution.** Changes the arithmetic entirely — no spread crossed, and
-  a lower or negative fee. It cannot be evaluated honestly without
-  queue-position data, and is the only lever here large enough to matter.
+- **Maker execution.** Measured in §11 rather than assumed: worth +2.3 to
+  +5.0 bp per trade after the adverse selection it causes, which is more than
+  the 0.37 bp §10 was short by. The caveats there are the work still to do —
+  chiefly that adverse selection was measured at unconditional moments, not at
+  the moments a model wants to trade.
 
 Things that would **not** close it, on this evidence: a longer horizon, since
 the edge is horizon-invariant (§3); more features, which measurably made it
