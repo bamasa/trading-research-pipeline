@@ -314,7 +314,15 @@ MODELS = {
     "order_flow": "trading_research.models.classical:OrderFlowRule",
     "breakout": "trading_research.models.classical:Breakout",
     "spread_capture": "trading_research.models.classical:SpreadCapture",
+    # Fitted on a basis-point target rather than a class. See
+    # trading_research.labels.targets for what they are asked to predict.
+    "ridge": "trading_research.models.regression:RidgeBaseline",
+    "xgboost_regressor": "trading_research.models.regression:GradientBoostedRegressor",
 }
+
+#: Which models can be fitted on which kind of target. A classifier handed a
+#: basis-point target would silently treat every distinct value as a class.
+REGRESSION_MODELS = frozenset({"ridge", "xgboost_regressor"})
 
 #: Named ensembles. Members are averaged, so the entry stays a string a config
 #: can carry. The network is excluded from the default: it needs its own
