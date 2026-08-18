@@ -306,6 +306,14 @@ MODELS = {
     "logistic": "trading_research.models.linear:LogisticBaseline",
     "xgboost": "trading_research.models.gbm:GradientBoostedBaseline",
     "tcn": "trading_research.models.tcn:TCNBaseline",
+    # Rule-based, fitted to nothing. The baselines a desk would run first, and
+    # the ones a learned model has to beat before the learning has earned its
+    # place.
+    "momentum": "trading_research.models.classical:Momentum",
+    "mean_reversion": "trading_research.models.classical:MeanReversion",
+    "order_flow": "trading_research.models.classical:OrderFlowRule",
+    "breakout": "trading_research.models.classical:Breakout",
+    "spread_capture": "trading_research.models.classical:SpreadCapture",
 }
 
 #: Named ensembles. Members are averaged, so the entry stays a string a config
