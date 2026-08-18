@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,rule_gated_by_model,914.0,0.5234965527037138,-0.8789989493162806,-11.97814106111805,-10604.362644466766,0

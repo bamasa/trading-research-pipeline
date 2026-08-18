@@ -98,6 +98,13 @@ mostly buys selectivity, which the cost floor then eats.
 
 ![Rules against models](assets/strategies_btc.png)
 
+Given five strategies and a daily choice between them — including the choice
+not to trade — the selector stands aside on every single day it is offered
+(§15). It is not a strategy that failed to find an edge; it is one that
+identified in real time that there was none and acted accordingly. The
+configurations that trade are the ones forbidden from declining, and they lose
+around 2,600 bp of notional a day doing it.
+
 One lever does move the number: **how often the model is retrained.** Fitting on
 a fortnight and refitting every day — schedule chosen on validation, applied
 once to test — raises XRP's gross edge to 12.31 bp against a 12.68 bp cost. That

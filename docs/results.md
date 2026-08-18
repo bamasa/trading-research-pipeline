@@ -4,11 +4,14 @@ BTCUSDT and XRPUSDT, Binance USD-M futures, February–March 2024. Best bid and
 ask sampled to a 100 ms grid, taker execution on both legs.
 
 **Nothing here was profitable.** Across two instruments, four horizons, two
-feature sets, four models and five rule-based strategies, no walk-forward fold
-was positive after costs — and the best gross edge belongs to a rule with no
-parameters rather than to any model (§14). The
-nearest approach is XRP with daily retraining (§10), which earns 12.31 bp gross
-against a 12.68 bp cost — short by 0.37 bp, over 141 trades, and still negative.
+feature sets, four models, five rule-based strategies and four ways of combining
+them, no walk-forward fold was positive after costs. The best gross edge belongs
+to a rule with no parameters rather than to any model (§14), and the best
+overall configuration is a daily selector that, given the option, never places a
+trade (§15). The nearest approach is XRP with daily retraining (§10), which
+earns 12.31 bp gross against a 12.68 bp cost — short by 0.37 bp, over 141
+trades, and still negative.
+
 What follows is the evidence, and — more usefully — the mechanism.
 
 ---
@@ -737,7 +740,72 @@ the cost floor then eats.
 That is worth stating plainly because the reverse claim is the default
 assumption in most of this literature, and it costs nothing to check.
 
-## 15. What would have to change
+## 15. Combining them, and switching between them
+
+Two things left to try. Consult a rule and a model together instead of choosing
+between them, and run several strategies side by side, picking each day's from
+the days already finished — with standing aside as an option.
+
+### Rules and models together
+
+| Strategy | Kind | Gross/trade | Trades |
+|---|---|---:|---:|
+| model gated by rule | composite | **+0.62** | 12,534 |
+| order flow | rule | +0.56 | 12,555 |
+| spread capture | rule | +0.50 | 4,977 |
+| breakout | rule | +0.42 | 10,159 |
+| logistic | learned | −0.20 | 859 |
+| blend | composite | −0.59 | 1,965 |
+| rule gated by model | composite | −0.88 | 914 |
+| agreement | composite | −1.30 | 1,008 |
+| xgboost | learned | −3.68 | 728 |
+
+BTCUSDT, seven folds, two-minute horizon.
+
+The best entry is the model taking the direction and the rule deciding whether
+the moment is worth it — but it beats the rule alone by 0.06 bp on the same
+number of trades, which is not a difference. What is informative is the
+ordering: **taking confidence from the rule works, taking it from the model does
+not.** The reverse arrangement loses 0.88 bp and requiring both to agree loses
+1.30, because the model's selectivity cuts the sample to a fourteenth and the
+trades it keeps are not better ones.
+
+### Choosing a strategy each day
+
+Five strategies run side by side; each day's choice made from a trailing window
+of finished days; the selector free to trade nothing.
+
+| Lookback | Floor | Switches | Days aside | Trades/day | Net/trade | Max drawdown |
+|---|---|---:|---:|---:|---:|---:|
+| 3 d | none | 4 | 0 | 241 | −10.65 | 23,598 bp |
+| 3 d | 0 bp | 0 | **10 of 10** | 0 | — | **0** |
+| 5 d | none | 2 | 0 | 251 | −10.78 | 18,608 bp |
+| 5 d | 0 bp | 0 | **8 of 8** | 0 | — | **0** |
+| 10 d | none | 1 | 0 | 272 | −11.94 | 7,227 bp |
+| 10 d | 0 bp | 0 | **3 of 3** | 0 | — | **0** |
+
+BTCUSDT. XRPUSDT is the same picture: with a floor the selector stands aside on
+nine days of ten, trades once, and loses 1,250 bp doing it.
+
+**Given the option not to trade, it never trades.** Every configuration with a
+floor stands aside on every day it is offered, because no strategy in the stable
+ever shows a positive trailing edge to clear it. The configurations that trade
+are the ones forbidden from declining, and they lose between 10.6 and 11.9 bp
+per trade with drawdowns from seven to twenty-four thousand basis points.
+
+This is the whole study in one table, and it is worth reading twice. The
+selector is not a strategy that failed to find an edge. It is a strategy that
+correctly identified there was none, in real time, from data available at the
+time, and acted on that by doing nothing. **The best-performing configuration in
+this entire document is the one that never places a trade** — and under a cost
+floor with no edge, that is the correct answer rather than a joke.
+
+It also puts a number on what the alternative costs. A strategy trading 250
+times a day at −10.65 bp per trade loses roughly 2,600 bp of notional a day.
+Whatever the temptation to keep a system running because it is built, the
+arithmetic of continuing is not close.
+
+## 16. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
