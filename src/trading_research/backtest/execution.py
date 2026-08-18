@@ -372,16 +372,20 @@ def trades_to_frame(trades: list[Trade]) -> pd.DataFrame:
     return pd.DataFrame([t.__dict__ for t in trades])
 
 
-def score(trades: list[Trade], costs: object) -> dict[str, float]:
+def score(trades: list[Trade], costs: object, *, days: float | None = None) -> dict[str, float]:
     """Profit and loss for a set of thinned trades.
 
     Reported per trade as well as in total, because thinning changes the trade
     count by design: a total that improves purely because fewer trades were
     taken says nothing, while an improvement per trade says the surviving
     signals were the better ones.
+
+    Pass ``days`` to get the figures a desk asks for before any of these —
+    trades per day, profit per day, and the worst drawdown along the way. See
+    :mod:`trading_research.backtest.metrics`.
     """
     if not trades:
-        return {
+        empty = {
             "trades": 0.0,
             "gross_bp": 0.0,
             "cost_bp": 0.0,
@@ -390,13 +394,16 @@ def score(trades: list[Trade], costs: object) -> dict[str, float]:
             "net_per_trade_bp": float("nan"),
             "hit_rate": float("nan"),
         }
+        if days is not None:
+            empty.update({"trades_per_day": 0.0, "net_bp_per_day": 0.0, "max_drawdown_bp": 0.0})
+        return empty
 
     frame = trades_to_frame(trades)
     gross = (frame["direction"] * frame["move_bp"]).to_numpy()
     cost = np.asarray(costs.round_trip_bp(frame["entry_spread_bp"]))  # type: ignore[attr-defined]
     net = gross - cost
 
-    return {
+    result = {
         "trades": float(len(trades)),
         "gross_bp": float(gross.sum()),
         "cost_bp": float(cost.sum()),
@@ -405,3 +412,12 @@ def score(trades: list[Trade], costs: object) -> dict[str, float]:
         "net_per_trade_bp": float(net.mean()),
         "hit_rate": float((gross > 0).mean()),
     }
+    if days is not None:
+        from trading_research.backtest.metrics import summarise
+
+        # The hit rate here is on net rather than gross: a trade that moved the
+        # right way but not far enough to pay for itself is not a win.
+        extended = summarise(net, days=days)
+        result.update({k: v for k, v in extended.items() if k not in result})
+        result["net_hit_rate"] = extended["hit_rate"]
+    return result
