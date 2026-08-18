@@ -961,7 +961,53 @@ This closes the question the brief opened with. Within ten seconds to five
 minutes, on this instrument, with features for both ends, there is no horizon at
 which taker execution pays.
 
-## 19. What would have to change
+## 19. Which instrument, decided before anything is fitted
+
+Step 0 was the one step done by hand, and it turns out to have been the most
+consequential. The instrument fixes the cost floor, and every result in this
+document is a comparison against that floor.
+
+The screen ranks on **headroom**: the share of moments whose move over the
+horizon exceeds the cost of trading it. That is the upper bound from §1, so no
+model can beat it and none is needed to compute it. Three days of best bid and
+ask per instrument, resampled to a second.
+
+| Instrument | Median spread | Round trip | Headroom at 2 min | Typical move ÷ cost |
+|---|---:|---:|---:|---:|
+| LINKUSDT | 0.54 bp | 11.54 | **41.1%** | **0.96** |
+| AVAXUSDT | 0.29 bp | 11.29 | 30.7% | 0.74 |
+| SOLUSDT | 0.10 bp | 11.10 | 30.4% | 0.78 |
+| ADAUSDT | 2.02 bp | 13.02 | 16.7% | 0.58 |
+| XRPUSDT | 1.98 bp | 12.98 | 16.6% | 0.65 |
+| ETHUSDT | 0.04 bp | 11.04 | 11.4% | 0.50 |
+| **BTCUSDT** | 0.02 bp | 11.02 | **10.1%** | **0.45** |
+| DOGEUSDT | 1.27 bp | 12.27 | 6.2% | 0.45 |
+| BNBUSDT | 0.33 bp | 11.33 | 4.8% | 0.38 |
+
+**The two instruments this study used are near the bottom.** BTCUSDT has a
+tenth of its moments clearing the cost against LINKUSDT's four tenths, and a
+typical two-minute move covers 45% of a round trip against 96%. Four times the
+headroom, for the same fee.
+
+That is a screen doing its job, and doing it after the fact. The cheapest
+instrument by spread is the worst by headroom, because BTCUSDT is quoted one
+tick wide and barely moves at this horizon while the fee stays at 10 bp either
+way. Ranking on cost — the obvious thing — points exactly the wrong way.
+
+**What it does not say.** Headroom is a ceiling under perfect prediction. An
+instrument with four times the room is not four times as profitable, or
+profitable at all: the study's models capture a small fraction of the ceiling
+they were given, and there is no reason from this table to think they would
+capture a larger fraction elsewhere. LINKUSDT at 0.96 still means the average
+move does not quite cover one round trip under perfect foresight.
+
+What the screen establishes is narrower and worth having: **the instrument was
+chosen badly, and choosing it well costs an hour**. Every model, feature, exit
+rule and search in the preceding eighteen sections was applied to two of the
+least promising candidates available, and none of that work would have
+identified the problem.
+
+## 20. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

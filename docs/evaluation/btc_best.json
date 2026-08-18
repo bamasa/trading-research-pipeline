@@ -1,0 +1,31 @@
+{
+  "name": "btc_best",
+  "metrics": {
+    "trades": 703.0,
+    "trades_per_day": 20.085714285714285,
+    "net_bp": -4940.556796883093,
+    "net_per_trade_bp": -7.027819056732707,
+    "net_bp_per_day": -141.1587656252312,
+    "max_drawdown_bp": 4942.484183761116,
+    "drawdown_trades": 702.0,
+    "profit_factor": 0.5012131674169995,
+    "hit_rate": 0.35135135135135137,
+    "days": 35.0,
+    "return_over_drawdown": -0.9996100368142087,
+    "gross_per_trade_bp": 4.265409450512719,
+    "per_trade_dispersion_bp": 33.279635916637176
+  },
+  "context": {
+    "cost_bp_per_trade": 11.02,
+    "source": "experiments/results/best_trades_BTCUSDT.csv",
+    "configurations_tried": 6,
+    "trades_for_two_sigma": "90",
+    "trades_available": "703"
+  },
+  "unknowns": [
+    "Whether the features leak \u2014 this is a property of the code, not of the trade log.",
+    "Whether the reported configuration was chosen before or after seeing this period.",
+    "Whether fills are achievable at size: no queue position, partial fills or impact are modelled.",
+    "Whether the result holds outside the period and instrument measured here."
+  ]
+}

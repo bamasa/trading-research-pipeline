@@ -127,15 +127,15 @@ result here should be read as evidence that any strategy is or was profitable.
 
 ## The pipeline, step by step
 
-Eleven steps from "which market" to "running in production". Nine are built;
-two are marked and are not.
+Twelve steps from "which market" to "running in production". Eleven are built;
+the last is marked and is not.
 
 ```
  ┌── 0 ──────────┐   ┌── 1 ──────────┐   ┌── 2 ──────────┐   ┌── 3 ──────────┐
- │ pick the      │   │ get the data  │   │ build         │   │ label what    │
- │ instrument    │──▶│ + contracts   │──▶│ features      │──▶│ counts as a   │
- │ + model class │   │ + validation  │   │ (declared     │   │ move worth    │
- │   ⚠ manual    │   │               │   │  lookback)    │   │ trading       │
+ │ screen        │   │ get the data  │   │ build         │   │ label what    │
+ │ instruments   │──▶│ + contracts   │──▶│ features      │──▶│ counts as a   │
+ │ by headroom   │   │ + validation  │   │ (declared     │   │ move worth    │
+ │               │   │               │   │  lookback)    │   │ trading       │
  └───────────────┘   └───────────────┘   └───────────────┘   └───────────────┘
                                                                      │
  ┌── 7 ──────────┐   ┌── 6 ──────────┐   ┌── 5 ──────────┐   ┌── 4 ──▼───────┐
@@ -144,16 +144,22 @@ two are marked and are not.
  │               │   │ (threshold)   │   │               │   │               │
  └───────────────┘   └───────────────┘   └───────────────┘   └───────────────┘
          │
- ┌── 8 ──▼───────┐   ┌── 9 ──────────┐   ┌── 10 ─────────┐
- │ charge the    │   │ search the    │   │ deploy + run  │
- │ costs         │──▶│ configuration │──▶│   ⚠ not built │
- │               │   │ (smart, not   │   │               │
- └───────────────┘   │  exhaustive)  │   └───────────────┘
+ ┌── 8 ──▼───────┐   ┌── 9 ──────────┐   ┌── 10 ─────────┐   ┌── 11 ─────────┐
+ │ charge the    │   │ search the    │   │ review it     │   │ deploy + run  │
+ │ costs         │──▶│ configuration │──▶│ against a     │──▶│   ⚠ not built │
+ │               │   │ (smart, not   │   │ strict rubric │   │               │
+ └───────────────┘   │  exhaustive)  │   └───────────────┘   └───────────────┘
                      └───────────────┘
 ```
 
-**0. Choose the instrument and the class of model.** ⚠ *Not automated — this is
-still a judgement made by hand.* The choice is not cosmetic: it fixes the cost
+**0. Choose the instrument.** `trading-research screen` ranks candidates by
+**headroom** — the share of moments whose move clears the cost of trading it,
+which is the ceiling from §1 and needs no model. Three days of best bid and ask
+per instrument is enough. Running it after the fact showed this study picked two
+of the worst available: BTCUSDT clears the cost at a tenth of its moments
+against LINKUSDT's four tenths.
+
+*Choosing the model class is still a judgement made by hand.* The choice is not cosmetic: it fixes the cost
 floor, and the cost floor decides everything downstream. BTCUSDT is one tick
 wide, so almost the entire round trip is fee; XRPUSDT carries a 1.7 bp spread on
 top. What should happen here is a screen across candidate instruments —
@@ -206,7 +212,19 @@ rather than a nested product — cheap candidates are killed after a few windows
 and only survivors are measured on the full span. Everything is chosen on
 validation and the test span is scored once.
 
-**10. Deploy and run.** ⚠ *Not built.* What is missing is not the model but
+**10. Review it.** `trading-research review` assembles the arithmetic half of
+[`docs/evaluation/rubric.md`](docs/evaluation/rubric.md) — result, dispersion,
+drawdown, and how many trades the edge would need to be established — into a
+document a reviewer or an agent can read.
+[`docs/evaluation/prompt.md`](docs/evaluation/prompt.md) is the reviewer's
+instructions. The tool scores nothing: something that produced the evidence and
+graded it would be marking its own work.
+
+This project's own scorecard is in
+[`docs/evaluation/btc_best.md`](docs/evaluation/btc_best.md), and it is not
+flattering.
+
+**11. Deploy and run.** ⚠ *Not built.* What is missing is not the model but
 everything around it: a live data feed with gap recovery, the feature pipeline
 running in streaming rather than batch, an order router, position and risk
 limits, a kill switch, and monitoring that compares live fills against what the
@@ -425,6 +443,9 @@ Done:
 - [x] Model ensembles, and a market gate that declines to trade in conditions
       that cannot support the cost
 - [x] Successive halving over sampled configurations, in place of a grid
+- [x] Instrument screening by headroom, before anything is fitted
+- [x] A review rubric and an evidence pack for it, applied to this project's
+      own result
 
 Next, staying with taker execution:
 

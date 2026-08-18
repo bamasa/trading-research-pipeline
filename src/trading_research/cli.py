@@ -25,6 +25,7 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated
 
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -905,6 +906,108 @@ def exit_search_cmd(
         outputs={"chosen": outcome.chosen.label, "test": outcome.test},
     ).write(out)
     console.print(f"\n-> {out}")
+
+
+@app.command("screen")
+def screen_cmd(
+    raw: Annotated[Path, typer.Option("--raw", help="Downloaded data directory.")] = Path(
+        "data/raw"
+    ),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/screen"),
+    horizon_s: Annotated[float, typer.Option("--horizon-s", min=1.0)] = 120.0,
+    max_days: Annotated[int | None, typer.Option("--max-days", min=1)] = None,
+    fee_bp_per_side: Annotated[float, typer.Option("--fee-bp", min=0.0)] = 5.0,
+    slippage_bp: Annotated[float, typer.Option("--slippage-bp", min=0.0)] = 0.5,
+) -> None:
+    """Rank instruments by how much room there is to trade them.
+
+    Step 0, and the only step that runs before anything is fitted. Measures the
+    share of moments whose move over the horizon clears the cost of trading it
+    — an upper bound that assumes perfect prediction, so no model can beat it
+    and none is needed to compute it.
+
+    A screen eliminates rather than selects: an instrument with 10% headroom is
+    not necessarily tradeable, and one with 0.1% definitely is not.
+    """
+    from trading_research.backtest.costs import TakerCosts
+    from trading_research.data.screen import screen_directory
+
+    costs = TakerCosts(fee_bp_per_side=fee_bp_per_side, slippage_bp=slippage_bp)
+    table = screen_directory(raw, horizon_s=horizon_s, max_days=max_days, costs=costs)
+    if table.empty:
+        err_console.print(f"[red]no instruments found under {raw}[/red]")
+        raise typer.Exit(code=1)
+
+    rendered = Table(title=f"Headroom at {horizon_s:g}s", show_edge=False)
+    for column in table.columns:
+        rendered.add_column(column, justify="left" if column == "symbol" else "right")
+    for _, row in table.iterrows():
+        rendered.add_row(
+            *["—" if pd.isna(v) else (f"{v:,.4g}" if isinstance(v, float) else str(v)) for v in row]
+        )
+    console.print(rendered)
+
+    out = Path(output)
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_csv(out / "screen.csv", index=False)
+    console.print(f"\n-> {out / 'screen.csv'}")
+
+
+@app.command("review")
+def review_cmd(
+    trades: Annotated[Path, typer.Option("--trades", help="CSV of trades with a net_bp column.")],
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/review"),
+    name: Annotated[str, typer.Option("--name")] = "strategy",
+    days: Annotated[float, typer.Option("--days", min=0.1)] = 1.0,
+    cost_bp: Annotated[float, typer.Option("--cost-bp", min=0.0)] = 11.02,
+    configurations: Annotated[
+        int | None,
+        typer.Option(
+            "--configurations",
+            help="How many were tried in total, not how many are shown. Omitted "
+            "means the selection dimension cannot be scored above 1.",
+        ),
+    ] = None,
+) -> None:
+    """Assemble the evidence a strategy review needs.
+
+    Computes the arithmetic half of ``docs/evaluation/rubric.md`` — the result,
+    the dispersion, the drawdown, the sample size needed to establish the edge
+    — and writes it as a document a reviewer or an agent can read.
+
+    It scores nothing. A tool that produced the evidence and graded it would be
+    marking its own work, which is the failure the rubric exists to catch.
+    """
+    from trading_research.evaluation import build_scorecard
+
+    if not trades.exists():
+        err_console.print(f"[red]no such file: {trades}[/red]")
+        raise typer.Exit(code=1)
+
+    frame = pd.read_csv(trades)
+    if "net_bp" not in frame.columns:
+        err_console.print(f"[red]{trades} has no net_bp column[/red]")
+        raise typer.Exit(code=1)
+
+    per_period = pd.DataFrame()
+    if "fold" in frame.columns:
+        per_period = frame.groupby("fold", as_index=False).agg(net_bp=("net_bp", "sum"))
+    card = build_scorecard(
+        name,
+        frame["net_bp"].to_numpy(),
+        days=days,
+        gross_per_trade_bp=frame["gross_bp"].to_numpy() if "gross_bp" in frame else None,
+        per_period=per_period,
+        context={"cost_bp_per_trade": cost_bp, "source": str(trades)},
+        configurations_tried=configurations,
+    )
+    written = card.write(Path(output) / f"{name}.md")
+    console.print(card.to_markdown())
+    console.print(f"-> {written}")
+    console.print(
+        "\nReview it against [bold]docs/evaluation/rubric.md[/bold] using "
+        "[bold]docs/evaluation/prompt.md[/bold]."
+    )
 
 
 @app.command("describe-schema")
