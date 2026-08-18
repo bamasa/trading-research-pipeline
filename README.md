@@ -22,8 +22,9 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > **Status: complete end to end, taker execution only.** Data contracts,
 > synthetic market, downloader, feature registry with look-ahead checks, purged
 > walk-forward splits, five models, calibration, cost-aware backtesting, a
-> searched retraining schedule, and the experiment scripts behind every
-> published table. Maker execution is measured as a bound in
+> searched retraining schedule, rule-based strategies alongside the learned
+> ones, ensembles, six exit rules, a market gate, successive-halving search, and
+> the experiment scripts behind every published table. Maker execution is measured as a bound in
 > [§11](docs/results.md) and deliberately not built on — see the
 > [roadmap](#roadmap).
 
@@ -106,6 +107,96 @@ gross line to climb, and the fee takes it 1,200 basis points the other way.
 See [`docs/results.md`](docs/results.md) for the full picture and
 [`docs/limitations.md`](docs/limitations.md) for what it does not establish. No
 result here should be read as evidence that any strategy is or was profitable.
+
+---
+
+## The pipeline, step by step
+
+Eleven steps from "which market" to "running in production". Nine are built;
+two are marked and are not.
+
+```
+ ┌── 0 ──────────┐   ┌── 1 ──────────┐   ┌── 2 ──────────┐   ┌── 3 ──────────┐
+ │ pick the      │   │ get the data  │   │ build         │   │ label what    │
+ │ instrument    │──▶│ + contracts   │──▶│ features      │──▶│ counts as a   │
+ │ + model class │   │ + validation  │   │ (declared     │   │ move worth    │
+ │   ⚠ manual    │   │               │   │  lookback)    │   │ trading       │
+ └───────────────┘   └───────────────┘   └───────────────┘   └───────────────┘
+                                                                     │
+ ┌── 7 ──────────┐   ┌── 6 ──────────┐   ┌── 5 ──────────┐   ┌── 4 ──▼───────┐
+ │ decide how to │   │ decide when   │   │ fit + choose  │   │ split in time │
+ │ leave         │◀──│ to enter      │◀──│ the model     │◀──│ purge+embargo │
+ │               │   │ (threshold)   │   │               │   │               │
+ └───────────────┘   └───────────────┘   └───────────────┘   └───────────────┘
+         │
+ ┌── 8 ──▼───────┐   ┌── 9 ──────────┐   ┌── 10 ─────────┐
+ │ charge the    │   │ search the    │   │ deploy + run  │
+ │ costs         │──▶│ configuration │──▶│   ⚠ not built │
+ │               │   │ (smart, not   │   │               │
+ └───────────────┘   │  exhaustive)  │   └───────────────┘
+                     └───────────────┘
+```
+
+**0. Choose the instrument and the class of model.** ⚠ *Not automated — this is
+still a judgement made by hand.* The choice is not cosmetic: it fixes the cost
+floor, and the cost floor decides everything downstream. BTCUSDT is one tick
+wide, so almost the entire round trip is fee; XRPUSDT carries a 1.7 bp spread on
+top. What should happen here is a screen across candidate instruments —
+spread, tick size, volume, how often a move clears the cost — that ranks them
+before any modelling. What happens today is that two were picked and the
+consequences measured afterwards.
+
+**1. Get the data, under a contract.** `trading-research download` pulls
+Binance public archives, verifies checksums, and converts to a declared schema.
+Two planes are modelled separately — trades and book — because a full order book
+cannot be reconstructed from a trade tape. `validate-data` checks the contract
+and reports gaps, crossed books and clock problems as findings rather than
+crashes.
+
+**2. Build features.** Every feature is a pure function that declares how far
+back it looks. The test suite mutates data *after* a cutoff and asserts nothing
+before the cutoff moved, which catches centred windows, backward fills and
+whole-sample normalisation — the three ways look-ahead usually gets in.
+
+**3. Label what counts as a move worth trading.** A forward return larger than
+the round-trip cost is a BUY or a SELL; everything else is HOLD. The threshold
+is the cost, so the model is learning to spot moves that could actually pay,
+not moves that merely happen.
+
+**4. Split in time.** Walk-forward over whole days, with the embargo derived
+from the label's horizon rather than guessed. A label at *t* reads prices to
+*t+H*, so the tail of every training block is dropped.
+
+**5. Fit and choose the model.** Rule-based strategies (momentum, mean
+reversion, order-flow, breakout) run through the identical machinery as the
+learned ones (logistic, gradient boosting, a dilated causal network) and their
+ensembles. A comparison where the baseline is scored differently is not a
+comparison.
+
+**6. Decide when to enter.** One threshold on the model's confidence, swept on
+validation. Raising it trades less and more selectively; the sweep can optimise
+either total profit or profit per trade, and the second is what "trade only the
+best signals" means when the cut is made honestly.
+
+**7. Decide how to leave.** Six rules: a fixed clock, take-profit, stop-loss,
+trailing stop, and two that read the model's ongoing opinion — leave when its
+confidence decays, or when its prediction flips. Plus a market gate that
+declines to trade at all when volatility cannot support the cost.
+
+**8. Charge the costs.** The same cost model at labelling, at the decision, and
+in the profit and loss. Taker on both legs: fee, spread, slippage.
+
+**9. Search the configuration.** Successive halving over sampled configurations
+rather than a nested product — cheap candidates are killed after a few windows
+and only survivors are measured on the full span. Everything is chosen on
+validation and the test span is scored once.
+
+**10. Deploy and run.** ⚠ *Not built.* What is missing is not the model but
+everything around it: a live data feed with gap recovery, the feature pipeline
+running in streaming rather than batch, an order router, position and risk
+limits, a kill switch, and monitoring that compares live fills against what the
+backtest assumed. That last one is the point — a strategy that silently decays
+looks identical to one that is working until it does not.
 
 ---
 
@@ -314,14 +405,36 @@ Done:
 - [x] Retraining schedule as a searched parameter, not an assumption
 - [x] Experiment scripts behind every published table
 - [x] Six exit rules, with the policy searched on validation
+- [x] Rule-based strategies — momentum, mean reversion, order flow, breakout —
+      scored through the same machinery as the learned ones
+- [x] Model ensembles, and a market gate that declines to trade in conditions
+      that cannot support the cost
+- [x] Successive halving over sampled configurations, in place of a grid
 
 Next, staying with taker execution:
 
+- [ ] **Step 0: automate instrument selection.** A screen over candidate
+      instruments — spread in bp, tick size, volume, share of moves clearing
+      the cost — ranking them before any modelling. Today the instrument is a
+      judgement made by hand, and it fixes the cost floor that decides
+      everything downstream.
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
 - [ ] Order-book collector with sequence-gap recovery, for depth beyond the touch
 - [ ] Position sizing from calibrated probabilities rather than a fixed unit
 - [ ] Holding period searched jointly with the entry threshold, since §12 shows
       the label horizon is not the right one to hold for
+
+**Step 10: deployment.** Nothing here runs live, and the gap is not the model:
+
+- [ ] Live feed with sequence-gap recovery and a reconnect that does not silently
+      skip data
+- [ ] Features computed in streaming rather than batch, producing bit-identical
+      values to the research path — a discrepancy here is the classic way a
+      backtest and a live system quietly diverge
+- [ ] Order router, position limits, risk limits, kill switch
+- [ ] Monitoring that compares live fills against what the backtest assumed:
+      realised spread, slippage, fill rate. A strategy that is decaying looks
+      exactly like one that is working until it does not
 
 Maker execution — deferred, deliberately
 ----------------------------------------
