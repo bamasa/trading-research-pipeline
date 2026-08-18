@@ -818,16 +818,21 @@ improves as the rate falls is ranking well even if it never reaches profit; one
 whose result is flat or worse is not ranking at all, and its threshold is
 arbitrary.
 
-Gross bp per trade at each target rate:
+Each cell is **gross / net** basis points per trade. Gross is before the round
+trip, net is after it — 11.02 bp on BTCUSDT, 12.68 on XRPUSDT. Both are shown
+because a column of gross figures alone reads as a column of profits, and none
+of these is one.
 
 | Trades/day | BTC order flow | BTC breakout | XRP order flow | XRP model+rule gate |
 |---|---:|---:|---:|---:|
-| 5 | −3.61 | +2.52 | −2.83 | −0.89 |
-| 10 | −2.06 | +1.43 | +1.11 | +1.67 |
-| **30** | +0.65 | +0.65 | **+3.92** | **+3.69** |
-| 50 | +0.80 | +0.23 | +1.83 | +2.83 |
-| 100 | +0.99 | +0.64 | +1.90 | +1.99 |
-| 250 | +0.67 | +0.42 | +1.20 | +0.74 |
+| 5 | −3.61 / −14.63 | +2.52 / **−8.50** | −2.83 / −15.56 | −0.89 / −13.60 |
+| 10 | −2.06 / −13.08 | +1.43 / −9.61 | +1.11 / −11.64 | +1.67 / −11.04 |
+| **30** | +0.65 / −10.37 | +0.65 / −10.39 | **+3.92** / **−8.81** | +3.69 / −9.04 |
+| 50 | +0.80 / −10.22 | +0.23 / −10.80 | +1.83 / −10.88 | +2.83 / −9.90 |
+| 100 | +0.99 / −10.03 | +0.64 / −10.39 | +1.90 / −10.82 | +1.99 / −10.74 |
+| 250 | +0.67 / −10.35 | +0.42 / −10.61 | +1.20 / −11.53 | +0.74 / −12.00 |
+
+Every net figure is negative. The best is −8.50.
 
 **There is an optimum, and it is not at the extreme.** Around thirty to forty
 trades a day the gross edge roughly quadruples against trading everything — 3.92
@@ -842,9 +847,9 @@ feature is extreme for reasons that have nothing to do with the next two
 minutes. And the sample shrinks: 5 trades a day over seven folds is 250 trades,
 where per-trade dispersion of about 8 bp swamps an edge of 3.
 
-**None of it reaches profit.** The best net figure in the table is −8.50 bp
-(BTCUSDT breakout, 5/day) against an 11.02 cost, and −8.81 (XRPUSDT order flow,
-30/day) against 12.68. Quadrupling the edge closes about a third of the gap.
+**None of it reaches profit.** Quadrupling the gross edge closes about a third
+of the gap and leaves two thirds. A cell reading +3.92 is a trade that made
+3.92 bp before paying 12.68 to be made.
 
 Two strategies rank and two do not. Breakout on BTCUSDT improves monotonically
 as the rate falls, which says its confidence carries information about which
