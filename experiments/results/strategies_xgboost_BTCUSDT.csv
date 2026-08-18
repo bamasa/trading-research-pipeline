@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,xgboost,728.0,0.45815766992524537,-3.6771287304568316,-14.69383370000125,-9979.218641475452,0

@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,spread_capture,4977.0,0.5227416913608093,0.503106538965581,-10.513019210953233,-52348.74310743607,0

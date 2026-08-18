@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XRPUSDT,mean_reversion,11012.0,0.4990352005316064,0.598613427105133,-12.12274839696373,-133446.11985626176,0

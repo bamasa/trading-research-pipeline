@@ -90,6 +90,14 @@ across twenty-one model-configuration-fold combinations, none was profitable,
 and the best gross edge belonged to plain logistic regression rather than to the
 network.
 
+And the learning is not what produces what edge there is. Trading the queue
+imbalance directly — one feature, no model, no parameters — beats logistic
+regression, gradient boosting and their ensemble on gross edge per trade, on
+both instruments, through identical machinery. The models' extra apparatus
+mostly buys selectivity, which the cost floor then eats.
+
+![Rules against models](assets/strategies_btc.png)
+
 One lever does move the number: **how often the model is retrained.** Fitting on
 a fortnight and refitting every day — schedule chosen on validation, applied
 once to test — raises XRP's gross edge to 12.31 bp against a 12.68 bp cost. That

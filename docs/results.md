@@ -4,7 +4,9 @@ BTCUSDT and XRPUSDT, Binance USD-M futures, February–March 2024. Best bid and
 ask sampled to a 100 ms grid, taker execution on both legs.
 
 **Nothing here was profitable.** Across two instruments, four horizons, two
-feature sets and four models, no walk-forward fold was positive after costs. The
+feature sets, four models and five rule-based strategies, no walk-forward fold
+was positive after costs — and the best gross edge belongs to a rule with no
+parameters rather than to any model (§14). The
 nearest approach is XRP with daily retraining (§10), which earns 12.31 bp gross
 against a 12.68 bp cost — short by 0.37 bp, over 141 trades, and still negative.
 What follows is the evidence, and — more usefully — the mechanism.
@@ -637,7 +639,65 @@ number. Running two of them together gives a worse number than running one.
 Only the second of those was computed under the rules the rest of this document
 uses, so it is the one that counts.
 
-## 14. What would have to change
+## 14. A rule with no parameters against models with many
+
+Everything above compares learned models with each other. That answers a
+narrower question than it looks like: it says which model is least bad, not
+whether the learning did anything. The test for that is a rule with no
+parameters — the sort of thing a desk runs before anyone opens a notebook.
+
+Five, all decades old: trade with the imbalance at the touch, trade the recent
+move, trade against it, trade a move that clears the range, trade only when the
+spread is tight. None fits anything beyond a normalisation scale and none ever
+sees the label. They go through the identical walk-forward, confidence
+threshold, thinning and cost model as the learned ones, because a comparison
+where the baseline is scored by different machinery is not a comparison.
+
+![Rules against models, BTCUSDT](../assets/strategies_btc.png)
+
+| Strategy | Kind | BTC gross | XRP gross |
+|---|---|---:|---:|
+| order flow | rule | **+0.56** | **+1.02** |
+| spread capture | rule | +0.50 | +1.00 |
+| breakout | rule | +0.42 | +0.76 |
+| momentum | rule | +0.20 | −0.60 |
+| mean reversion | rule | −0.20 | +0.60 |
+| logistic | learned | −0.20 | +0.92 |
+| ensemble | learned | −1.48 | −8.33 |
+| xgboost | learned | −3.68 | −5.21 |
+
+Gross basis points per trade, seven folds, two-minute horizon, cooldown of one
+holding period.
+
+**The order-flow rule wins on both instruments.** Trading with the queue
+imbalance — the single feature §2 identified, used directly with no model at all
+— produces more gross edge per trade than logistic regression, gradient boosting
+or their average. On BTCUSDT the top four are all rules and every learned model
+is below them.
+
+**It also trades fifteen times as much.** The rule takes 12,555 trades against
+859 for logistic, because the confidence threshold cuts a learned model much
+harder. The rule's figure therefore rests on far more evidence, which cuts both
+ways: it is the more reliable number, and it is achieved without the
+selectivity that was supposed to be the models' advantage.
+
+**The ensemble is the worst thing here.** Averaging logistic and gradient
+boosting produces −1.48 on BTCUSDT and −8.33 on XRPUSDT, below either member.
+Averaging reduces variance around whatever the members agree on; when one member
+is badly wrong the average inherits it. It is a variance tool and it was applied
+to a bias problem.
+
+None of this is profitable — zero positive folds out of fourteen for every
+strategy but one. What it establishes is narrower and more useful: on this data,
+at this horizon, **the machine learning is not what is producing the edge.** The
+one feature that carries the signal carries it just as well without a model
+wrapped around it, and the models' extra machinery mostly buys selectivity that
+the cost floor then eats.
+
+That is worth stating plainly because the reverse claim is the default
+assumption in most of this literature, and it costs nothing to check.
+
+## 15. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

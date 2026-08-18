@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,logistic,859.0,0.5460760796899794,-0.19764579638733984,-11.34234349446161,-9605.983898137776,0

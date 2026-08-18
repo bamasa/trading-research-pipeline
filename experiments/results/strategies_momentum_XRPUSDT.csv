@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XRPUSDT,momentum,11012.0,0.45232392480521894,-0.598613427105133,-13.319975251173998,-146549.9083366129,0

@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,mean_reversion,11072.0,0.48829845136248057,-0.20176085269720745,-11.226389041369627,-124194.92997343138,0

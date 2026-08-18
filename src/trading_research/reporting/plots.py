@@ -723,3 +723,36 @@ def exit_policies(
     if label:
         title += f" — {label}"
     return _finish(fig, ax, title, Path(path))
+
+
+def strategy_comparison(results: pd.DataFrame, path: Path | str, *, label: str = "") -> Path:
+    """Gross edge per trade by strategy, rules against learned models.
+
+    Coloured by kind rather than by value, because the comparison the chart
+    exists for is between the two families and not between neighbours. Gross
+    rather than net: every strategy here pays the same round trip, so net would
+    shift all the bars by one constant and compress the difference the figure is
+    about.
+    """
+    plt = _pyplot()
+    frame = results.sort_values("gross")
+    colours = [COLOURS["signal"] if kind == "rule" else COLOURS["accent"] for kind in frame["kind"]]
+
+    fig, ax = plt.subplots(figsize=(FIGSIZE[0], 0.34 * len(frame) + 1.8))
+    ax.barh(frame["strategy"], frame["gross"], color=colours, height=0.68)
+    ax.axvline(0, color=COLOURS["neutral"], linewidth=1.0)
+
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=COLOURS["signal"]),
+        plt.Rectangle((0, 0), 1, 1, color=COLOURS["accent"]),
+    ]
+    ax.legend(
+        handles, ["rule, fits nothing", "learned"], frameon=False, fontsize=9, loc="lower right"
+    )
+    ax.set_xlabel("gross bp per trade")
+    ax.tick_params(axis="y", labelsize=9)
+
+    title = "A rule with no parameters against models with many"
+    if label:
+        title += f" — {label}"
+    return _finish(fig, ax, title, Path(path))

@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XRPUSDT,logistic,415.0,0.5463387681611843,0.9238031612272923,-12.264277182017349,-4623.056376317902,1

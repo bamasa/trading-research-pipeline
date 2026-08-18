@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,breakout,10159.0,0.5175778852468733,0.4150653288295705,-10.606001553122477,-107805.2036277631,0

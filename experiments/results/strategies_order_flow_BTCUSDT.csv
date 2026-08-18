@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,order_flow,12555.0,0.5304399122744815,0.5591673960531143,-10.464201405845529,-131440.9020806955,0

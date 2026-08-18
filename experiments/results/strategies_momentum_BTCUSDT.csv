@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,momentum,11072.0,0.510033707361317,0.20176085269720745,-10.822867335975213,-119934.38631231086,0

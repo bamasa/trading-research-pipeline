@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,ensemble,1783.0,0.47319200290324276,-1.4803235352937674,-12.510884637460459,-22519.054029719147,0

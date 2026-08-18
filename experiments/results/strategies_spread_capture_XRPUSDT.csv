@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XRPUSDT,spread_capture,4062.0,0.49670704319845643,1.0032663837975495,-11.632375383671357,-47304.584809205,0

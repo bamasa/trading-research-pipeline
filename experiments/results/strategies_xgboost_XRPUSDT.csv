@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XRPUSDT,xgboost,667.0,0.5115856747206493,-5.2086484980012155,-18.204007202478216,-10003.700767242639,0
