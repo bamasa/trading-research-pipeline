@@ -35,6 +35,18 @@ SCALE_FREE = [
     "realized_vol_50_bp",
     "spread_bp_ratio_50",
     "ofi_20_norm",
+    # Short-horizon set. Every one is a ratio, a share, a basis-point return or
+    # a row count, so none of them carries the instrument's price or size units
+    # — which is the property that lets a model fitted on BTCUSDT say anything
+    # about XRPUSDT.
+    "quote_intensity_20",
+    "imbalance_slope_10",
+    "touch_persistence_20",
+    "mid_reversal_10",
+    "spread_pressure_20",
+    "size_shock_10",
+    "micro_drift_5",
+    "realised_vol_20",
 ]
 
 UNIT_DEPENDENT = ["ofi_1", "ofi_20", "log_total_depth"]

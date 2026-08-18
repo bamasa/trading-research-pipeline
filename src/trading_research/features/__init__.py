@@ -9,7 +9,10 @@ fails loudly.
 
 from __future__ import annotations
 
-from trading_research.features import book  # noqa: F401  (import registers the features)
+from trading_research.features import (
+    book,  # noqa: F401  (import registers the features)
+    microstructure,  # noqa: F401  (same)
+)
 from trading_research.features.registry import (
     REGISTRY,
     Feature,
