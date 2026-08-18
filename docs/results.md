@@ -593,7 +593,7 @@ number that was too good rather than a number that looked wrong. The regression
 test is now four lines: the same profitable short, exited four different ways,
 must be profitable each time.
 
-## 13. Searching two levers together
+## 13. Searching levers together
 
 §10 searched the retraining schedule with the holding period fixed at the label
 horizon. §12 searched the holding period with the schedule fixed. Each found
@@ -631,13 +631,53 @@ space widened after two separate successes produces a better validation figure
 and a worse test one. Both are the same arithmetic: a validation block is a
 finite sample, and every additional candidate is another chance to fit it.
 
+
+### And a third time, with everything moving
+
+§13 widened the search from twelve candidates to forty and the test result got
+worse. The obvious next question is whether that was the widening or the
+particular pair of levers, so the whole configuration was searched at once:
+market gate, training window, refit frequency, holding period, cooldown,
+whether the clock scales with confidence, and whether the entry threshold is
+swept for total profit or profit per trade. Forty-eight configurations sampled
+from that space, run through successive halving.
+
+| Instrument | Model | Chosen on validation | Test net | Schedule only | Change |
+|---|---|---|---:|---:|---:|
+| BTC | logistic | vol>q0.7, train7/apply1, hold 30 s, cd 2 min | −10.17 | −4.72 | **−5.45** |
+| XRP | logistic | no gate, train7/apply1, hold 30 s, cd 0 | −5.90 | −0.44 | **−5.46** |
+| BTC | order flow | vol>q0.5 & spread<q0.9, train7/apply1, hold 30 s, cd 2 min | −10.03 | — | — |
+| XRP | order flow | vol>q0.7, train14/apply1, hold 2 min, confidence-scaled | −12.45 | — | — |
+
+**Both learned runs lost about five and a half basis points against searching
+one lever.** Twelve candidates gave −4.72 and −0.44; forty gave −4.72 and −3.92;
+forty-eight over a wider space gives −10.17 and −5.90. The degradation is
+monotonic in the size of the search, which is as clean a demonstration of the
+mechanism as this data is going to produce.
+
+Two things the search did agree on, across all four runs and both earlier
+sweeps. A **thirty-second hold** was chosen in three of four, against the two
+minutes the label uses — the §12 finding, arrived at independently. And a
+**volatility gate** was chosen in three of four, which says the idea is sound
+even though it did not rescue anything: trading only when the market is moving
+enough to pay for the round trip is right, and there is still not enough
+movement.
+
+The halving itself worked as intended — 51 evaluations across three rungs, 52%
+cheaper than scoring every candidate at full budget, with the winner still
+measured on the whole validation span. It made the search affordable. It did
+not make it wise, and the two are unrelated: cheapness is why forty-eight
+candidates were tried at all, and forty-eight candidates is why the test result
+is the worst in the document.
+
 ### On stacking measured gains
 
 Adding up the levers measured separately — daily retraining short by 0.37 bp,
 a shorter clock worth about 1.9, posting worth 2.3 to 5.0 — gives a positive
-number. Running two of them together gives a worse number than running one.
-Only the second of those was computed under the rules the rest of this document
-uses, so it is the one that counts.
+number. Running two of them together gives a worse number than running one, and
+running all of them together gives the worst number here. Only the last two were
+computed under the rules the rest of this document uses, so they are the ones
+that count.
 
 ## 14. A rule with no parameters against models with many
 
