@@ -44,14 +44,21 @@ MAX_CONFIDENCE = 0.9
 def _to_proba(strength: np.ndarray) -> np.ndarray:
     """Map a signal in [-1, 1] onto three class probabilities.
 
-    Interpolates from one third at zero signal — no opinion, all three classes
-    equal — up to ``MAX_CONFIDENCE`` at full strength. The ceiling is below one
-    on purpose: the threshold sweep runs to 0.95, and a rule whose strongest
-    signal sat at 1.0 could never be excluded by any threshold, which would make
-    it incomparable with the learned models rather than merely better.
+    Runs from one third at zero signal — no opinion, all three classes equal —
+    towards ``MAX_CONFIDENCE`` as the signal grows. The ceiling is below one on
+    purpose: the threshold sweep runs to 0.95, and a rule whose strongest signal
+    sat at 1.0 could never be excluded by any threshold, which would make it
+    incomparable with the learned models rather than merely better.
+
+    Squashed with ``tanh`` rather than clipped. An earlier version clipped the
+    normalised signal at one, which mapped every strong signal to exactly the
+    ceiling — and a rule whose confidence is two values cannot be made more or
+    less selective, because no threshold separates trades that all score the
+    same. Breakout, whose deadzone leaves nothing between the two, produced an
+    identical trade count at every target rate until this changed.
     """
-    strength = np.clip(np.nan_to_num(strength, nan=0.0), -1.0, 1.0)
-    magnitude = np.abs(strength)
+    strength = np.nan_to_num(strength, nan=0.0)
+    magnitude = np.tanh(np.abs(strength))
     directional = NEUTRAL + (MAX_CONFIDENCE - NEUTRAL) * magnitude
     remainder = 1.0 - directional
 

@@ -805,7 +805,65 @@ times a day at −10.65 bp per trade loses roughly 2,600 bp of notional a day.
 Whatever the temptation to keep a system running because it is built, the
 arithmetic of continuing is not close.
 
-## 16. What would have to change
+## 16. Setting the trade rate directly
+
+Selectivity has been set indirectly everywhere else: a threshold swept to
+maximise something, with the trade count falling out as a consequence. This sets
+it directly — pick a target number of trades a day, find the threshold on
+validation that produces it, apply it to test.
+
+It separates two things the sweep conflates. Whether a strategy has an edge, and
+whether its confidence *ranks* trades usefully. A strategy whose per-trade result
+improves as the rate falls is ranking well even if it never reaches profit; one
+whose result is flat or worse is not ranking at all, and its threshold is
+arbitrary.
+
+Gross bp per trade at each target rate:
+
+| Trades/day | BTC order flow | BTC breakout | XRP order flow | XRP model+rule gate |
+|---|---:|---:|---:|---:|
+| 5 | −3.61 | +2.52 | −2.83 | −0.89 |
+| 10 | −2.06 | +1.43 | +1.11 | +1.67 |
+| **30** | +0.65 | +0.65 | **+3.92** | **+3.69** |
+| 50 | +0.80 | +0.23 | +1.83 | +2.83 |
+| 100 | +0.99 | +0.64 | +1.90 | +1.99 |
+| 250 | +0.67 | +0.42 | +1.20 | +0.74 |
+
+**There is an optimum, and it is not at the extreme.** Around thirty to forty
+trades a day the gross edge roughly quadruples against trading everything — 3.92
+bp for the order-flow rule on XRPUSDT, its best figure anywhere in this document.
+Below that it collapses: at five trades a day the same rule returns −2.83.
+
+That shape is worth understanding, because the naive expectation is monotonic.
+Trading less is supposed to keep the best signals. It does, down to a point, and
+then two things overtake it. The confidence ranking is only informative over
+part of its range — the very top of it is a handful of observations where the
+feature is extreme for reasons that have nothing to do with the next two
+minutes. And the sample shrinks: 5 trades a day over seven folds is 250 trades,
+where per-trade dispersion of about 8 bp swamps an edge of 3.
+
+**None of it reaches profit.** The best net figure in the table is −8.50 bp
+(BTCUSDT breakout, 5/day) against an 11.02 cost, and −8.81 (XRPUSDT order flow,
+30/day) against 12.68. Quadrupling the edge closes about a third of the gap.
+
+Two strategies rank and two do not. Breakout on BTCUSDT improves monotonically
+as the rate falls, which says its confidence carries information about which
+trades are better. The order-flow rule does not — it peaks in the middle and
+falls away at both ends — so its threshold is a sample-size choice rather than a
+selection of better trades.
+
+### A defect this found
+
+The first run of this experiment produced an identical trade count at every
+target rate for the breakout rule. The cause was in the rules' probability
+mapping: the normalised signal was clipped at one, so every signal past that
+point mapped to exactly the ceiling. A rule whose confidence takes two values
+cannot be made more or less selective, because no threshold separates trades
+that all score the same. Squashing with ``tanh`` instead of clipping restored
+the ordering, and breakout's gross edge at five trades a day went from
+unmeasurable to the best figure on that instrument.
+
+## 17. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
