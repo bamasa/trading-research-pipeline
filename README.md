@@ -19,10 +19,13 @@ features, they tune on the data they report on, or they ignore what it costs to
 cross a spread two hundred times a day. This project is built so that each of
 those failure modes is a test that fails, not a caveat in a footnote.
 
-> **Status: early.** The data layer, the synthetic market, the public-data
-> downloader, the feature registry with its look-ahead checks, and purged
-> walk-forward splits are in place. Models, the backtest and reporting come
-> next, in that order. See the [roadmap](#roadmap).
+> **Status: complete end to end, taker execution only.** Data contracts,
+> synthetic market, downloader, feature registry with look-ahead checks, purged
+> walk-forward splits, five models, calibration, cost-aware backtesting, a
+> searched retraining schedule, and the experiment scripts behind every
+> published table. Maker execution is measured as a bound in
+> [§11](docs/results.md) and deliberately not built on — see the
+> [roadmap](#roadmap).
 
 ---
 
@@ -78,10 +81,10 @@ prediction works and the horizon where trading pays do not overlap.**
 
 Four obvious levers were tested and none of them helps. A longer horizon does
 not, because the edge is horizon-invariant. A wider feature set — 194 generated
-columns against 10 hand-picked — measurably made it worse. A better fee
-tier falls short by about a factor of three: break-even needs 0.6 bp per side
-against roughly 1.7 at the top volume tiers, and even a zero fee leaves only
-about 1 bp per trade once the spread is paid. And a sequence model does not:
+columns against 10 hand-picked — measurably made it worse. A better fee tier
+falls short by about a factor of five: break-even needs roughly 0.3 bp per side
+against about 1.7 at the top volume tiers, and even a zero fee leaves under a
+basis point per trade once the spread is paid. And a sequence model does not:
 across twenty-one model-configuration-fold combinations, none was profitable,
 and the best gross edge belonged to plain logistic regression rather than to the
 network.
@@ -287,10 +290,11 @@ one:
 
 ## Roadmap
 
+Done:
+
 - [x] Package skeleton, tooling, CI, disclosure audit
 - [x] Data contracts for both planes, with quality validation
 - [x] Synthetic market with regimes and a known injected signal
-- [x] `generate-demo-data`, `validate-data`, `describe-schema`
 - [x] Binance public-data downloader with checksums and manifests
 - [x] Feature registry with declared lookbacks and automated look-ahead tests
 - [x] Directional labels and purged walk-forward splits
@@ -299,12 +303,38 @@ one:
 - [x] Wide generated feature set with train-only selection
 - [x] Horizon diagnostics: predictability against tradeability
 - [x] BTC → XRP transfer experiment
-- [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
-- [ ] Order-book collector with sequence-gap recovery
-- [ ] A single sequence model, compared against gradient boosting
-- [ ] Research assistant restricted to safe, auditable actions
+- [x] Staged pipeline: `prepare`, `select`, `train`, `predict`, `backtest`
+- [x] Sequence model (dilated causal convolutions), compared against the rest
+- [x] Trade thinning with cooldown, take-profit and stop-loss
+- [x] Isotonic and Platt calibration
+- [x] Retraining schedule as a searched parameter, not an assumption
+- [x] Experiment scripts behind every published table
 
----
+Next, staying with taker execution:
+
+- [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
+- [ ] Order-book collector with sequence-gap recovery, for depth beyond the touch
+- [ ] Position sizing from calibrated probabilities rather than a fixed unit
+
+Maker execution — deferred, deliberately
+----------------------------------------
+[§11](docs/results.md) measures what posting would be worth and finds +2.3 to
++5.0 bp per trade after adverse selection, against the 0.37 bp the best taker
+configuration was short by. That is a **bound, not a strategy**, and the work
+below is what would be needed to turn it into one. Until it is done, everything
+in this repository is taker-only and should be read that way.
+
+- [ ] Measure adverse selection at the moments a model wants to trade, not at
+      unconditional moments. Those are precisely the moments the market is about
+      to move — the worst case for a resting order, and the figure that decides
+      whether the margin above survives.
+- [ ] Passive exits. A position held to a horizon currently closes by crossing.
+      A fully passive strategy needs the same analysis on the way out, where
+      failing to fill is a risk rather than a missed opportunity.
+- [ ] A queue model that is not optimistic: size ahead that grows, cancellations
+      ahead of the order, and the order's own size treated as non-negligible.
+- [ ] Capacity. Fill rates in the teens mean a strategy that took 141 trades as
+      a taker takes about twenty as a maker, which establishes nothing.
 
 ## Relationship to prior closed-source work
 

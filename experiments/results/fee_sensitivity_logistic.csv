@@ -1,9 +1,0 @@
-fee_bp_per_side,best_setting,net_per_trade_bp,folds_positive,folds
-5.0,logistic cd=24,-9.320178171413593,0,21
-4.0,logistic cd=24,-7.320178171413594,0,21
-3.0,logistic cd=24,-5.320178171413594,0,21
-2.25,logistic cd=24,-3.820178171413594,0,21
-1.7,logistic cd=24,-2.7201781714135937,1,21
-1.0,logistic cd=24,-1.3201781714135934,2,21
-0.5,logistic cd=24,-0.32017817141359345,2,21
-0.0,logistic cd=24,0.6798218285864065,8,21

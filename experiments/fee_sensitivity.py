@@ -10,9 +10,11 @@ That last point is the reason this is a sweep and not a rerun, and it is also
 its main limitation — a strategy facing a lower fee *should* trade differently,
 so the figures here are optimistic for the same reason they are cheap.
 
-Needs a walk-forward run first:
+Reads whatever walk-forward runs are present, so run those first:
 
-    uv run python -m experiments.walk_forward --model logistic --symbols BTCUSDT
+    for m in logistic xgboost tcn; do
+        uv run python -m experiments.walk_forward --model "$m" --symbols BTCUSDT
+    done
     uv run python -m experiments.fee_sensitivity
 """
 
@@ -26,44 +28,56 @@ from experiments._common import COSTS, RESULTS, emit, parser
 FEES_BP = (5.0, 4.0, 3.0, 2.25, 1.7, 1.0, 0.5, 0.0)
 
 
+def break_even_fee(gross_per_trade_bp: float, spread_and_slippage_bp: float) -> float | None:
+    """Fee per side at which a configuration would stop losing money.
+
+    Costs are linear in the fee, so this needs no rerun: whatever the gross edge
+    is, the fee that exactly consumes it follows. ``None`` means no fee works —
+    the gross edge does not even cover the spread and slippage, so the trade
+    loses money at a fee of zero.
+    """
+    headroom = gross_per_trade_bp - spread_and_slippage_bp
+    return headroom / 2.0 if headroom > 0 else None
+
+
 def main() -> None:
-    p = parser(__doc__ or "")
-    p.add_argument("--model", default="logistic")
-    args = p.parse_args()
+    parser(__doc__ or "").parse_args()
 
-    path = RESULTS / f"walk_forward_{args.model}_folds.csv"
-    if not path.exists():
+    folds = []
+    for path in sorted(RESULTS.glob("walk_forward_*_folds.csv")):
+        folds.append(pd.read_csv(path))
+    if not folds:
         raise SystemExit(
-            f"{path} not found. Run:\n"
-            f"  uv run python -m experiments.walk_forward --model {args.model}"
+            "no walk-forward runs found. Run:\n"
+            "  uv run python -m experiments.walk_forward --model logistic"
         )
-    folds = pd.read_csv(path)
+    folds = pd.concat(folds, ignore_index=True)
 
-    rows = []
+    # What the recorded cost contains besides the fee: the spread crossed once
+    # and slippage on both sides. That part does not move with the tier, which
+    # is why a zero fee still does not make every configuration profitable.
+    by_setting = folds.groupby(["symbol", "model", "cooldown"]).agg(
+        trades=("trades", "sum"),
+        gross_per_trade_bp=("gross_per_trade_bp", "mean"),
+        net_per_trade_bp=("net_per_trade_bp", "mean"),
+    )
+    fixed_cost = (
+        by_setting["gross_per_trade_bp"]
+        - by_setting["net_per_trade_bp"]
+        - (2 * COSTS.fee_bp_per_side)
+    )
+
+    sweep = by_setting.copy()
     for fee in FEES_BP:
-        # Gross is untouched by the fee; only the charge per trade moves. Two
-        # sides, plus the spread and slippage already inside the recorded cost.
         delta = 2 * (COSTS.fee_bp_per_side - fee)
-        adjusted = folds.assign(
-            net_per_trade_bp=folds["net_per_trade_bp"] + delta,
-            net_bp=folds["net_bp"] + delta * folds["trades"],
-        )
-        by_setting = adjusted.groupby(["symbol", "model", "cooldown"]).agg(
-            net_per_trade_bp=("net_per_trade_bp", "mean"),
-            net_bp=("net_bp", "sum"),
-        )
-        best = by_setting["net_per_trade_bp"].idxmax()
-        rows.append(
-            {
-                "fee_bp_per_side": fee,
-                "best_setting": f"{best[1]} cd={best[2]}",
-                "net_per_trade_bp": float(by_setting["net_per_trade_bp"].max()),
-                "folds_positive": int((adjusted["net_bp"] > 0).sum()),
-                "folds": len(adjusted),
-            }
-        )
+        sweep[f"net_at_{fee:g}bp"] = by_setting["net_per_trade_bp"] + delta
+    sweep["spread_and_slippage_bp"] = fixed_cost
+    sweep["break_even_fee_bp_per_side"] = [
+        break_even_fee(g, c)
+        for g, c in zip(by_setting["gross_per_trade_bp"], fixed_cost, strict=True)
+    ]
 
-    emit(pd.DataFrame(rows), f"fee_sensitivity_{args.model}")
+    emit(sweep.reset_index(), "fee_sensitivity")
 
 
 if __name__ == "__main__":

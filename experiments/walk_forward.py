@@ -24,14 +24,16 @@ import pandas as pd
 from experiments._common import (
     COSTS,
     emit,
+    load,
     load_book_features,
     parser,
     round_trip,
 )
 from trading_research.backtest.evaluate import choose_confidence, decide
 from trading_research.backtest.execution import ThinningRules, score, thin
+from trading_research.features.selection import FeatureSelector
 from trading_research.models.base import clean
-from trading_research.pipeline.stages import add_label, build_model
+from trading_research.pipeline.stages import add_label, build_model, feature_columns
 from trading_research.validation.splits import WalkForwardSpec, fold_masks, walk_forward
 
 #: The hand-picked set. Ten features chosen for being readable rather than for
@@ -74,6 +76,14 @@ TCN_TRAIN_ROWS = 60_000
 def main() -> None:
     p = parser(__doc__ or "")
     p.add_argument("--model", default="logistic")
+    p.add_argument(
+        "--features",
+        choices=("hand", "wide"),
+        default="hand",
+        help="'hand' reads ten registry features from the raw book; "
+        "'wide' reads the 194 generated columns and selects inside each fold.",
+    )
+    p.add_argument("--max-features", type=int, default=40)
     args = p.parse_args()
     warnings.filterwarnings("ignore")
 
@@ -81,14 +91,20 @@ def main() -> None:
     rows = []
 
     for symbol in args.symbols:
-        frame = load_book_features(symbol, FEATURES, days=args.days)
-        columns = list(FEATURES)
+        if args.features == "wide":
+            # The generated set already carries forward_bp and spread_bp_now,
+            # and selection happens per fold below.
+            frame = load(symbol, root=args.prepared_root, days=args.days)
+            columns = feature_columns(frame)
+        else:
+            frame = load_book_features(symbol, FEATURES, days=args.days)
+            columns = list(FEATURES)
 
-        mid = frame["mid"].to_numpy()
-        forward = np.full(len(mid), np.nan)
-        forward[:-HORIZON] = np.log(mid[HORIZON:] / mid[:-HORIZON]) * 1e4
-        frame["forward_bp"] = forward
-        frame["spread_bp_now"] = frame["spread_bp"]
+            mid = frame["mid"].to_numpy()
+            forward = np.full(len(mid), np.nan)
+            forward[:-HORIZON] = np.log(mid[HORIZON:] / mid[:-HORIZON]) * 1e4
+            frame["forward_bp"] = forward
+            frame["spread_bp_now"] = frame["spread_bp"]
 
         cost = round_trip(symbol, frame)
         frame = add_label(frame, cost)
@@ -99,8 +115,26 @@ def main() -> None:
 
         for fold in walk_forward(days, spec):
             masks = fold_masks(fold, frame["timestamp"], purge=HOLD)
+
+            fold_columns = columns
+            if args.features == "wide":
+                # Fitted inside the training block only. Selecting over the
+                # whole sample is among the most effective ways to manufacture
+                # an edge: with two hundred candidates, some will look
+                # predictive on test by chance, and choosing them for that is
+                # choosing them for their test performance.
+                block = frame.loc[masks.train]
+                usable = block[columns].notna().all(axis=1) & block["label"].notna()
+                selector = FeatureSelector(max_features=args.max_features, score_target="ic")
+                selector.fit(
+                    block.loc[usable, columns],
+                    block.loc[usable, "label"],
+                    block.loc[usable, "forward_bp"],
+                )
+                fold_columns = selector.selected_
+
             train_x, train_y = clean(
-                frame.loc[masks.train, columns], frame.loc[masks.train, "label"]
+                frame.loc[masks.train, fold_columns], frame.loc[masks.train, "label"]
             )
             if args.model == "tcn":
                 train_x, train_y = train_x.tail(TCN_TRAIN_ROWS), train_y.tail(TCN_TRAIN_ROWS)
@@ -111,17 +145,19 @@ def main() -> None:
             # test. Choosing it on test is the most common way a short-horizon
             # result is overstated; §6 shows what it does to this one.
             validation = frame.loc[masks.validation]
-            ok = validation[columns].notna().all(axis=1)
+            ok = validation[fold_columns].notna().all(axis=1)
             confidence, _ = choose_confidence(
-                model.predict_proba(validation.loc[ok, columns]),
+                model.predict_proba(validation.loc[ok, fold_columns]),
                 validation.loc[ok, "forward_bp"],
                 validation.loc[ok, "spread_bp_now"],
                 COSTS,
             )
 
             test = frame.loc[masks.test]
-            ok = test[columns].notna().all(axis=1)
-            decision = decide(model.predict_proba(test.loc[ok, columns]), min_confidence=confidence)
+            ok = test[fold_columns].notna().all(axis=1)
+            decision = decide(
+                model.predict_proba(test.loc[ok, fold_columns]), min_confidence=confidence
+            )
             forward = test.loc[ok, "forward_bp"].to_numpy()
             spread = test.loc[ok, "spread_bp_now"].to_numpy()
 
@@ -136,6 +172,7 @@ def main() -> None:
                     {
                         "symbol": symbol,
                         "model": args.model,
+                        "features": args.features,
                         "cooldown": cooldown,
                         "fold": fold.index,
                         "confidence": confidence,
@@ -145,9 +182,11 @@ def main() -> None:
             print(f"  fold {fold.index} done", flush=True)
 
     per_fold = pd.DataFrame(rows)
-    emit(per_fold, f"walk_forward_{args.model}_folds")
+    tag = args.model if args.features == "hand" else f"{args.model}_wide"
+    emit(per_fold, f"walk_forward_{tag}_folds")
 
-    summary = per_fold.groupby(["symbol", "model", "cooldown"]).agg(
+    group = ["symbol", "model", "features", "cooldown"]
+    summary = per_fold.groupby(group).agg(
         trades=("trades", "sum"),
         trades_per_fold=("trades", "mean"),
         hit_rate=("hit_rate", "mean"),
@@ -155,11 +194,11 @@ def main() -> None:
         net_per_trade_bp=("net_per_trade_bp", "mean"),
         net_bp=("net_bp", "sum"),
     )
-    summary["folds_positive"] = per_fold.groupby(["symbol", "model", "cooldown"])["net_bp"].apply(
+    summary["folds_positive"] = per_fold.groupby(group)["net_bp"].apply(
         lambda s: int((s > 0).sum())
     )
     print()
-    emit(summary.reset_index(), f"walk_forward_{args.model}")
+    emit(summary.reset_index(), f"walk_forward_{tag}")
 
 
 if __name__ == "__main__":

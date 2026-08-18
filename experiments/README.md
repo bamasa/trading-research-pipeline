@@ -27,7 +27,7 @@ A few read the raw book instead, because they need bid and ask sizes that
 | `signal_decay.py` | §2, §3 | Feature correlation by horizon, and why edge per trade is flat across horizons |
 | `walk_forward.py` | §4, §5 | Model comparison over seven folds, at three cooldowns |
 | `selection_leak.py` | §6 | The same strategy scored with the cutoff chosen on test and on validation |
-| `fee_sensitivity.py` | §9 | What fee would be needed to break even |
+| `fee_sensitivity.py` | §9 | What fee would be needed to break even. Reads every walk-forward run present |
 | `maker_threshold.py` | §11 | Adverse selection of passive fills, measured against what posting saves |
 
 Retraining schedules (§10) are not here: they run through the CLI, as

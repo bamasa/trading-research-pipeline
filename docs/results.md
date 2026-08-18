@@ -194,26 +194,36 @@ result here is quoted from one window.
 z-scores over five windows, trade-flow aggregates and calendar terms — cut to 40
 by a selector fitted inside each fold's training block.
 
-| Features | Model | Trades | Hit | Gross/trade | Net/trade | Folds + |
+Best cooldown per configuration, seven folds, BTCUSDT:
+
+| Features | Model | Trades/fold | Hit | Gross/trade | Net/trade | Folds + |
 |---|---|---:|---:|---:|---:|---:|
-| 10 hand-picked | logistic | 383 | 51.5% | **+2.24** | −8.22 | 0/7 |
-| 10 hand-picked | xgboost | 430 | 48.2% | +0.73 | −10.45 | 0/7 |
-| 40 of 194 | logistic | 438 | **56.6%** | **−0.67** | −12.04 | 0/7 |
-| 40 of 194 | xgboost | 1882 | 51.2% | −0.83 | −10.27 | 0/7 |
+| 10 hand-picked | logistic | 143 | 51.4% | **+1.81** | −9.32 | 0/7 |
+| 10 hand-picked | xgboost | 233 | 46.6% | −0.63 | −11.64 | 0/7 |
+| 40 of 194 | logistic | 126 | **51.8%** | −2.88 | −14.04 | 0/7 |
+| 40 of 194 | xgboost | 154 | **52.0%** | +0.80 | −10.25 | 0/7 |
 
 Three things worth reading twice.
 
-**More features made it worse.** Ten hand-picked columns beat forty selected
-from a hundred and ninety-four. Expanding the feature space without expanding
-the sample gives the selector more ways to fit the particular fortnight it saw.
+**More features made the good model worse.** Ten hand-picked columns under
+logistic regression give the best gross edge in the table; the same model on
+forty columns selected from a hundred and ninety-four gives the worst. Expanding
+the feature space without expanding the sample gives the selector more ways to
+fit the particular fortnight it saw, and the linear model has no capacity to
+spare for the noise it is handed.
 
-**Higher accuracy, lower profit.** The wide set predicts direction more often —
-56.6% against 51.5% — and earns less. It catches many small moves and misses
-large ones. Accuracy is not a proxy for profitability, and here it points the
-wrong way.
+**Higher accuracy, lower profit.** The wide set predicts direction more often
+than the hand-picked set does under the same model — 51.8% against 51.4% for
+logistic, 52.0% against 46.6% for the tree — and the linear model earns far
+less for it. It catches many small moves and misses large ones. Accuracy is not
+a proxy for profitability, and here it points the wrong way.
 
-**Gradient boosting traded four times as often and lost five times as much.**
-More candidate features give it more ways to find structure that is not there.
+**The tree moved the other way, and it does not rescue anything.** Gradient
+boosting improves with the wider set — from −0.63 to +0.80 bp gross — which is
+what a model built for many weak inputs should do. It is still an order of
+magnitude short of the 11.02 bp it has to clear, and it lands below the
+hand-picked linear model it was supposed to beat. The two directions cancel to
+the same conclusion: the feature set is not the binding constraint.
 
 ---
 
@@ -346,30 +356,34 @@ The fee is the obvious lever, so it is worth checking properly rather than
 assuming. Costs are linear in the fee, so net profit per trade at any tier
 follows from the gross edge and the trade count already measured.
 
-Net basis points per trade, two-minute horizon, BTCUSDT:
+Net basis points per trade, two-minute horizon, BTCUSDT, best cooldown per model:
 
-| Features / model | 5.0 bp | 3.0 bp | 1.7 bp | 0.0 bp |
+| Model | 5.0 bp | 3.0 bp | 1.7 bp | 0.0 bp |
 |---|---:|---:|---:|---:|
-| 10 hand-picked / logistic | −8.78 | −4.78 | **−2.18** | **+1.22** |
-| 10 hand-picked / xgboost | −10.29 | −6.29 | −3.69 | −0.29 |
-| 40 of 194 / logistic | −11.70 | −7.70 | −5.10 | −1.70 |
-| 40 of 194 / xgboost | −11.85 | −7.85 | −5.25 | −1.85 |
+| logistic, cd=24 | −9.32 | −5.32 | **−2.72** | **+0.68** |
+| logistic, cd=120 | −10.33 | −6.33 | −3.73 | −0.33 |
+| xgboost, cd=0 | −11.64 | −7.64 | −5.04 | −1.64 |
+| tcn, cd=24 | −13.22 | −9.22 | −6.62 | −3.22 |
 
 Fee at which each would break even:
 
-| Features / model | Gross/trade | Break-even fee |
-|---|---:|---|
-| 10 hand-picked / logistic | +2.24 | **0.61 bp per side** |
-| 10 hand-picked / xgboost | +0.73 | unreachable |
-| 40 of 194 / logistic | −0.67 | unreachable |
-| 40 of 194 / xgboost | −0.83 | unreachable |
+| Model | Gross/trade | Spread + slippage | Break-even fee |
+|---|---:|---:|---|
+| logistic, cd=24 | +1.81 | 1.13 | **0.34 bp per side** |
+| logistic, cd=120 | +0.81 | 1.14 | unreachable |
+| xgboost, cd=0 | −0.63 | 1.02 | unreachable |
+| tcn, cd=24 | −1.75 | 1.47 | unreachable |
 
-**The fee tier does not close the gap.** The best configuration needs 0.61 bp
-per side; Binance's top volume tiers reach roughly 1.7, nearly three times
-that. Even at a *zero* fee it earns only 1.22 bp per trade, because the spread
-and slippage cost about 1 bp whatever the tier. Three of the four
-configurations lose money at any fee including zero — their gross edge is
-negative, or smaller than the spread and slippage alone.
+**The fee tier does not close the gap.** The best configuration needs 0.34 bp
+per side; Binance's top volume tiers reach roughly 1.7, five times that. Even at
+a *zero* fee it earns 0.68 bp per trade, because the spread and slippage cost
+about 1.1 bp whatever the tier. Every other configuration loses money at any fee
+including zero — its gross edge is negative, or smaller than the spread and
+slippage alone.
+
+That last column is the one worth dwelling on. A fee is negotiable; the spread
+is not. Roughly a basis point of the cost survives any tier a taker could reach,
+and against a gross edge under two, that alone decides the question.
 
 This corrects an earlier reading of the same data. Taking the 5.18 bp gross
 figure from the horizon sweep, the break-even fee works out at 2.08 bp per side
@@ -512,7 +526,7 @@ Things that would **not** close it, on this evidence: a longer horizon, since
 the edge is horizon-invariant (§3); more features, which measurably made it
 worse (§4); trade thinning, which improves edge per trade but by about one basis
 point (§5); trading only the most confident signals, which is selection rather
-than edge (§6); and a better fee tier, which falls short by a factor of three
+than edge (§6); and a better fee tier, which falls short by a factor of five
 (§9).
 
 Retraining frequency (§10) is the one lever that moved the number materially —
