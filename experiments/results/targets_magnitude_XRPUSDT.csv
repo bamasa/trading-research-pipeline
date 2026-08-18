@@ -1,0 +1,3 @@
+symbol,target,model,trades,trades_per_day,gross_per_trade_bp,net_per_trade_bp,net_bp,max_drawdown_bp,folds_positive
+XRPUSDT,magnitude,ridge,577.0,11.775510204081632,-9.907710782420706,-23.237296858906664,-8197.869910912876,2053.343230516529,0
+XRPUSDT,magnitude,xgboost_regressor,1654.0,33.755102040816325,0.6900514373774876,-12.01752718555626,-15254.685240229644,3415.015194434619,0

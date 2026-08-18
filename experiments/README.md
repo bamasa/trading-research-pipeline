@@ -29,6 +29,7 @@ A few read the raw book instead, because they need bid and ask sizes that
 | `selection_leak.py` | §6 | The same strategy scored with the cutoff chosen on test and on validation |
 | `fee_sensitivity.py` | §9 | What fee would be needed to break even. Reads every walk-forward run present |
 | `strategies.py` | §14 | Rule-based strategies against learned models, same machinery |
+| `targets.py` | §17 | Four targets: direction, magnitude, net PnL, triple barrier |
 | `trade_rate.py` | §16 | What happens at a chosen number of trades a day |
 | `daily_allocation.py` | §15 | Several strategies side by side, one chosen each day or none |
 | `joint_search.py` | §13 | Retraining schedule and holding period searched together |

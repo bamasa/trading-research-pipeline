@@ -868,7 +868,60 @@ that all score the same. Squashing with ``tanh`` instead of clipping restored
 the ordering, and breakout's gross edge at five trades a day went from
 unmeasurable to the best figure on that instrument.
 
-## 17. What would have to change
+## 17. Asking a different question
+
+Every result until here predicted one thing: the sign of the forward return
+where it cleared the round trip. That is a proxy for profitability, and it
+throws away everything except the sign. It cannot distinguish a 12 bp move from
+a 60 bp one, it knows nothing about the path between entry and exit though the
+exit rules act on that path, and it asks a question nobody wants answered in
+place of the one they do.
+
+Four targets, each with the models that can be fitted on it, everything else
+identical:
+
+| Target | Kind | What it asks |
+|---|---|---|
+| `direction` | classification | did it move more than the cost, and which way |
+| `magnitude` | regression | how far did it move |
+| `net_pnl` | regression | what would a long opened here have netted |
+| `triple_barrier` | classification | which was touched first: target, stop, or the clock |
+
+Gross / net basis points per trade, seven folds:
+
+| Target + model | BTCUSDT | XRPUSDT |
+|---|---:|---:|
+| magnitude + ridge | **+4.23 / −7.14** | −9.91 / −23.24 |
+| net_pnl + xgboost | −0.70 / −11.71 | **+2.64 / −10.03** |
+| direction + logistic | −0.20 / −11.34 | +1.85 / −11.61 |
+| net_pnl + ridge | −0.40 / −11.46 | +0.73 / −12.06 |
+| triple_barrier + xgboost | −0.51 / −11.52 | −0.16 / −12.88 |
+| magnitude + xgboost | −2.36 / −13.38 | +0.69 / −12.02 |
+| triple_barrier + logistic | −1.26 / −12.43 | −7.52 / −20.86 |
+| direction + xgboost | −3.68 / −14.69 | −6.17 / −19.08 |
+
+**The target matters more than the model.** On BTCUSDT, keeping the model
+family and changing only what it predicts moves gross edge from −0.20 to +4.23 —
+a larger swing than anything the model comparison in §4 produced. Asking for the
+size of the move rather than its sign is worth more than any amount of extra
+model capacity, which fits §3: the arithmetic that bounds this problem is about
+magnitude, and a three-class label deletes exactly that.
+
+**And it does not carry across instruments.** The same target and model is the
+best entry on BTCUSDT at +4.23 and the worst on XRPUSDT at −9.91. XRPUSDT's best
+is a different target with a different model. There is no ordering here that
+survives being asked twice.
+
+That is the pattern of this whole document restated. Every lever produces a
+promising number on one instrument, in one configuration, on one period; none
+of them produces the same number twice. A result that does not reproduce on the
+second instrument is a description of the first instrument.
+
+**Nothing reaches profit.** The best net figure is −7.14 bp against an 11.02 bp
+cost — the best in this document, and still a loss of two thirds of the cost.
+Zero positive folds out of fifty-six.
+
+## 18. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

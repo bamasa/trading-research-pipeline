@@ -1,0 +1,3 @@
+symbol,target,model,trades,trades_per_day,gross_per_trade_bp,net_per_trade_bp,net_bp,max_drawdown_bp,folds_positive
+XRPUSDT,triple_barrier,logistic,564.0,11.510204081632653,-7.518505295860874,-20.859609430474382,-9161.99354141808,3756.0920464915826,0
+XRPUSDT,triple_barrier,xgboost,2921.0,59.61224489795918,-0.16243008493406297,-12.88465620383606,-35472.63378714046,9133.746066193049,0

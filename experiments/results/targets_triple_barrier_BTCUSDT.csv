@@ -1,0 +1,3 @@
+symbol,target,model,trades,trades_per_day,gross_per_trade_bp,net_per_trade_bp,net_bp,max_drawdown_bp,folds_positive
+BTCUSDT,triple_barrier,logistic,1101.0,22.46938775510204,-1.2600263970646333,-12.430198531871843,-13635.256045115675,3185.84147465014,0
+BTCUSDT,triple_barrier,xgboost,2077.0,42.387755102040806,-0.507427489682842,-11.524658687504852,-24949.57733176169,6321.094127913316,0
