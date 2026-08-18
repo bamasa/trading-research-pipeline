@@ -164,8 +164,16 @@ def choose_confidence(
     *,
     grid: np.ndarray | None = None,
     min_trades: int = 50,
+    objective: str = "net_bp",
 ) -> tuple[float, pd.DataFrame]:
-    """Pick the confidence threshold that maximises net profit on validation.
+    """Pick the confidence threshold that maximises ``objective`` on validation.
+
+    ``objective`` decides what "best" means, and the two options answer
+    different questions. ``net_bp`` maximises the total, which favours trading
+    often at a small edge. ``net_per_trade_bp`` maximises the edge on each
+    trade, which pushes the threshold up until only the strongest signals
+    survive — the selective strategy, with the cut made here on validation and
+    carried to test unchanged.
 
     Returns the chosen threshold and the whole curve. The curve is the useful
     part: a net figure that peaks sharply at one threshold and is negative
@@ -201,5 +209,7 @@ def choose_confidence(
         # told to stand aside instead.
         return float(grid.max()) + 1.0, curve
 
-    best_row = int(eligible["net_bp"].idxmax())
+    if objective not in eligible.columns:
+        raise ValueError(f"unknown objective {objective!r}; have {list(eligible.columns)}")
+    best_row = int(eligible[objective].idxmax())
     return float(eligible["min_confidence"].loc[best_row]), curve

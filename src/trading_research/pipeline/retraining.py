@@ -44,6 +44,8 @@ import pandas as pd
 from trading_research.backtest.costs import TakerCosts
 from trading_research.backtest.evaluate import choose_confidence, decide
 from trading_research.backtest.execution import ThinningRules, score, thin
+from trading_research.backtest.gating import MarketGate
+from trading_research.models.base import CLASSES
 from trading_research.pipeline.stages import StageError, add_label, build_model
 from trading_research.validation.retrain import Evaluator, ScheduleResult
 
@@ -90,6 +92,9 @@ def prepared_evaluator(
     inner_validation_fraction: float = 0.25,
     max_train_rows: int | None = None,
     minimum_train_rows: int = 2000,
+    gate: MarketGate | None = None,
+    confidence_objective: str = "net_bp",
+    hold_scale_by_confidence: float = 0.0,
 ) -> Evaluator:
     """Build an evaluator that fits on one span and trades the next.
 
@@ -97,6 +102,14 @@ def prepared_evaluator(
     needed for the network, whose fit time is linear in rows and whose training
     block here is far longer than it can use in the budget; the tabular models
     see everything.
+
+    ``gate`` restricts both the fit and the trading to observations where the
+    market can support a trade. Its levels are taken from the training window
+    and applied unchanged to the days being traded.
+
+    ``confidence_objective`` decides whether the entry threshold is swept for
+    total profit or for profit per trade. The second is the selective strategy:
+    it raises the threshold until only the strongest signals clear it.
     """
     columns = list(features)
     cache = DayCache(prepared_dir)
@@ -108,6 +121,10 @@ def prepared_evaluator(
             raise StageError(f"features missing from prepared data: {missing[:5]}")
 
         usable = frame[columns].notna().all(axis=1) & frame["label"].notna()
+        gate_levels: dict[str, float] = {}
+        if gate is not None and not gate.is_open:
+            gate_levels = gate.thresholds(frame.loc[usable])
+            usable &= gate.mask(frame, gate_levels)
         block = frame.loc[usable]
         if len(block) < minimum_train_rows:
             raise StageError(f"only {len(block)} usable rows in {train[0]}..{train[1]}")
@@ -137,23 +154,38 @@ def prepared_evaluator(
             inner["forward_bp"],
             inner["spread_bp_now"],
             costs,
+            objective=confidence_objective,
         )
 
         out_frame = cache.span(*apply)
         ok = out_frame[columns].notna().all(axis=1) & out_frame["forward_bp"].notna()
+        if gate_levels:
+            # Levels from the training window, not this one: recomputing them
+            # here would make the gate depend on the period it is judging.
+            ok &= gate.mask(out_frame, gate_levels)  # type: ignore[union-attr]
         acted = out_frame.loc[ok]
         if acted.empty:
             raise StageError(f"no usable rows in {apply[0]}..{apply[1]}")
 
-        decision = decide(estimator.predict_proba(acted[columns]), min_confidence=confidence)
+        proba = estimator.predict_proba(acted[columns])
+        decision = decide(proba, min_confidence=confidence)
+        rules = ThinningRules(
+            hold_periods=hold_periods,
+            cooldown_periods=cooldown_periods,
+            hold_scale_by_confidence=hold_scale_by_confidence,
+        )
         trades = thin(
             decision,
             acted["forward_bp"].to_numpy(),
             acted["spread_bp_now"].to_numpy(),
-            ThinningRules(hold_periods=hold_periods, cooldown_periods=cooldown_periods),
+            rules,
+            mid=acted["mid"].to_numpy() if rules.needs_price_path and "mid" in acted else None,
+            p_buy=proba[:, CLASSES.index(1)] if rules.needs_probabilities else None,
+            p_sell=proba[:, CLASSES.index(-1)] if rules.needs_probabilities else None,
         )
         result = score(trades, costs)
         result["confidence"] = float(confidence)
+        result["gated_rows"] = float(len(acted))
         result["train_rows"] = float(len(fit))
         return result
 

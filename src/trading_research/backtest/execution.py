@@ -69,6 +69,17 @@ class ThinningRules:
         Whether an opposite signal may close a position **and open the
         opposite one**. Off by default: it doubles the cost of a reversal and,
         on a noisy signal, mostly converts churn into more churn.
+    ``hold_scale_by_confidence``
+        Makes the clock depend on how sure the model was at entry rather than
+        being one number for every trade. At *k*, a position opened with
+        confidence *c* is held for ``hold_periods * (1 + k * (c - 0.5) * 2)``
+        observations, so a barely-cleared signal is held for less than the
+        default and a strong one for more. Zero keeps the fixed clock.
+
+        The case for it is that confidence and horizon are related: a model
+        nearly certain of a direction is usually seeing a larger or more
+        persistent move than one that just cleared the threshold, and giving
+        both the same holding period wastes the first and overstays the second.
 
     Price-path exits
     ----------------
@@ -106,6 +117,14 @@ class ThinningRules:
         and respects the cooldown, rather than immediately paying to enter the
         other side.
 
+    Marker exits
+    ------------
+    ``thin`` also accepts an ``exit_when`` boolean array. Anything computable
+    per observation can drive it — volatility collapsing, the spread widening,
+    a feature reverting — and the position closes when it is true. Kept as an
+    array rather than a rule so that this module stays ignorant of features:
+    what counts as a marker is the caller's question, not execution's.
+
     Every one of these is an option, not an improvement. Which combination is
     best is a question for validation — see
     :mod:`trading_research.validation.exits`.
@@ -114,6 +133,7 @@ class ThinningRules:
     hold_periods: int
     cooldown_periods: int = 0
     allow_reversal: bool = False
+    hold_scale_by_confidence: float = 0.0
     take_profit_bp: float | None = None
     stop_loss_bp: float | None = None
     trailing_stop_bp: float | None = None
@@ -129,6 +149,10 @@ class ThinningRules:
             value = getattr(self, name)
             if value is not None and value <= 0:
                 raise ValueError(f"{name} must be positive when set, got {value}")
+        if self.hold_scale_by_confidence < 0:
+            raise ValueError(
+                f"hold_scale_by_confidence must be non-negative, got {self.hold_scale_by_confidence}"
+            )
         if self.exit_below_confidence is not None and not 0.0 < self.exit_below_confidence < 1.0:
             raise ValueError(
                 f"exit_below_confidence must be in (0, 1), got {self.exit_below_confidence}"
@@ -153,7 +177,11 @@ class ThinningRules:
     @property
     def needs_probabilities(self) -> bool:
         """True when an exit reads the model's ongoing opinion."""
-        return self.exit_below_confidence is not None or self.exit_on_flip
+        return (
+            self.exit_below_confidence is not None
+            or self.exit_on_flip
+            or self.hold_scale_by_confidence > 0
+        )
 
 
 def thin(
@@ -164,6 +192,7 @@ def thin(
     mid: np.ndarray | None = None,
     p_buy: np.ndarray | None = None,
     p_sell: np.ndarray | None = None,
+    exit_when: np.ndarray | None = None,
 ) -> list[Trade]:
     """Walk the signal stream in time order, opening trades where allowed.
 
@@ -178,10 +207,14 @@ def thin(
     With any early exit the outcome depends on the path, ``mid`` becomes
     required, and the signal exits additionally need ``p_buy`` and ``p_sell``.
 
+    ``exit_when`` is an optional boolean array: where it is true, an open
+    position closes with reason ``"marker"``. It is how a feature-driven exit
+    is expressed without this module knowing what a feature is.
+
     Order of checks
     ---------------
     At each observation, in this order: take-profit, stop-loss, trailing stop,
-    signal exits, then the clock. The order is a choice and it matters, because
+    signal exits, marker, then the clock. The order is a choice and it matters, because
     two rules can be satisfied on the same observation and bar data cannot say
     which came first. It resolves ties optimistically — the profitable exit
     wins — which flatters the result. At 100 ms the window in which it matters
@@ -266,6 +299,9 @@ def thin(
             elif rules.exit_on_flip and against > held:
                 close(i, "flip")
 
+        if open_direction != HOLD and exit_when is not None and bool(exit_when[i]):
+            close(i, "marker")
+
         if open_direction != HOLD and i >= position_until:
             close(i, "clock")
 
@@ -286,8 +322,19 @@ def thin(
 
         open_direction = signal
         open_at = i
-        position_until = i + rules.hold_periods
         best_move_bp = 0.0
+
+        hold = rules.hold_periods
+        if rules.hold_scale_by_confidence > 0 and p_buy is not None and p_sell is not None:
+            # Confidence in the direction taken, mapped from [0.5, 1] onto
+            # [0, 1] so that a signal which barely cleared the threshold scales
+            # the clock by about one and a near-certain one by 1 + k.
+            entry_confidence = p_buy[i] if signal == BUY else p_sell[i]
+            stretch = 1.0 + rules.hold_scale_by_confidence * max(
+                0.0, (float(entry_confidence) - 0.5) * 2.0
+            )
+            hold = max(1, round(rules.hold_periods * stretch))
+        position_until = i + hold
 
     # A position still open when the data runs out is closed rather than
     # dropped. Its outcome is already known — `forward_bp` at entry covers the

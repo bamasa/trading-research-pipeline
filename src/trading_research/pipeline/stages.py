@@ -308,11 +308,24 @@ MODELS = {
     "tcn": "trading_research.models.tcn:TCNBaseline",
 }
 
+#: Named ensembles. Members are averaged, so the entry stays a string a config
+#: can carry. The network is excluded from the default: it needs its own
+#: process, and an ensemble that deadlocks is not a usable default.
+ENSEMBLES = {
+    "ensemble": ("logistic", "xgboost"),
+    "ensemble_all": ("logistic", "xgboost", "tcn"),
+}
+
 
 def build_model(name: str, **params: Any) -> Any:
     """Instantiate a model by name, so a config can select one as a string."""
+    if name in ENSEMBLES:
+        from trading_research.models.ensemble import EnsembleModel
+
+        return EnsembleModel([build_model(member, **params) for member in ENSEMBLES[name]])
     if name not in MODELS:
-        raise StageError(f"unknown model {name!r}; known: {', '.join(sorted(MODELS))}")
+        known = sorted([*MODELS, *ENSEMBLES])
+        raise StageError(f"unknown model {name!r}; known: {', '.join(known)}")
     module_path, class_name = MODELS[name].split(":")
     import importlib
 
