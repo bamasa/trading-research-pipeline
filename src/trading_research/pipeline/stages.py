@@ -322,6 +322,21 @@ MODELS = {
 ENSEMBLES = {
     "ensemble": ("logistic", "xgboost"),
     "ensemble_all": ("logistic", "xgboost", "tcn"),
+    # Rules and models in one average, rather than compared with each other.
+    "blend": ("order_flow", "logistic"),
+}
+
+#: Composites that are not averages: a rule and a model consulted together,
+#: with one able to veto the other. See :mod:`trading_research.models.composite`.
+COMPOSITES: dict[str, tuple[str, tuple[str, ...]]] = {
+    # Trade only where the order-flow rule and the model point the same way.
+    "agree": ("agreement", ("order_flow", "logistic")),
+    "agree_all": ("agreement", ("order_flow", "logistic", "xgboost")),
+    # The rule finds the direction, the model decides whether the moment is
+    # worth trading — the arrangement §14 argues for.
+    "rule_gated_by_model": ("gated", ("order_flow", "logistic")),
+    # And the reverse, as the control.
+    "model_gated_by_rule": ("gated", ("logistic", "order_flow")),
 }
 
 
@@ -331,8 +346,14 @@ def build_model(name: str, **params: Any) -> Any:
         from trading_research.models.ensemble import EnsembleModel
 
         return EnsembleModel([build_model(member, **params) for member in ENSEMBLES[name]])
+    if name in COMPOSITES:
+        from trading_research.models.composite import Agreement, Gated
+
+        kind, members = COMPOSITES[name]
+        built = [build_model(member, **params) for member in members]
+        return Agreement(built) if kind == "agreement" else Gated(built[0], built[1])
     if name not in MODELS:
-        known = sorted([*MODELS, *ENSEMBLES])
+        known = sorted([*MODELS, *ENSEMBLES, *COMPOSITES])
         raise StageError(f"unknown model {name!r}; known: {', '.join(known)}")
     module_path, class_name = MODELS[name].split(":")
     import importlib
