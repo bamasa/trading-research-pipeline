@@ -669,3 +669,57 @@ def maker_tradeoff(results: pd.DataFrame, path: Path | str) -> Path:
         color=COLOURS["neutral"],
     )
     return _finish(fig, ax, "What posting costs, and what it saves", Path(path))
+
+
+def exit_policies(
+    results: pd.DataFrame,
+    path: Path | str,
+    *,
+    baseline: str,
+    label: str = "",
+) -> Path:
+    """Gross edge per trade by exit policy, against the untouched clock.
+
+    Horizontal bars, sorted, because the question is a ranking and the labels
+    are long. Bars are coloured by whether they beat the baseline rather than
+    by which rule they belong to: with seven families and a five-colour palette
+    the family colouring repeated itself, which is worse than no colouring — a
+    reader takes two bars of the same colour to mean the same thing.
+
+    ``baseline`` names the untouched policy explicitly. Inferring it went wrong
+    once: sorting and taking the best clock-only policy picked a *shortened*
+    clock, which is itself a change to the exit, so every other bar was being
+    compared against something that had already been tuned.
+    """
+    plt = _pyplot()
+    frame = results.dropna(subset=["gross_per_trade_bp"]).sort_values("gross_per_trade_bp")
+
+    row = frame.loc[frame["policy"] == baseline]
+    if row.empty:
+        raise ValueError(f"baseline {baseline!r} is not in the results")
+    reference = float(row["gross_per_trade_bp"].iloc[0])
+
+    colours = [
+        COLOURS["neutral"]
+        if name == baseline
+        else (COLOURS["edge"] if value > reference else COLOURS["signal"])
+        for name, value in zip(frame["policy"], frame["gross_per_trade_bp"], strict=True)
+    ]
+
+    fig, ax = plt.subplots(figsize=(FIGSIZE[0], 0.28 * len(frame) + 1.6))
+    ax.barh(frame["policy"], frame["gross_per_trade_bp"], color=colours, height=0.68)
+    ax.axvline(
+        reference,
+        color=COLOURS["cost"],
+        linewidth=1.6,
+        linestyle="--",
+        label=f"untouched clock, {baseline} ({reference:.2f} bp)",
+    )
+    ax.set_xlabel("gross bp per trade")
+    ax.tick_params(axis="y", labelsize=8)
+    ax.legend(frameon=False, fontsize=9, loc="lower right")
+
+    title = "Every way of leaving a trade"
+    if label:
+        title += f" — {label}"
+    return _finish(fig, ax, title, Path(path))

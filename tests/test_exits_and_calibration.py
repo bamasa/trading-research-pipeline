@@ -83,7 +83,9 @@ def test_a_short_takes_profit_when_the_price_falls() -> None:
         mid=mid,
     )
     assert trades[0].exit_reason == "take_profit"
-    assert trades[0].move_bp > 0  # a short profits from the fall
+    # move_bp is the price change, not the position's gain: the price fell, so
+    # it is negative, and `score` turns that into a profit via the direction.
+    assert trades[0].move_bp < 0
 
 
 # ---------------------------------------------------------------------------

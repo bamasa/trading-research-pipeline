@@ -203,6 +203,10 @@ uv run trading-research backtest --min-confidence 0.62 --hold 24 --cooldown 120
 # first half of the span and applied once to the second
 uv run trading-research retrain-search --model logistic --start 2024-02-15 \
     --train-days 3,7,14,21 --apply-days 1,3,7
+
+# how to leave a trade: clock, take-profit, stop, trail, or the model's own
+# fading opinion — chosen on validation, applied once to test
+uv run trading-research exit-search --model logistic --hold 24
 ```
 
 The model is one flag — `--model logistic | xgboost | tcn` — and so are the
@@ -309,12 +313,15 @@ Done:
 - [x] Isotonic and Platt calibration
 - [x] Retraining schedule as a searched parameter, not an assumption
 - [x] Experiment scripts behind every published table
+- [x] Six exit rules, with the policy searched on validation
 
 Next, staying with taker execution:
 
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
 - [ ] Order-book collector with sequence-gap recovery, for depth beyond the touch
 - [ ] Position sizing from calibrated probabilities rather than a fixed unit
+- [ ] Holding period searched jointly with the entry threshold, since §12 shows
+      the label horizon is not the right one to hold for
 
 Maker execution — deferred, deliberately
 ----------------------------------------

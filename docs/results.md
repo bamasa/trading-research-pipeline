@@ -508,7 +508,90 @@ does not hold on this data at this horizon. Whether the remaining margin
 survives conditioning on a signal is a question this data can ask but the
 experiment here does not answer.
 
-## 12. What would have to change
+## 12. How to leave a trade
+
+Everything above holds a position for the label horizon and then leaves. That is
+a default, not a decision: the entry side is tuned — features selected, a
+confidence threshold swept, a retraining schedule searched — while the exit was
+one constant, set equal to the horizon the label happened to use.
+
+Six rules, searched on validation and applied once to test. Four read the price
+(a fixed clock, take-profit, stop-loss, trailing stop) and two read the model's
+ongoing opinion — leave when confidence in the position decays, or when the
+prediction flips. The last two are the only place in this pipeline where a
+prediction made *after* the entry is used for anything.
+
+![Every way of leaving a trade](../assets/exit_policies.png)
+
+The model is fitted once per fold and every policy scored against the same
+predictions, so the table compares exits rather than fits.
+
+### What transferred
+
+| Instrument | Model | Chosen on validation | Test net/trade | Untouched clock | Gain |
+|---|---|---|---:|---:|---:|
+| BTC | logistic | hold 30 s | −7.07 | −7.58 | +0.52 |
+| BTC | xgboost | hold 4 min | −11.40 | −11.15 | **−0.25** |
+| BTC | tcn | take-profit 22 bp | −6.04 | −7.68 | +1.64 |
+| XRP | logistic | exit on flip | −12.28 | −12.94 | +0.66 |
+| XRP | xgboost | hold 30 s | −16.31 | −17.42 | +1.11 |
+| XRP | tcn | hold 30 s | −14.63 | −11.17 | **−3.45** |
+
+Four of six improved, two got worse, and the spread of outcomes is wider than
+the median gain. **Choosing the exit on validation transfers weakly.** Against a
+gap of seven to twelve basis points, a lever worth about half a point either way
+is not the answer, and the two negative rows are the honest measure of how
+reliable the positive ones are.
+
+### What it did establish
+
+**The label horizon is the wrong holding period.** The winner is a *shorter*
+clock in three of six cases — thirty seconds against the two minutes the label
+uses — and shortening the clock is the single largest improvement in the
+validation table: 2.97 bp gross to 4.82. This follows from §3 rather than
+contradicting it: signal decays fast, so most of what a prediction is worth is
+realised early, while the cost of the round trip does not care how long the
+position was open. Holding for the horizon the label was built on is an
+assumption that this project made without examining, and it was costing about
+two basis points a trade.
+
+**A tight take-profit is a trap, and it is measurable.** At 4 bp, 75% of trades
+win — against 54% for the untouched clock — and gross edge per trade falls from
+2.97 bp to 1.27. It caps the winners and lets the losers run their course. Any
+backtest reporting hit rate rather than expectancy would call this an
+improvement.
+
+**A wide stop-loss helps a little; a tight one does not.** At 22 bp, twice the
+round trip, it truncates the left tail without touching much else: 4.06 bp gross
+against 2.97. At 4 bp it fires on ordinary noise and the hit rate collapses to
+33%.
+
+**Trailing stops did nothing here.** They neither cap winners nor cut losers
+cleanly; at 100 ms the path is mostly noise to shave against, and every setting
+tested lands within a basis point of the baseline.
+
+**Signal exits are the most interesting and the least conclusive.** Leaving when
+the model's confidence decays is the second-best policy on validation (4.55 bp
+against 2.97), which is what you would expect if the model knows something about
+when its own call has expired. It did not survive to test on either instrument.
+
+### A bug, and what it cost
+
+The first run of this search produced the only positive test result in the
+project: +3.37 bp per trade, BTC with the network and a stop-loss. It was wrong.
+`Trade.move_bp` is the price change and `score` applies the direction — but
+every path-dependent exit was storing a value that already had the direction
+applied, so it was applied twice. Every short that exited early had its profit
+inverted; every long was correct; the totals stayed plausible.
+
+It is recorded here because of how it presented. It was invisible in every
+summary, it survived a full test suite, and it appeared as a *good* result,
+which is the direction that gets published. What caught it was checking a
+number that was too good rather than a number that looked wrong. The regression
+test is now four lines: the same profitable short, exited four different ways,
+must be profitable each time.
+
+## 13. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

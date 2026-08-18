@@ -30,8 +30,10 @@ A few read the raw book instead, because they need bid and ask sizes that
 | `fee_sensitivity.py` | §9 | What fee would be needed to break even. Reads every walk-forward run present |
 | `maker_threshold.py` | §11 | Adverse selection of passive fills, measured against what posting saves |
 
-Retraining schedules (§10) are not here: they run through the CLI, as
-`trading-research retrain-search`.
+Two searches are not here, because they run through the CLI rather than a
+script: retraining schedules (§10) as `trading-research retrain-search`, and
+exit policies (§12) as `trading-research exit-search`. Their outputs are in
+`results/` all the same.
 
 ## One model per invocation
 

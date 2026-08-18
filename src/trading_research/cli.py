@@ -757,6 +757,156 @@ def retrain_search_cmd(
     console.print(f"\n-> {out}")
 
 
+@app.command("exit-search")
+def exit_search_cmd(
+    prepared: Annotated[Path, typer.Option("--prepared")] = Path("artifacts/prepared"),
+    features: Annotated[Path, typer.Option("--features")] = Path("artifacts/features"),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/exits"),
+    model: Annotated[str, typer.Option("--model", help="One model per run.")] = "logistic",
+    threshold_bp: Annotated[float, typer.Option("--threshold-bp", min=0.0)] = 11.0,
+    hold_periods: Annotated[int, typer.Option("--hold", min=1)] = 24,
+    cooldown_periods: Annotated[int, typer.Option("--cooldown", min=0)] = 0,
+    fee_bp_per_side: Annotated[float, typer.Option("--fee-bp", min=0.0)] = 5.0,
+    slippage_bp: Annotated[float, typer.Option("--slippage-bp", min=0.0)] = 0.5,
+    train_days: Annotated[int, typer.Option("--train-days", min=1)] = 14,
+    validation_days: Annotated[int, typer.Option("--validation-days", min=1)] = 7,
+    test_days: Annotated[int, typer.Option("--test-days", min=1)] = 7,
+    folds: Annotated[int, typer.Option("--folds", min=1)] = 7,
+    minimum_trades: Annotated[int, typer.Option("--min-trades", min=1)] = 50,
+    objective: Annotated[str, typer.Option("--objective")] = "net_per_trade_bp",
+    calibrate: Annotated[str | None, typer.Option("--calibrate")] = None,
+) -> None:
+    """Search how to leave a trade: clock, take-profit, stop, trail, signal.
+
+    The model is fitted once per fold and every policy is scored against the
+    same predictions, so the table compares exits rather than fits. The winner
+    is chosen on validation and applied once to test.
+    """
+    import json
+
+    import pandas as pd
+
+    from trading_research.backtest.costs import TakerCosts
+    from trading_research.pipeline.exits import policy_evaluator, walk_forward_predictions
+    from trading_research.pipeline.stages import (
+        StageError,
+        StageManifest,
+        load_prepared,
+        load_selected,
+    )
+    from trading_research.validation.exits import ExitSearchError, default_grid, search
+    from trading_research.validation.splits import WalkForwardSpec, walk_forward
+
+    try:
+        columns = load_selected(features)
+        frame = load_prepared(prepared)
+        costs = TakerCosts(fee_bp_per_side=fee_bp_per_side, slippage_bp=slippage_bp)
+
+        spec = WalkForwardSpec(
+            train_days=train_days,
+            validation_days=validation_days,
+            test_days=test_days,
+            step_days=1,
+            n_folds=folds,
+        )
+        days = sorted(set(frame["timestamp"].dt.date))[: spec.required_days]
+        frame = frame[frame["timestamp"].dt.date.isin(set(days))].reset_index(drop=True)
+        schedule = walk_forward(days, spec)
+
+        console.print(f"{model}: fitting {len(schedule)} folds over {len(days)} days")
+        blocks, min_confidence = walk_forward_predictions(
+            frame,
+            columns,
+            schedule,
+            threshold_bp=threshold_bp,
+            costs=costs,
+            model=model,
+            calibrate=calibrate,
+            purge=hold_periods,
+            on_fold=lambda fold: console.print(f"  fold {fold.index} fitted"),
+        )
+        console.print(f"entry threshold from validation: {min_confidence:.3f}")
+
+        grid = default_grid(hold_periods, cooldown_periods=cooldown_periods)
+        outcome = search(
+            policy_evaluator(blocks["validation"], costs, min_confidence=min_confidence),
+            grid=grid,
+            objective=objective,
+            minimum_trades=minimum_trades,
+            baseline=grid[0],
+            on_test=policy_evaluator(blocks["test"], costs, min_confidence=min_confidence),
+            on_result=lambda policy, metrics: console.print(
+                f"  {policy.label}: {metrics.get('trades', 0):.0f} trades, "
+                f"{objective} {metrics.get(objective, float('nan')):.2f}"
+            ),
+        )
+    except (StageError, ExitSearchError) as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    columns_wanted = [
+        c
+        for c in (
+            "policy",
+            "family",
+            "trades",
+            "hit_rate",
+            "gross_per_trade_bp",
+            objective,
+            "net_bp",
+            "skipped",
+        )
+        if c in outcome.validation.columns
+    ]
+    ordered = outcome.validation[columns_wanted].sort_values(
+        objective, ascending=False, na_position="last"
+    )
+
+    table = Table(title=f"Exit policies on validation ({model})", show_edge=False)
+    for column in ordered.columns:
+        table.add_column(column, justify="left" if column in ("policy", "family") else "right")
+    for _, row in ordered.iterrows():
+        table.add_row(*[f"{v:,.2f}" if isinstance(v, float) else str(v) for v in row])
+    console.print(table)
+    console.print(f"\n[green]{outcome.summary()}[/green]")
+
+    out = Path(output)
+    out.mkdir(parents=True, exist_ok=True)
+    ordered.to_csv(out / "validation.csv", index=False)
+    if outcome.test is not None:
+        pd.Series(outcome.test).to_frame("value").to_csv(out / "test.csv")
+    (out / "chosen.json").write_text(
+        json.dumps(
+            {
+                "chosen": outcome.chosen.label,
+                "family": outcome.chosen.family,
+                "objective": objective,
+                "min_confidence": min_confidence,
+                "policy": outcome.chosen.__dict__,
+                "test": outcome.test,
+                "test_baseline": outcome.test_baseline,
+            },
+            indent=2,
+            default=float,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    StageManifest(
+        stage="exit-search",
+        inputs={"prepared_dir": str(prepared), "features_dir": str(features)},
+        params={
+            "model": model,
+            "threshold_bp": threshold_bp,
+            "hold_periods": hold_periods,
+            "objective": objective,
+            "grid": [p.label for p in grid],
+        },
+        outputs={"chosen": outcome.chosen.label, "test": outcome.test},
+    ).write(out)
+    console.print(f"\n-> {out}")
+
+
 @app.command("describe-schema")
 def describe_schema(
     plane: Annotated[

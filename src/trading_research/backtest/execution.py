@@ -30,7 +30,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from trading_research.labels.directional import HOLD
+from trading_research.labels.directional import BUY, HOLD
 
 
 @dataclass(frozen=True)
@@ -42,10 +42,10 @@ class Trade:
     direction: int
     entry_spread_bp: float
     move_bp: float
-    #: What ended the trade: "clock", "take_profit", "stop_loss", "reversal" or
-    #: "end_of_data". Recorded because a rule that never fires and a rule that
-    #: fires on every trade produce the same summary line and mean opposite
-    #: things.
+    #: What ended the trade: "clock", "take_profit", "stop_loss",
+    #: "trailing_stop", "signal_decay", "flip", "reversal" or "end_of_data".
+    #: Recorded because a rule that never fires and a rule that fires on every
+    #: trade produce the same summary line and mean opposite things.
     exit_reason: str = "clock"
 
 
@@ -53,26 +53,62 @@ class Trade:
 class ThinningRules:
     """How signals are converted into trades.
 
+    Entry is one decision — act or do not — and it is governed by the
+    confidence threshold upstream. Exit is where the choices are, and there are
+    more of them than there look to be.
+
+    Position management
+    -------------------
     ``hold_periods``
-        How long a position stays open, in observations. Normally the label
-        horizon: the model predicted a move over that window, so the position
-        is held for it and no longer.
+        How long a position stays open, in observations, when nothing else
+        closes it. The natural value is the label horizon: the model predicted
+        a move over that window, so the position is held for it and no longer.
     ``cooldown_periods``
         Observations to wait after closing before trading again.
     ``allow_reversal``
-        Whether an opposite signal may close a position early. Off by default:
-        it doubles the cost of a reversal and, on a noisy signal, mostly
-        converts churn into more churn.
-    ``take_profit_bp`` / ``stop_loss_bp``
-        Exit as soon as the position is this far in front of, or behind, its
-        entry. Both need the price path, so ``thin`` must be given ``mid``.
+        Whether an opposite signal may close a position **and open the
+        opposite one**. Off by default: it doubles the cost of a reversal and,
+        on a noisy signal, mostly converts churn into more churn.
 
-        Neither is free. A take-profit caps the winners and leaves the losers
-        to run their full course, which is why a tight one *lowers* the average
-        outcome while raising the hit rate — measured here at 5 bp: 69% of
-        trades won and the mean fell by more than half. A stop-loss does the
-        mirror image, and a tight one turns ordinary noise into a realised
-        loss. They are options, not improvements.
+    Price-path exits
+    ----------------
+    ``take_profit_bp``
+        Close once the position is this far in front. Caps the winners while
+        leaving the losers to run their full course, which is why a tight one
+        *lowers* the average outcome while raising the hit rate — measured here
+        at 4 bp on BTCUSDT: 75% of trades won, against 54% for the untouched
+        clock, and gross edge per trade fell from 2.97 bp to 1.27.
+    ``stop_loss_bp``
+        Close once the position is this far behind. The mirror image: a tight
+        one converts ordinary noise into a realised loss.
+    ``trailing_stop_bp``
+        Close once the position has given back this much from the best level it
+        reached. Unlike a fixed take-profit it does not cap the winners, which
+        is the usual argument for it; what it does instead is convert a winner
+        into a smaller winner every time the path is noisy, and at these
+        horizons the path is nothing but noise.
+
+    Signal exits
+    ------------
+    These read the model's ongoing opinion rather than the price, so ``thin``
+    must be given ``p_buy`` and ``p_sell``. They are the only rules here that
+    use the fact that a model keeps predicting after the trade is opened —
+    everything else treats the entry decision as final.
+
+    ``exit_below_confidence``
+        Close when the probability of the direction being held falls below
+        this. The position was opened because the model was confident; this
+        closes it when the model stops being confident, rather than waiting for
+        a clock that was set by the label horizon.
+    ``exit_on_flip``
+        Close when the model's probability for the opposite direction exceeds
+        the one being held. Distinct from ``allow_reversal``: this goes flat
+        and respects the cooldown, rather than immediately paying to enter the
+        other side.
+
+    Every one of these is an option, not an improvement. Which combination is
+    best is a question for validation — see
+    :mod:`trading_research.validation.exits`.
     """
 
     hold_periods: int
@@ -80,21 +116,44 @@ class ThinningRules:
     allow_reversal: bool = False
     take_profit_bp: float | None = None
     stop_loss_bp: float | None = None
+    trailing_stop_bp: float | None = None
+    exit_below_confidence: float | None = None
+    exit_on_flip: bool = False
 
     def __post_init__(self) -> None:
         if self.hold_periods < 1:
             raise ValueError(f"hold_periods must be at least 1, got {self.hold_periods}")
         if self.cooldown_periods < 0:
             raise ValueError(f"cooldown_periods must be non-negative, got {self.cooldown_periods}")
-        for name in ("take_profit_bp", "stop_loss_bp"):
+        for name in ("take_profit_bp", "stop_loss_bp", "trailing_stop_bp"):
             value = getattr(self, name)
             if value is not None and value <= 0:
                 raise ValueError(f"{name} must be positive when set, got {value}")
+        if self.exit_below_confidence is not None and not 0.0 < self.exit_below_confidence < 1.0:
+            raise ValueError(
+                f"exit_below_confidence must be in (0, 1), got {self.exit_below_confidence}"
+            )
 
     @property
     def needs_price_path(self) -> bool:
-        """True when an exit can happen before the clock runs out."""
-        return self.take_profit_bp is not None or self.stop_loss_bp is not None
+        """True when an exit can happen before the clock runs out.
+
+        Includes the signal exits: they decide *when* to leave from the model's
+        opinion, but the outcome still has to be priced from the path, and
+        using the label's forward return for a trade that ended early would
+        credit it with a move it was not there for.
+        """
+        return (
+            self.take_profit_bp is not None
+            or self.stop_loss_bp is not None
+            or self.trailing_stop_bp is not None
+            or self.needs_probabilities
+        )
+
+    @property
+    def needs_probabilities(self) -> bool:
+        """True when an exit reads the model's ongoing opinion."""
+        return self.exit_below_confidence is not None or self.exit_on_flip
 
 
 def thin(
@@ -103,6 +162,8 @@ def thin(
     spread_bp: np.ndarray,
     rules: ThinningRules,
     mid: np.ndarray | None = None,
+    p_buy: np.ndarray | None = None,
+    p_sell: np.ndarray | None = None,
 ) -> list[Trade]:
     """Walk the signal stream in time order, opening trades where allowed.
 
@@ -110,35 +171,58 @@ def thin(
     position, in cooldown, free — can be correct. A vectorised version would
     have to know when positions close, which depends on when they opened.
 
-    Without a take-profit or stop-loss, a trade's outcome is ``forward_bp`` at
-    entry: the realised move over exactly the horizon the model was trained to
+    With no early-exit rule set, a trade's outcome is ``forward_bp`` at entry:
+    the realised move over exactly the horizon the model was trained to
     predict, so the trade is scored against what it bet on.
 
-    With either set, the outcome depends on the path, and ``mid`` becomes
-    required. The exit is the first of take-profit, stop-loss and the clock —
-    checked in that order at each step. Both are evaluated on the *same*
-    observation, so a bar that would have triggered both is resolved
-    optimistically. That is a real limitation of bar data rather than a choice,
-    and it flatters the result: with 100 ms observations the window in which it
-    matters is small, but it is not zero, and a wider grid would make it
-    material.
+    With any early exit the outcome depends on the path, ``mid`` becomes
+    required, and the signal exits additionally need ``p_buy`` and ``p_sell``.
+
+    Order of checks
+    ---------------
+    At each observation, in this order: take-profit, stop-loss, trailing stop,
+    signal exits, then the clock. The order is a choice and it matters, because
+    two rules can be satisfied on the same observation and bar data cannot say
+    which came first. It resolves ties optimistically — the profitable exit
+    wins — which flatters the result. At 100 ms the window in which it matters
+    is small, but it is not zero, and a wider grid would make it material.
     """
     n = len(decision)
     if rules.needs_price_path and mid is None:
-        raise ValueError("take_profit_bp or stop_loss_bp needs the price path; pass mid=")
+        raise ValueError("this exit rule needs the price path; pass mid=")
+    if rules.needs_probabilities and (p_buy is None or p_sell is None):
+        raise ValueError("this exit rule needs the model's opinion; pass p_buy= and p_sell=")
 
     trades: list[Trade] = []
     position_until = -1  # index at which the current position closes on the clock
     free_from = 0  # index from which trading is allowed again
     open_at = -1
     open_direction = HOLD
+    best_move_bp = 0.0  # high-water mark since entry, for the trailing stop
+
+    def raw_move(index: int) -> float:
+        """Price change since entry, in basis points, unsigned by direction.
+
+        Stored on the trade, because ``score`` applies the direction itself and
+        a value that already had it applied would be signed twice. That is not
+        hypothetical: it was the shape of a real bug here, and it inverted the
+        profit of every short that exited early while leaving every long
+        correct — so the totals stayed plausible and only shorts were wrong.
+        """
+        assert mid is not None
+        return (mid[index] / mid[open_at] - 1.0) * 1e4
+
+    def position_move(index: int) -> float:
+        """The same change from the position's point of view: positive is ahead.
+
+        This is what the exit *conditions* need — a stop-loss asks whether the
+        position is behind, not whether the price fell.
+        """
+        return open_direction * raw_move(index)
 
     def close(at: int, reason: str) -> None:
-        nonlocal open_direction, free_from
-        if mid is not None and reason != "clock":
-            move = open_direction * (mid[at] / mid[open_at] - 1.0) * 1e4
-        else:
-            move = float(forward_bp[open_at])
+        nonlocal open_direction, free_from, best_move_bp
+        move = float(forward_bp[open_at]) if reason == "clock" or mid is None else raw_move(at)
         trades.append(
             Trade(
                 entry_index=open_at,
@@ -150,17 +234,37 @@ def thin(
             )
         )
         open_direction = HOLD
+        best_move_bp = 0.0
         free_from = at + rules.cooldown_periods
 
     for i in range(n):
-        # Path exits are checked before the clock, since either can only end
-        # the trade earlier than it would have ended anyway.
-        if open_direction != HOLD and rules.needs_price_path and mid is not None:
-            move = open_direction * (mid[i] / mid[open_at] - 1.0) * 1e4
+        # Early exits are checked before the clock, since each of them can only
+        # end the trade sooner than it would have ended anyway.
+        if open_direction != HOLD and mid is not None:
+            move = position_move(i)
+            best_move_bp = max(best_move_bp, move)
+
             if rules.take_profit_bp is not None and move >= rules.take_profit_bp:
                 close(i, "take_profit")
             elif rules.stop_loss_bp is not None and move <= -rules.stop_loss_bp:
                 close(i, "stop_loss")
+            elif (
+                rules.trailing_stop_bp is not None
+                # Only after the position has been in front: a trailing stop
+                # armed from entry is a stop-loss wearing a different name.
+                and best_move_bp > 0
+                and move <= best_move_bp - rules.trailing_stop_bp
+            ):
+                close(i, "trailing_stop")
+
+        if open_direction != HOLD and rules.needs_probabilities:
+            assert p_buy is not None and p_sell is not None
+            held = p_buy[i] if open_direction == BUY else p_sell[i]
+            against = p_sell[i] if open_direction == BUY else p_buy[i]
+            if rules.exit_below_confidence is not None and held < rules.exit_below_confidence:
+                close(i, "signal_decay")
+            elif rules.exit_on_flip and against > held:
+                close(i, "flip")
 
         if open_direction != HOLD and i >= position_until:
             close(i, "clock")
@@ -183,6 +287,7 @@ def thin(
         open_direction = signal
         open_at = i
         position_until = i + rules.hold_periods
+        best_move_bp = 0.0
 
     # A position still open when the data runs out is closed rather than
     # dropped. Its outcome is already known — `forward_bp` at entry covers the
@@ -190,16 +295,13 @@ def thin(
     # entered — so discarding it would quietly lose real trades, and the ones
     # nearest the end of every block at that.
     if open_direction != HOLD:
-        open_direction_kept = open_direction
-        at = min(position_until, n - 1)
-        move = float(forward_bp[open_at])
         trades.append(
             Trade(
                 entry_index=open_at,
-                exit_index=at,
-                direction=open_direction_kept,
+                exit_index=min(position_until, n - 1),
+                direction=open_direction,
                 entry_spread_bp=float(spread_bp[open_at]),
-                move_bp=move,
+                move_bp=float(forward_bp[open_at]),
                 exit_reason="end_of_data",
             )
         )
