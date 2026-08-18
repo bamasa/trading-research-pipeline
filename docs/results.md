@@ -921,7 +921,47 @@ second instrument is a description of the first instrument.
 cost — the best in this document, and still a loss of two thirds of the cost.
 Zero positive folds out of fifty-six.
 
-## 18. What would have to change
+## 18. Shorter horizons, with features built for them
+
+Two minutes is a long time for a strategy of this kind, and §3's answer — that
+horizon does not matter because the edge identity is flat — was measured on a
+7.4-second grid with features designed for the long end. That is not a fair test
+of the short end.
+
+Re-asked properly: a 3.3-second grid, eight new features built for seconds
+rather than minutes (quote intensity, imbalance slope, touch persistence, mid
+reversal, spread pressure, size shock, microprice drift, short realised
+volatility), and the holding period tied to the horizon rather than fixed.
+
+| Horizon | Gross/trade | Net/trade | Trades/day |
+|---|---:|---:|---:|
+| 10 s | +0.89 | −10.56 | 32 |
+| 20 s | +1.99 | −9.62 | 35 |
+| 30 s | −0.57 | −12.12 | 23 |
+| 60 s | +2.06 | −9.44 | 20 |
+| **120 s** | **+4.48** | **−6.83** | 20 |
+| 300 s | −0.34 | −12.04 | 13 |
+
+BTCUSDT, logistic, five folds, cost 11.02 bp.
+
+**Shorter is not better.** Ten seconds returns +0.89 bp against two minutes'
++4.48. The features built specifically for the short end did not rescue it,
+which is the useful part of the result: the failure is not that nobody had
+looked at seconds properly, it is that there is less there.
+
+The −6.83 at two minutes is the best net figure in this document. It is still
+62% of the cost short.
+
+The scatter across adjacent horizons is worth noting rather than smoothing: 20 s
+gives +1.99 and 30 s gives −0.57, which are not different from each other in any
+meaningful sense. Only the two-minute peak stands outside the noise, and one
+peak in six is the kind of thing that appears in any sweep.
+
+This closes the question the brief opened with. Within ten seconds to five
+minutes, on this instrument, with features for both ends, there is no horizon at
+which taker execution pays.
+
+## 19. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

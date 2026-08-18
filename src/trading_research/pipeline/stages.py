@@ -97,6 +97,7 @@ def prepare(
     missing values or, worse, a window that quietly means something different
     from every other window.
     """
+    from trading_research.features import build
     from trading_research.features.generated import generate
     from trading_research.features.registry import REGISTRY
 
@@ -136,7 +137,16 @@ def prepare(
             for column in ("symbol", "source"):
                 trades[column] = trades[column].astype("string")
 
-        features = generate(book, trades).iloc[warm_rows:]
+        # The generated set is built from primitives; the registry holds
+        # hand-written features that are not derivable from them — order-flow
+        # imbalance needs bid and ask sizes, and the short-horizon set needs
+        # the update pattern itself. Both go into the same frame so that
+        # everything downstream sees one feature space.
+        generated = generate(book, trades)
+        registry_names = [n for n in REGISTRY.names("book") if n not in generated.columns]
+        extra = build(book, registry_names)[registry_names] if registry_names else None
+        features = generated if extra is None else pd.concat([generated, extra], axis=1)
+        features = features.iloc[warm_rows:]
         mid = ((book["bid_price_0"] + book["ask_price_0"]) / 2).to_numpy()
         forward = np.full(len(mid), np.nan)
         if horizon < len(mid):
