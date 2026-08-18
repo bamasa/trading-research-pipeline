@@ -1,0 +1,5 @@
+symbol,model,single_config,single_gross,single_net,single_trades,single_pos,joint_config,joint_gross,joint_net,joint_trades,joint_pos,delta_net
+BTCUSDT,logistic,train21/apply1 hold24,6.69,-4.72,111,0.21,train21/apply1 hold24,6.69,-4.72,111,0.21,0.0
+BTCUSDT,xgboost,train14/apply1 hold24,-1.17,-12.26,336,0.08,train14/apply1 hold48,-1.72,-12.83,279,0.08,-0.5700000000000003
+XRPUSDT,logistic,train14/apply1 hold24,12.31,-0.44,141,0.47,train21/apply1 hold48,8.86,-3.92,96,0.6,-3.48
+XRPUSDT,xgboost,train7/apply7 hold24,7.44,-5.3,223,0.33,train7/apply7 hold24,7.44,-5.3,223,0.33,0.0

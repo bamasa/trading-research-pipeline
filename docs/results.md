@@ -591,7 +591,53 @@ number that was too good rather than a number that looked wrong. The regression
 test is now four lines: the same profitable short, exited four different ways,
 must be profitable each time.
 
-## 13. What would have to change
+## 13. Searching two levers together
+
+§10 searched the retraining schedule with the holding period fixed at the label
+horizon. §12 searched the holding period with the schedule fixed. Each found
+something. The obvious next question is what happens when both move — a shorter
+position takes more trades, so a staler model should hurt it more, and the best
+schedule for a two-minute position need not be the best one for a thirty-second
+position.
+
+Forty combinations — four training windows by three apply windows by four
+holding periods — scored on validation, the winner applied once to test. The
+entry threshold moves with them, swept inside each training window's tail.
+
+| Instrument | Model | Schedule only | Both together | Change |
+|---|---|---:|---:|---:|
+| BTC | logistic | −4.72 | −4.72 | 0.00 |
+| BTC | xgboost | −12.26 | −12.83 | −0.57 |
+| XRP | logistic | **−0.44** | −3.92 | **−3.48** |
+| XRP | xgboost | −5.30 | −5.30 | 0.00 |
+
+**Searching both was never better and twice was worse.** In two of the four runs
+the joint search chose the same holding period the label already used, so the
+result is identical by construction. In the other two it chose a different one
+and lost on test — including the XRPUSDT run that had been the best result in
+this document, which went from 0.37 bp short of break-even to 3.9.
+
+The mechanism is not subtle. Widening the grid from twelve candidates to forty
+buys a better number on validation and does not buy a better number on test:
+the extra freedom is spent fitting the validation block. The two levers do not
+compose, and the reason they looked as though they might is that each was
+measured with the other held still.
+
+This is the same finding as §6 in a different costume. There, selectivity chosen
+after the fact looked profitable and chosen honestly did not. Here, a search
+space widened after two separate successes produces a better validation figure
+and a worse test one. Both are the same arithmetic: a validation block is a
+finite sample, and every additional candidate is another chance to fit it.
+
+### On stacking measured gains
+
+Adding up the levers measured separately — daily retraining short by 0.37 bp,
+a shorter clock worth about 1.9, posting worth 2.3 to 5.0 — gives a positive
+number. Running two of them together gives a worse number than running one.
+Only the second of those was computed under the rules the rest of this document
+uses, so it is the one that counts.
+
+## 14. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
@@ -614,7 +660,7 @@ than edge (§6); and a better fee tier, which falls short by a factor of five
 
 Retraining frequency (§10) is the one lever that moved the number materially —
 it closed all but 0.37 bp of a 12.68 bp gap on XRP — and it still did not close
-it. That it got as far as it did is the strongest argument for the two levers
+it, nor did it survive being searched jointly with the holding period (§13). That it got as far as it did is the strongest argument for the two levers
 above: a strategy this close to the line is one that maker execution or a real
 volume tier could plausibly push across.
 
