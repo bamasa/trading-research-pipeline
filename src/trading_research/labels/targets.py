@@ -11,6 +11,37 @@ rules act on that path. And it asks the model a question — "will it move more
 than eleven basis points" — that nobody wants the answer to, in place of the
 one they do: "is opening a position here worth it".
 
+Two problems, not one
+---------------------
+The first is *what* is asked, and the four targets below answer it differently.
+The second is *how the answer is measured*, and every one of them shared the
+same defect until now: the future was a single price, ``m(t+H)``.
+
+At these frequencies one future price is mostly noise. The mid oscillates
+between bid and ask on every update, so ``m(t+H)`` is the true level plus half a
+spread in a direction nobody can predict, and a model asked to fit that spends
+its capacity on the oscillation. The standard fix in the order-book literature —
+Ntakaris et al. on FI-2010, and Zhang et al. for DeepLOB — is to compare
+*averages* rather than points:
+
+    m_plus(t)  = mean of the next k mids
+    m_minus(t) = mean of the last k mids
+    label = (m_plus - m_minus) / m_minus
+
+Averaging both ends removes the bounce and leaves the drift. It is the same
+horizon and a far less noisy measurement of it.
+
+The second fix is normalisation. A 10 bp move means something different in a
+calm hour and a violent one, and a target in raw basis points asks the model to
+learn the regime as well as the direction. Dividing by a trailing volatility
+makes the target stationary — and it makes the trade decision better, not just
+the fit: a prediction in units of local volatility converts back to basis points
+by multiplying by the volatility prevailing *now*, so the comparison with cost
+adapts to the regime instead of being fixed.
+
+``smoothing`` and ``normalise`` are therefore parameters of every target rather
+than separate targets of their own.
+
 Four targets, from the proxy outwards.
 
 ``direction``
@@ -67,23 +98,102 @@ class TargetSpec:
     needs_path: bool = False
 
 
-def direction(frame: pd.DataFrame, *, cost_bp: float, **_: Any) -> pd.Series:
-    """Sign of the move where it clears the cost, zero otherwise."""
-    move = frame["forward_bp"]
+def smoothed_move_bp(
+    mid: pd.Series,
+    horizon: int,
+    *,
+    smoothing: int = 1,
+) -> pd.Series:
+    """Forward move in basis points, measured between averages rather than points.
+
+    ``smoothing`` is *k* in the FI-2010 construction: the mean of the next *k*
+    mids against the mean of the last *k*. One reduces to the single-point
+    version this project used everywhere before, so the change is opt-in and the
+    old numbers remain reproducible.
+
+    The window is centred on the horizon — the forward average is taken over the
+    *k* observations ending at ``t + H`` — so the label still reads exactly *H*
+    rows ahead and the purge derived from the horizon is still correct. Taking
+    the average of the *k* rows *after* ``t + H`` would read further than
+    declared, which is the quiet way a smoothed label becomes a leak.
+    """
+    values = mid.to_numpy(dtype="float64")
+    if smoothing <= 1:
+        forward = np.full(len(values), np.nan)
+        forward[:-horizon] = values[horizon:]
+        backward = values
+    else:
+        rolled = pd.Series(values).rolling(smoothing, min_periods=1).mean().to_numpy()
+        forward = np.full(len(values), np.nan)
+        forward[:-horizon] = rolled[horizon:]
+        backward = rolled
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return pd.Series(np.log(forward / backward) * 1e4, index=mid.index)
+
+
+def _move(frame: pd.DataFrame, horizon: int, smoothing: int, normalise: int) -> pd.Series:
+    """The move a target is built on, smoothed and normalised as asked."""
+    if smoothing > 1 or normalise > 0:
+        if "mid" not in frame.columns:
+            raise KeyError("smoothing and normalisation need the mid price path")
+        move = smoothed_move_bp(frame["mid"], horizon, smoothing=smoothing)
+    else:
+        move = frame["forward_bp"]
+
+    if normalise > 0:
+        if "mid" not in frame.columns:
+            raise KeyError("normalisation needs the mid price path")
+        # Trailing volatility only: a window that included the future would
+        # scale the label by information from after the decision.
+        ratio = frame["mid"] / frame["mid"].shift(1)
+        returns = pd.Series(np.log(ratio.to_numpy(dtype="float64")), index=frame.index) * 1e4
+        sigma = returns.rolling(normalise, min_periods=normalise // 2).std()
+        move = move / sigma.where(sigma > 0)
+    return move
+
+
+def direction(
+    frame: pd.DataFrame,
+    *,
+    cost_bp: float,
+    horizon: int = 24,
+    smoothing: int = 1,
+    normalise: int = 0,
+    **_: Any,
+) -> pd.Series:
+    """Sign of the move where it clears the cost, zero otherwise.
+
+    With ``normalise`` the threshold is in units of local volatility rather than
+    basis points, so ``cost_bp`` is interpreted as a number of standard
+    deviations. The caller converts.
+    """
+    move = _move(frame, horizon, smoothing, normalise)
     return pd.Series(
         np.where(move.isna(), np.nan, np.sign(move) * (move.abs() > cost_bp)),
         index=frame.index,
     )
 
 
-def magnitude(frame: pd.DataFrame, **_: Any) -> pd.Series:
-    """The forward return itself, in basis points.
+def magnitude(
+    frame: pd.DataFrame,
+    *,
+    horizon: int = 24,
+    smoothing: int = 1,
+    normalise: int = 0,
+    **_: Any,
+) -> pd.Series:
+    """The forward return itself, in basis points or in local volatilities.
 
     Signed, so it carries direction and size in one number. A model fitted on
     this can be asked for an expected value, which is what the trade decision
     actually needs.
+
+    With ``normalise`` the units become standard deviations of the recent
+    return distribution. Converting a prediction back to basis points means
+    multiplying by the volatility prevailing at the moment of the decision,
+    which makes the comparison against cost regime-aware rather than fixed.
     """
-    return frame["forward_bp"]
+    return _move(frame, horizon, smoothing, normalise)
 
 
 def net_pnl(frame: pd.DataFrame, *, cost_bp: float, **_: Any) -> pd.Series:
@@ -94,6 +204,38 @@ def net_pnl(frame: pd.DataFrame, *, cost_bp: float, **_: Any) -> pd.Series:
     and the decision rule is "positive is worth taking".
     """
     return frame["forward_bp"] - cost_bp
+
+
+def smoothed_direction(
+    frame: pd.DataFrame,
+    *,
+    cost_bp: float,
+    horizon: int = 24,
+    smoothing: int = 20,
+    normalise: int = 0,
+    **_: Any,
+) -> pd.Series:
+    """``direction`` with the FI-2010 smoothing switched on by default."""
+    return direction(
+        frame, cost_bp=cost_bp, horizon=horizon, smoothing=smoothing, normalise=normalise
+    )
+
+
+def normalised_magnitude(
+    frame: pd.DataFrame,
+    *,
+    horizon: int = 24,
+    smoothing: int = 20,
+    normalise: int = 200,
+    **_: Any,
+) -> pd.Series:
+    """``magnitude``, smoothed and expressed in local volatilities.
+
+    The form most of the order-book literature actually fits: a stationary
+    target that does not ask the model to learn the volatility regime as well
+    as the direction.
+    """
+    return magnitude(frame, horizon=horizon, smoothing=smoothing, normalise=normalise)
 
 
 def triple_barrier(
@@ -178,6 +320,26 @@ TARGETS: dict[str, tuple[TargetSpec, Callable[..., pd.Series]]] = {
             description="what a long nets after the round trip",
         ),
         net_pnl,
+    ),
+    "smoothed_direction": (
+        TargetSpec(
+            name="smoothed_direction",
+            kind="classification",
+            horizon=24,
+            description="direction between smoothed prices, FI-2010 style",
+            needs_path=True,
+        ),
+        smoothed_direction,
+    ),
+    "normalised_magnitude": (
+        TargetSpec(
+            name="normalised_magnitude",
+            kind="regression",
+            horizon=24,
+            description="smoothed move in units of trailing volatility",
+            needs_path=True,
+        ),
+        normalised_magnitude,
     ),
     "triple_barrier": (
         TargetSpec(

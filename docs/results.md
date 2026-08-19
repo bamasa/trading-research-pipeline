@@ -1094,7 +1094,62 @@ needs on the best of forty-four candidates.
 
 The screen was built to eliminate. It eliminated the asset class.
 
-## 21. What would have to change
+## 21. Smoothing the label, and what it does and does not buy
+
+Every target so far measured the future as a single price, ``m(t+H)``. At these
+frequencies that is mostly noise: the mid oscillates between bid and ask on
+every update, so one future price is the true level plus half a spread in an
+unpredictable direction. The order-book literature — Ntakaris et al. on FI-2010,
+Zhang et al. for DeepLOB — compares *averages* instead: the mean of the next *k*
+mids against the mean of the last *k*.
+
+The measurement improves a great deal.
+
+| Label | σ of the label | IC with queue imbalance | Edge = IC × σ |
+|---|---:|---:|---:|
+| single point | 7.09 bp | +0.079 | 0.56 bp |
+| smoothed, k=10 | 6.59 bp | +0.133 | 0.88 bp |
+| **smoothed, k=20** | 6.07 bp | **+0.148** | **0.90 bp** |
+| smoothed, k=40 | 4.98 bp | +0.114 | 0.57 bp |
+
+**The single-point label was throwing away nearly half the measurable signal.**
+Averaging both ends removes the bounce and leaves the drift; the information
+coefficient almost doubles, and the implied edge rises 60%.
+
+Volatility normalisation is the other standard fix and is now a parameter of
+every target: dividing by a trailing volatility makes the target stationary, and
+a prediction in units of local volatility converts back to basis points by
+multiplying by the volatility prevailing *now* — so the comparison against cost
+adapts to the regime instead of being fixed. The window is strictly trailing; one
+that included the future would scale the label by information from after the
+decision.
+
+### And the trading result barely moves
+
+| Target + model | Gross/trade | Net/trade |
+|---|---:|---:|
+| magnitude + ridge (raw) | **+4.23** | **−7.14** |
+| normalised magnitude + ridge | +1.86 | −9.33 |
+| smoothed direction + logistic | +0.43 | −10.65 |
+| direction + logistic (raw) | −0.20 | −11.34 |
+
+Smoothing the three-class target helps: −0.20 becomes +0.43. Smoothing and
+normalising the regression target *hurts*: +4.23 becomes +1.86.
+
+The reason is worth stating because it is a trap in the other direction. **The
+smoothed label measures a price nobody can trade at.** A position is opened at
+the touch and closed at the touch; the realised result is the actual path, not
+the averaged one. A model that predicts the smoothed series better is better at
+predicting a quantity that was constructed to be predictable, and the backtest
+scores it on fills.
+
+So the doubled information coefficient is real and is not entirely earnings. It
+is the right way to *measure* whether a feature carries signal — and §2's table
+understates every coefficient in it for this reason. It is not automatically the
+right thing to *fit*, and the gap between those two uses is exactly the kind of
+thing a repository full of classification metrics would never notice.
+
+## 22. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

@@ -1,0 +1,3 @@
+symbol,target,model,trades,trades_per_day,gross_per_trade_bp,net_per_trade_bp,net_bp,max_drawdown_bp,folds_positive
+BTCUSDT,smoothed_direction,logistic,2102.0,42.89795918367347,0.4307872141285434,-10.647375971736876,-22643.372095007417,5043.076730655021,0
+BTCUSDT,smoothed_direction,xgboost,2528.0,51.59183673469388,-0.5342725864056053,-11.555161565584532,-29786.1149849304,6228.574688373395,0
