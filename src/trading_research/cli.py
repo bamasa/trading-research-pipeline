@@ -1078,6 +1078,9 @@ def download_book_cmd(
     grid_ms: Annotated[int, typer.Option("--grid-ms", min=1)] = 100,
     keep_archive: Annotated[bool, typer.Option("--keep-archive/--no-keep-archive")] = False,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
+    workers: Annotated[
+        int, typer.Option("--workers", min=1, help="Days replayed in parallel.")
+    ] = 1,
 ) -> None:
     """Fetch multi-level order books from Bybit's free archives.
 
@@ -1106,6 +1109,7 @@ def download_book_cmd(
         grid_ms=grid_ms,
         keep_archive=keep_archive,
         overwrite=overwrite,
+        workers=workers,
         on_day=lambda row: console.print(
             f"  {row['day']}: "
             + (

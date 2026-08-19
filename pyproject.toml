@@ -46,6 +46,9 @@ report = [
 deep = [
     "torch>=2.2,<3",
 ]
+fast = [
+    "orjson>=3.9,<4",
+]
 export = [
     "skl2onnx>=1.16,<2",
     "onnxruntime>=1.17,<2",

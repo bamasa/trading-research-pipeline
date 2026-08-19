@@ -83,7 +83,7 @@ _MARKET_PREFIX: Final[dict[str, str]] = {
 }
 
 #: Datasets this module knows how to convert into a project contract.
-SUPPORTED_KINDS: Final = ("aggTrades", "bookTicker", "bookDepth")
+SUPPORTED_KINDS: Final = ("aggTrades", "bookTicker", "bookDepth", "metrics", "fundingRate")
 
 
 class BinanceArchiveError(RuntimeError):
@@ -518,11 +518,97 @@ def parse_book_depth(payload: bytes, spec: ArchiveSpec) -> pd.DataFrame:
     return out.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
+def parse_metrics(payload: bytes, spec: ArchiveSpec) -> pd.DataFrame:
+    """Convert a ``metrics`` archive: positioning and sentiment, every 5 minutes.
+
+    These are the quantities the data vendors sell as premium features — open
+    interest, how the largest accounts are positioned, whether takers are buying
+    or selling — and Binance publishes them free in the same archive as the
+    trades.
+
+    They are worth having because they are not derivable from the book. The
+    order book says what is quoted; open interest says how much is at risk, and
+    the long-short ratios say who is holding it. A crowded position unwinding is
+    a different mechanism from a thin book, and until now nothing here could
+    distinguish them.
+
+    Five-minute resolution, so these are context rather than triggers: at a
+    two-minute horizon a value is at best sixty seconds stale, and the features
+    built on it should be levels and changes rather than anything that pretends
+    to be timely.
+    """
+    frame = read_archive_csv(payload)
+    if "create_time" not in frame.columns:
+        raise BinanceArchiveError("metrics archive is missing create_time")
+
+    out = pd.DataFrame({"timestamp": pd.to_datetime(frame["create_time"], utc=True)})
+    for column in (
+        "sum_open_interest",
+        "sum_open_interest_value",
+        "count_toptrader_long_short_ratio",
+        "sum_toptrader_long_short_ratio",
+        "count_long_short_ratio",
+        "sum_taker_long_short_vol_ratio",
+    ):
+        if column in frame.columns:
+            out[column] = pd.to_numeric(frame[column], errors="coerce")
+
+    out["symbol"] = pd.array([spec.symbol] * len(out), dtype="string")
+    out["source"] = pd.array([spec.source_tag] * len(out), dtype="string")
+    return out.sort_values("timestamp", kind="stable").reset_index(drop=True)
+
+
+def parse_funding_rate(payload: bytes, spec: ArchiveSpec) -> pd.DataFrame:
+    """Convert a ``fundingRate`` archive: the cost of holding a perpetual.
+
+    Paid every eight hours and known in advance, so it is not a prediction — it
+    is a fact about what a position costs to carry, and a large funding rate is
+    the market telling you which side is crowded.
+
+    Only monthly archives exist for this kind; the daily prefix returns nothing.
+    """
+    frame = read_archive_csv(payload)
+    required = {"calc_time", "last_funding_rate"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise BinanceArchiveError(f"fundingRate archive is missing column(s): {sorted(missing)}")
+
+    out = pd.DataFrame(
+        {
+            "timestamp": to_utc(frame["calc_time"]),
+            "funding_rate": pd.to_numeric(frame["last_funding_rate"], errors="coerce"),
+            "funding_interval_hours": pd.to_numeric(
+                frame.get("funding_interval_hours", 8), errors="coerce"
+            ),
+        }
+    )
+    out["symbol"] = pd.array([spec.symbol] * len(out), dtype="string")
+    out["source"] = pd.array([spec.source_tag] * len(out), dtype="string")
+    return out.sort_values("timestamp", kind="stable").reset_index(drop=True)
+
+
+def _keep_day(frame: pd.DataFrame, day: date) -> pd.DataFrame:
+    """Trim a monthly archive to the requested day.
+
+    Written after the fact rather than into each parser, because a parser that
+    knew which day was wanted would have to be told, and every daily kind would
+    carry an argument it never uses.
+    """
+    if "timestamp" not in frame.columns:
+        return frame
+    return frame[frame["timestamp"].dt.date == day].reset_index(drop=True)
+
+
 PARSERS: Final = {
     "aggTrades": parse_agg_trades,
     "bookTicker": parse_book_ticker,
     "bookDepth": parse_book_depth,
+    "metrics": parse_metrics,
+    "fundingRate": parse_funding_rate,
 }
+
+#: Kinds Binance only publishes as monthly archives.
+MONTHLY_ONLY: Final = frozenset({"fundingRate"})
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +692,8 @@ def download_range(
 
         frame = PARSERS[spec.kind](payload, spec)
         del payload
+        if spec.kind in MONTHLY_ONLY:
+            frame = _keep_day(frame, day)
         if spec.kind == "bookTicker" and grid:
             frame = resample_book(frame, grid)
 
@@ -639,13 +727,26 @@ def _payload_for(
     keep_raw: bool,
     verify: bool,
 ) -> tuple[bytes, int]:
-    """Return the raw archive for one day, using the cache when it is present."""
-    cached = cache_dir / spec.filename(day, "daily")
-    if keep_raw and cached.exists():
+    """Return the raw archive covering one day, using the cache when present.
+
+    Most kinds are published daily. A few — funding, which is paid three times a
+    day — exist only as monthly files, so the same month is fetched for every
+    day inside it. The cache makes that cheap: the first day of a month pays for
+    the download and the rest read it back.
+    """
+    frequency: Frequency = "monthly" if spec.kind in MONTHLY_ONLY else "daily"
+    period = day.replace(day=1) if frequency == "monthly" else day
+
+    cached = cache_dir / spec.filename(period, frequency)
+    if cached.exists():
         return cached.read_bytes(), 0
 
-    payload = fetch_archive(spec.url(day, "daily"), verify=verify)
-    if keep_raw:
+    payload = fetch_archive(spec.url(period, frequency), verify=verify)
+    # A monthly archive is always cached whatever ``keep_raw`` says: re-fetching
+    # sixty megabytes once per day of the month to extract one day from it is a
+    # waste the caller did not ask for.
+    if keep_raw or frequency == "monthly":
+        cache_dir.mkdir(parents=True, exist_ok=True)
         cached.write_bytes(payload)
     return payload, len(payload)
 
