@@ -46,6 +46,10 @@ report = [
 deep = [
     "torch>=2.2,<3",
 ]
+export = [
+    "skl2onnx>=1.16,<2",
+    "onnxruntime>=1.17,<2",
+]
 dev = [
     "pytest>=8,<9",
     "pytest-cov>=5,<7",
@@ -117,7 +121,7 @@ no_implicit_optional = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["xgboost.*", "sklearn.*", "matplotlib.*", "torch.*"]
+module = ["xgboost.*", "sklearn.*", "matplotlib.*", "torch.*", "skl2onnx.*", "onnxruntime.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

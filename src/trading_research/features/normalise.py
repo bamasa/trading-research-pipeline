@@ -67,6 +67,12 @@ class RollingNormaliser:
     method: str = "robust"
     clip: float = 8.0
     min_periods: int | None = None
+    #: Columns left alone. Anything already bounded and centred — an imbalance
+    #: in [-1, 1], a share in [0, 1], a calendar term — gains nothing from being
+    #: rescaled and loses its interpretation. Re-normalising a bounded feature
+    #: also amplifies it exactly where it is least informative: in a quiet
+    #: window its own small variation is divided by its own small spread.
+    exclude: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if self.window < 10:
@@ -81,19 +87,33 @@ class RollingNormaliser:
         """Rows that cannot be normalised, and must be treated as missing."""
         return self.min_periods if self.min_periods is not None else self.window // 4
 
-    def transform(self, frame: pd.DataFrame, columns: Sequence[str] | None = None) -> pd.DataFrame:
+    def transform(
+        self,
+        frame: pd.DataFrame,
+        columns: Sequence[str] | None = None,
+        *,
+        floor: pd.Series | None = None,
+    ) -> pd.DataFrame:
         """Normalise the named columns, leaving everything else untouched.
 
         Every statistic is trailing and *shifted by one row*: the value at *t*
         is centred on a window ending at *t-1*. Including *t* would let a row
         contribute to its own scale, which is a small leak and an unnecessary
         one.
+
+        ``floor`` sets a minimum scale, per row. For price-derived columns the
+        natural floor is the spread: a scale smaller than one tick says the
+        price was pinned, and dividing by it turns a single tick into a large
+        normalised value. Without it the fallback below applies, which is
+        weaker — it recovers a usable number but does not know what "too small"
+        means for this instrument.
         """
         chosen = (
             list(columns)
             if columns is not None
             else [c for c in frame.columns if pd.api.types.is_numeric_dtype(frame[c])]
         )
+        chosen = [c for c in chosen if c not in self.exclude]
         out = frame.copy()
         minimum = self.warmup
 
@@ -123,6 +143,8 @@ class RollingNormaliser:
                 self.window, min_periods=minimum
             ).mean() * 1.4826
             usable = scale.where(scale > 0, fallback)
+            if floor is not None:
+                usable = usable.combine(floor.reindex(values.index), max)
             normalised = (values - centre) / usable.where(usable > 0)
             normalised = normalised.where(centre.notna(), np.nan).fillna(
                 pd.Series(0.0, index=values.index).where(centre.notna())
