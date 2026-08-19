@@ -179,12 +179,31 @@ class FoldMasks:
             raise SplitError(f"fold {self.index}: {', '.join(empty)} is empty after purging")
 
 
-def fold_masks(fold: Fold, timestamps: pd.Series, *, purge: int) -> FoldMasks:
+def fold_masks(
+    fold: Fold,
+    timestamps: pd.Series,
+    *,
+    purge: int,
+    groups: pd.Series | None = None,
+) -> FoldMasks:
     """Turn a fold into row masks over ``timestamps``, purging block tails.
 
     ``purge`` is the number of rows to drop from the end of the training and
     validation blocks — the label horizon, in observations. Pass 0 only for a
     target that does not look forward at all.
+
+    ``groups`` is required whenever the frame holds **more than one time
+    series** — several instruments stacked and sorted by time. The purge counts
+    rows, and in an interleaved frame the last *n* rows are spread across every
+    series, so a purge of 24 removes only 8 rows from each of three
+    instruments. The tail of each series then overlaps the next block by
+    two-thirds of the label horizon.
+
+    That is not hypothetical: it produced the only positive result this project
+    has seen, +11.69 bp per trade on a pooled fit, which vanished once the
+    purge was applied per series. Passing ``groups`` purges each series
+    separately, which is what "drop the last H observations" was always
+    supposed to mean.
 
     The test block is not purged at its tail: nothing follows it in this fold,
     so there is nothing for its labels to leak into. Its final labels are
@@ -195,6 +214,8 @@ def fold_masks(fold: Fold, timestamps: pd.Series, *, purge: int) -> FoldMasks:
         raise ValueError(f"purge must be non-negative, got {purge}")
     if timestamps.dt.tz is None:
         raise SplitError("timestamps must be timezone-aware; naive times cannot be split by day")
+    if groups is not None and len(groups) != len(timestamps):
+        raise SplitError(f"{len(groups)} groups for {len(timestamps)} rows")
 
     day = timestamps.dt.tz_convert("UTC").dt.date.to_numpy()
 
@@ -203,8 +224,9 @@ def fold_masks(fold: Fold, timestamps: pd.Series, *, purge: int) -> FoldMasks:
     test = _range_mask(day, *fold.test)
 
     if purge:
-        train = _purge_tail(train, purge)
-        validation = _purge_tail(validation, purge)
+        keys = groups.to_numpy() if groups is not None else None
+        train = _purge_tail(train, purge, keys)
+        validation = _purge_tail(validation, purge, keys)
 
     return FoldMasks(index=fold.index, train=train, validation=validation, test=test, purged=purge)
 
@@ -213,13 +235,28 @@ def _range_mask(day: np.ndarray, start: date, end: date) -> np.ndarray:
     return (day >= start) & (day <= end)
 
 
-def _purge_tail(mask: np.ndarray, purge: int) -> np.ndarray:
-    """Drop the last ``purge`` selected rows, whose labels read past the block."""
-    selected = np.flatnonzero(mask)
-    if len(selected) <= purge:
-        return np.zeros_like(mask)
+def _purge_tail(mask: np.ndarray, purge: int, groups: np.ndarray | None = None) -> np.ndarray:
+    """Drop the last ``purge`` selected rows of each series in the block.
+
+    With no ``groups`` the whole block is one series and the last ``purge``
+    rows go. With groups, each series loses its own last ``purge`` rows —
+    otherwise an interleaved frame is purged by a fraction of what was asked.
+    """
+    if groups is None:
+        selected = np.flatnonzero(mask)
+        if len(selected) <= purge:
+            return np.zeros_like(mask)
+        out = mask.copy()
+        out[selected[-purge:]] = False
+        return out
+
     out = mask.copy()
-    out[selected[-purge:]] = False
+    for key in np.unique(groups[mask]):
+        selected = np.flatnonzero(mask & (groups == key))
+        if len(selected) <= purge:
+            out[selected] = False
+        else:
+            out[selected[-purge:]] = False
     return out
 
 

@@ -1149,7 +1149,67 @@ understates every coefficient in it for this reason. It is not automatically the
 right thing to *fit*, and the gap between those two uses is exactly the kind of
 thing a repository full of classification metrics would never notice.
 
-## 22. What would have to change
+## 22. Rolling normalisation, pooling, and two bugs it exposed
+
+Every feature until now was fed at its own scale. That asks a model to learn the
+level as well as the relationship, and it makes instruments incomparable — which
+matters, because pooling them is the only thing available that multiplies the
+sample by more than a little. §17 said the sample limits every conclusion here.
+
+So: centre and scale each feature against its own trailing window, robustly
+(median and interquartile range, since one repriced quote otherwise sets the
+scale for the window), causally (the window ends at *t−1*, so a row cannot
+contribute to its own scale), and per instrument — normalising the pool as a
+whole would centre every instrument on an average none of them experiences.
+
+### What it bought
+
+| Instrument | Fitted alone | Fitted on the pool |
+|---|---:|---:|
+| BTCUSDT | **+4.35 / −6.69** | −1.28 / −12.45 |
+| XMRUSDT | +2.58 / −10.48 | −14.99 / −29.78 |
+| XRPUSDT | −0.04 / −12.81 | −7.93 / −20.77 |
+
+Gross / net basis points per trade, five folds, identical test blocks.
+
+**Normalisation helps a little.** BTCUSDT's best net moves from −7.14 to −6.69,
+the best figure in this document.
+
+**Pooling hurts, on all three.** Not marginally: every instrument does worse
+trained on the pool than on itself, and XMRUSDT loses 17 bp per trade. Three
+instruments do not have enough in common for one fit to serve them, and the
+pooled model spends its capacity on structure that is not shared. Twenty
+instruments might behave differently; three do not.
+
+### The result that was not there
+
+The first run of this produced +11.69 bp per trade on XRPUSDT — the only
+positive net figure this project has seen. It was worth exactly the scrutiny it
+got.
+
+Two bugs, both real, neither the whole answer:
+
+**The purge does not survive interleaving.** `fold_masks` drops the last *H*
+rows of a training block. In a pooled frame those rows are spread across every
+instrument, so a purge of 24 removed 8 from each of three — and each series
+overlapped the next block by two thirds of its label horizon. Fixed by purging
+per series, and the fix is now a parameter that pooled callers must pass.
+
+**A zero scale is not missing data.** XRPUSDT is quoted one tick wide, so its
+20-row return is often exactly zero, so the trailing interquartile range is
+zero, so the division produced `NaN` — and 81% of XRPUSDT's rows silently
+disappeared. What survived was the 19% most active moments. The strategy was
+therefore trading a volatility-selected subsample chosen for it by a division,
+and winning on 147 trades.
+
+Neither bug alone explained the number. What settled it was removing one
+instrument from the pool: +11.69 became −18.69. **A result that changes sign
+when an unrelated instrument is added to the training set is not a result**, and
+that test was quicker than either debugging session.
+
+With both bugs fixed the figure is −20.77, and pooling is uniformly harmful.
+
+## 23. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
