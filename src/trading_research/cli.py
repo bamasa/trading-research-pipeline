@@ -1068,6 +1068,66 @@ def discover_cmd(
     )
 
 
+@app.command("download-book")
+def download_book_cmd(
+    start: Annotated[str, typer.Option("--start", help="YYYY-MM-DD.")],
+    end: Annotated[str, typer.Option("--end", help="YYYY-MM-DD, inclusive.")],
+    symbol: Annotated[str, typer.Option("--symbol", "-s")] = "BTCUSDT",
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("data/book"),
+    depth: Annotated[int, typer.Option("--depth", min=1, max=500)] = 10,
+    grid_ms: Annotated[int, typer.Option("--grid-ms", min=1)] = 100,
+    keep_archive: Annotated[bool, typer.Option("--keep-archive/--no-keep-archive")] = False,
+    overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
+) -> None:
+    """Fetch multi-level order books from Bybit's free archives.
+
+    The one thing Binance does not publish. Bybit gives five hundred levels per
+    side at tick granularity, back to 2023, with no registration and no fee —
+    which is what the depth-dependent features in the registry have been
+    waiting for.
+
+    The archive is a stream: one snapshot a day and then deltas, where a size of
+    zero removes a level. This replays it and photographs the book on a grid.
+    Sequence gaps are counted and reported rather than smoothed over, because a
+    missed update leaves the book wrong until the next snapshot and nothing
+    downstream can tell.
+
+    Expect about 200 MB of download and two minutes of replay per instrument-day,
+    producing roughly 34 MB at ten levels.
+    """
+    from trading_research.data.bybit import download_range
+
+    result = download_range(
+        symbol,
+        _as_date(start, "--start"),
+        _as_date(end, "--end"),
+        Path(output) / symbol,
+        depth=depth,
+        grid_ms=grid_ms,
+        keep_archive=keep_archive,
+        overwrite=overwrite,
+        on_day=lambda row: console.print(
+            f"  {row['day']}: "
+            + (
+                f"[yellow]{row['skipped']}[/yellow]"
+                if row.get("skipped")
+                else f"{row['rows']:,} rows, {row.get('gaps', 0)} sequence gap(s)"
+            )
+        ),
+    )
+
+    done = result[result.get("rows", 0) > 0] if "rows" in result else result
+    console.print(
+        f"\n[green]{len(done)} day(s)[/green], {int(done['rows'].sum()):,} rows "
+        f"-> {Path(output) / symbol}"
+    )
+    if "gaps" in done and done["gaps"].sum():
+        console.print(
+            f"[yellow]{int(done['gaps'].sum())} sequence gap(s) across the range; "
+            f"the book is stale from each until the next snapshot.[/yellow]"
+        )
+
+
 @app.command("describe-schema")
 def describe_schema(
     plane: Annotated[

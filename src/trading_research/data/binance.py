@@ -83,7 +83,7 @@ _MARKET_PREFIX: Final[dict[str, str]] = {
 }
 
 #: Datasets this module knows how to convert into a project contract.
-SUPPORTED_KINDS: Final = ("aggTrades", "bookTicker")
+SUPPORTED_KINDS: Final = ("aggTrades", "bookTicker", "bookDepth")
 
 
 class BinanceArchiveError(RuntimeError):
@@ -480,7 +480,49 @@ def resample_book(book: pd.DataFrame, grid: str) -> pd.DataFrame:
     return reduced
 
 
-PARSERS: Final = {"aggTrades": parse_agg_trades, "bookTicker": parse_book_ticker}
+def parse_book_depth(payload: bytes, spec: ArchiveSpec) -> pd.DataFrame:
+    """Convert a ``bookDepth`` archive into one row per snapshot.
+
+    This is the only depth Binance publishes free, and it is not the multi-level
+    book a microstructure model wants. It reports *cumulative* size resting
+    within 1% to 5% of the mid, on each side, once every thirty seconds.
+
+    Two limits worth stating before anyone builds on it. At BTCUSDT's price one
+    percent is several hundred dollars, twenty to a hundred times further out
+    than the moves this project predicts — so these columns describe how thick
+    the book is, not what is about to happen at the touch. And thirty seconds is
+    an order of magnitude coarser than the grid everything else runs on, so the
+    values are carried forward between snapshots and are stale by construction.
+
+    Useful as slow context — is the book unusually thin, is it lopsided — and
+    not as a short-horizon predictor. Pivoted to one row per timestamp so it
+    joins to the book plane like any other feature source.
+    """
+    frame = read_archive_csv(payload)
+    expected = {"timestamp", "percentage", "depth", "notional"}
+    missing = expected - set(frame.columns)
+    if missing:
+        raise BinanceArchiveError(f"bookDepth archive is missing column(s): {sorted(missing)}")
+
+    frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+    wide = frame.pivot_table(
+        index="timestamp", columns="percentage", values=["depth", "notional"], aggfunc="last"
+    )
+    wide.columns = [
+        f"{pair[0]}_{'bid' if int(pair[1]) < 0 else 'ask'}_{abs(int(pair[1]))}pct"
+        for pair in wide.columns
+    ]
+    out = wide.reset_index()
+    out["symbol"] = pd.array([spec.symbol] * len(out), dtype="string")
+    out["source"] = pd.array([spec.source_tag] * len(out), dtype="string")
+    return out.sort_values("timestamp", kind="stable").reset_index(drop=True)
+
+
+PARSERS: Final = {
+    "aggTrades": parse_agg_trades,
+    "bookTicker": parse_book_ticker,
+    "bookDepth": parse_book_depth,
+}
 
 
 # ---------------------------------------------------------------------------
