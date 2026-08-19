@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XMRUSDT,model_gated_by_rule,2952.0,0.5036169448391872,-0.16063664880978396,-12.370611026043239,-36560.933086802586,0

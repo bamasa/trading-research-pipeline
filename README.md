@@ -152,12 +152,18 @@ the last is marked and is not.
                      └───────────────┘
 ```
 
-**0. Choose the instrument.** `trading-research screen` ranks candidates by
-**headroom** — the share of moments whose move clears the cost of trading it,
-which is the ceiling from §1 and needs no model. Three days of best bid and ask
-per instrument is enough. Running it after the fact showed this study picked two
-of the worst available: BTCUSDT clears the cost at a tenth of its moments
-against LINKUSDT's four tenths.
+**0. Choose the instrument.** `trading-research discover` enumerates what the
+venue lists; `trading-research screen` ranks it on both halves of the edge
+identity — how far the price moves against the cost, *and* whether the book
+predicts where. Three days of data per instrument.
+
+Both halves matter and the first version had only one. Ranked on movement alone
+it put XMRUSDT third of forty-four; XMRUSDT moves nine times as far as BTCUSDT
+and its book predicts nothing (correlation 0.0002 against 0.049), and the full
+pipeline run on it did worse than on the instrument it was meant to replace.
+Corrected, the ranking inverts — and gives the sharpest result in the project:
+**the best of forty-four instruments has an expected edge one-sixteenth of its
+cost to trade.**
 
 *Choosing the model class is still a judgement made by hand.* The choice is not cosmetic: it fixes the cost
 floor, and the cost floor decides everything downstream. BTCUSDT is one tick

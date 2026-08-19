@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XMRUSDT,order_flow,3599.0,0.48902349702365827,0.4325873112706596,-11.76408266372725,-42119.62463622642,0

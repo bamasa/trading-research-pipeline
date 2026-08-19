@@ -21,7 +21,7 @@ from trading_research.models.base import clean
 from trading_research.pipeline.stages import REGRESSION_MODELS, build_model, load_selected
 from trading_research.validation.splits import WalkForwardSpec, fold_masks, walk_forward
 
-COST_BP = {"BTCUSDT": 11.02, "XRPUSDT": 12.84}
+COST_BP = {"BTCUSDT": 11.02, "XRPUSDT": 12.84, "XMRUSDT": 11.81}
 HOLD = 24
 RULE_COLUMNS = ("log_mid_ret20", "log_mid_ret50", "log_mid_vol50", "queue_imbalance", "spread_bp")
 

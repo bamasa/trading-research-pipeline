@@ -3,9 +3,12 @@
 BTCUSDT and XRPUSDT, Binance USD-M futures, February–March 2024. Best bid and
 ask sampled to a 100 ms grid, taker execution on both legs.
 
-**Nothing here was profitable.** Across two instruments, four horizons, two
-feature sets, four models, five rule-based strategies and four ways of combining
-them, no walk-forward fold was positive after costs. The best gross edge belongs
+**Nothing here was profitable, and §20 explains why in one line:** across
+forty-four instruments, the best has an expected edge one-sixteenth of its cost
+to trade. No amount of modelling closes a gap of that size. Across two
+instruments studied in depth, four horizons, two feature sets, four models, five
+rule-based strategies and four ways of combining them, no walk-forward fold was
+positive after costs. The best gross edge belongs
 to a rule with no parameters rather than to any model (§14), and the best
 overall configuration is a daily selector that, given the option, never places a
 trade (§15). The nearest approach is XRP with daily retraining (§10), which
@@ -1023,7 +1026,75 @@ modelling — the screen only says where to look, and none of these is
 demonstrated profitable — but it is an argument about where the first hour of a
 study should go.
 
-## 20. What would have to change
+## 20. The screen was measuring the wrong half, and the fix is decisive
+
+§19 ranked instruments on **headroom** — the share of moments whose move clears
+the cost — and put XMRUSDT third of forty-four. The full pipeline was then run
+on it, and it was worse than the instrument it was supposed to replace, on every
+strategy and every target:
+
+| Strategy | BTCUSDT gross | XMRUSDT gross |
+|---|---:|---:|
+| order flow | +0.56 | +0.43 |
+| model gated by rule | +0.62 | −0.16 |
+| logistic | −0.20 | −11.84 |
+| xgboost | −3.68 | −54.76 |
+
+The reason is one number:
+
+| Instrument | Information coefficient | Volatility (2 min) | Edge = IC × σ |
+|---|---:|---:|---:|
+| BTCUSDT | +0.049 | 7.6 bp | 0.38 bp |
+| XRPUSDT | +0.060 | 9.7 bp | 0.58 bp |
+| **XMRUSDT** | **+0.0002** | **64.9 bp** | **0.01 bp** |
+
+**XMRUSDT moves nine times as far and is not predictable at all.** The book says
+nothing about where it goes next. The screen measured volatility and called it
+opportunity, which is the same mistake as reading a gross figure as a profit —
+one half of a product, presented as the whole.
+
+### The corrected screen
+
+Both halves, and the product of them. Predictability is the correlation between
+queue imbalance now and the move over the horizon: one feature, no model, no
+fitting, computed from the same three days of data.
+
+Adding it does not adjust the ranking, it inverts it:
+
+| Instrument | Rank on headroom | Rank on edge | IC |
+|---|---:|---:|---:|
+| XMRUSDT | 7 | **44** | −0.001 |
+| COTIUSDT | 1 | 10 | +0.025 |
+| **CRVUSDT** | **44** | **1** | **+0.185** |
+| XRPUSDT | 30 | 8 | +0.061 |
+| BTCUSDT | 37 | 33 | +0.048 |
+
+CRVUSDT was last on headroom — its round trip is 32 bp, three times BTCUSDT's —
+and is first on edge, because its book is nearly four times as informative.
+
+### And the answer it gives
+
+| Instrument | Round trip | Edge (IC × σ) | Edge ÷ cost |
+|---|---:|---:|---:|
+| CRVUSDT | 32.21 | 2.07 bp | **0.064** |
+| ALICEUSDT | 20.14 | 1.21 bp | 0.060 |
+| BICOUSDT | 14.01 | 0.77 bp | 0.055 |
+| XRPUSDT | 12.98 | 0.51 bp | 0.040 |
+| BTCUSDT | 11.02 | 0.37 bp | 0.028 |
+
+**The best instrument of forty-four has an edge one-sixteenth of its cost.** Not
+one half, not one third. The best available candidate on this venue, at this
+horizon, needs sixteen times the edge it has before a taker strategy pays.
+
+That is a stronger statement than anything the modelling produced, and it took
+three days of data per instrument rather than eighteen sections of work. It is
+also the honest ceiling for everything in this document: the models capture a
+fraction of the edge identity, and the identity itself is a sixteenth of what it
+needs on the best of forty-four candidates.
+
+The screen was built to eliminate. It eliminated the asset class.
+
+## 21. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

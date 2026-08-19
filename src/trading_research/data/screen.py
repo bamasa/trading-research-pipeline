@@ -11,17 +11,36 @@ one that does, and ranking on the fee alone would put a one-tick major at the
 top of a list it belongs at the bottom of.
 
 The right quantity follows from the arithmetic the rest of the project
-established. Expected edge per trade is roughly the information coefficient
-times the volatility of the move over the horizon, and it has to clear the
-round trip. So the screen measures the second half of that directly:
+established. Expected edge per trade is roughly
 
-**headroom** — the share of moments whose move over the horizon exceeds the
-cost of trading it. That is an upper bound assuming the direction is predicted
-perfectly, so no model can beat it, and it needs no model to compute.
+    edge = information coefficient * volatility of the move
 
-An instrument with 5% headroom is not necessarily tradeable. An instrument with
-0.1% is definitely not, and that is what a screen is for: it eliminates, it does
-not select.
+and it has to clear the round trip. **Both halves are measured here**, because
+an early version of this screen measured only the second and ranked XMRUSDT
+third of forty-four. XMRUSDT moves nine times as far as BTCUSDT per two
+minutes; its queue imbalance correlates with the next two minutes at 0.0002
+against BTCUSDT's 0.049. It has enormous room and nothing to fill it with, and
+every model tried on it did worse than on the instrument it was supposed to
+replace.
+
+So two numbers, and the product of them:
+
+**headroom** — the share of moments whose move over the horizon exceeds the cost
+of trading it. An upper bound assuming the direction is predicted perfectly, so
+no model can beat it and none is needed to compute it.
+
+**predictability** — the correlation between queue imbalance now and the move
+over the horizon. One feature, no model, no fitting. It is not the best
+predictor available, and that is the point: it is a cheap proxy for whether the
+book says anything at all about this instrument.
+
+Volatility without predictability is a casino, and predictability without
+volatility cannot pay for the round trip. Ranking on either alone finds the
+wrong instrument, and the screen now says which half is missing rather than
+producing one number that hides it.
+
+An instrument scoring low on both is definitely not tradeable, which is what a
+screen is for: it eliminates, it does not select.
 
 Deliberately model-free and direction-free
 ------------------------------------------
@@ -47,7 +66,13 @@ import numpy as np
 import pandas as pd
 
 from trading_research.backtest.costs import TakerCosts
-from trading_research.data.schema import ask_price_col, bid_price_col, mid_price
+from trading_research.data.schema import (
+    ask_price_col,
+    ask_size_col,
+    bid_price_col,
+    bid_size_col,
+    mid_price,
+)
 
 BP: float = 1e4
 
@@ -64,6 +89,9 @@ class ScreenResult:
     volatility_bp: float
     headroom: float
     moves_per_day: float
+    #: Correlation of queue imbalance with the forward move. The other half of
+    #: the edge identity, and the half that varies most between instruments.
+    information_coefficient: float = float("nan")
 
     def as_row(self) -> dict[str, object]:
         return {
@@ -74,9 +102,15 @@ class ScreenResult:
             "volatility_bp": self.volatility_bp,
             "headroom": self.headroom,
             "moves_per_day": self.moves_per_day,
+            "information_coefficient": self.information_coefficient,
             # How many round trips a typical move covers. Below one, a
             # perfectly predicted average move still does not pay.
             "move_over_cost": self.volatility_bp / self.round_trip_bp,
+            # Both halves together: what a trade is worth if the one cheap
+            # feature is all the edge there is. This is the column to rank on.
+            "edge_over_cost": abs(self.information_coefficient)
+            * self.volatility_bp
+            / self.round_trip_bp,
         }
 
 
@@ -105,9 +139,27 @@ def screen_frame(
     if step >= len(mid):
         raise ValueError(f"{symbol}: {len(mid)} rows cannot support a {horizon_s}s horizon")
 
-    move = np.abs(np.log(mid[step:] / mid[:-step]) * BP)
+    signed_move = np.log(mid[step:] / mid[:-step]) * BP
+    move = np.abs(signed_move)
     days = int(pd.Series(book["timestamp"]).dt.date.nunique())
     clears = move > round_trip
+
+    # The other half of the identity, from the one feature that carries most of
+    # the signal. Computed here rather than left to the modelling stage because
+    # an instrument the book says nothing about should be eliminated before
+    # anything is fitted, not after.
+    bid_size = book[bid_size_col(0)].to_numpy(dtype="float64")[:-step]
+    ask_size = book[ask_size_col(0)].to_numpy(dtype="float64")[:-step]
+    total = bid_size + ask_size
+    imbalance = np.divide(
+        bid_size - ask_size, total, out=np.full_like(total, np.nan), where=total > 0
+    )
+    usable = np.isfinite(imbalance) & np.isfinite(signed_move)
+    ic = (
+        float(np.corrcoef(imbalance[usable], signed_move[usable])[0, 1])
+        if usable.sum() > 100
+        else float("nan")
+    )
 
     return ScreenResult(
         symbol=symbol,
@@ -117,6 +169,7 @@ def screen_frame(
         round_trip_bp=round_trip,
         volatility_bp=float(np.nanstd(move)),
         headroom=float(np.nanmean(clears)),
+        information_coefficient=ic,
         # Non-overlapping equivalent: how many times a day a move of that size
         # is available, if each one could be traded once.
         moves_per_day=float(clears.sum() / max(days, 1) / step),
@@ -133,7 +186,9 @@ def screen_directory(
 ) -> pd.DataFrame:
     """Screen every instrument present under ``raw_root``.
 
-    Ordered by headroom, best first. Instruments that cannot be read or have
+    Ordered by ``edge_over_cost``, which multiplies the two halves. Ranking on
+    headroom alone put an instrument with no predictability at the top; ranking
+    on the coefficient alone would put a still one there. Instruments that cannot be read or have
     too little data are reported with the reason rather than dropped, because a
     screen that silently omits candidates is worse than one that says why.
     """
@@ -156,6 +211,6 @@ def screen_directory(
         rows.append(result.as_row())
 
     table = pd.DataFrame(rows)
-    if "headroom" in table.columns:
-        table = table.sort_values("headroom", ascending=False, na_position="last")
+    if "edge_over_cost" in table.columns:
+        table = table.sort_values("edge_over_cost", ascending=False, na_position="last")
     return table.reset_index(drop=True)

@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+XMRUSDT,breakout,861.0,0.48526681627384977,-1.189380837631965,-13.355810635211668,-11478.84330842354,0

@@ -44,7 +44,7 @@ RULE_COLUMNS = (
     "queue_imbalance",
     "spread_bp",
 )
-COST_BP = {"BTCUSDT": 11.02, "XRPUSDT": 12.68}
+COST_BP = {"BTCUSDT": 11.02, "XRPUSDT": 12.68, "XMRUSDT": 11.81}
 HOLD = 24
 
 
