@@ -1,0 +1,24 @@
+{
+  "config": {
+    "plane": "depth",
+    "model": "logistic",
+    "target": "triple_barrier",
+    "horizon": 120,
+    "hold": 60,
+    "cooldown": 0,
+    "exit": "trailing",
+    "objective": "net_bp",
+    "refit": "5d",
+    "train_days": 10,
+    "gate": "quiet_out"
+  },
+  "final": {
+    "trades": 387.0,
+    "trades_per_day": 13.326239142001398,
+    "net_per_trade_bp": -12.222839053213859,
+    "net_bp": -4730.238713593763,
+    "hit_rate": 0.1731266149870801,
+    "max_drawdown_bp": 4734.304565151252,
+    "dispersion_bp": 17.624783957074882
+  }
+}

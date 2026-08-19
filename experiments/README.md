@@ -33,6 +33,7 @@ A few read the raw book instead, because they need bid and ask sizes that
 | `targets.py` | §17 | Four targets: direction, magnitude, net PnL, triple barrier |
 | `trade_rate.py` | §16 | What happens at a chosen number of trades a day |
 | `rate_oos.py` | §25 | The promising trade rate, re-run on sixty-two days it was not chosen on |
+| `grand_search.py` | §26 | Ten axes searched together on all 84 days, winner judged on a block the search never saw |
 | `daily_allocation.py` | §15 | Several strategies side by side, one chosen each day or none |
 | `joint_search.py` | §13 | Retraining schedule and holding period searched together |
 | `maker_threshold.py` | §11 | Adverse selection of passive fills, measured against what posting saves |

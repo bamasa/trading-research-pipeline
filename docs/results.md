@@ -1419,12 +1419,119 @@ policy can make four samples informative.
 This is the last of the taker-side levers. Horizon, feature set, model class,
 target definition, exit rule, market gate, instrument, retraining frequency,
 book depth and now trade rate have each been tested and none closes a
-twenty-fold gap. What remains is on the execution side (§26), not the signal
+twenty-fold gap. What remains is on the execution side (§27), not the signal
 side.
 
 ---
 
-## 26. What would have to change
+## 26. Everything searched again, with the answer held back
+
+§25 killed a finding, and the natural objection is that it killed the wrong
+thing: perhaps the trade rate was never the interesting axis, and a search wide
+enough to move all of them at once — features, model, target, horizon, exits,
+refit policy, threshold — would find what a narrow one missed. The data had also
+grown, from the thirty-nine days most of this work used to eighty-four.
+
+So everything was searched again, on all of it.
+
+### What was searched
+
+Ten axes, sampled rather than enumerated, 240 configurations through three
+rounds of successive halving:
+
+| Axis | Choices |
+|---|---|
+| Feature plane | 3 hand-picked / 8 microstructure / 12 with depth / 27 wide |
+| Model | 16, including rules, learned models, ensembles, composites, meta-labelling and confidence bounds |
+| Target | 7, classification and regression |
+| Label horizon | 1, 2, 5, 10, 20 minutes |
+| Holding period | 1, 2, 5, 10, 20 minutes |
+| Cooldown | 0, 1x, 2x the holding period |
+| Exit rule | clock / take-profit-stop / trailing / flip / confidence decay |
+| Threshold objective | total profit / profit per trade |
+| Refit policy | every 1, 2, 5 days, **or at detected regime breaks** |
+| Training window | 5, 10, 20 days |
+| Market gate | open / volatility floor / spread ceiling |
+
+Costs were not searched. The fee, the spread treatment and the slippage stay at
+the published Bybit numbers throughout — they are the one part of this that is
+not a modelling choice, and a search allowed to touch them is a search choosing
+its own scoreboard.
+
+### The protection
+
+A wider search is a stronger generator of false positives, not a weaker one, so
+the eighty-four days were cut once before anything ran: 54 days for the search,
+**29 days held back and read exactly once**, after the search had named a
+winner. Every feature, every hyperparameter, every threshold and the winner
+itself come from the search block alone.
+
+### The result
+
+The winner was a logistic model on the depth plane, a triple-barrier label at a
+ten-minute horizon, a five-minute hold with a trailing stop, refitting every
+five days behind a volatility floor.
+
+| | Days | Trades | Net per trade | Gross per trade | Hit rate | Max drawdown |
+|---|---|---|---|---|---|---|
+| Search block (chose it) | 54 | 931 | −9.78 bp | +2.23 bp | 21.8% | 9,114 bp |
+| Final block (never searched) | 29 | 387 | −12.22 bp | −0.21 bp | 17.3% | 4,734 bp |
+
+The round trip is 12.02 bp. The best of 240 configurations, chosen with every
+axis free, cleared **2.23 bp of it** on the block that selected it — the highest
+gross edge measured anywhere in this project, and still less than a fifth of
+what it needs.
+
+On the block that selected nothing, the gross edge is −0.21 bp. Not reduced:
+gone. Before any fee, before any spread, before any slippage, the strategy
+picked as the best of 240 does not predict the direction of the next five
+minutes at all.
+
+### No axis mattered
+
+The more useful reading is not the winner but the spread across candidates.
+Grouping the first round's 220 scored configurations by each axis in turn:
+
+| Axis | Best median | Worst median | Range |
+|---|---|---|---|
+| Refit policy | −11.52 (1 day) | −11.85 (at breaks) | 0.33 bp |
+| Feature plane | −11.31 (3 columns) | −11.89 (27 columns) | 0.58 bp |
+| Exit rule | −11.24 (flip) | −11.85 (clock) | 0.61 bp |
+| Threshold objective | −11.62 (total) | −11.68 (per trade) | 0.06 bp |
+| Market gate | −11.35 (volatility floor) | −11.85 (spread ceiling) | 0.50 bp |
+| Target | −11.39 (magnitude) | −11.95 (normalised magnitude) | 0.56 bp |
+
+Every axis moves the median by less than 0.7 bp against a 12 bp cost. Ten design
+decisions, each of which has a literature and an argument behind it, and the
+whole of their combined effect is an order of magnitude smaller than the gap
+they are meant to close. The hand-picked three columns beat all twenty-seven;
+refitting daily beats refitting at detected breaks; and none of it is
+distinguishable from any of the rest.
+
+The one axis that does move the number is not in the table, because it is not a
+choice: how many trades a candidate takes. The candidates clustered near −10.8 bp
+took tens of thousands of trades and are measuring the cost precisely. The ones
+that look better took a few hundred and are measuring their own sample size — the
+first round's leader scored −5.54 bp on thirteen days and −9.78 bp on
+fifty-four, which is the same decay §25 documented, observed again as a matter
+of course.
+
+### What this settles
+
+The gap is not in the configuration. It was searched, on more data than any
+earlier section used, with the winner protected from the block it was judged on,
+and the answer is that the best configuration findable is a fifth of the way
+there on the data that chose it and nowhere at all on data that did not.
+
+Taker execution on a single crypto perpetual at these horizons does not support
+a profitable strategy, and no arrangement of the parts changes that. What
+remains is not a better search over the same space — it is a different space:
+maker execution, which changes the cost, or a horizon long enough that the move
+being predicted is large relative to a cost that does not grow with it.
+
+---
+
+## 27. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
