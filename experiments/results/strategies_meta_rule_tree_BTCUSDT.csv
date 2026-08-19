@@ -1,0 +1,2 @@
+symbol,strategy,trades,hit_rate,gross_per_trade_bp,net_per_trade_bp,net_bp,folds_positive
+BTCUSDT,meta_rule_tree,2634.0,0.4878712424773544,-0.3280373511675192,-11.345497463913958,-29280.856345505752,0

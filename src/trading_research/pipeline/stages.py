@@ -344,6 +344,16 @@ ENSEMBLES = {
     "blend": ("order_flow", "logistic"),
 }
 
+#: Two-stage strategies. A primary picks the side and a secondary decides
+#: whether the trade is worth taking — the arrangement §14 argues for, since the
+#: best direction-finder here is a rule and the models were better at judging
+#: neither direction nor timing on their own.
+META: dict[str, tuple[str, str]] = {
+    "meta_rule_model": ("order_flow", "logistic"),
+    "meta_rule_tree": ("order_flow", "xgboost"),
+    "meta_model_model": ("logistic", "xgboost"),
+}
+
 #: Composites that are not averages: a rule and a model consulted together,
 #: with one able to veto the other. See :mod:`trading_research.models.composite`.
 COMPOSITES: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -364,6 +374,11 @@ def build_model(name: str, **params: Any) -> Any:
         from trading_research.models.ensemble import EnsembleModel
 
         return EnsembleModel([build_model(member, **params) for member in ENSEMBLES[name]])
+    if name in META:
+        from trading_research.models.meta import MetaLabelled
+
+        primary, secondary = META[name]
+        return MetaLabelled(build_model(primary, **params), build_model(secondary, **params))
     if name in COMPOSITES:
         from trading_research.models.composite import Agreement, Gated
 
@@ -371,7 +386,7 @@ def build_model(name: str, **params: Any) -> Any:
         built = [build_model(member, **params) for member in members]
         return Agreement(built) if kind == "agreement" else Gated(built[0], built[1])
     if name not in MODELS:
-        known = sorted([*MODELS, *ENSEMBLES, *COMPOSITES])
+        known = sorted([*MODELS, *ENSEMBLES, *COMPOSITES, *META])
         raise StageError(f"unknown model {name!r}; known: {', '.join(known)}")
     module_path, class_name = MODELS[name].split(":")
     import importlib
