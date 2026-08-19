@@ -972,22 +972,30 @@ horizon exceeds the cost of trading it. That is the upper bound from §1, so no
 model can beat it and none is needed to compute it. Three days of best bid and
 ask per instrument, resampled to a second.
 
-| Instrument | Median spread | Round trip | Headroom at 2 min | Typical move ÷ cost |
-|---|---:|---:|---:|---:|
-| LINKUSDT | 0.54 bp | 11.54 | **41.1%** | **0.96** |
-| AVAXUSDT | 0.29 bp | 11.29 | 30.7% | 0.74 |
-| SOLUSDT | 0.10 bp | 11.10 | 30.4% | 0.78 |
-| ADAUSDT | 2.02 bp | 13.02 | 16.7% | 0.58 |
-| XRPUSDT | 1.98 bp | 12.98 | 16.6% | 0.65 |
-| ETHUSDT | 0.04 bp | 11.04 | 11.4% | 0.50 |
-| **BTCUSDT** | 0.02 bp | 11.02 | **10.1%** | **0.45** |
-| DOGEUSDT | 1.27 bp | 12.27 | 6.2% | 0.45 |
-| BNBUSDT | 0.33 bp | 11.33 | 4.8% | 0.38 |
+Forty-four contracts, chosen by enumerating what the venue lists rather than by
+recalling what exists — every USDT perpetual above $3M daily volume that was
+listed before the period. Three days of best bid and ask each.
 
-**The two instruments this study used are near the bottom.** BTCUSDT has a
-tenth of its moments clearing the cost against LINKUSDT's four tenths, and a
-typical two-minute move covers 45% of a round trip against 96%. Four times the
-headroom, for the same fee.
+| Instrument | Round trip | Volatility (2 min) | Headroom | Typical move ÷ cost |
+|---|---:|---:|---:|---:|
+| COTIUSDT | 12.63 | 19.0 bp | **61.2%** | 1.51 |
+| ONDOUSDT | 15.46 | 22.4 bp | 56.0% | 1.45 |
+| **XMRUSDT** | 11.78 | **45.5 bp** | 55.5% | **3.87** |
+| SUIUSDT | 11.65 | 14.6 bp | 48.8% | 1.25 |
+| LINKUSDT | 11.54 | 11.1 bp | 41.1% | 0.96 |
+| SOLUSDT | 11.10 | 8.6 bp | 30.4% | 0.78 |
+| XRPUSDT | 12.98 | 8.4 bp | 16.6% | 0.65 |
+| ETHUSDT | 11.04 | 5.5 bp | 11.4% | 0.50 |
+| **BTCUSDT** | 11.02 | 4.9 bp | **10.1%** | **0.45** |
+| DOGEUSDT | 12.27 | 5.5 bp | 6.2% | 0.45 |
+| BNBUSDT | 11.33 | 4.3 bp | 4.8% | 0.38 |
+
+Nine of forty-four shown; the full table is in
+`experiments/results/` and `artifacts/screen/screen.csv`.
+
+**BTCUSDT ranks 37th of 44.** A tenth of its moments clear the cost against six
+tenths for the best. A typical two-minute move covers 45% of a round trip; on
+XMRUSDT it covers 387%, nearly nine times as much for a lower cost.
 
 That is a screen doing its job, and doing it after the fact. The cheapest
 instrument by spread is the worst by headroom, because BTCUSDT is quoted one
@@ -1006,6 +1014,14 @@ chosen badly, and choosing it well costs an hour**. Every model, feature, exit
 rule and search in the preceding eighteen sections was applied to two of the
 least promising candidates available, and none of that work would have
 identified the problem.
+
+The gap between the two halves of this project is uncomfortable and worth
+stating plainly. Eighteen sections of modelling moved the best result from about
+−11 bp per trade to −7. One afternoon of screening found instruments with four
+to nine times the room to work in. That ordering is not an argument against the
+modelling — the screen only says where to look, and none of these is
+demonstrated profitable — but it is an argument about where the first hour of a
+study should go.
 
 ## 20. What would have to change
 
