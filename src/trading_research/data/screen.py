@@ -141,6 +141,13 @@ def screen_frame(
 
     signed_move = np.log(mid[step:] / mid[:-step]) * BP
     move = np.abs(signed_move)
+    # The identity is edge = IC * sigma(move), and sigma there is the dispersion
+    # of the *signed* move. An earlier version reported std(|move|), which for a
+    # roughly symmetric distribution is sqrt(1 - 2/pi) ~ 0.6 of it, so every
+    # edge in the table was understated by about forty per cent. The ranking was
+    # unaffected -- the factor is common to all instruments -- but the headline
+    # ratio of edge to cost was not.
+    sigma = float(np.nanstd(signed_move))
     days = int(pd.Series(book["timestamp"]).dt.date.nunique())
     clears = move > round_trip
 
@@ -167,7 +174,7 @@ def screen_frame(
         days=days,
         median_spread_bp=median_spread,
         round_trip_bp=round_trip,
-        volatility_bp=float(np.nanstd(move)),
+        volatility_bp=sigma,
         headroom=float(np.nanmean(clears)),
         information_coefficient=ic,
         # Non-overlapping equivalent: how many times a day a move of that size

@@ -1,0 +1,30 @@
+{
+  "config": {
+    "plane": "depth",
+    "model": "ridge",
+    "target": "magnitude",
+    "horizon": 240,
+    "hold": 120,
+    "cooldown": 0,
+    "exit": "take_profit_stop",
+    "objective": "net_per_trade_bp",
+    "refit": "5d",
+    "train_days": 20,
+    "gate": "tight_only",
+    "params": [],
+    "select": "top8",
+    "exit_level": 25.0,
+    "norm_window": 1000
+  },
+  "final": {
+    "trades": 861.0,
+    "trades_per_day": 64.7365604264114,
+    "gross_per_trade_bp": -2.135234599166075,
+    "cost_per_trade_bp": 13.44017814695834,
+    "net_per_trade_bp": -15.575412746124416,
+    "net_bp": -13410.430374413121,
+    "hit_rate": 0.4715447154471545,
+    "max_drawdown_bp": 13384.205355776523,
+    "dispersion_bp": 36.71607836875237
+  }
+}

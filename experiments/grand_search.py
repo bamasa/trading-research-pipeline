@@ -35,6 +35,27 @@ thousand combinations; a few hundred are drawn and put through successive
 halving, so a candidate that is obviously poor after four windows does not cost
 twenty.
 
+Four axes the first pass left at defaults
+-----------------------------------------
+The first run of this searched which model, not how that model was configured;
+which of four fixed feature planes, not which columns within them; and which
+exit rule, not at what level. Those defaults were inherited from earlier
+sections and were never themselves searched, which makes "no configuration
+works" a weaker claim than it sounds. So four more axes were added:
+
+* **Model hyperparameters** — tree depth, learning rate, regularisation, the
+  number of estimators, the ridge penalty, the logistic penalty.
+* **Feature selection inside each training window** — the variance,
+  correlation and information-coefficient stages of
+  :mod:`trading_research.features.selection`, keeping the top 8, 16 or 40
+  columns, refitted on every training block so the choice never sees the rows
+  it will trade.
+* **Exit levels** — where the take-profit, the stop and the trailing stop sit,
+  rather than one hard-coded number for each.
+* **The normalisation window** — a rolling normaliser is a claim about how fast
+  the scale of a feature moves, and 4,000 rows was an assumption. Three
+  windows are pre-computed and a configuration chooses among them.
+
 What is not searched, and why
 -----------------------------
 Costs. The taker fee, the spread treatment and the slippage assumption are held
@@ -64,6 +85,7 @@ from trading_research.backtest.execution import ThinningRules, thin
 from trading_research.backtest.gating import MarketGate
 from trading_research.features.depth import build_depth_features
 from trading_research.features.normalise import RollingNormaliser
+from trading_research.features.selection import FeatureSelector
 from trading_research.labels.targets import build_target
 from trading_research.models.base import CLASSES
 from trading_research.pipeline.stages import REGRESSION_MODELS, build_model
@@ -74,9 +96,18 @@ from trading_research.validation.search import successive_halving
 #: throughout this project. Not searched: see the module docstring.
 COSTS = TakerCosts(fee_bp_per_side=5.5, slippage_bp=0.5)
 
-#: One row is five seconds after subsampling a 100 ms stream by fifty.
-SUBSAMPLE = 50
-ROWS_PER_DAY = 86_400 / 5
+#: Seconds per row. Every instrument is resampled onto this grid rather than
+#: subsampled by a counter, so a horizon expressed in rows means the same
+#: elapsed time everywhere.
+#:
+#: Counting rows was wrong across instruments and only looked right on BTCUSDT.
+#: Taking every fiftieth book update gives five-second rows on an instrument
+#: that updates ten times a second, and fourteen-second rows on one that updates
+#: three times a minute — so "twenty days of training" became thirty-three days,
+#: and "a two-minute horizon" became five. Comparing instruments that way
+#: compares their update rates.
+GRID_SECONDS = 5
+ROWS_PER_DAY = 86_400 / GRID_SECONDS
 
 #: Share of the span the search may look at. The rest is read once, at the end.
 SEARCH_SHARE = 0.65
@@ -107,6 +138,32 @@ RULE_COLUMNS = ("queue_imbalance", "spread_bp", "log_mid_ret20", "log_mid_ret50"
 
 #: Columns already bounded or centred, which gain nothing from rescaling.
 BOUNDED = frozenset({"queue_imbalance", "depth_imbalance", "weighted_depth_imbalance"})
+
+
+def to_grid(book: pd.DataFrame, seconds: int = GRID_SECONDS) -> pd.DataFrame:
+    """Resample a stream of book updates onto a fixed time grid.
+
+    The last update in each interval, carried forward across intervals with no
+    update at all. Carrying forward is the honest reading — between updates the
+    book is what it last was — and it is causal, since a row only ever repeats
+    something already observed.
+
+    The cost is that a quiet instrument produces repeated rows whose returns are
+    zero, which dilutes any per-row statistic. That is a true statement about
+    the instrument rather than an artefact: an instrument whose book stands still
+    for a minute at a time is one where a two-minute horizon contains very little.
+    """
+    frame = book.set_index("timestamp").sort_index()
+    # Per day, not across the span. Resampling the whole range at once builds a
+    # continuous grid over days that were never downloaded and forward-fills a
+    # stale book into them — on BTCUSDT that invented sixteen days out of a
+    # hundred. A gap in the data has to stay a gap.
+    parts = [
+        day.resample(f"{seconds}s").last().ffill()
+        for _, day in frame.groupby(frame.index.date, sort=True)
+    ]
+    grid = pd.concat(parts)
+    return grid.dropna(subset=["bid_price_0", "ask_price_0"]).reset_index()
 
 
 def build_features(book: pd.DataFrame) -> pd.DataFrame:
@@ -151,16 +208,37 @@ def build_features(book: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def is_basis_points(name: str) -> bool:
+    """Whether a column is denominated in basis points of price."""
+    return name.endswith("_bp") or any(
+        token in name for token in ("ret", "vol", "reversal", "span", "impact", "distance")
+    )
+
+
 def normalise(frame: pd.DataFrame, window: int = 4000) -> pd.DataFrame:
     """Rolling robust normalisation of everything that is not already bounded.
 
     The scale floor is the spread: a trailing dispersion smaller than one tick
     means the price was pinned, and dividing by it turns a single tick into a
     large normalised value.
+
+    The floor applies **only to columns measured in basis points**. Applying it
+    to everything was a bug worth recording: a quote-intensity share lives in
+    [0, 1] and an imbalance change in [-2, 2], so their natural dispersion is far
+    below one basis point, and flooring their scale at the spread divided them
+    by a number five to ten times too large. Trees are invariant to that;
+    logistic and ridge at fixed regularisation are not, which quietly
+    handicapped every wide plane against the hand-picked three columns and
+    biased the plane comparison in favour of the narrow one.
     """
-    columns = [c for c in frame.columns if c not in BOUNDED and c != "mid"]
-    normaliser = RollingNormaliser(window=window, exclude=frozenset(BOUNDED | {"mid"}))
-    return normaliser.transform(frame, columns, floor=frame["spread_bp"])
+    exclude = frozenset(BOUNDED | {"mid"})
+    scaled = [c for c in frame.columns if c not in exclude]
+    in_bp = [c for c in scaled if is_basis_points(c)]
+    unitless = [c for c in scaled if not is_basis_points(c)]
+
+    normaliser = RollingNormaliser(window=window, exclude=exclude)
+    out = normaliser.transform(frame, in_bp, floor=frame["spread_bp"])
+    return normaliser.transform(out, unitless)
 
 
 def planes(frame: pd.DataFrame) -> dict[str, list[str]]:
@@ -200,14 +278,56 @@ CLASSIFIERS = (
 )
 REGRESSORS = ("ridge", "xgboost_regressor", "bound_ridge", "bound_mixed")
 
-CLASSIFICATION_TARGETS = ("direction", "triple_barrier", "smoothed_direction")
-REGRESSION_TARGETS = ("net_pnl", "forward_smoothed", "normalised_magnitude", "magnitude")
+#: The two-sided FI-2010 smoothing is deliberately absent. §21 measured its
+#: label correlating +0.586 with a quantity known before the decision, because
+#: the average it compares against includes the past. A model fitted to it
+#: spends its capacity predicting something already known, which does not
+#: corrupt the P&L — trades are scored on realised forward moves — but does make
+#: the target axis a comparison against a target the project has documented as
+#: defective. ``forward_smoothed`` is the leak-free version and is offered
+#: instead.
+CLASSIFICATION_TARGETS = ("direction", "triple_barrier")
+REGRESSION_TARGETS = ("net_pnl", "forward_smoothed", "magnitude")
 
 #: Rules read raw columns and fit nothing, so a plane wider than their inputs
 #: changes neither their signal nor their cost. Sampling them across four planes
 #: would spend three quarters of their share of the budget re-measuring the same
 #: candidate.
 RULES = frozenset({"order_flow", "momentum", "mean_reversion", "breakout", "spread_capture"})
+
+#: Hyperparameters offered per model family. A configuration draws one entry
+#: from the family its model belongs to, so a ridge is never handed a tree
+#: depth and the budget is not spent on combinations that do nothing.
+HYPERPARAMETERS: dict[str, tuple[dict[str, Any], ...]] = {
+    "tree": (
+        {},
+        {"max_depth": 2, "n_estimators": 150, "learning_rate": 0.1},
+        {"max_depth": 3, "n_estimators": 300, "learning_rate": 0.05},
+        {"max_depth": 6, "n_estimators": 300, "learning_rate": 0.03},
+        {"max_depth": 4, "n_estimators": 600, "learning_rate": 0.02, "min_child_weight": 100.0},
+        {"max_depth": 8, "n_estimators": 200, "learning_rate": 0.05, "reg_lambda": 20.0},
+    ),
+    "logistic": ({}, {"C": 0.01}, {"C": 0.1}, {"C": 10.0}, {"class_weight": None}),
+    "ridge": ({}, {"alpha": 0.01}, {"alpha": 10.0}, {"alpha": 1000.0}),
+    "none": ({},),
+}
+
+#: Which family each model draws its hyperparameters from. Composites and
+#: ensembles pass their parameters to every member, so they take the family of
+#: whatever they are mostly made of.
+FAMILY: dict[str, str] = {
+    "logistic": "logistic",
+    "xgboost": "tree",
+    "ridge": "ridge",
+    "xgboost_regressor": "tree",
+    "bound_ridge": "ridge",
+    "bound_mixed": "ridge",
+    "ensemble": "none",
+    "agree": "none",
+    "rule_gated_by_model": "none",
+    "meta_rule_model": "logistic",
+    "meta_rule_tree": "none",
+}
 
 SPACE: dict[str, Sequence[Any]] = {
     "plane": ("touch", "micro", "depth", "wide"),
@@ -221,6 +341,10 @@ SPACE: dict[str, Sequence[Any]] = {
     "refit": ("1d", "2d", "5d", "breaks"),
     "train_days": (5, 10, 20),
     "gate": ("open", "quiet_out", "tight_only"),
+    # Added in the second pass: see the module docstring.
+    "select": ("all", "top8", "top16", "top40"),
+    "exit_level": (3.0, 6.0, 12.0, 25.0),
+    "norm_window": (1000, 4000, 16000),
 }
 
 
@@ -239,12 +363,23 @@ class Config:
     refit: str
     train_days: int
     gate: str
+    #: Hyperparameters as a sorted tuple of pairs, so a Config stays hashable
+    #: and the search can put it in a set.
+    params: tuple[tuple[str, Any], ...] = ()
+    select: str = "all"
+    exit_level: float = 8.0
+    norm_window: int = 4000
+
+    def kwargs(self) -> dict[str, Any]:
+        return dict(self.params)
 
     def label(self) -> str:
+        params = ",".join(f"{k}={v}" for k, v in self.params) or "default"
         return (
             f"{self.model}/{self.plane}/{self.target}/h{self.horizon}"
-            f"/hold{self.hold}/cd{self.cooldown}/{self.exit}"
+            f"/hold{self.hold}/cd{self.cooldown}/{self.exit}{self.exit_level:g}"
             f"/{self.objective}/{self.refit}/tr{self.train_days}/{self.gate}"
+            f"/{self.select}/nw{self.norm_window}/[{params}]"
         )
 
 
@@ -267,6 +402,11 @@ def draw(n: int, seed: int) -> list[Config]:
         regression = model in REGRESSORS
         targets = REGRESSION_TARGETS if regression else CLASSIFICATION_TARGETS
         plane = "micro" if model in RULES else choice["plane"]
+        # Rules fit nothing and read named columns, so hyperparameters and
+        # feature selection are not theirs to vary.
+        family = HYPERPARAMETERS[FAMILY.get(model, "none")] if model not in RULES else ({},)
+        params = family[int(rng.integers(len(family)))]
+        select = "all" if model in RULES else str(choice["select"])
         config = Config(
             plane=plane,
             model=model,
@@ -279,6 +419,10 @@ def draw(n: int, seed: int) -> list[Config]:
             refit=str(choice["refit"]),
             train_days=int(choice["train_days"]),
             gate=str(choice["gate"]),
+            params=tuple(sorted(params.items())),
+            select=select,
+            exit_level=float(choice["exit_level"]),
+            norm_window=int(choice["norm_window"]),
         )
         if config in seen:
             continue
@@ -290,14 +434,18 @@ def draw(n: int, seed: int) -> list[Config]:
 def rules_for(config: Config) -> ThinningRules:
     """Turn the chosen exit into the execution rules that implement it."""
     common = {"hold_periods": config.hold, "cooldown_periods": config.cooldown}
+    level = config.exit_level
     if config.exit == "take_profit_stop":
-        return ThinningRules(**common, take_profit_bp=8.0, stop_loss_bp=8.0)
+        return ThinningRules(**common, take_profit_bp=level, stop_loss_bp=level)
     if config.exit == "trailing":
-        return ThinningRules(**common, trailing_stop_bp=6.0)
+        return ThinningRules(**common, trailing_stop_bp=level)
     if config.exit == "flip":
         return ThinningRules(**common, exit_on_flip=True)
     if config.exit == "confidence":
-        return ThinningRules(**common, exit_below_confidence=0.34)
+        # The level axis is in basis points elsewhere; here it maps onto the
+        # probability floor a position must keep to stay open.
+        floor = {3.0: 0.34, 6.0: 0.36, 12.0: 0.40, 25.0: 0.45}[level]
+        return ThinningRules(**common, exit_below_confidence=floor)
     return ThinningRules(**common)
 
 
@@ -317,11 +465,13 @@ def gate_for(config: Config) -> MarketGate | None:
 class Data:
     """The span, its features, and the targets built lazily and kept."""
 
-    def __init__(self, features: pd.DataFrame, spread_bp: np.ndarray, mid: np.ndarray) -> None:
-        self.features = features
+    def __init__(
+        self, frames: dict[int, pd.DataFrame], spread_bp: np.ndarray, mid: np.ndarray
+    ) -> None:
+        self.frames = frames
         self.spread_bp = spread_bp
         self.mid = mid
-        self.plane = planes(features)
+        self.plane = planes(next(iter(frames.values())))
         self._targets: dict[tuple[str, int], pd.Series] = {}
         self._forward: dict[int, np.ndarray] = {}
 
@@ -353,14 +503,48 @@ class Data:
         return self._forward[horizon]
 
 
-def refit_points(config: Config, start: int, stop: int, breaks: Sequence[int]) -> list[int]:
-    """Where the model is refitted, between ``start`` and ``stop``."""
+@dataclass(frozen=True)
+class Refit:
+    """One refit: when it happens, how far back it may train, how long it trades.
+
+    ``floor`` and ``until`` are what two bugs in the first version of this cost.
+
+    ``until`` was a fixed five days regardless of how often the policy refitted,
+    so a daily-refit candidate traded every row five times over with five
+    different models. Its trade count was inflated fivefold, its trades were
+    heavily overlapping rather than independent, and the "one position at a
+    time" premise of :func:`thin` was violated across windows. Apply windows now
+    run to the next refit, so they tile the span exactly once whatever the
+    cadence.
+
+    ``floor`` was absent, so a model refitted *at* a detected regime break still
+    trained on up to twenty days of pre-break data — the very data the break had
+    just declared stale. That is not a test of regime-aware refitting; it is a
+    test of an irregular cadence with a contaminated training window. Under the
+    ``breaks`` policy the floor is now the previous break.
+    """
+
+    at: int
+    floor: int
+    until: int
+
+
+def refit_points(config: Config, start: int, stop: int, breaks: Sequence[int]) -> list[Refit]:
+    """Where the model is refitted between ``start`` and ``stop``, and on what."""
     if config.refit == "breaks":
-        inside = [b for b in breaks if start < b < stop]
-        return [start, *inside]
-    days = {"1d": 1, "2d": 2, "5d": 5}[config.refit]
-    stride = int(days * ROWS_PER_DAY)
-    return list(range(start, stop, stride))
+        points = [start, *[b for b in breaks if start < b < stop]]
+        # Under this policy the previous break is the floor: everything before
+        # it belongs to a regime the detector says has ended.
+        floors = [0, *points[:-1]]
+    else:
+        days = {"1d": 1, "2d": 2, "5d": 5}[config.refit]
+        points = list(range(start, stop, int(days * ROWS_PER_DAY)))
+        # A fixed cadence makes no claim about staleness, so training may reach
+        # as far back as the window asks for.
+        floors = [0] * len(points)
+
+    edges = [*points[1:], stop]
+    return [Refit(at=a, floor=f, until=u) for a, f, u in zip(points, floors, edges, strict=True)]
 
 
 def run_block(
@@ -377,6 +561,7 @@ def run_block(
     forward; the model never sees the rows it trades, and neither does the
     threshold.
     """
+    features = data.frames[config.norm_window]
     columns = data.plane[config.plane]
     target = data.target(config.target, config.horizon)
     forward = data.forward(config.hold)
@@ -384,25 +569,34 @@ def run_block(
     gate = gate_for(config)
     rules = rules_for(config)
 
-    usable = data.features[columns].notna().all(axis=1).to_numpy()
+    usable = features[columns].notna().all(axis=1).to_numpy()
     labelled = usable & target.notna().to_numpy()
     tradeable = usable & np.isfinite(forward)
 
     rows: list[dict[str, Any]] = []
     for window_start, window_end in bounds:
-        for point in refit_points(config, window_start, window_end, breaks):
-            train_from = max(window_start, point - int(config.train_days * ROWS_PER_DAY))
-            # Purge the label horizon: the last rows of the training block read
-            # forward into the rows about to be traded.
-            train_to = point - config.horizon
+        for refit in refit_points(config, window_start, window_end, breaks):
+            point = refit.at
+            # Training reaches back past the start of the block being traded.
+            # Clamping it there was a bug: on the final block it forbade fitting
+            # on data that is simply in the past, skipped the first refit
+            # entirely, and left the first days untraded while still counting
+            # them in the denominator — so the one number the whole document
+            # rests on was measured under a handicap no live run would have.
+            train_from = max(refit.floor, point - int(config.train_days * ROWS_PER_DAY))
+            # Purge what the labels read forward. The label horizon is the
+            # obvious part; the holding period matters too, because the
+            # threshold is chosen on outcomes measured over ``hold`` rows and
+            # those extend past the end of the training block.
+            train_to = point - max(config.horizon, config.hold)
             if train_to - train_from < 20_000:
                 continue
-            apply_to = min(window_end, point + int(5 * ROWS_PER_DAY))
+            apply_to = refit.until
 
-            train_mask = np.zeros(len(data.features), dtype=bool)
+            train_mask = np.zeros(len(features), dtype=bool)
             train_mask[train_from:train_to] = True
             train_mask &= labelled
-            apply_mask = np.zeros(len(data.features), dtype=bool)
+            apply_mask = np.zeros(len(features), dtype=bool)
             apply_mask[point:apply_to] = True
             apply_mask &= tradeable
             if train_mask.sum() < 10_000 or apply_mask.sum() < 2_000:
@@ -412,7 +606,7 @@ def run_block(
                 gate_frame = pd.DataFrame(
                     {
                         "spread_bp_now": data.spread_bp,
-                        "volatility": data.features["log_mid_vol50"].to_numpy(),
+                        "volatility": features["log_mid_vol50"].to_numpy(),
                     }
                 )
                 levels = gate.thresholds(gate_frame[train_mask])
@@ -435,12 +629,29 @@ def run_block(
             if not regression and len(np.unique(y[fit_index])) < 2:
                 continue
 
-            estimator = build_model(config.model)
+            # Feature selection, refitted on this training block alone. Choosing
+            # columns once over the whole span would let the test block vote on
+            # which features exist, which is the most effective way there is to
+            # manufacture an edge that is not there.
+            chosen = columns
+            if config.select != "all":
+                selector = FeatureSelector(max_features=int(config.select[3:]))
+                try:
+                    selector.fit(
+                        features.iloc[fit_index][columns],
+                        pd.Series(y[fit_index], index=fit_index),
+                        forward=pd.Series(forward[fit_index], index=fit_index),
+                    )
+                except ValueError:
+                    continue
+                chosen = selector.selected_ or columns
+
+            estimator = build_model(config.model, **config.kwargs())
             estimator.fit(
-                data.features.iloc[fit_index][columns], pd.Series(y[fit_index], index=fit_index)
+                features.iloc[fit_index][chosen], pd.Series(y[fit_index], index=fit_index)
             )
 
-            inner_proba = estimator.predict_proba(data.features.iloc[inner_index][columns])
+            inner_proba = estimator.predict_proba(features.iloc[inner_index][chosen])
             confidence, _ = choose_confidence(
                 inner_proba,
                 pd.Series(forward[inner_index]),
@@ -449,28 +660,51 @@ def run_block(
                 objective=config.objective,
             )
 
-            apply_index = np.flatnonzero(apply_mask)
-            proba = estimator.predict_proba(data.features.iloc[apply_index][columns])
-            decision = decide(proba, min_confidence=confidence)
+            # Trade over the contiguous block, standing aside where a row is
+            # unusable or the gate is shut — rather than deleting those rows.
+            #
+            # Deleting them was a bug. :func:`thin` counts the holding period
+            # and the cooldown in rows and reads the price path row by row, so
+            # on a compacted series a "five-minute hold" spanned however much
+            # wall-clock time the surviving rows happened to cover, and a
+            # trailing stop watched the price teleport across the removed
+            # stretches. A gate that removes thirty per cent of rows changes
+            # what every duration in the configuration means.
+            block = slice(point, apply_to)
+            usable_here = np.flatnonzero(apply_mask[block])
+            if len(usable_here) < 1_000:
+                continue
+            proba_usable = estimator.predict_proba(features.iloc[point + usable_here][chosen])
+
+            length = apply_to - point
+            proba = np.zeros((length, len(CLASSES)))
+            proba[:, CLASSES.index(0)] = 1.0
+            proba[usable_here] = proba_usable
+            decision = np.zeros(length, dtype=int)
+            decision[usable_here] = decide(proba_usable, min_confidence=confidence)
+
             trades = thin(
                 decision,
-                forward[apply_index],
-                data.spread_bp[apply_index],
+                forward[block],
+                data.spread_bp[block],
                 rules,
-                mid=data.mid[apply_index] if rules.needs_price_path else None,
+                mid=data.mid[block] if rules.needs_price_path else None,
                 p_buy=proba[:, CLASSES.index(1)] if rules.needs_probabilities else None,
                 p_sell=proba[:, CLASSES.index(-1)] if rules.needs_probabilities else None,
             )
-            days = len(apply_index) / ROWS_PER_DAY
+            days = length / ROWS_PER_DAY
             for trade in trades:
                 cost = float(COSTS.round_trip_bp(trade.entry_spread_bp))
                 rows.append(
                     {
-                        "at": int(apply_index[trade.entry_index]),
+                        "at": point + int(trade.entry_index),
+                        "gross_bp": trade.direction * trade.move_bp,
+                        "cost_bp": cost,
                         "exit_reason": trade.exit_reason,
                         "net_bp": trade.direction * trade.move_bp - cost,
                         "days": days,
                         "refit_at": point,
+                        "features_used": len(chosen),
                     }
                 )
     return pd.DataFrame(rows)
@@ -479,12 +713,25 @@ def run_block(
 def summarise(trades: pd.DataFrame, days: float) -> dict[str, float]:
     """The figures a configuration is judged on."""
     if trades.empty:
-        return {"trades": 0.0, "net_per_trade_bp": float("nan"), "net_bp": 0.0}
-    net = trades["net_bp"]
+        return {
+            "trades": 0.0,
+            "gross_per_trade_bp": float("nan"),
+            "net_per_trade_bp": float("nan"),
+            "net_bp": 0.0,
+        }
+    # Chronological, not append order: a drawdown computed over trades sorted
+    # by refit block rather than by time is not a drawdown.
+    net = trades.sort_values("at")["net_bp"]
     equity = net.cumsum()
     return {
         "trades": float(len(net)),
         "trades_per_day": float(len(net) / days) if days else float("nan"),
+        # Reported alongside net because the two carry different information:
+        # net says whether the strategy pays, gross says whether there was
+        # anything to pay with. An instrument with three times the cost can
+        # show a worse net on a better signal.
+        "gross_per_trade_bp": float(trades["gross_bp"].mean()),
+        "cost_per_trade_bp": float(trades["cost_bp"].mean()),
         "net_per_trade_bp": float(net.mean()),
         "net_bp": float(net.sum()),
         "hit_rate": float((net > 0).mean()),
@@ -505,15 +752,24 @@ def main() -> None:
     files = sorted((args.book / args.symbol).glob("*.parquet"))
     if not files:
         raise SystemExit(f"no book data for {args.symbol} under {args.book}")
-    book = pd.concat([pd.read_parquet(p) for p in files], ignore_index=True)
-    book = book.iloc[::SUBSAMPLE].reset_index(drop=True)
+    book = to_grid(pd.concat([pd.read_parquet(p) for p in files], ignore_index=True))
     print(f"{args.symbol}: {len(book):,} rows, {book.timestamp.min()} .. {book.timestamp.max()}")
 
-    features = normalise(build_features(book))
+    raw = build_features(book)
     mid = ((book["bid_price_0"] + book["ask_price_0"]) / 2).to_numpy()
     spread_bp = ((book["ask_price_0"] - book["bid_price_0"]) / mid * 1e4).to_numpy()
-    features["mid"] = mid
-    data = Data(features, spread_bp, mid)
+
+    # One normalised copy per window on the axis. Held as float32: three copies
+    # of 1.4 million rows in float64 is most of a gigabyte, and nothing here
+    # needs more precision than a normalised feature carries.
+    frames: dict[int, pd.DataFrame] = {}
+    for window in SPACE["norm_window"]:
+        frame = normalise(raw, window=int(window)).astype("float32")
+        frame["mid"] = mid
+        frames[int(window)] = frame
+        print(f"  normalised at {window}: {frame.notna().all(axis=1).mean():.1%} complete rows")
+    del raw
+    data = Data(frames, spread_bp, mid)
 
     cut = int(len(book) * SEARCH_SHARE)
     final_bounds = [(cut, len(book))]
@@ -564,7 +820,8 @@ def main() -> None:
     print(f"on the search block: {outcome.best_metrics}")
 
     RESULTS.mkdir(parents=True, exist_ok=True)
-    outcome.table.to_csv(RESULTS / "grand_search_rungs.csv", index=False)
+    stem = f"grand_search_{args.symbol}"
+    outcome.table.to_csv(RESULTS / f"{stem}_rungs.csv", index=False)
 
     # The one reading of the final block.
     final_cuts = segment(mid[cut:], spread_bp[cut:], minimum_rows=40_000)
@@ -579,9 +836,10 @@ def main() -> None:
     table = pd.DataFrame(rows)
     if final["trades"]:
         table["two_se_bp"] = 2 * table["dispersion_bp"] / np.sqrt(table["trades"])
-    emit(table, "grand_search")
+    table.insert(0, "symbol", args.symbol)
+    emit(table, stem)
 
-    (RESULTS / "grand_search_winner.json").write_text(
+    (RESULTS / f"{stem}_winner.json").write_text(
         json.dumps({"config": outcome.best.__dict__, "final": final}, indent=2, default=str)
     )
 

@@ -1,24 +1,28 @@
 {
   "config": {
-    "plane": "depth",
-    "model": "logistic",
-    "target": "triple_barrier",
+    "plane": "micro",
+    "model": "order_flow",
+    "target": "direction",
     "horizon": 120,
-    "hold": 60,
-    "cooldown": 0,
-    "exit": "trailing",
+    "hold": 12,
+    "cooldown": 12,
+    "exit": "confidence",
     "objective": "net_bp",
-    "refit": "5d",
-    "train_days": 10,
-    "gate": "quiet_out"
+    "refit": "2d",
+    "train_days": 5,
+    "gate": "tight_only",
+    "params": [],
+    "select": "all",
+    "exit_level": 25.0,
+    "norm_window": 4000
   },
   "final": {
-    "trades": 387.0,
-    "trades_per_day": 13.326239142001398,
-    "net_per_trade_bp": -12.222839053213859,
-    "net_bp": -4730.238713593763,
-    "hit_rate": 0.1731266149870801,
-    "max_drawdown_bp": 4734.304565151252,
-    "dispersion_bp": 17.624783957074882
+    "trades": 11413.0,
+    "trades_per_day": 393.00353314641336,
+    "net_per_trade_bp": -10.78825922247774,
+    "net_bp": -123126.40250613843,
+    "hit_rate": 0.004906685358801367,
+    "max_drawdown_bp": 123119.8026366773,
+    "dispersion_bp": 2.7363287370899756
   }
 }

@@ -4,7 +4,7 @@ BTCUSDT and XRPUSDT, Binance USD-M futures, February–March 2024. Best bid and
 ask sampled to a 100 ms grid, taker execution on both legs.
 
 **Nothing here was profitable, and §20 explains why in one line:** across
-forty-four instruments, the best has an expected edge one-sixteenth of its cost
+forty-four instruments, the best has an average edge about a tenth of its cost
 to trade. No amount of modelling closes a gap of that size. Across two
 instruments studied in depth, four horizons, two feature sets, four models, five
 rule-based strategies and four ways of combining them, no walk-forward fold was
@@ -1076,23 +1076,45 @@ and is first on edge, because its book is nearly four times as informative.
 
 | Instrument | Round trip | Edge (IC × σ) | Edge ÷ cost |
 |---|---:|---:|---:|
-| CRVUSDT | 32.21 | 2.07 bp | **0.064** |
-| ALICEUSDT | 20.14 | 1.21 bp | 0.060 |
-| BICOUSDT | 14.01 | 0.77 bp | 0.055 |
-| XRPUSDT | 12.98 | 0.51 bp | 0.040 |
-| BTCUSDT | 11.02 | 0.37 bp | 0.028 |
+| ALICEUSDT | 20.12 | 2.18 bp | **0.109** |
+| CRVUSDT | 33.15 | 3.44 bp | 0.104 |
+| BICOUSDT | 13.90 | 1.12 bp | 0.081 |
+| XRPUSDT | 12.98 | 0.69 bp | 0.053 |
+| BTCUSDT | 11.02 | 0.34 bp | 0.031 |
 
-**The best instrument of forty-four has an edge one-sixteenth of its cost.** Not
-one half, not one third. The best available candidate on this venue, at this
-horizon, needs sixteen times the edge it has before a taker strategy pays.
+**The best instrument of forty-four has an average edge about a tenth of its
+cost, and BTCUSDT — the instrument most of this document was built on — has a
+thirtieth.** Which is the more useful number depends on what is being claimed,
+and the difference between them is a three-fold gap that eighteen sections of
+modelling never had a chance of closing.
 
-That is a stronger statement than anything the modelling produced, and it took
-three days of data per instrument rather than eighteen sections of work. It is
-also the honest ceiling for everything in this document: the models capture a
-fraction of the edge identity, and the identity itself is a sixteenth of what it
-needs on the best of forty-four candidates.
+### Two corrections this table has already needed
 
-The screen was built to eliminate. It eliminated the asset class.
+The first is arithmetic. An earlier version reported σ as the standard deviation
+of the **absolute** move rather than the signed one. For a roughly symmetric
+distribution those differ by a factor of √(1 − 2/π) ≈ 0.6, so every edge in the
+table was understated by about forty per cent and the headline read
+"one-sixteenth" where it should have read closer to one-tenth. The ranking was
+unaffected, since the factor is common to every instrument, but the ratio that
+the rest of the document quotes was not.
+
+The second is what the identity means. IC × σ is the edge on an **average**
+trade, and it is not a ceiling on a *selective* one. Trading only the strongest
+q of signals earns, under joint normality, IC · σ · λ(q), where λ is the inverse
+Mills ratio — a factor of three to four at one trade a day, and more under fat
+tails. Sections that used "edge is bounded by IC × σ" as an impossibility
+argument were overstating it; the empirical measurement in §23, which found the
+strongest decile better than the weakest by a factor of about two rather than
+the thirty required, is the argument that actually carries the weight.
+
+Taken together: the best instrument's selective edge is perhaps a third of its
+cost rather than a sixteenth. Still short, and short by enough that nothing in
+this document closes it — but short by a factor of three, which is a different
+kind of problem from short by a factor of sixteen.
+
+The screen was built to eliminate. It eliminates BTCUSDT comfortably; what it
+says about the asset class is weaker than an earlier draft of this section
+claimed.
 
 ## 21. Smoothing the label, and what it does and does not buy
 
@@ -1397,15 +1419,19 @@ two cells the noise favoured. What was selected was the window, not the rate.
 
 The fresh period is also where the arithmetic gets easier: three times the
 trades, and dispersion falling from 66 bp to 27 bp. At 79 trades and 27 bp,
-−8.51 bp per trade is roughly four standard errors from zero. The negative
+−8.51 bp per trade is 2.8 standard errors from zero. The negative
 result is far better established than the positive one ever was.
 
 ### Why lowering the rate could not have worked
 
 The identity in §6 says the same thing in advance. Expected profit per trade is
-edge minus cost, and edge is bounded by IC × σ(move) — about 0.4 bp here against
-11 bp of round trip. Trading less often changes how many times that −10.6 bp is
-paid; it does not change the sign. A selective threshold helps only if the
+edge minus cost, and the *average* edge is IC × σ(move) — about 0.4 bp here
+against 11 bp of round trip. That identity is weaker than an earlier draft of
+this section made it: a selective strategy earns the *conditional* edge
+IC · σ · λ(q), several times larger at low trade rates (§20), so the arithmetic
+does not by itself forbid a rare trade from paying. What it does say is that
+trading less often changes how many times the cost is paid, not the edge that
+has to cover it, and the gap it has to cover is a factor of thirty. A selective threshold helps only if the
 model's confidence ranks its own accuracy well enough that the top fraction of
 signals carries several times the average edge, and §23 measured that ranking
 directly: the strongest decile is better than the weakest, but by a factor of
@@ -1482,10 +1508,18 @@ axis free, cleared **2.23 bp of it** on the block that selected it — the highe
 gross edge measured anywhere in this project, and still less than a fifth of
 what it needs.
 
-On the block that selected nothing, the gross edge is −0.21 bp. Not reduced:
-gone. Before any fee, before any spread, before any slippage, the strategy
-picked as the best of 240 does not predict the direction of the next five
-minutes at all.
+On the block that selected nothing, the gross edge is −0.21 bp, with a standard
+error of 0.90 — so what the final block establishes is that the gross edge is
+somewhere below about +1.6 bp, not that it is zero. An earlier draft of this
+section said "not reduced: gone", which reads the point estimate as if it were
+the measurement. The difference between the two blocks is 2.44 bp against a
+combined standard error of 1.19, which is two sigma: suggestive of decay,
+short of demonstrating it.
+
+The **net** conclusion needs none of that care. At −12.22 bp against a 12.02 bp
+round trip, on 387 trades with a standard error of 0.90, the strategy loses
+approximately the entire cost of trading, and no reading of the confidence
+interval rescues it.
 
 ### No axis mattered
 
