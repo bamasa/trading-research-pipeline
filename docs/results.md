@@ -1258,7 +1258,86 @@ So the technique is sound and it is not the missing piece. What separates a
 model that can use it from ours is not the decision rule but the forecast, and
 the gap there is a factor of twenty.
 
-## 24. What would have to change
+## 24. Ten levels of book, and a label that grades itself
+
+Two questions the Bybit archives made answerable. Bybit publishes five hundred
+levels per side, tick granularity, back to 2023, free — which is what Binance
+does not, and what the standing explanation for a weak forecast pointed at.
+
+### Depth adds nothing
+
+Ten levels against one, same model, same folds, four instruments:
+
+| Instrument | Touch only | Touch + depth | Change |
+|---|---:|---:|---:|
+| BTCUSDT | 0.63 bp | 0.61 bp | −0.02 |
+| XRPUSDT | 0.91 bp | 0.80 bp | −0.10 |
+| CRVUSDT | 0.74 bp | 0.76 bp | +0.01 |
+| BICOUSDT | — | — | both near zero |
+
+Individually, no depth feature beats the touch imbalance: 0.046 for the touch
+against 0.036 for the best of slope, concentration, weighted imbalance and
+book-walking cost. Together they add nothing measurable.
+
+**So the data was not the limitation.** That explanation is now closed, and it
+was the last one standing.
+
+One thing worth keeping from the attempt: without rolling normalisation the
+depth model produced an out-of-sample coefficient of **−0.047** — systematically
+wrong rather than merely weak. Book thickness drifts, so coefficients fitted on
+one fortnight do not transfer to the next. Normalisation fixed the sign and
+removed the gain at the same time.
+
+### The label that grades itself
+
+The other explanation for the twenty-fold gap with the closed-source model was
+that its target is smoothed, FI-2010 style: the mean of the next *k* mids
+against the mean of the last *k*. Measured against that label our model jumps
+from 0.042 to **0.424** — the same order as the 0.80 that started the question.
+
+It is not forecasting.
+
+| | BTCUSDT | XRPUSDT |
+|---|---:|---:|
+| Label vs a purely **backward** quantity | **+0.586** | **+0.586** |
+| Label vs the actual forward move | +0.699 | +0.698 |
+
+**The backward mean is known at time t.** It sits in the numerator and the
+denominator of the label, so a model can score 0.59 on it while predicting
+nothing whatsoever. Ours reached 0.42 — below what pure hindsight would give,
+meaning it recovers part of the known half and none of the unknown one.
+
+The same fact from the trading side:
+
+| Trained on | IC vs its own label | IC vs realised price | Net per trade |
+|---|---:|---:|---:|
+| single point | +0.042 | **+0.042** | — |
+| two-sided smoothed | **+0.424** | **−0.014** | −7.67 bp |
+| forward-only smoothed | +0.054 | +0.041 | — |
+
+A model correlating 0.42 with its target and 0.00 with what the price did is
+not a good model measured badly; it is a measurement that does not describe the
+thing being traded. Trading it gives −7.67 bp on BTCUSDT, −17.40 on XRPUSDT.
+
+### The fix, and what it is worth
+
+Average the *future* — genuinely uncertain, and where noise reduction helps —
+and reference it to the mid **now**, which is known and cannot be predicted for
+credit. `forward_smoothed` does this. Its correlation with a backward-only
+quantity is −0.02, the same as a single point.
+
+It buys a real but modest improvement: 0.042 to 0.054 on its own label, with
+forecasting power against the realised price unchanged at 0.041. Noise
+reduction worth having and nothing like the tenfold jump the two-sided version
+appeared to offer.
+
+**§21 recorded that smoothing nearly doubles a measured coefficient and warned
+the smoothed price is not tradeable. This is why, and the number is larger than
+that section implied.** Any study reporting classification accuracy or
+correlation against an FI-2010 label is reporting a figure that is more than
+half hindsight, and nothing in the usual metrics distinguishes that from skill.
+
+## 25. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
