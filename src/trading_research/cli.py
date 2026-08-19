@@ -1010,6 +1010,64 @@ def review_cmd(
     )
 
 
+@app.command("discover")
+def discover_cmd(
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/screen"),
+    listed_before: Annotated[
+        str | None,
+        typer.Option("--listed-before", help="Drop contracts listed on or after this date."),
+    ] = None,
+    top: Annotated[int, typer.Option("--top", min=1)] = 40,
+    minimum_volume_usd: Annotated[float, typer.Option("--min-volume", min=0.0)] = 3e6,
+) -> None:
+    """List the contracts worth screening, ranked by traded volume.
+
+    The step before the screen, and until now the one done by hand. A candidate
+    nobody thought of is one the screen never sees, so this enumerates what the
+    venue lists rather than relying on anyone's recall.
+
+    ``--listed-before`` matters more than it looks. Volume comes from today and
+    the data being screened does not: without the filter the list fills with
+    recent listings whose archives return nothing, displacing contracts that
+    have history.
+
+    Volume ranks what gets *measured*. The screen decides what is *good*, and
+    the two are different questions — the highest-volume contract came second
+    from bottom on headroom.
+    """
+    from trading_research.data.discover import candidate_table
+
+    cutoff = _as_date(listed_before, "--listed-before") if listed_before else None
+    try:
+        table = candidate_table(
+            listed_before=cutoff, top=top, minimum_volume_usd=minimum_volume_usd
+        )
+    except OSError as exc:
+        err_console.print(f"[red]could not reach the exchange listing: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if table.empty:
+        err_console.print("[red]no contracts matched[/red]")
+        raise typer.Exit(code=1)
+
+    rendered = Table(title=f"{len(table)} candidates by volume", show_edge=False)
+    for column in table.columns:
+        rendered.add_column(column, justify="left" if column == "symbol" else "right")
+    for _, row in table.head(20).iterrows():
+        rendered.add_row(*[f"{v:,.4g}" if isinstance(v, float) else str(v) for v in row])
+    console.print(rendered)
+    if len(table) > 20:
+        console.print(f"[dim]… and {len(table) - 20} more[/dim]")
+
+    out = Path(output)
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_csv(out / "candidates.csv", index=False)
+    console.print(f"\n-> {out / 'candidates.csv'}")
+    console.print(
+        "\nDownload a few days of each, then rank them with [bold]trading-research screen[/bold]."
+    )
+
+
 @app.command("describe-schema")
 def describe_schema(
     plane: Annotated[
