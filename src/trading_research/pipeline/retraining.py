@@ -163,12 +163,36 @@ def prepared_evaluator(
             # Levels from the training window, not this one: recomputing them
             # here would make the gate depend on the period it is judging.
             ok &= gate.mask(out_frame, gate_levels)  # type: ignore[union-attr]
-        acted = out_frame.loc[ok]
-        if acted.empty:
+        if not ok.any():
             raise StageError(f"no usable rows in {apply[0]}..{apply[1]}")
 
-        proba = estimator.predict_proba(acted[columns])
-        decision = decide(proba, min_confidence=confidence)
+        # Unusable and gated rows stand aside in place rather than being
+        # dropped. thin() counts holds and cooldowns in rows and walks the
+        # price path row by row, so on a compacted series every duration means
+        # "that many surviving rows" and the path jumps across the removed
+        # stretches. The same defect was fixed in the grand search first; this
+        # is the other place it lived.
+        usable_rows = np.flatnonzero(ok.to_numpy())
+        proba_usable = estimator.predict_proba(out_frame.loc[ok, columns])
+
+        length = len(out_frame)
+        proba = np.zeros((length, len(CLASSES)))
+        proba[:, CLASSES.index(0)] = 1.0
+        proba[usable_rows] = proba_usable
+        # Between usable rows the model's opinion is its last opinion; zeros
+        # would fire every confidence exit the moment the gate blinked.
+        last = np.maximum.accumulate(
+            np.where(np.isin(np.arange(length), usable_rows), np.arange(length), -1)
+        )
+        filled = last >= 0
+        proba[filled] = proba[last[filled]]
+        decision = np.zeros(length, dtype=int)
+        decision[usable_rows] = decide(proba_usable, min_confidence=confidence)
+
+        forward = out_frame["forward_bp"].to_numpy(dtype="float64")
+        # A trade must still never be opened on a row whose outcome is unknown.
+        decision[~np.isfinite(forward)] = 0
+
         rules = ThinningRules(
             hold_periods=hold_periods,
             cooldown_periods=cooldown_periods,
@@ -176,16 +200,16 @@ def prepared_evaluator(
         )
         trades = thin(
             decision,
-            acted["forward_bp"].to_numpy(),
-            acted["spread_bp_now"].to_numpy(),
+            forward,
+            out_frame["spread_bp_now"].to_numpy(dtype="float64"),
             rules,
-            mid=acted["mid"].to_numpy() if rules.needs_price_path and "mid" in acted else None,
+            mid=out_frame["mid"].to_numpy() if rules.needs_price_path and "mid" in out_frame else None,
             p_buy=proba[:, CLASSES.index(1)] if rules.needs_probabilities else None,
             p_sell=proba[:, CLASSES.index(-1)] if rules.needs_probabilities else None,
         )
         result = score(trades, costs)
         result["confidence"] = float(confidence)
-        result["gated_rows"] = float(len(acted))
+        result["gated_rows"] = float(len(usable_rows))
         result["train_rows"] = float(len(fit))
         return result
 

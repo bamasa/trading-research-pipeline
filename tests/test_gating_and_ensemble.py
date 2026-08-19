@@ -69,8 +69,17 @@ def test_levels_come_from_one_frame_and_apply_to_another(frame) -> None:
 
 
 def test_a_missing_volatility_column_does_not_silently_open_the_gate(frame) -> None:
+    """An earlier version of this test asserted the opposite of its own name.
+
+    It pinned ``thresholds() == {}`` for a missing column — and an empty dict
+    masks nothing, which *is* the silently-open gate. Three instrument-wide
+    searches ran with a misnamed volatility column before anyone noticed,
+    because this test blessed the behaviour. A gate asked to filter on a column
+    the frame does not have must refuse.
+    """
     gate = MarketGate(min_volatility_quantile=0.9, volatility_column="not_a_column")
-    assert gate.thresholds(frame) == {}
+    with pytest.raises(KeyError, match="not_a_column"):
+        gate.thresholds(frame)
 
 
 def test_impossible_quantiles_are_rejected() -> None:

@@ -146,7 +146,10 @@ def successive_halving(
             for c, m in rung.results
             if objective in m
             and not pd.isna(m[objective])
-            and m.get("trades", np.inf) >= minimum_trades
+            # A scorer that reports no trade count does not get a pass on the
+            # trade filter: np.inf here waved through anything that forgot the
+            # column.
+            and m.get("trades", 0.0) >= minimum_trades
         ]
         if not eligible:
             raise SearchError(

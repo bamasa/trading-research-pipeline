@@ -211,7 +211,8 @@ def build_features(book: pd.DataFrame) -> pd.DataFrame:
 def is_basis_points(name: str) -> bool:
     """Whether a column is denominated in basis points of price."""
     return name.endswith("_bp") or any(
-        token in name for token in ("ret", "vol", "reversal", "span", "impact", "distance")
+        token in name
+        for token in ("ret", "vol", "reversal", "span", "impact", "distance", "spread")
     )
 
 
@@ -309,25 +310,54 @@ HYPERPARAMETERS: dict[str, tuple[dict[str, Any], ...]] = {
     ),
     "logistic": ({}, {"C": 0.01}, {"C": 0.1}, {"C": 10.0}, {"class_weight": None}),
     "ridge": ({}, {"alpha": 0.01}, {"alpha": 10.0}, {"alpha": 1000.0}),
+    # GradientBoostedRegressor accepts a narrower constructor than the
+    # classifier, so it gets the subset. Handing it the full tree family made
+    # a third of its draws crash on keywords it does not take — and the search
+    # swallowed those as "skipped", so a slice of the space was silently never
+    # searched.
+    "tree_small": (
+        {},
+        {"max_depth": 2, "n_estimators": 150, "learning_rate": 0.1},
+        {"max_depth": 3, "n_estimators": 300, "learning_rate": 0.05},
+        {"max_depth": 6, "n_estimators": 300, "learning_rate": 0.03},
+    ),
     "none": ({},),
 }
 
 #: Which family each model draws its hyperparameters from. Composites and
 #: ensembles pass their parameters to every member, so they take the family of
 #: whatever they are mostly made of.
+#: Composites pass their parameters to *every* member, and several members are
+#: rules whose constructors take none — so any composite with a rule inside is
+#: "none". ``bound_mixed`` pairs a ridge with a tree regressor, and a keyword
+#: for one crashes the other, so it is "none" too.
 FAMILY: dict[str, str] = {
     "logistic": "logistic",
     "xgboost": "tree",
     "ridge": "ridge",
-    "xgboost_regressor": "tree",
+    "xgboost_regressor": "tree_small",
     "bound_ridge": "ridge",
-    "bound_mixed": "ridge",
+    "bound_mixed": "none",
     "ensemble": "none",
     "agree": "none",
     "rule_gated_by_model": "none",
-    "meta_rule_model": "logistic",
+    "meta_rule_model": "none",
     "meta_rule_tree": "none",
 }
+
+#: Models that read named columns — the rules, and every composite with a rule
+#: inside. Feature selection must not run for them: the selector keeps whatever
+#: scores well, and a plane that scores well can still be missing the one
+#: column the rule reads by name, which crashes the fit.
+RULE_BACKED = frozenset(
+    {
+        *(),
+        "agree",
+        "rule_gated_by_model",
+        "meta_rule_model",
+        "meta_rule_tree",
+    }
+)
 
 SPACE: dict[str, Sequence[Any]] = {
     "plane": ("touch", "micro", "depth", "wide"),
@@ -406,7 +436,7 @@ def draw(n: int, seed: int) -> list[Config]:
         # feature selection are not theirs to vary.
         family = HYPERPARAMETERS[FAMILY.get(model, "none")] if model not in RULES else ({},)
         params = family[int(rng.integers(len(family)))]
-        select = "all" if model in RULES else str(choice["select"])
+        select = "all" if model in RULES or model in RULE_BACKED else str(choice["select"])
         config = Config(
             plane=plane,
             model=model,
@@ -466,11 +496,21 @@ class Data:
     """The span, its features, and the targets built lazily and kept."""
 
     def __init__(
-        self, frames: dict[int, pd.DataFrame], spread_bp: np.ndarray, mid: np.ndarray
+        self,
+        frames: dict[int, pd.DataFrame],
+        spread_bp: np.ndarray,
+        mid: np.ndarray,
+        *,
+        search_end: int | None = None,
     ) -> None:
         self.frames = frames
         self.spread_bp = spread_bp
         self.mid = mid
+        # The cost baked into cost-aware labels comes from the search block
+        # alone. The median over the whole span includes the held-out days,
+        # which is a small look-ahead in exactly the place that claims there
+        # is none.
+        self.search_end = search_end if search_end is not None else len(mid)
         self.plane = planes(next(iter(frames.values())))
         self._targets: dict[tuple[str, int], pd.Series] = {}
         self._forward: dict[int, np.ndarray] = {}
@@ -488,7 +528,9 @@ class Data:
             values, _ = build_target(
                 name,
                 frame,
-                cost_bp=float(COSTS.round_trip_bp(float(np.median(self.spread_bp)))),
+                cost_bp=float(
+                    COSTS.round_trip_bp(float(np.median(self.spread_bp[: self.search_end])))
+                ),
                 horizon=horizon,
             )
             self._targets[key] = values
@@ -603,10 +645,15 @@ def run_block(
                 continue
 
             if gate is not None:
+                # Columns named exactly as the gate reads them. A frame that
+                # spelt the volatility column differently made thresholds()
+                # return nothing and the gate silently open — every quiet_out
+                # candidate in three instrument-wide searches ran ungated, and
+                # the gate axis compared open against open.
                 gate_frame = pd.DataFrame(
                     {
-                        "spread_bp_now": data.spread_bp,
-                        "volatility": features["log_mid_vol50"].to_numpy(),
+                        gate.spread_column: data.spread_bp,
+                        gate.volatility_column: features["log_mid_vol50"].to_numpy(),
                     }
                 )
                 levels = gate.thresholds(gate_frame[train_mask])
@@ -680,6 +727,16 @@ def run_block(
             proba = np.zeros((length, len(CLASSES)))
             proba[:, CLASSES.index(0)] = 1.0
             proba[usable_here] = proba_usable
+            # Between usable rows the model's opinion is its last opinion.
+            # Leaving the filler at "all hold" handed p_buy = p_sell = 0 to the
+            # exit logic, so the moment a gate closed, every confidence exit
+            # fired at once — positions were closed by the gate blinking, not
+            # by the model changing its mind.
+            last = np.maximum.accumulate(
+                np.where(np.isin(np.arange(length), usable_here), np.arange(length), -1)
+            )
+            filled = last >= 0
+            proba[filled] = proba[last[filled]]
             decision = np.zeros(length, dtype=int)
             decision[usable_here] = decide(proba_usable, min_confidence=confidence)
 
@@ -723,6 +780,8 @@ def summarise(trades: pd.DataFrame, days: float) -> dict[str, float]:
     # by refit block rather than by time is not a drawdown.
     net = trades.sort_values("at")["net_bp"]
     equity = net.cumsum()
+    # Peak anchored at zero, so a losing opening run counts as drawdown.
+    peak = equity.cummax().clip(lower=0.0)
     return {
         "trades": float(len(net)),
         "trades_per_day": float(len(net) / days) if days else float("nan"),
@@ -735,7 +794,7 @@ def summarise(trades: pd.DataFrame, days: float) -> dict[str, float]:
         "net_per_trade_bp": float(net.mean()),
         "net_bp": float(net.sum()),
         "hit_rate": float((net > 0).mean()),
-        "max_drawdown_bp": float((equity.cummax() - equity).max()),
+        "max_drawdown_bp": float((peak - equity).max()),
         "dispersion_bp": float(net.std()),
     }
 
@@ -769,9 +828,8 @@ def main() -> None:
         frames[int(window)] = frame
         print(f"  normalised at {window}: {frame.notna().all(axis=1).mean():.1%} complete rows")
     del raw
-    data = Data(frames, spread_bp, mid)
-
     cut = int(len(book) * SEARCH_SHARE)
+    data = Data(frames, spread_bp, mid, search_end=cut)
     final_bounds = [(cut, len(book))]
     search_days = cut / ROWS_PER_DAY
     final_days = (len(book) - cut) / ROWS_PER_DAY

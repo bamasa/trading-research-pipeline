@@ -1,0 +1,30 @@
+{
+  "config": {
+    "plane": "micro",
+    "model": "rule_gated_by_model",
+    "target": "direction",
+    "horizon": 240,
+    "hold": 240,
+    "cooldown": 480,
+    "exit": "clock",
+    "objective": "net_per_trade_bp",
+    "refit": "2d",
+    "train_days": 10,
+    "gate": "tight_only",
+    "params": [],
+    "select": "top16",
+    "exit_level": 6.0,
+    "norm_window": 4000
+  },
+  "final": {
+    "trades": 100.0,
+    "trades_per_day": 7.51876427716741,
+    "gross_per_trade_bp": 6.096969853475632,
+    "cost_per_trade_bp": 15.211045722113642,
+    "net_per_trade_bp": -9.114075868638007,
+    "net_bp": -911.4075868638008,
+    "hit_rate": 0.53,
+    "max_drawdown_bp": 2523.3377389405114,
+    "dispersion_bp": 205.9025551614308
+  }
+}

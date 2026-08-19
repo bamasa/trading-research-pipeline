@@ -1368,25 +1368,22 @@ the result deteriorating as the rate rose, which invites the reading that it
 would keep improving as the rate fell.
 
 Swept per instrument over four walk-forward folds, with the threshold chosen on
-validation and applied to test, BTCUSDT looked like it did:
+validation and applied to test, BTCUSDT showed exactly that shape: clearly
+positive cells at one and two trades a day (+27 and +20 bp per trade on 13 and
+22 trades), negative on both sides of them — the interior optimum a real effect
+would make. XRP was negative everywhere, CRV near zero, BICO mixed.
 
-| Target rate | Trades | Net per trade | Total | Positive |
-|---|---|---|---|---|
-| 2/week | 4 | −22.57 | −90 | 25% |
-| 4/week | 6 | −25.17 | −151 | 17% |
-| 1/day | 13 | **+27.17** | **+353** | 54% |
-| 2/day | 22 | **+19.94** | **+439** | 59% |
-| 5/day | 49 | +0.47 | +23 | 51% |
-| 10/day | 84 | −4.76 | −400 | 49% |
+That sweep was an interactive session whose script was not preserved, so its
+numbers are quoted rather than reproducible from this repository — a documented
+lapse, and one more reason to treat what follows as the actual evidence. The
+committed record starts with the out-of-sample test below, whose "chosen on"
+column re-measures the same period with the same procedure.
 
-Two positive cells, with an interior optimum on either side of them — the shape
-a real effect makes. XRP was negative everywhere, CRV near zero, BICO mixed.
-
-At twenty-two trades and 40 bp of per-trade dispersion those cells sit near two
-standard errors, and this table is four instruments by six rates. Twenty-four
-cells produce two-sigma results by chance about as often as not, so nothing in
-the table can settle whether the effect is real. Only data that did not produce
-it can.
+At twenty-two trades and 40 bp of per-trade dispersion the positive cells sit
+near two standard errors, and the sweep was four instruments by six rates.
+Twenty-four cells produce two-sigma results by chance about as often as not, so
+nothing in that table could settle whether the effect was real. Only data that
+did not produce it can.
 
 ### The out-of-sample test
 
@@ -1405,11 +1402,11 @@ freezing the weights would have tested decay rather than the strategy.
 | 2/day | **+12.31** | −8.51 |
 | 5/day | +6.91 | −10.46 |
 
-It did not survive. The interesting part is the shape of the failure rather than
-its direction: on the period the rate was chosen on, *every* rate is positive —
-including 5/day, which the original sweep scored near zero and 10/day, which it
-scored clearly negative. On fresh data every rate is negative, within four
-basis points of the others.
+It did not survive. The interesting part is the shape of the failure rather
+than its direction: on the period the rates were chosen on, the three rates
+from one a day upward are all positive — including 5/day, which the original
+sweep had scored at zero — and only the barely-sampled 2/week cell is not. On
+fresh data every rate is negative, within four basis points of the others.
 
 That is not a threshold that stopped working. It is a period that flattered
 everything run on it. February and early March 2024 trended on BTC hard enough

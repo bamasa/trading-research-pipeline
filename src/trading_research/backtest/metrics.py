@@ -43,13 +43,17 @@ def drawdown_bp(net_per_trade: np.ndarray) -> tuple[float, int]:
     if len(net_per_trade) == 0:
         return 0.0, 0
     equity = np.cumsum(net_per_trade)
-    peak = np.maximum.accumulate(equity)
+    # The peak starts at zero — the equity before any trade — so a losing
+    # opening run counts as drawdown. Anchoring at the first trade's equity
+    # hid exactly that: a strategy that lost from its first trade reported no
+    # drawdown until it had first made something to lose.
+    peak = np.maximum.accumulate(np.maximum(equity, 0.0))
     underwater = equity - peak
     trough = int(np.argmin(underwater))
     if underwater[trough] >= 0:
         return 0.0, 0
     # Where the peak that this trough fell from was set.
-    start = int(np.argmax(equity[: trough + 1]))
+    start = int(np.argmax(equity[: trough + 1])) if equity[: trough + 1].max() > 0 else 0
     return float(-underwater[trough]), trough - start
 
 
@@ -105,7 +109,11 @@ def summarise(
 def equity_curve(net_per_trade: np.ndarray) -> pd.DataFrame:
     """Cumulative result, its running peak and how far underwater it is."""
     equity = np.cumsum(net_per_trade)
-    peak = np.maximum.accumulate(equity) if len(equity) else equity
+    # The peak starts at zero — the equity before any trade — so a losing
+    # opening run counts as drawdown. Anchoring at the first trade's equity
+    # hid exactly that: a strategy that lost from its first trade reported no
+    # drawdown until it had first made something to lose.
+    peak = np.maximum.accumulate(np.maximum(equity, 0.0)) if len(equity) else equity
     return pd.DataFrame(
         {
             "trade": np.arange(len(equity)),

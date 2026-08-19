@@ -255,7 +255,16 @@ def thin(
 
     def close(at: int, reason: str) -> None:
         nonlocal open_direction, free_from, best_move_bp
-        move = float(forward_bp[open_at]) if reason == "clock" or mid is None else raw_move(at)
+        # A clock exit after exactly ``hold_periods`` rows is scored on
+        # ``forward_bp``, which is by construction the move over those rows.
+        # Any other duration — a hold scaled by confidence, or the data ending
+        # first — is scored on the price path, because ``forward_bp`` measures
+        # the fixed horizon and not the rows actually held: the earlier version
+        # credited a position held twice as long with the move of the unscaled
+        # one. Without a path the fixed-horizon move is the only number there
+        # is, and it is used with that caveat.
+        exact_clock = reason == "clock" and at - open_at == rules.hold_periods
+        move = float(forward_bp[open_at]) if exact_clock or mid is None else raw_move(at)
         trades.append(
             Trade(
                 entry_index=open_at,

@@ -87,11 +87,22 @@ class MarketGate:
         make the gate depend on the period it is judging.
         """
         out: dict[str, float] = {}
-        if self.min_volatility_quantile > 0 and self.volatility_column in frame.columns:
+        if self.min_volatility_quantile > 0:
+            # Missing column -> error, not an open gate. The forgiving version
+            # returned an empty dict, and an empty dict masks nothing — so a
+            # frame whose volatility column was named differently produced a
+            # gate that silently let everything through. Three instrument-wide
+            # searches ran that way, and their gate axis compared open to open.
+            if self.volatility_column not in frame.columns:
+                raise KeyError(
+                    f"gate needs {self.volatility_column!r}; frame has {sorted(frame.columns)[:8]}"
+                )
             column = frame[self.volatility_column].dropna()
             if not column.empty:
                 out["min_volatility"] = float(column.quantile(self.min_volatility_quantile))
-        if self.max_spread_quantile < 1 and self.spread_column in frame.columns:
+        if self.max_spread_quantile < 1:
+            if self.spread_column not in frame.columns:
+                raise KeyError(f"gate needs {self.spread_column!r}")
             column = frame[self.spread_column].dropna()
             if not column.empty:
                 out["max_spread"] = float(column.quantile(self.max_spread_quantile))
