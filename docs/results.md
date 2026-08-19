@@ -1337,7 +1337,94 @@ that section implied.** Any study reporting classification accuracy or
 correlation against an FI-2010 label is reporting a figure that is more than
 half hindsight, and nothing in the usual metrics distinguishes that from skill.
 
-## 25. What would have to change
+## 25. Trading rarely, and the period that flattered everything
+
+Cost is charged per trade, so the obvious escape from an 11 bp round trip is to
+take fewer of them: raise the entry threshold until only the strongest signals
+clear it, and let the rest of the day pass. §17 swept the trade rate and found
+the result deteriorating as the rate rose, which invites the reading that it
+would keep improving as the rate fell.
+
+Swept per instrument over four walk-forward folds, with the threshold chosen on
+validation and applied to test, BTCUSDT looked like it did:
+
+| Target rate | Trades | Net per trade | Total | Positive |
+|---|---|---|---|---|
+| 2/week | 4 | −22.57 | −90 | 25% |
+| 4/week | 6 | −25.17 | −151 | 17% |
+| 1/day | 13 | **+27.17** | **+353** | 54% |
+| 2/day | 22 | **+19.94** | **+439** | 59% |
+| 5/day | 49 | +0.47 | +23 | 51% |
+| 10/day | 84 | −4.76 | −400 | 49% |
+
+Two positive cells, with an interior optimum on either side of them — the shape
+a real effect makes. XRP was negative everywhere, CRV near zero, BICO mixed.
+
+At twenty-two trades and 40 bp of per-trade dispersion those cells sit near two
+standard errors, and this table is four instruments by six rates. Twenty-four
+cells produce two-sigma results by chance about as often as not, so nothing in
+the table can settle whether the effect is real. Only data that did not produce
+it can.
+
+### The out-of-sample test
+
+Bybit publishes daily archives back to 2023, so sixty-two further days of
+BTCUSDT were downloaded — 10 March to 10 May 2024, immediately after the period
+the sweep saw. What is held fixed is the *procedure*, not the model: the same
+features, the same rolling normalisation, the same refit cadence, the same
+validation-chosen threshold, the same target rates. A single fit applied across
+two months would have gone stale, and §10 already measured refitting frequency;
+freezing the weights would have tested decay rather than the strategy.
+
+| Target rate | Period it was chosen on | Sixty-two fresh days |
+|---|---|---|
+| 2/week | −7.09 | −8.47 |
+| 1/day | **+10.21** | −6.38 |
+| 2/day | **+12.31** | −8.51 |
+| 5/day | +6.91 | −10.46 |
+
+It did not survive. The interesting part is the shape of the failure rather than
+its direction: on the period the rate was chosen on, *every* rate is positive —
+including 5/day, which the original sweep scored near zero and 10/day, which it
+scored clearly negative. On fresh data every rate is negative, within four
+basis points of the others.
+
+That is not a threshold that stopped working. It is a period that flattered
+everything run on it. February and early March 2024 trended on BTC hard enough
+that any configuration extracting direction looked profitable; the sweep read
+the resulting spread across cells as a signal about trade rate and picked the
+two cells the noise favoured. What was selected was the window, not the rate.
+
+The fresh period is also where the arithmetic gets easier: three times the
+trades, and dispersion falling from 66 bp to 27 bp. At 79 trades and 27 bp,
+−8.51 bp per trade is roughly four standard errors from zero. The negative
+result is far better established than the positive one ever was.
+
+### Why lowering the rate could not have worked
+
+The identity in §6 says the same thing in advance. Expected profit per trade is
+edge minus cost, and edge is bounded by IC × σ(move) — about 0.4 bp here against
+11 bp of round trip. Trading less often changes how many times that −10.6 bp is
+paid; it does not change the sign. A selective threshold helps only if the
+model's confidence ranks its own accuracy well enough that the top fraction of
+signals carries several times the average edge, and §23 measured that ranking
+directly: the strongest decile is better than the weakest, but by a factor of
+about two, not the factor of thirty required.
+
+The two-week and four-week cells make the point from the other end. They are the
+lowest rates tested and among the worst results in the table, on both periods —
+at four trades the outcome is whichever way four coins landed, and no threshold
+policy can make four samples informative.
+
+This is the last of the taker-side levers. Horizon, feature set, model class,
+target definition, exit rule, market gate, instrument, retraining frequency,
+book depth and now trade rate have each been tested and none closes a
+twenty-fold gap. What remains is on the execution side (§26), not the signal
+side.
+
+---
+
+## 26. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
