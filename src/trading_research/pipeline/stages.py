@@ -344,6 +344,15 @@ ENSEMBLES = {
     "blend": ("order_flow", "logistic"),
 }
 
+#: Models that predict an edge *and* their uncertainty about it, so the trade
+#: rule can require a margin rather than a magnitude. Built with a cost, which
+#: the caller supplies through ``params``.
+UNCERTAIN = {
+    "bound_ridge": ("ridge", "ridge"),
+    "bound_tree": ("xgboost_regressor", "xgboost_regressor"),
+    "bound_mixed": ("ridge", "xgboost_regressor"),
+}
+
 #: Two-stage strategies. A primary picks the side and a secondary decides
 #: whether the trade is worth taking — the arrangement §14 argues for, since the
 #: best direction-finder here is a rule and the models were better at judging
@@ -374,6 +383,17 @@ def build_model(name: str, **params: Any) -> Any:
         from trading_research.models.ensemble import EnsembleModel
 
         return EnsembleModel([build_model(member, **params) for member in ENSEMBLES[name]])
+    if name in UNCERTAIN:
+        from trading_research.models.uncertainty import ConfidenceBound, HeteroscedasticRegressor
+
+        mean_name, variance_name = UNCERTAIN[name]
+        cost_bp = float(params.pop("cost_bp", 11.0))
+        k = float(params.pop("k", 1.0))
+        hetero = HeteroscedasticRegressor(
+            build_model(mean_name, scale_bp=cost_bp),
+            build_model(variance_name, scale_bp=cost_bp),
+        )
+        return ConfidenceBound(hetero, cost_bp=cost_bp, k=k)
     if name in META:
         from trading_research.models.meta import MetaLabelled
 
@@ -386,7 +406,7 @@ def build_model(name: str, **params: Any) -> Any:
         built = [build_model(member, **params) for member in members]
         return Agreement(built) if kind == "agreement" else Gated(built[0], built[1])
     if name not in MODELS:
-        known = sorted([*MODELS, *ENSEMBLES, *COMPOSITES, *META])
+        known = sorted([*MODELS, *ENSEMBLES, *COMPOSITES, *META, *UNCERTAIN])
         raise StageError(f"unknown model {name!r}; known: {', '.join(known)}")
     module_path, class_name = MODELS[name].split(":")
     import importlib

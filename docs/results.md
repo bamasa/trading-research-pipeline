@@ -1209,7 +1209,56 @@ that test was quicker than either debugging session.
 
 With both bugs fixed the figure is −20.77, and pooling is uniformly harmful.
 
-## 23. What would have to change
+## 23. How sure is the model, and the number that decides everything
+
+Every model here produced one number per observation and the pipeline selected
+trades by *how large* it was. That is the wrong filter. A large prediction the
+model has no business making is exactly the one to skip, and a modest one it is
+confident about may be the better trade.
+
+The rule a desk actually writes needs two numbers:
+
+    long   when  mu - k*sigma >  cost
+    short  when  mu + k*sigma < -cost
+
+So the model predicts both: a mean regressor for the edge, and a second
+regressor for the squared error the first will make — fitted on residuals from a
+chronologically held-out tail, because a variance model trained on in-sample
+residuals learns that the mean model is far better than it is and opens the gate
+on everything.
+
+### It never fires, and the reason is one ratio
+
+| Instrument | Prediction σ(mu) | Uncertainty sigma | Ratio | Needs mu above |
+|---|---:|---:|---:|---:|
+| BTCUSDT | 0.42 bp | 7.87 bp | **0.05** | 18.9 bp |
+| XRPUSDT | 0.64 bp | 9.35 bp | **0.07** | 22.2 bp |
+| XMRUSDT | 3.17 bp | 31.32 bp | **0.10** | 43.1 bp |
+
+**The model's uncertainty about its own forecast is ten to twenty times the
+forecast.** No confidence-bound rule can trade on that — not at an 11 bp cost,
+not at 1 bp, not at zero. The gate opened on 0.01% of rows at a cost of 0.3 bp
+and on nothing at all at the real one.
+
+That is the sharpest single diagnostic this project has produced, and it needed
+a model that reports its own uncertainty to become visible. Everything before it
+measured how large the predictions were; this measures whether they mean
+anything, and the answer is that they are noise with a small mean.
+
+### What a working version looks like
+
+The construction comes from a closed-source model on the same instrument whose
+predictions correlate with its target at 0.80. That implies a prediction
+dispersion near 1.6 bp against a residual near 1.2 — a ratio of about 1.3,
+twenty times ours. At that ratio the bound clears a 1 bp cost comfortably and an
+11 bp cost not at all, which is consistent with everything in §9: the rule works
+where the arithmetic already worked, and adds nothing where it did not.
+
+So the technique is sound and it is not the missing piece. What separates a
+model that can use it from ours is not the decision rule but the forecast, and
+the gap there is a factor of twenty.
+
+## 24. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a
