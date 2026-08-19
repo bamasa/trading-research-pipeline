@@ -449,6 +449,10 @@ Done:
 - [x] Model ensembles, and a market gate that declines to trade in conditions
       that cannot support the cost
 - [x] Successive halving over sampled configurations, in place of a grid
+- [x] Rolling normalisation of features against a trailing window
+- [x] Pooling instruments into one training set — **tried and rejected**: every
+      instrument did worse on the pool than on itself (§22), and the scope is
+      deliberately one instrument at a time from here
 - [x] Instrument screening by headroom, before anything is fitted
 - [x] A review rubric and an evidence pack for it, applied to this project's
       own result
