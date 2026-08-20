@@ -192,7 +192,13 @@ class LightGBMBaseline(Model):
             reg_lambda=self.params["reg_lambda"],
             random_state=self.params["seed"],
             class_weight="balanced",
-            n_jobs=-1,
+            # Single-threaded on purpose. LightGBM ships its own OpenMP
+            # runtime, and on macOS loading it into a process that already has
+            # XGBoost's or PyTorch's segfaults as soon as it opens a thread
+            # pool. The suite hits that whenever a torch test runs first. One
+            # thread costs a little speed and makes the model usable next to
+            # the rest of the project.
+            n_jobs=1,
             verbose=-1,
         )
         self.estimator_.fit(x, y)
