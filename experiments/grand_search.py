@@ -579,8 +579,10 @@ def refit_points(config: Config, start: int, stop: int, breaks: Sequence[int]) -
         # it belongs to a regime the detector says has ended.
         floors = [0, *points[:-1]]
     else:
-        days = {"1d": 1, "2d": 2, "5d": 5}[config.refit]
-        points = list(range(start, stop, int(days * ROWS_PER_DAY)))
+        # "<n>d" for any n, so a caller can sweep the apply window as a
+        # continuous axis rather than picking from a fixed menu.
+        days = float(config.refit.removesuffix("d"))
+        points = list(range(start, stop, max(1, int(days * ROWS_PER_DAY))))
         # A fixed cadence makes no claim about staleness, so training may reach
         # as far back as the window asks for.
         floors = [0] * len(points)

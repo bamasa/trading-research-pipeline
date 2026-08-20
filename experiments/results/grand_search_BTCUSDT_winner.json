@@ -1,0 +1,30 @@
+{
+  "config": {
+    "plane": "wide",
+    "model": "meta_rule_model",
+    "target": "triple_barrier",
+    "horizon": 24,
+    "hold": 60,
+    "cooldown": 60,
+    "exit": "clock",
+    "objective": "net_bp",
+    "refit": "5d",
+    "train_days": 20,
+    "gate": "tight_only",
+    "params": [],
+    "select": "all",
+    "exit_level": 12.0,
+    "norm_window": 1000
+  },
+  "final": {
+    "trades": 44.0,
+    "trades_per_day": 1.5146239138143296,
+    "gross_per_trade_bp": -5.3043769344465765,
+    "cost_per_trade_bp": 12.014376908829234,
+    "net_per_trade_bp": -17.31875384327581,
+    "net_bp": -762.0251691041357,
+    "hit_rate": 0.25,
+    "max_drawdown_bp": 768.3151286666204,
+    "dispersion_bp": 28.21066550956073
+  }
+}

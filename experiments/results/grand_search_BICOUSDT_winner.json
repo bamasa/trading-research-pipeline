@@ -1,30 +1,30 @@
 {
   "config": {
     "plane": "micro",
-    "model": "rule_gated_by_model",
+    "model": "agree",
     "target": "direction",
-    "horizon": 240,
-    "hold": 240,
-    "cooldown": 480,
-    "exit": "clock",
-    "objective": "net_per_trade_bp",
-    "refit": "2d",
+    "horizon": 24,
+    "hold": 60,
+    "cooldown": 60,
+    "exit": "take_profit_stop",
+    "objective": "net_bp",
+    "refit": "1d",
     "train_days": 10,
-    "gate": "tight_only",
+    "gate": "open",
     "params": [],
-    "select": "top16",
-    "exit_level": 6.0,
-    "norm_window": 4000
+    "select": "all",
+    "exit_level": 25.0,
+    "norm_window": 16000
   },
   "final": {
-    "trades": 100.0,
-    "trades_per_day": 7.51876427716741,
-    "gross_per_trade_bp": 6.096969853475632,
-    "cost_per_trade_bp": 15.211045722113642,
-    "net_per_trade_bp": -9.114075868638007,
-    "net_bp": -911.4075868638008,
-    "hit_rate": 0.53,
-    "max_drawdown_bp": 2523.3377389405114,
-    "dispersion_bp": 205.9025551614308
+    "trades": 184.0,
+    "trades_per_day": 13.834526269988034,
+    "gross_per_trade_bp": 1.4603079639295016,
+    "cost_per_trade_bp": 16.163192009845165,
+    "net_per_trade_bp": -14.702884045915663,
+    "net_bp": -2705.330664448482,
+    "hit_rate": 0.5054347826086957,
+    "max_drawdown_bp": 3108.5638319375407,
+    "dispersion_bp": 65.20662329891117
   }
 }
