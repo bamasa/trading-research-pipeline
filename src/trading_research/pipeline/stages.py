@@ -328,6 +328,12 @@ MODELS = {
     # trading_research.labels.targets for what they are asked to predict.
     "ridge": "trading_research.models.regression:RidgeBaseline",
     "xgboost_regressor": "trading_research.models.regression:GradientBoostedRegressor",
+    # Randomised tree ensembles and a second booster. Present for what they
+    # contribute to a stack -- members that split differently make different
+    # mistakes -- as much as for their own scores.
+    "random_forest": "trading_research.models.forests:RandomForest",
+    "extra_trees": "trading_research.models.forests:ExtraTrees",
+    "lightgbm": "trading_research.models.forests:LightGBMBaseline",
 }
 
 #: Which models can be fitted on which kind of target. A classifier handed a
