@@ -203,7 +203,9 @@ def prepared_evaluator(
             forward,
             out_frame["spread_bp_now"].to_numpy(dtype="float64"),
             rules,
-            mid=out_frame["mid"].to_numpy() if rules.needs_price_path and "mid" in out_frame else None,
+            mid=out_frame["mid"].to_numpy()
+            if rules.needs_price_path and "mid" in out_frame
+            else None,
             p_buy=proba[:, CLASSES.index(1)] if rules.needs_probabilities else None,
             p_sell=proba[:, CLASSES.index(-1)] if rules.needs_probabilities else None,
         )
