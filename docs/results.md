@@ -1728,7 +1728,10 @@ The entry is sound and the exit is not. So the model is not asked to replace the
 rule — it is asked the questions the rule does not ask. This is meta-labelling:
 the rule picks the side, the model decides what to do about it.
 
-![Net per trade by variant](images/reversion_variants_ALL.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/reversion_variants_ALL_dark.png">
+  <img alt="Net per trade by variant" src="images/reversion_variants_ALL_light.png">
+</picture>
 
 On 3,297 held-out trades across 26 instruments, models fitted on the search
 block only. Comparisons are **paired** — the variants trade the same entries and
@@ -1747,7 +1750,10 @@ noise:
 | **baseline: fixed ten-minute clock** | **+7.4** | — | — |
 | fixed trailing stop, level chosen on search | +1.2 | −6.2 | −5.3 |
 
-![Cumulative result](images/reversion_equity_ALL.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/reversion_equity_ALL_dark.png">
+  <img alt="Cumulative result" src="images/reversion_equity_ALL_light.png">
+</picture>
 
 Every model variant beats the rule, both boosters agree closely, and the
 arrangement that works best asks the model *how far a trade will run* and leaves

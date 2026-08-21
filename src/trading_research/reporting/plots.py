@@ -47,6 +47,61 @@ def _pyplot() -> Any:
     return plt
 
 
+#: Two renderings of every chart the README shows. GitHub serves the reader's
+#: theme, and a white canvas dropped into a dark page reads as a glaring
+#: rectangle — so the charts are rendered twice and the README picks with a
+#: ``<picture media="prefers-color-scheme">`` block. Line colours are shared:
+#: they were chosen to survive both grounds, and only the ground itself, the
+#: text and the grid change.
+THEMES: dict[str, dict[str, str]] = {
+    "light": {
+        "figure.facecolor": "white",
+        "savefig.facecolor": "white",
+        "axes.facecolor": "white",
+        "axes.edgecolor": "#1f2328",
+        "axes.labelcolor": "#1f2328",
+        "text.color": "#1f2328",
+        "xtick.color": "#1f2328",
+        "ytick.color": "#1f2328",
+        "grid.color": "#d0d7de",
+    },
+    "dark": {
+        "figure.facecolor": "#0d1117",
+        "savefig.facecolor": "#0d1117",
+        "axes.facecolor": "#0d1117",
+        "axes.edgecolor": "#e6edf3",
+        "axes.labelcolor": "#e6edf3",
+        "text.color": "#e6edf3",
+        "xtick.color": "#e6edf3",
+        "ytick.color": "#e6edf3",
+        "grid.color": "#30363d",
+    },
+}
+
+
+def themed(theme: str) -> Any:
+    """A matplotlib context for one of the two grounds."""
+    if theme not in THEMES:
+        raise KeyError(f"theme must be one of {sorted(THEMES)}, got {theme!r}")
+    return _pyplot().rc_context(THEMES[theme])
+
+
+def both_themes(draw: Any, path: Path | str) -> list[Path]:
+    """Render one chart twice, as ``name_light.png`` and ``name_dark.png``.
+
+    ``draw`` takes the output path and produces the figure; everything about
+    the theme is handled here so chart code stays theme-blind.
+    """
+    base = Path(path)
+    out = []
+    for theme in THEMES:
+        target = base.with_name(f"{base.stem}_{theme}{base.suffix}")
+        with themed(theme):
+            draw(target)
+        out.append(target)
+    return out
+
+
 def _finish(fig: Any, ax: Any, title: str, path: Path) -> Path:
     ax.set_title(title, loc="left", fontsize=11, pad=10)
     ax.spines["top"].set_visible(False)
@@ -789,6 +844,7 @@ def variant_comparison(
     label_column: str = "variant",
     value_column: str = "net_per_trade_bp",
     baseline: float | None = None,
+    baseline_label: str = "baseline rule",
     title: str = "Net per trade",
 ) -> Path:
     """Horizontal bars, ordered, with the baseline drawn as a line.
@@ -805,7 +861,7 @@ def variant_comparison(
     ]
     ax.barh(ordered[label_column], ordered[value_column], color=colours, height=0.62)
     if baseline is not None:
-        ax.axvline(baseline, color="#c53030", linewidth=1.2, linestyle="--", label="baseline rule")
+        ax.axvline(baseline, color="#c53030", linewidth=1.2, linestyle="--", label=baseline_label)
         ax.legend(frameon=False, fontsize=9, loc="lower right")
     ax.set_xlabel("basis points per trade")
     ax.grid(axis="x", alpha=0.25, linewidth=0.6)

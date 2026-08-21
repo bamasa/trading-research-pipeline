@@ -129,7 +129,10 @@ paired *t* of 10.0, with two independent boosters agreeing to within 1.6 bp.
 Asking the model *when to exit* instead fails on every architecture tried — that
 distinction is the useful part of the exercise.
 
-![Net per trade by variant](docs/images/reversion_variants_ALL.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/reversion_variants_ALL_dark.png">
+  <img alt="Net per trade by variant" src="docs/images/reversion_variants_ALL_light.png">
+</picture>
 
 ### The state it requires, measured
 
@@ -139,7 +142,10 @@ distinction is the useful part of the exercise.
 | Index move over the span | +49.8% | −33.1% |
 | Dispersion of daily moves | 265 bp | 483 bp |
 
-![Net per trade by holding period](docs/images/reversion_horizon_profile.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/reversion_horizon_profile_dark.png">
+  <img alt="Net per trade by holding period" src="docs/images/reversion_horizon_profile_light.png">
+</picture>
 
 The holding-period profile is the mechanism made visible: two minutes loses, ten
 is best, longer decays — the shape a reverting market produces and a trending one
@@ -228,7 +234,10 @@ regression, gradient boosting and their ensemble on gross edge per trade, on
 both instruments, through identical machinery. The models' extra apparatus
 mostly buys selectivity, which the cost floor then eats.
 
-![Rules against models](assets/strategies_btc.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/strategies_btc_dark.png">
+  <img alt="Rules against models" src="docs/images/strategies_btc_light.png">
+</picture>
 
 Given five strategies and a daily choice between them — including the choice
 not to trade — the selector stands aside on every single day it is offered
@@ -244,12 +253,17 @@ is a shortfall of 0.37 bp rather than the ~10 bp gap everywhere else, and it is
 still a loss: negative in sign, over 141 trades, with fewer than half its windows
 positive. It is the closest this study gets, and close is not across.
 
-![Gross against net](assets/bt_equity.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/bt_equity_dark.png">
+  <img alt="Gross against net" src="docs/images/bt_equity_light.png">
+</picture>
 
-The whole study in one figure: the model's calls are right often enough for the
-gross line to climb, and the fee takes it 1,200 basis points the other way.
-
-![Where the model traded](assets/bt_trades.png)
+The whole study in one figure — the best BTCUSDT configuration's own trades,
+rebuilt from the committed table by
+[`scripts/render_readme_charts.py`](scripts/render_readme_charts.py): the
+model's calls are right often enough for the gross line to climb three thousand
+basis points, and the cost of crossing the spread takes the same trades eight
+thousand the other way.
 
 ### Where the ceiling actually is
 
