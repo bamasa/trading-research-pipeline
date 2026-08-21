@@ -12,6 +12,9 @@ the test — is what stopped that.
 
 ## Status meanings
 
+**Tally: five killed, two artefacts, none open.** Every candidate this project
+produced has now met the test it named in advance, and none survived it.
+
 | Status | Meaning |
 |---|---|
 | **candidate** | Positive on a held-out block; has not yet met data neither block saw |
@@ -21,83 +24,61 @@ the test — is what stopped that.
 
 ---
 
-## Open candidates
+## Killed
 
 ### Market reversion at ten minutes
 
-**Status: candidate.** Frozen at
-[`strategies/reversion.py`](../src/trading_research/strategies/reversion.py);
-measured in [§27](results.md#27-the-market-goes-too-far-and-comes-back) and by
-[`experiments/market_reversion.py`](../experiments/market_reversion.py).
+**Status: killed**, on the test it named in advance. Measured in
+[§27](results.md#27-the-market-goes-too-far-and-comes-back); the test itself is
+[`experiments/reversion_fresh.py`](../experiments/reversion_fresh.py).
 
-An equal-weighted index of 26 USDT perpetuals overshoots over roughly ten
-minutes and comes back, so the index's recent return predicts each
-constituent's next move with a negative sign.
+The claim was that an equal-weighted index of 26 USDT perpetuals overshoots over
+roughly ten minutes and comes back, so its recent return predicts each
+constituent's next move with a negative sign. On 1 February to 10 March 2024 it
+looked good: negative information coefficient on 26 instruments of 26 on both
+halves, a gap test separating it from a measurement artefact, a holding-period
+profile that repeated across blocks, and 20 of 26 instruments positive on a
+held-out block at +6.9 bp per trade.
 
-| | Search block | Held out |
-|---|---|---|
-| Median net per trade | +17.2 bp | +2.8 bp |
-| Cells positive | 76% | 55% |
-| Best cell, instruments positive | — | 20 of 26 |
-| Median net at that cell | — | +6.9 bp |
+The frozen configuration was then run on 12 March to 20 April — thresholds
+carried over from the original span, nothing re-tuned — and both stated kill
+conditions fired:
 
-What it has survived:
+| Hold | Gross | Net | Instruments positive |
+|---|---:|---:|---:|
+| 2 min | +2.15 | −11.84 | 0 / 26 |
+| 5 min | +1.27 | −13.21 | 0 / 26 |
+| **10 min (frozen)** | **−5.31** | **−19.94** | **0 / 26** |
+| 20 min | −15.47 | −29.62 | 0 / 26 |
+| 40 min | −16.41 | −30.92 | 0 / 26 |
 
-- Negative information coefficient on 26 of 26 instruments, both halves.
-- A gap test. Shared price noise between the end of a lookback window and the
-  start of a forward window manufactures negative correlation from nothing, and
-  dies the moment a gap is inserted. This strengthens slightly out to thirty
-  seconds and decays over ten minutes.
-- The holding-period profile repeats across blocks: two minutes loses, ten
-  minutes is best, longer decays. Configuration ranks correlate at +0.35.
-- The instrument ordering follows the edge identity — volatile alts beat
-  BTCUSDT and ETHUSDT at similar cost, which is what IC times dispersion
-  predicts.
+3,637 trades, −69,283 bp in total, and the best instrument of twenty-six is
+DOGEUSDT at −9.9 bp per trade.
 
-What would kill it, stated before the test:
+Condition 1 — a median at or below zero — fired at −19.94 with nothing positive.
+Condition 2 — the profile failing to repeat — fired harder: the best holding
+period is now the shortest tested rather than ten minutes, and at the frozen
+horizon the *gross* edge has changed sign, from +16.6 bp to −5.31. This is not
+an effect that weakened. It is one that was not there on a period which chose
+nothing.
 
-1. The frozen configuration run on days after 11 March 2024 returning a median
-   at or below zero across instruments.
-2. The holding-period profile failing to repeat on that period.
-
-Known weaknesses, recorded now rather than discovered later:
-
-- **Sixfold decay** between blocks, +17.2 to +2.8. The direction of that trend
-  is the main reason this is not called a result.
-- **One bet, not twenty-six.** Against a market-neutral target the coefficient
-  collapses from −0.056 to +0.004. The instruments carry the same position, so
-  agreement across them is much weaker evidence than it looks, and a portfolio
-  buys leverage rather than diversification.
-- +2.8 bp against a 14 bp round trip is close enough to zero to be a period.
+The sixfold decay between the original two blocks, recorded as the main worry
+while it was still a candidate, was the warning.
 
 ### A model improving that rule
 
-**Status: candidate**, and dependent on the one above — if the reversion rule
-falls, this falls with it. Measured in
-[§28](results.md#28-where-the-information-is-and-what-a-model-can-add-to-a-rule)
-by [`experiments/reversion_boost.py`](../experiments/reversion_boost.py).
+**Status: killed with the rule it improved.** The improvement was real and
+large on the original span — +18.8 bp against the rule's +7.4 on 3,297 held-out
+trades, paired *t* of 10.0, both boosters agreeing — and it is an improvement to
+a strategy that does not work. A model that decides how far a losing trade will
+run makes it lose less.
 
-The rule holds for a fixed ten minutes and gives back 51–86 bp from each trade's
-peak. Asked *how far a trade will run* rather than *when to exit*, a model
-improves it on 3,297 held-out trades:
-
-| Variant | Net per trade | paired *t* |
-|---|---:|---:|
-| hold through the trigger when confident | +18.8 | 10.0 |
-| per-trade take-profit level | +17.2 | 8.5 |
-| baseline rule | +7.4 | — |
-
-What would kill it: the same fresh-data test as the rule, and any sign that the
-ranking does not repeat when the trade population changes.
-
-Known weaknesses: it inherits every caveat of the rule it improves; the trades
-are pooled across instruments carrying one market-wide bet; and the models are
-fitted on 1,259 search-block trades, which is few enough that the DOGEUSDT-only
-version of the same comparison is not significant (*t* = 1.19).
-
----
-
-## Killed
+What it leaves behind is worth keeping, because it is about method rather than
+about this signal: asking a model *how far a trade will run* and letting a rule
+act on it beat asking the model *when to exit* on every architecture tried, and
+the two accounting errors found on the way — booking a take-profit at the
+overshoot rather than at its level, and reading 113 trades as though they could
+settle a 12 bp difference — are the kind that reverse a conclusion.
 
 ### Trading rarely to escape the cost floor
 

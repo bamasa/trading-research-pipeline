@@ -1,9 +1,11 @@
-"""The one candidate this project has that survived its own checks so far.
+"""A refuted candidate, kept with the number that refuted it.
 
-Everything else here is a negative result. This is not — yet — a positive one
-either; it is a *candidate*, recorded as code so that its exact parameters
-cannot drift, be misremembered, or be quietly re-tuned into something that only
-worked once. The register in ``docs/findings.md`` carries its status.
+This looked like the one thing in the project that worked, and it does not. It
+is kept — parameters frozen, result attached — because a killed candidate in the
+open is worth more than a deleted one: the next person to find a ten-minute
+reversion in crypto perpetuals can read what happened to this one.
+
+The register in ``docs/findings.md`` carries the full account.
 
 The claim
 ---------
@@ -34,13 +36,26 @@ What has been checked
   IC times the dispersion of the move, so high-volatility alts should beat
   BTCUSDT and ETHUSDT at similar cost. They do, in that order.
 
-What has not been checked
--------------------------
-The only test that has ever mattered in this project: the same frozen
-configuration on days neither block has seen. Until that is run, the honest
-description is a candidate with a sixfold decay between blocks (+17.2 bp median
-on the search block, +2.8 bp on the held-out one) and a held-out result close
-enough to zero that it could still be a period effect.
+What killed it
+--------------
+The test the whole project is built around: the same frozen configuration, with
+thresholds carried over unchanged, on days neither block had seen. Run on 12
+March to 20 April 2024, immediately after the original span.
+
+Nothing was positive. Median -19.94 bp per trade at the frozen ten-minute hold,
+0 instruments of 26, 3,637 trades, -69,283 bp in total.
+
+Both kill conditions stated in advance fired, and the second is the informative
+one. A median below zero is what a decayed edge looks like; the *profile
+inverted* — the best holding period is now the shortest tested rather than ten
+minutes, and at the frozen horizon the gross edge changed sign from +16.6 bp to
+-5.31, before any cost. The shape that repeated across two blocks did not
+survive a third.
+
+The warning was already recorded while this was a candidate: a sixfold decay
+between the original blocks, +17.2 bp median falling to +2.8. That is the same
+signature §25 documented — a structure that looks like an interior optimum and
+is a period.
 """
 
 from __future__ import annotations
@@ -92,9 +107,22 @@ class ReversionConfig:
         return asdict(self)
 
 
-#: What the configuration above produced when the held-out block was read once.
-#: Recorded so a later run that disagrees is visibly a disagreement rather than
-#: a memory of a different number.
+#: What the frozen configuration produced on days nothing had chosen. This is
+#: the number that settled it, kept beside the one that did not.
+FRESH_SPAN_RESULT = {
+    "block": "2024-03-12 to 2024-04-20, chosen by nothing",
+    "instruments": 26,
+    "positive_instruments": 0,
+    "trades": 3637,
+    "median_net_bp_per_trade": -19.94,
+    "median_gross_bp_per_trade": -5.31,
+    "total_net_bp": -69_283,
+    "best": {"symbol": "DOGEUSDT", "net_bp": -9.92},
+    "verdict": "killed: both stated conditions fired",
+}
+
+#: What the configuration above produced when the original held-out block was
+#: read once. Kept so the contrast is legible rather than remembered.
 HELD_OUT_RESULT = {
     "block": "2024-02-26 to 2024-03-11, never searched",
     "instruments": 26,

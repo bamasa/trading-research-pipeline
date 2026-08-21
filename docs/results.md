@@ -1549,7 +1549,7 @@ magnitude more.
 
 ---
 
-## 27. The market goes too far, and comes back
+## 27. The market goes too far and comes back — for six weeks
 
 Every section before this asked one instrument's order book where that
 instrument's price was going. §26 settled what that is worth: a gross edge of a
@@ -1635,24 +1635,53 @@ UNIUSDT +19.7 at the top, BTCUSDT −5.1 and ETHUSDT −6.6 at the bottom. Volat
 alts have the dispersion to clear a cost that BTCUSDT, moving a fifth as far for
 the same fee, does not.
 
-### What is wrong with it
+### And then it died
 
-Recorded here rather than discovered later, and repeated in
-[`findings.md`](findings.md) with the conditions that would kill it:
+Two kill conditions were written into [`findings.md`](findings.md) before the
+test that would apply them: a median at or below zero across instruments, and a
+holding-period profile that failed to repeat. The frozen configuration —
+thresholds carried over from the original span, nothing re-tuned — was run on
+12 March to 20 April 2024, which no part of the search, the parameter choice or
+the model fitting had seen.
 
-- **Sixfold decay** between blocks, +17.2 to +2.8. The direction of that trend
-  is the main reason this is a candidate and not a result.
-- **One bet.** See the table above. Twenty of twenty-six is not twenty
-  independent successes.
-- **+2.8 bp against a 14 bp round trip** is close enough to zero to be a period.
-- The decisive test — the frozen configuration on days neither block has seen —
-  has not been run. The venue began rate-limiting sustained downloads before the
-  fresh span could be fetched.
+Both fired.
 
-The configuration is frozen as code in
-[`strategies/reversion.py`](../src/trading_research/strategies/reversion.py) so
-that it cannot drift or be quietly re-tuned into something that only ever
-worked once.
+| Hold | Gross | Net | Instruments positive |
+|---|---:|---:|---:|
+| 2 min | +2.15 | −11.84 | 0 / 26 |
+| 5 min | +1.27 | −13.21 | 0 / 26 |
+| **10 min (frozen)** | **−5.31** | **−19.94** | **0 / 26** |
+| 20 min | −15.47 | −29.62 | 0 / 26 |
+| 40 min | −16.41 | −30.92 | 0 / 26 |
+
+3,637 trades, −69,283 bp in total. The best instrument of twenty-six is DOGEUSDT
+at −9.9 bp per trade, and it was the best of twenty-six on the original span too,
+at +26.7.
+
+The second condition fired harder than the first. A median below zero is what a
+decayed edge looks like; an *inverted profile* is what an absent one looks like.
+The best holding period is now the shortest tested rather than ten minutes, and
+at the frozen horizon the **gross** edge has changed sign, from +16.6 bp to
+−5.31 — before any cost is charged. The shape that repeated across the original
+two blocks does not survive a third.
+
+### What was worth recording anyway
+
+The sixfold decay between the original blocks, written down as the main worry
+while this was still a candidate, was the warning. It is the same signature §25
+documented: a structure that looks like an interior optimum and is a period.
+
+The gap test was worth running and was not the thing that failed. Whatever the
+index return was measuring on the original span, it was not shared price noise —
+the effect strengthened out to a thirty-second gap, which an accounting artefact
+cannot do. It was a real property of February and early March, and not a
+property of the market.
+
+The configuration stays frozen in
+[`strategies/reversion.py`](../src/trading_research/strategies/reversion.py) with
+its result attached. A killed candidate kept in the open, with the number that
+killed it, is worth more than a deleted one: the next person to find a
+ten-minute reversion in crypto perpetuals can read what happened to this one.
 
 ---
 
@@ -1698,7 +1727,13 @@ the same costs traces profit against skill. Net crosses zero at an information
 coefficient of about **0.08 to 0.10**, identically at 5 and at 100 trades a day.
 The best of everything tried reaches 0.023.
 
-### What a model adds to a rule that already works
+### What a model adds to a rule (that later turned out not to work)
+
+The measurements below stand on their own as a comparison of arrangements, and
+they were made before §27's candidate was killed. What they no longer establish
+is that any of it makes money: a model that decides how far a losing trade will
+run makes it lose less. The method is the part worth keeping.
+
 
 The §27 rule enters on the index, holds for exactly ten minutes and stakes the
 same amount every time. Decomposing its trades says which of those three costs

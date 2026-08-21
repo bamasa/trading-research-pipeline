@@ -89,78 +89,83 @@ edge has a leak, and that is a test rather than a hope.
 
 ## The findings
 
-Most of this project is a negative result, arrived at carefully. One part is
-not, and it is a candidate rather than a conclusion. Both are below, in that
-order, because the second only makes sense given the first.
+All of it is a negative result, arrived at carefully. The order below is the one
+that makes it legible: first the candidate that got furthest and how it was
+refuted, because that is where the method is visible, then the broad negative it
+was trying to escape.
 
 ---
 
-## What works: the market goes too far, and comes back
+## The one that nearly worked, and how it was killed
 
-An equal-weighted index of twenty-six USDT perpetuals overshoots over roughly
-ten minutes and comes back. Its recent return predicts the *next* move of each
-constituent, negatively. There is no model in the rule: measure the index's
+This section is here because it is the most useful thing in the repository, and
+what it describes is a negative result.
+
+An equal-weighted index of twenty-six USDT perpetuals appeared to overshoot over
+roughly ten minutes and come back, so its recent return predicted the *next*
+move of each constituent, negatively. No model in the rule: measure the index's
 return over ten minutes, take the opposite side, close ten minutes later.
 
-The holding period is the whole argument, and it comes from arithmetic rather
-than search. Edge per trade is roughly the information coefficient times the
-dispersion of the move; dispersion grows with the square root of the holding
-period and the cost of a round trip does not grow at all. So a horizon exists
-where prediction and cost cross.
+It had everything a finding is supposed to have.
+
+**A mechanism from arithmetic, not from search.** Edge per trade is roughly the
+information coefficient times the dispersion of the move; dispersion grows with
+the square root of the holding period and a round trip does not grow at all. So
+a horizon should exist where prediction and cost cross — and one did, exactly
+where the arithmetic said.
+
+**Agreement across instruments.** A negative information coefficient on 26 of
+26, on both halves of the data.
+
+**It passed the artefact check that kills most such things.** Price noise shared
+between the end of a lookback window and the start of a forward window
+manufactures negative correlation from nothing, and dies the instant a gap is
+inserted. This strengthened out to a thirty-second gap and decayed over ten
+minutes — an economic shape.
+
+**A profile that repeated on a block that chose nothing.**
 
 ![Net per trade by holding period](docs/images/reversion_horizon_profile.png)
 
-Both curves have the same shape, and one of them was measured on days that chose
-nothing. At the peak — ten-minute lookback, ten-minute hold — **twenty of
-twenty-six instruments are positive on the held-out block**, median +6.9 bp per
-trade over about 126 trades each. The ordering follows the identity rather than
-the search: DOGEUSDT +26.7, APTUSDT +21.2, UNIUSDT +19.7, and BTCUSDT −5.1
-because it moves a fifth as far for the same fee.
-
-### A model doubles it, once it is asked the right question
-
-The rule holds for a fixed ten minutes and gives back 51–86 bp from each trade's
-peak, because the peak arrives around minute five. Asking a model to *name the
-exit row* fails on every architecture tried — the peak moves too much between
-trades. Asking it *how far this trade will run*, and leaving the decision to the
-rule, does not.
+At the peak, twenty of twenty-six instruments were positive on the held-out
+block at +6.9 bp per trade, and a model that decided how far each trade would
+run raised the pooled figure from +7.4 to +18.8 bp on 3,297 trades, paired *t*
+of 10.0, with two independent boosters agreeing.
 
 ![Net per trade by variant](docs/images/reversion_variants_ALL.png)
 
-On 3,297 held-out trades across 26 instruments, models fitted on the search
-block only, compared **paired** against the same entries:
+### And then it died
 
-| Variant | Net per trade | paired *t* |
-|---|---:|---:|
-| hold through the trigger when confident | **+18.8 bp** | 10.0 |
-| per-trade take-profit level | +17.2 bp | 8.5 |
-| cut the dead ones early | +16.6 bp | 7.1 |
-| fixed take-profit, level chosen on search | +14.4 bp | 5.5 |
-| **baseline: fixed ten-minute clock** | **+7.4 bp** | — |
-| fixed trailing stop | +1.2 bp | −5.3 |
+Two kill conditions were written into
+[`docs/findings.md`](docs/findings.md) **before** the test that would apply
+them: a median at or below zero, and a holding-period profile that failed to
+repeat. The frozen configuration — thresholds carried over from the original
+span, nothing re-tuned — ran on the six weeks that followed.
 
-![Cumulative result](docs/images/reversion_equity_ALL.png)
+| Hold | Gross | Net | Instruments positive |
+|---|---:|---:|---:|
+| 2 min | +2.15 | −11.84 | 0 / 26 |
+| 5 min | +1.27 | −13.21 | 0 / 26 |
+| **10 min (frozen)** | **−5.31** | **−19.94** | **0 / 26** |
+| 20 min | −15.47 | −29.62 | 0 / 26 |
+| 40 min | −16.41 | −30.92 | 0 / 26 |
 
-### Why this is still called a candidate
+3,637 trades, −69,283 bp. The best instrument of twenty-six is DOGEUSDT at
+−9.9 bp per trade, and it was the best of twenty-six on the original span too,
+at +26.7.
 
-Four things are wrong with it, recorded in
-[`docs/findings.md`](docs/findings.md) alongside the conditions that would kill
-it — written before the tests, not after:
+The second condition fired harder than the first, and that distinction is the
+lesson. A median below zero is what a decayed edge looks like. An **inverted
+profile** is what an absent one looks like: the best holding period is now the
+shortest tested rather than ten minutes, and at the frozen horizon the *gross*
+edge changed sign, from +16.6 bp to −5.31, before any cost is charged.
 
-- **Sixfold decay** between blocks: +17.2 bp median on the search block, +2.8 on
-  the held-out one.
-- **It is one bet, not twenty-six.** Against a market-neutral target the
-  coefficient collapses from −0.056 to +0.004 and the instruments stop agreeing.
-  Trading the panel is leverage, not diversification.
-- **Thirteen held-out days.** +2.8 bp against a 14 bp round trip is close enough
-  to zero to be a period rather than an effect.
-- **The decisive test has not been run.** The frozen configuration on days
-  neither block has seen is the only thing that would settle it, and the venue
-  began rate-limiting before that span could be fetched.
+The sixfold decay between the original two blocks — recorded as the main worry
+while this was still a candidate, not discovered afterwards — was the warning.
 
-Four earlier findings in this project looked at least this good and did not
-survive that test. [`docs/findings.md`](docs/findings.md) lists them with what
-killed each one.
+Everything above stays in the repository with the number that killed it. The
+next person to find a ten-minute reversion in crypto perpetuals can read what
+happened to this one.
 
 ---
 
@@ -235,18 +240,30 @@ gross line to climb, and the fee takes it 1,200 basis points the other way.
 
 ![Where the model traded](assets/bt_trades.png)
 
-### Why one works and the other does not
+### Where the ceiling actually is
 
 The audit in [§28](docs/results.md) measures each source of information before a
-model is chosen, and the answer is not subtle. At a two-minute horizon on
-BICOUSDT, the best single column of the touch plane — the plane every earlier
-section used — reaches an information coefficient of 0.022 out of sample. The
-best single *cross-sectional* column reaches **0.046**, twice as much. Break-even
-needs about 0.08.
+model is chosen, which is the order this project should have used from the
+start. Fitting a model and looking at the money answers "did this arrangement
+work" and never answers "was there anything here to find", so every negative
+result before the audit was ambiguous.
 
-So the ceiling was never the model. Eight features off the top of one book do
-not carry enough, and no arrangement of trees, ensembles, stacking or networks
-changes that — measured, in [§28](docs/results.md), rather than assumed.
+At a two-minute horizon on BICOUSDT, the best single column of the touch
+plane — the plane every earlier section used — reaches an information
+coefficient of 0.022 out of sample. Break-even needs about **0.08 to 0.10**,
+measured by blending predictions with the realised future at increasing weight
+until profit crosses zero. The best of everything tried, over sixteen model
+types, reaches 0.023.
+
+So the ceiling was never the model, and no arrangement of trees, ensembles,
+stacking or networks moves it. The bias-variance decomposition says why:
+prediction variance is negligible, so averaging has nothing to remove, and the
+models explain under 0.03% of the forward move.
+
+The cross-sectional column that reached 0.046 — twice the best own-book
+feature — is what sent this project after the reversion candidate above. That
+0.046 was real on the span it was measured on, and the six weeks that followed
+say it was a property of those weeks.
 
 See [`docs/results.md`](docs/results.md) for the full picture,
 [`docs/findings.md`](docs/findings.md) for the register of every candidate and

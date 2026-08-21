@@ -33,6 +33,23 @@ def test_the_frozen_parameters_are_what_was_measured() -> None:
     assert GRID_SECONDS == 5
 
 
+def test_the_refutation_is_recorded_beside_the_result() -> None:
+    """A killed candidate must carry the number that killed it.
+
+    The temptation, once a finding dies, is to delete it. Keeping the frozen
+    parameters next to the result on data that chose nothing is what makes the
+    record useful to anyone who finds the same thing later.
+    """
+    from trading_research.strategies.reversion import FRESH_SPAN_RESULT
+
+    assert FRESH_SPAN_RESULT["positive_instruments"] == 0
+    assert FRESH_SPAN_RESULT["median_net_bp_per_trade"] < 0
+    # The gross edge changed sign, which is the part that distinguishes an
+    # absent effect from a decayed one.
+    assert FRESH_SPAN_RESULT["median_gross_bp_per_trade"] < 0
+    assert "killed" in FRESH_SPAN_RESULT["verdict"]
+
+
 def test_the_recorded_result_keeps_its_caveat() -> None:
     """The number and the reason not to trust it travel together."""
     assert HELD_OUT_RESULT["positive_instruments"] == 20
