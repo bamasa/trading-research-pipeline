@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import warnings
+from datetime import date
 from itertools import product
 from pathlib import Path
 
@@ -50,6 +51,7 @@ from experiments._common import RESULTS, emit
 from experiments.information_audit import to_grid
 from trading_research.backtest.costs import TakerCosts
 from trading_research.backtest.execution import ThinningRules, thin
+from trading_research.data.ensure import ensure_universe
 
 COSTS = TakerCosts(fee_bp_per_side=5.5, slippage_bp=0.5)
 ROWS_PER_DAY = 86_400 // 5
@@ -65,6 +67,38 @@ HORIZONS = (24, 60, 120, 240, 480, 960)
 RATES = (2.0, 5.0, 20.0, 60.0)
 
 SEARCH_SHARE = 0.65
+
+#: Fetched on demand if absent. Stated rather than assumed, so a clean checkout
+#: runs instead of failing on a missing path.
+UNIVERSE = (
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "AVAXUSDT",
+    "LINKUSDT",
+    "DOTUSDT",
+    "MATICUSDT",
+    "LTCUSDT",
+    "BCHUSDT",
+    "ATOMUSDT",
+    "NEARUSDT",
+    "UNIUSDT",
+    "FILUSDT",
+    "APTUSDT",
+    "ARBUSDT",
+    "OPUSDT",
+    "INJUSDT",
+    "CRVUSDT",
+    "BICOUSDT",
+    "GALAUSDT",
+    "ALGOUSDT",
+    "VETUSDT",
+    "DYDXUSDT",
+)
+SPAN = (date(2024, 2, 1), date(2024, 3, 10))
 
 
 def load_panel(root: Path, *, min_days: int = 35) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
@@ -165,6 +199,7 @@ def main() -> None:
     args = parser.parse_args()
     warnings.filterwarnings("ignore")
 
+    ensure_universe(UNIVERSE, *SPAN, root=args.universe)
     panel, books = load_panel(args.universe)
     cut = int(len(panel) * SEARCH_SHARE)
     print(

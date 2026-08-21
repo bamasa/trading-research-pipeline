@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import warnings
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -39,6 +40,7 @@ import pandas as pd
 
 from experiments._common import RESULTS, emit
 from trading_research.data.bybit_trades import load as load_trades
+from trading_research.data.ensure import ensure_book, ensure_trades
 from trading_research.evaluation.information import audit
 from trading_research.features.cross import build_cross_features
 from trading_research.features.depth import build_depth_features
@@ -103,6 +105,10 @@ def main() -> None:
     parser.add_argument("--universe", type=Path, default=Path("data/universe"))
     args = parser.parse_args()
     warnings.filterwarnings("ignore")
+
+    span = (date(2024, 2, 1), date(2024, 3, 10))
+    ensure_book(args.symbol, *span, root=args.book, depth=10)
+    ensure_trades(args.symbol, *span, root=args.trades)
 
     files = sorted((args.book / args.symbol).glob("*.parquet"))
     book = to_grid(pd.concat([pd.read_parquet(p) for p in files], ignore_index=True))

@@ -59,6 +59,12 @@ venv/
 secrets.yaml
 credentials.json
 
+# Intermediate per-trade tables. The summaries in experiments/results are small
+# and are what the documents cite; the raw trade lists behind them run to tens of
+# megabytes, are regenerable by re-running the script, and belong nowhere near
+# version control. One reached a commit before this rule existed.
+/experiments/results/*_trades.csv
+
 # --- Exceptions -------------------------------------------------------------
 # A tiny committed sample is allowed so that the docs can show real output
 # without anyone having to download or generate anything first.

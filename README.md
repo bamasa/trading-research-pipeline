@@ -361,16 +361,52 @@ and the quickstart. It is *not* evidence about markets: every row is stamped
 backtest measures the agreement between a generator and a model and nothing
 else.
 
-**Public exchange data (in progress).** BTCUSDT from Binance's public archives,
-downloaded by an explicit command, checksum-verified and cached locally. Raw
-downloads are never committed. XRPUSDT follows, to test whether anything
-transfers across instruments.
+**Public exchange data.** Two venues, for two different things.
 
-**Order-book collector (planned).** REST snapshot plus a websocket depth
-stream, applying updates in sequence order, detecting gaps and resynchronising
-after them. Sequence-gap handling is the part that matters: a single missed
-update silently corrupts every snapshot until the next resynchronisation, and
-nothing about the resulting prices looks wrong.
+*Binance* publishes best bid and ask, aggregated trades, open interest and
+funding as daily archives. Used for the instrument screen, which needs breadth
+rather than depth. Note that daily `bookTicker` archives stop after 30 March
+2024, which is why the screen can be measured on two windows and not more.
+
+*Bybit* publishes the **full order book** as an incremental stream — a snapshot
+and its deltas — which reconstructs to ten levels a side, and publishes trade
+prints carrying the aggressor's side. Everything from §24 onward runs on these:
+the depth features need the levels, and the maker model needs the prints,
+because a book says what was offered and only a print says what was taken.
+
+**Nothing under `data/` is in version control.** A day of one instrument's book
+is hundreds of megabytes.
+
+**The code fetches what it needs.** Every experiment declares its instruments
+and span, and [`data/ensure.py`](src/trading_research/data/ensure.py) compares
+that against what is on disk and downloads only the gaps. A clean checkout
+therefore runs — slowly the first time, instantly afterwards. Three properties
+are deliberate:
+
+- an interrupted run resumes rather than restarts, since a day already present
+  is never fetched twice;
+- a day the venue does not have is reported and skipped, not raised — an
+  instrument listed mid-span has no archive before it existed — while a *total*
+  absence does raise, so an experiment cannot quietly run on nothing;
+- nothing downloads silently: each call prints what it will fetch first, and
+  `dry_run=True` answers the question without acting.
+
+```python
+from datetime import date
+from trading_research.data.ensure import ensure_book, ensure_universe
+
+# ten levels a side, about two minutes of replay per day
+ensure_book("DOGEUSDT", date(2024, 2, 1), date(2024, 3, 10))
+
+# top of book only for a cross-section: eleven seconds per instrument-day
+ensure_universe(["BTCUSDT", "ETHUSDT"], date(2024, 2, 1), date(2024, 3, 10))
+```
+
+The venue rate-limits sustained downloading. A stalled fetch is the venue, not
+the code; wait and re-run, and it resumes from where it stopped.
+
+**Synthetic data** remains the default for tests and the quickstart, so neither
+needs the network.
 
 ---
 

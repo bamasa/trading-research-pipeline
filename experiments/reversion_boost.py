@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import warnings
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -60,6 +61,7 @@ import pandas as pd
 from experiments._common import RESULTS, emit
 from experiments.information_audit import to_grid
 from trading_research.backtest.costs import TakerCosts
+from trading_research.data.ensure import ensure_universe
 from trading_research.strategies.reversion import (
     ReversionConfig,
     index_level,
@@ -81,6 +83,41 @@ LOOKAHEAD = 360
 #: that touched the level and ran to 150 bp within the minute was credited 150.
 #: A limit order fills at its level. Full paths make that exact.
 CHECKPOINTS = tuple(range(LOOKAHEAD + 1))
+
+
+#: What this experiment needs. Stated here so a clean checkout fetches it
+#: rather than failing on a path, and so a reader can see the cost before
+#: starting: 26 instruments over 39 days of top-of-book, about eleven seconds
+#: each.
+UNIVERSE = (
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "AVAXUSDT",
+    "LINKUSDT",
+    "DOTUSDT",
+    "MATICUSDT",
+    "LTCUSDT",
+    "BCHUSDT",
+    "ATOMUSDT",
+    "NEARUSDT",
+    "UNIUSDT",
+    "FILUSDT",
+    "APTUSDT",
+    "ARBUSDT",
+    "OPUSDT",
+    "INJUSDT",
+    "CRVUSDT",
+    "BICOUSDT",
+    "GALAUSDT",
+    "ALGOUSDT",
+    "VETUSDT",
+    "DYDXUSDT",
+)
+SPAN = (date(2024, 2, 1), date(2024, 3, 10))
 
 
 def load_panel(root: Path, *, min_days: int = 35):
@@ -259,6 +296,7 @@ def main() -> None:
     warnings.filterwarnings("ignore")
 
     config = ReversionConfig()
+    ensure_universe(UNIVERSE, *SPAN, root=args.universe)
     panel, books = load_panel(args.universe)
     cut = int(len(panel) * SEARCH_SHARE)
     print(
@@ -268,6 +306,7 @@ def main() -> None:
 
     trades = make_trades(panel, books, config, cut)
     RESULTS.mkdir(parents=True, exist_ok=True)
+    # Gitignored: 32 MB of per-trade paths, regenerable by re-running this.
     trades.to_csv(RESULTS / "reversion_trades.csv", index=False)
     print(f"{len(trades):,} trades across all instruments")
 
