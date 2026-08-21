@@ -38,6 +38,7 @@ from experiments._common import RESULTS, emit
 from experiments.information_audit import to_grid
 from trading_research.backtest.costs import TakerCosts
 from trading_research.backtest.execution import ThinningRules, thin
+from trading_research.evaluation.significance import assess
 from trading_research.strategies.reversion import (
     ReversionConfig,
     decide,
@@ -94,7 +95,8 @@ def run(
     """Trade every instrument with a threshold supplied from elsewhere."""
     names = list(panel.columns)
     values = panel.to_numpy()
-    rows = []
+    rows: list[dict[str, object]] = []
+    per_trade: list[pd.DataFrame] = []
     for i, symbol in enumerate(names):
         if symbol not in thresholds or symbol not in books:
             continue
@@ -120,6 +122,19 @@ def run(
         gross = np.array([t.direction * t.move_bp for t in trades])
         cost = np.array([float(COSTS.round_trip_bp(t.entry_spread_bp)) for t in trades])
         net = gross - cost
+        # Kept per trade as well as aggregated, so the significance of the
+        # whole panel can be assessed at the level the bets are actually
+        # independent at -- the day -- rather than at the level they are
+        # counted at.
+        per_trade.append(
+            pd.DataFrame(
+                {
+                    "symbol": symbol,
+                    "day": [t.entry_index // ROWS_PER_DAY for t in trades],
+                    "net_bp": net,
+                }
+            )
+        )
         equity = np.cumsum(net)
         peak = np.maximum.accumulate(np.maximum(equity, 0.0))
         rows.append(
@@ -136,7 +151,8 @@ def run(
                 "two_se_bp": float(2 * net.std() / np.sqrt(len(net))),
             }
         )
-    return pd.DataFrame(rows)
+    trades_frame = pd.concat(per_trade, ignore_index=True) if per_trade else pd.DataFrame()
+    return pd.DataFrame(rows), trades_frame
 
 
 def main() -> None:
@@ -172,7 +188,7 @@ def main() -> None:
             continue
     print(f"{len(thresholds)} thresholds carried over unchanged\n")
 
-    frozen = run(fresh, fresh_books, config, thresholds, config.hold)
+    frozen, frozen_trades = run(fresh, fresh_books, config, thresholds, config.hold)
     if frozen.empty:
         raise SystemExit("no trades on the fresh span")
 
@@ -190,10 +206,30 @@ def main() -> None:
         f"-> {'SURVIVES' if median > 0 else 'KILLED'}"
     )
 
+    # The unit of observation, reported whichever way the test comes out. On the
+    # original span this was the difference between a t of 4.12 and one of 1.18,
+    # and the second was the honest one.
+    if not frozen_trades.empty:
+        result = assess(frozen_trades, value="net_bp", cluster="day", series="symbol")
+        emit(pd.DataFrame([result.to_dict()]), "reversion_fresh_significance")
+        print(
+            f"\n  by trade:   {result.trades:,} observations, "
+            f"{result.trade_mean_bp:+.2f} bp, t = {result.trade_t:+.2f}"
+        )
+        print(
+            f"  by day:     {result.clusters} observations, "
+            f"{result.cluster_mean_bp:+.2f} bp, t = {result.cluster_t:+.2f}"
+        )
+        print(
+            f"  instruments correlate at {result.correlation:+.2f} within a day, "
+            f"so 26 of them are about {result.effective_per_cluster:.1f} independent bets"
+        )
+        print(f"  -> {result.verdict}")
+
     # The second condition: does the shape repeat?
     profile = []
     for hold in PROFILE:
-        part = run(fresh, fresh_books, config, thresholds, hold)
+        part, _ = run(fresh, fresh_books, config, thresholds, hold)
         if part.empty:
             continue
         profile.append(

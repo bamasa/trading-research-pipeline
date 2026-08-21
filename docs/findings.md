@@ -65,6 +65,31 @@ nothing.
 The sixfold decay between the original two blocks, recorded as the main worry
 while it was still a candidate, was the warning.
 
+### What the unit of observation was actually worth
+
+The original held-out figure was quoted as +6.89 bp on 3,383 trades, *t* = 4.12.
+That statistic counts each trade as an observation, and the 26 instruments carry
+one market-wide bet — their per-day results correlate at +0.47, so a day of them
+is closer to two observations than to twenty-six. Aggregated by day the same
+result is +6.18 bp over **14 days**, *t* = **1.18**, and the day-by-day series is
+
+    -36  +12  +4  -7  -0  +28  -4  +13  +20  -14  +12  -5  +22  +42
+
+which is eight positive days out of fourteen. Nobody would call that a finding
+if they saw it in that form, and the form is the honest one.
+
+A second problem compounds it: the "held-out" block, 26 February to 11 March,
+is immediately adjacent to the search block, 1 to 26 February. It tests
+generalisation across a fortnight, not across a regime. The fresh span was the
+first real break, and nothing survived it.
+
+Both lessons are now enforced in code rather than remembered:
+[`evaluation/significance.py`](../src/trading_research/evaluation/significance.py)
+reports every result by trade *and* by cluster, with the correlation between
+series and the implied number of independent bets, and refuses to call a
+cluster-level *t* between 2 and 3 settled — because this project reached one and
+then lost money for six weeks.
+
 ### A model improving that rule
 
 **Status: killed with the rule it improved.** The improvement was real and

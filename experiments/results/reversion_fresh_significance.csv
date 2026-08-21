@@ -1,0 +1,2 @@
+trades,trade_mean_bp,trade_t,clusters,cluster_mean_bp,cluster_t,correlation_within_cluster,effective_bets_per_cluster,positive_clusters,inflation
+3762.0,-19.233615638772037,-9.21905664684126,28.0,-15.872709235550124,-1.7304995806806416,0.7936735978131325,1.2474906279005316,10.0,5.327396059359467
