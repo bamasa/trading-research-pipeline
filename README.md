@@ -475,6 +475,30 @@ uv run trading-research describe-schema book
 
 Nothing here downloads anything or needs credentials.
 
+### Reproducing the finding, one command
+
+```bash
+uv run trading-research reproduce
+```
+
+runs every stage in order on a clean checkout: fetches what is missing, audits
+which family of signal carries anything, searches the configuration on the
+search block — taking the best *neighbourhood* rather than the best cell, with
+the peak it declined reported beside the choice — reads the held-out block once
+with thresholds carried over, and prints the result with both statistics and the
+market state it depends on.
+
+Two honesty properties are worth knowing before reading its output. The held-out
+block is read once; if the numbers disappoint, that is the answer, and the run
+does not go back. And the printed verdict comes from the clustered statistic,
+which counts days rather than trades — on the spans in this repository the two
+differ by a factor of five.
+
+Run on the spans the documents use, the pipeline's own end-to-end choice lands
+one cell away from §27's configuration and loses on the held-out block — which
+is reported here rather than smoothed over, because it is a fair measure of how
+sharp the effect's edge is: one neighbouring cell, and it is gone.
+
 ### The pipeline on real data
 
 Five stages, each a command, each writing files and a manifest. Download once,

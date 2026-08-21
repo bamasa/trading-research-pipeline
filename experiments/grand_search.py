@@ -83,6 +83,7 @@ from trading_research.backtest.costs import TakerCosts
 from trading_research.backtest.evaluate import choose_confidence, decide
 from trading_research.backtest.execution import ThinningRules, thin
 from trading_research.backtest.gating import MarketGate
+from trading_research.data.grid import to_grid
 from trading_research.features.depth import build_depth_features
 from trading_research.features.normalise import RollingNormaliser
 from trading_research.features.selection import FeatureSelector
@@ -138,32 +139,6 @@ RULE_COLUMNS = ("queue_imbalance", "spread_bp", "log_mid_ret20", "log_mid_ret50"
 
 #: Columns already bounded or centred, which gain nothing from rescaling.
 BOUNDED = frozenset({"queue_imbalance", "depth_imbalance", "weighted_depth_imbalance"})
-
-
-def to_grid(book: pd.DataFrame, seconds: int = GRID_SECONDS) -> pd.DataFrame:
-    """Resample a stream of book updates onto a fixed time grid.
-
-    The last update in each interval, carried forward across intervals with no
-    update at all. Carrying forward is the honest reading — between updates the
-    book is what it last was — and it is causal, since a row only ever repeats
-    something already observed.
-
-    The cost is that a quiet instrument produces repeated rows whose returns are
-    zero, which dilutes any per-row statistic. That is a true statement about
-    the instrument rather than an artefact: an instrument whose book stands still
-    for a minute at a time is one where a two-minute horizon contains very little.
-    """
-    frame = book.set_index("timestamp").sort_index()
-    # Per day, not across the span. Resampling the whole range at once builds a
-    # continuous grid over days that were never downloaded and forward-fills a
-    # stale book into them — on BTCUSDT that invented sixteen days out of a
-    # hundred. A gap in the data has to stay a gap.
-    parts = [
-        day.resample(f"{seconds}s").last().ffill()
-        for _, day in frame.groupby(frame.index.date, sort=True)
-    ]
-    grid = pd.concat(parts)
-    return grid.dropna(subset=["bid_price_0", "ask_price_0"]).reset_index()
 
 
 def build_features(book: pd.DataFrame) -> pd.DataFrame:

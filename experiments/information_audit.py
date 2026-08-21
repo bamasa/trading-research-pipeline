@@ -41,6 +41,7 @@ import pandas as pd
 from experiments._common import RESULTS, emit
 from trading_research.data.bybit_trades import load as load_trades
 from trading_research.data.ensure import ensure_book, ensure_trades
+from trading_research.data.grid import to_grid
 from trading_research.evaluation.information import audit
 from trading_research.features.cross import build_cross_features
 from trading_research.features.depth import build_depth_features
@@ -55,16 +56,6 @@ HORIZONS = {"2min": 24, "1h": 720, "1day": 17_280}
 
 #: Ordered by liquidity; the first is the lead-lag leader.
 LEADERS = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
-
-
-def to_grid(book: pd.DataFrame, seconds: int = GRID_SECONDS) -> pd.DataFrame:
-    frame = book.set_index("timestamp").sort_index()
-    parts = [
-        day.resample(f"{seconds}s").last().ffill()
-        for _, day in frame.groupby(frame.index.date, sort=True)
-    ]
-    grid = pd.concat(parts)
-    return grid.dropna(subset=["bid_price_0", "ask_price_0"]).reset_index()
 
 
 def touch_features(book: pd.DataFrame) -> pd.DataFrame:

@@ -1183,3 +1183,75 @@ def _span(df: object) -> str:
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(app())
+
+
+@app.command("reproduce")
+def reproduce_cmd(
+    book: Annotated[Path, typer.Option("--book", help="Where the panel lives.")] = Path(
+        "data/universe"
+    ),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/discovery"),
+    fetch: Annotated[
+        bool, typer.Option("--fetch/--no-fetch", help="Download what is missing.")
+    ] = True,
+) -> None:
+    """Run the whole pipeline on a clean checkout and report what it finds.
+
+    Every other command here does one step. This runs all of them in order --
+    fetch, screen the sources, search a configuration on the search block, read
+    the held-out block once, and measure the market state the answer depends on
+    -- so the result in the documents can be reproduced rather than taken on
+    trust.
+
+    It takes a while the first time, because the data is not in the repository
+    and never will be: a day of one instrument's book is hundreds of megabytes.
+    Afterwards it is instant, since only missing days are fetched.
+
+    The held-out block is read once, with everything already chosen. If the
+    numbers disappoint, that is the answer -- the run does not go back and try
+    again, because a pipeline that reruns until it likes the result is a search
+    with extra steps.
+    """
+    from trading_research.pipeline.discovery import run
+
+    console.print(f"[bold]Running the pipeline end to end[/bold] (data under {book})\n")
+    result = run(book_root=book, fetch=fetch, report=lambda line: console.print(f"  {line}"))
+
+    if not result.held_out:
+        console.print("\n[yellow]The run stopped before a result.[/yellow]")
+        raise typer.Exit(code=1)
+
+    table = Table(title="What the pipeline found")
+    table.add_column("quantity")
+    table.add_column("value", justify="right")
+    held = result.held_out
+    for label, value in (
+        ("instruments positive", f"{held['positive_instruments']}/{held['instruments']}"),
+        ("median instrument, net", f"{held['median_instrument_bp']:+.2f} bp"),
+        ("gross per trade", f"{held['gross_per_trade_bp']:+.2f} bp"),
+        ("net per trade", f"{held['net_per_trade_bp']:+.2f} bp"),
+        ("trades", f"{held['trades']:,.0f}"),
+        ("t, counting trades", f"{held['trade_t']:+.2f}"),
+        ("t, counting days", f"{held['cluster_t']:+.2f}"),
+        ("days", f"{held['clusters']:.0f}"),
+    ):
+        table.add_row(label, value)
+    console.print()
+    console.print(table)
+
+    console.print(
+        f"\n  [dim]{held['verdict']}[/dim]"
+        f"\n  [dim]index autocorrelation: {result.regime['search']:+.4f} on the search "
+        f"block, {result.regime['held_out']:+.4f} held out — the condition the result "
+        f"carries[/dim]"
+    )
+
+    output.mkdir(parents=True, exist_ok=True)
+    result.summary().to_csv(output / "stages.csv", index=False)
+    pd.DataFrame([{**held, **{f"regime_{k}": v for k, v in result.regime.items()}}]).to_csv(
+        output / "result.csv", index=False
+    )
+    for stage in result.stages:
+        if stage.table is not None:
+            stage.table.to_csv(output / f"{stage.name.replace(' ', '_')}.csv", index=False)
+    console.print(f"\n[dim]-> {output}[/dim]")
