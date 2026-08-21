@@ -4,9 +4,11 @@
 when pointed at crypto perpetuals.**
 
 Most of what it found is negative, established carefully: directional prediction
-from one instrument's own order book does not clear a taker round trip, on any
-of forty-four instruments, under thirteen axes of configuration. One thing is
-not negative. An index of twenty-six perpetuals overshoots over ten minutes and
+from one instrument's own order book does not clear a taker round trip. Forty-four
+instruments were screened for whether one *could*, and the best of them has an
+average edge about a tenth of its cost; the three best were then searched over
+thirteen axes of configuration, and every winner loses on the block that chose
+nothing. One thing is not negative. An index of twenty-six perpetuals overshoots over ten minutes and
 comes back, and trading against that — with a model deciding how far each trade
 will run — earns **+18.8 bp per trade on 3,297 held-out trades** against a rule
 that earns +7.4. It is a candidate rather than a result, for four reasons listed
@@ -164,18 +166,21 @@ killed each one.
 
 ## What does not work: direction from one instrument's own book
 
-Run on 38 days of BTCUSDT and 59 of XRPUSDT futures from early 2024, then again
-on three instruments over thirteen axes, the pipeline reaches a definite
-negative conclusion, and — more usefully — explains it.
+Run first on Binance best-bid-ask for BTCUSDT and XRPUSDT in early 2024, and
+then on Bybit's full order book for BTCUSDT (83 days) and BICOUSDT, CRVUSDT and
+XRPUSDT (38 days each), the pipeline reaches a definite negative conclusion and
+— more usefully — explains it.
 
 Short-horizon direction **is** predictable. Queue imbalance correlates with the
 next second's mid return at about 0.27, decaying to roughly 0.02 by ten
 minutes. That is real signal, and it is reproducible.
 
-It is also not enough. A taker round trip on Binance USD-M costs about 11 basis
-points: 5 bp of fee per side, plus the spread, plus slippage. Against that, the
-best gross edge observed was around 5 bp per trade, at a two-to-five minute
-horizon — short by a factor of about two. No fold, on either instrument, at any
+It is also not enough. A taker round trip costs about 11 bp on Binance USD-M and
+12–16 bp on Bybit, depending on the instrument's spread: a fee each side, plus
+the spread, plus slippage. Against that, the best gross edge the corrected
+searches produced is +3 to +9 bp per trade on the block that chose it — short by
+a factor of two to four — and on the block that chose nothing, two of the three
+winners have a gross edge of the wrong sign. No fold, on any instrument, at any
 horizon tested, was profitable after costs.
 
 The mechanism is visible in one table. Signal strength falls with horizon at
@@ -183,15 +188,23 @@ almost exactly the rate volatility rises, so their product — the expected gros
 edge per trade — barely moves, while the fee stays fixed. **The horizon where
 prediction works and the horizon where trading pays do not overlap.**
 
-Four obvious levers were tested and none of them helps. A longer horizon does
-not, because the edge is horizon-invariant. A wider feature set — 194 generated
-columns against 10 hand-picked — measurably made it worse. A better fee tier
-falls short by about a factor of five: break-even needs roughly 0.3 bp per side
-against about 1.7 at the top volume tiers, and even a zero fee leaves under a
-basis point per trade once the spread is paid. And a sequence model does not:
-across twenty-one model-configuration-fold combinations, none was profitable,
-and the best gross edge belonged to plain logistic regression rather than to the
-network.
+Every lever anyone reaches for was tested, and none of them helps. A longer
+horizon does not, because within this range the edge is horizon-invariant. A
+wider feature set — 194 generated columns against 10 hand-picked — measurably
+made it worse. A better fee tier falls short by about a factor of five:
+break-even needs roughly 0.3 bp per side against about 1.7 at the top volume
+tiers, and even a zero fee leaves under a basis point per trade once the spread
+is paid. A sequence model does not. Neither do bagging, random forests,
+extremely randomised trees, a second booster, voting, or stacking — and the
+[bias-variance decomposition](docs/results.md) says why: prediction variance is
+negligible for all eight candidates, so there is nothing for averaging to
+remove, and the models explain under 0.03% of the forward move.
+
+Nor does *how* the strategy is run. Six exit rules, a market gate, four targets,
+five rule-based strategies, a daily choice between them, retraining frequency,
+refitting at detected regime breaks, and a full grid of training-window against
+apply-window lengths — 672 cells of the last, of which three were positive, with
+the two axes moving the median by 0.9 and 0.3 bp against a 13 bp cost.
 
 And the learning is not what produces what edge there is. Trading the queue
 imbalance directly — one feature, no model, no parameters — beats logistic
@@ -279,17 +292,26 @@ Both halves matter and the first version had only one. Ranked on movement alone
 it put XMRUSDT third of forty-four; XMRUSDT moves nine times as far as BTCUSDT
 and its book predicts nothing (correlation 0.0002 against 0.049), and the full
 pipeline run on it did worse than on the instrument it was meant to replace.
-Corrected, the ranking inverts — and gives the sharpest result in the project:
-**the best of forty-four instruments has an expected edge one-sixteenth of its
-cost to trade.**
+Corrected, the ranking inverts.
 
-*Choosing the model class is still a judgement made by hand.* The choice is not cosmetic: it fixes the cost
-floor, and the cost floor decides everything downstream. BTCUSDT is one tick
-wide, so almost the entire round trip is fee; XRPUSDT carries a 1.7 bp spread on
-top. What should happen here is a screen across candidate instruments —
-spread, tick size, volume, how often a move clears the cost — that ranks them
-before any modelling. What happens today is that two were picked and the
-consequences measured afterwards.
+The screen has itself been corrected twice, and both corrections are in
+[§20](docs/results.md). It measured the dispersion of the *absolute* move where
+the identity needs the signed one, understating every edge by about forty per
+cent; and "edge is bounded by IC × dispersion" was used as an impossibility
+argument when it bounds the *average* trade rather than a selective one. With
+both fixed: **the best of forty-four instruments has an average edge about a
+tenth of its cost, and BTCUSDT — the instrument most of this project was built
+on — has a thirtieth.** That three-fold gap is larger than anything the
+modelling ever moved, which is why the instrument is chosen before the model
+and not after.
+
+The screen is also the one step here with a stability check. Re-run on Bybit
+across eighty instruments over two windows seven weeks apart, the rank
+correlation of edge-over-cost is 0.59 — so it measures a real property, not
+noise. But half the top ten changes between windows, so it supports taking a
+basket of five to ten rather than trusting a single best instrument.
+
+*Choosing the model class is still a judgement made by hand.*
 
 **1. Get the data, under a contract.** `trading-research download` pulls
 Binance public archives, verifies checksums, and converts to a declared schema.
