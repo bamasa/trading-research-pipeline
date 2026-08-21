@@ -1,11 +1,19 @@
 # trading-research-pipeline
 
-**A leakage-aware research pipeline for systematic trading.**
+**A leakage-aware research pipeline for systematic trading — and what it found
+when pointed at crypto perpetuals.**
+
+Most of what it found is negative, established carefully: directional prediction
+from one instrument's own order book does not clear a taker round trip, on any
+of forty-four instruments, under thirteen axes of configuration. One thing is
+not negative. An index of twenty-six perpetuals overshoots over ten minutes and
+comes back, and trading against that — with a model deciding how far each trade
+will run — earns **+18.8 bp per trade on 3,297 held-out trades** against a rule
+that earns +7.4. It is a candidate rather than a result, for four reasons listed
+below and in [`docs/findings.md`](docs/findings.md).
 
 Instruments, features, targets and models are compared under one honest cost
-model, with look-ahead checked mechanically rather than promised. Demonstrated
-end to end on crypto limit-order-book data; the pipeline itself is not tied to
-that example.
+model, with look-ahead checked mechanically rather than promised.
 
 It covers the whole path from raw events to a trading result: data contracts,
 feature engineering, forward-looking labels, chronological validation with
@@ -19,20 +27,22 @@ features, they tune on the data they report on, or they ignore what it costs to
 cross a spread two hundred times a day. This project is built so that each of
 those failure modes is a test that fails, not a caveat in a footnote.
 
-> **Status: complete end to end, taker execution only.** Data contracts,
-> synthetic market, downloader, feature registry with look-ahead checks, purged
-> walk-forward splits, five models, calibration, cost-aware backtesting, a
-> searched retraining schedule, rule-based strategies alongside the learned
-> ones, ensembles, six exit rules, a market gate, successive-halving search, and
-> the experiment scripts behind every published table. Maker execution is measured as a bound in
-> [§11](docs/results.md) and deliberately not built on — see the
-> [roadmap](#roadmap).
+> **Status: complete end to end, taker and maker.** Data contracts, a synthetic
+> market, downloaders for two venues with data that fetches itself when missing,
+> a feature registry with look-ahead checks, purged walk-forward splits, sixteen
+> models from parameter-free rules to dilated convolutions, bagging, stacking on
+> forward-chained out-of-fold predictions, a bias-variance decomposition that
+> says which ensemble is worth using, calibration, cost-aware backtesting, a
+> queue-level maker model, regime-break detection, an information audit that
+> measures each data source before a model is chosen, successive-halving search
+> over thirteen axes, and the experiment script behind every published table.
+> 746 tests, a disclosure audit in CI.
 
 ---
 
 ## Why this project
 
-Three things here are deliberately stricter than the norm in public trading
+Four things here are deliberately stricter than the norm in public trading
 repositories:
 
 **1. No look-ahead, checked mechanically.** Every feature registers the number
@@ -52,6 +62,22 @@ is usually set too small.
 when deciding to trade, and when computing profit and loss. Backtests routinely
 overstate results by labelling against a mid-price move that would not have
 survived the spread.
+
+**4. Findings are recorded with what would kill them, before the test.**
+[`docs/findings.md`](docs/findings.md) lists every candidate this project has
+produced with its status — candidate, confirmed, killed, artefact — and, for the
+open ones, the condition that would refute them, written down in advance. Four
+findings are in the killed column, each with the test that killed it. Two are
+artefacts: an effect that turned out to be a property of the measurement rather
+than the market.
+
+That register exists because the same mistake kept recurring in different
+costumes — a promising number, a plausible mechanism, and no test that could
+have refuted it. Two rounds of adversarial review against this repository's own
+code found nineteen defects, including a market gate that silently let
+everything through while three searches reported a gate axis, and a test whose
+name asserted the opposite of the behaviour it pinned. Both are documented where
+they happened rather than quietly fixed.
 
 The synthetic market underpins all of this. It contains a known, deliberately
 weak predictable component, so the test suite can assert both directions: that
@@ -581,22 +607,65 @@ Done:
 - [x] Pooling instruments into one training set — **tried and rejected**: every
       instrument did worse on the pool than on itself (§22), and the scope is
       deliberately one instrument at a time from here
-- [x] Instrument screening by headroom, before anything is fitted
+- [x] Instrument screening by headroom, before anything is fitted — **and the
+      correction that followed**: the screen measured the dispersion of the
+      *absolute* move where the identity needs the signed one, understating
+      every edge by about forty per cent (§20)
 - [x] A review rubric and an evidence pack for it, applied to this project's
       own result
+- [x] **Step 0 automated.** A screen over eighty instruments on the venue that
+      is actually traded, measured on two windows seven weeks apart. Rank
+      correlation 0.59, so it measures a real property — but half the top ten
+      changes between windows, so it supports a basket of five to ten rather
+      than a single best instrument
+- [x] Multi-level order books reconstructed from Bybit's incremental stream,
+      ten levels a side, with sequence-gap detection
+- [x] Trade prints with the aggressor's side — what a book cannot say, and what
+      a maker model needs
+- [x] **A queue-level maker model**: an order joins behind the size resting at
+      its price and fills only once that much opposing volume has traded
+      through. Measures adverse selection rather than assuming a figure for it
+- [x] Regime-break detection (CUSUM over four block statistics), with its
+      threshold calibrated against forty synthetic nulls rather than by eye
+- [x] Randomised tree ensembles, a second booster, bagging over stretches of
+      history, voting with a diversity figure, and stacking on forward-chained
+      out-of-fold predictions
+- [x] **A bias-variance decomposition** that says which ensemble is worth using,
+      resampling contiguous history rather than random rows — on this data it
+      says none of them are, because the variance to average away is not there
+- [x] **An information audit**: each data source measured before a model is
+      chosen, for what it reaches alone and what it adds on top of the sources
+      already accepted. This is what found the cross-sectional signal
+- [x] Cross-instrument features — leader and index returns, catch-up, beta,
+      dispersion, rank — the omission that had no good excuse
+- [x] Order-flow features from trade prints, alongside the queue features
+- [x] Position sizing rules: volatility targeting, a confidence ramp, fractional
+      Kelly — documented with the identity that sizing is multiplicative in the
+      edge and cannot turn a losing one positive
+- [x] Pairs trading: hedge ratio, Ornstein-Uhlenbeck residual, half-life
+- [x] Data that fetches itself when it is missing, so a clean checkout runs
+- [x] A findings register with each candidate's status and the conditions that
+      would kill it, written before the test rather than after
 
-Next, staying with taker execution:
+Next, and in this order, because the first one decides whether the rest matters:
 
-- [ ] **Step 0: automate instrument selection.** A screen over candidate
-      instruments — spread in bp, tick size, volume, share of moves clearing
-      the cost — ranking them before any modelling. Today the instrument is a
-      judgement made by hand, and it fixes the cost floor that decides
-      everything downstream.
+- [ ] **The decisive test.** The frozen reversion configuration on days neither
+      block has seen. Four earlier findings in this project looked at least as
+      good and did not survive it. The span could not be fetched because the
+      venue began rate-limiting sustained downloads; this is a matter of waiting,
+      not of code.
+- [ ] **A mechanism for the reversion.** Correlation without a cause is what
+      falls over. Liquidation cascades, funding settlement and session
+      boundaries are each testable, and an effect that concentrates in explicable
+      windows is worth more than one spread evenly.
+- [ ] **The maker case for this signal specifically.** Adverse selection was
+      measured unconditionally and costs about what the fee saving is worth. But
+      a reversion strategy *wants* to be filled against the move, which is
+      exactly when a resting order fills — so the thing that killed passive
+      execution everywhere else may work in its favour here.
+- [ ] A volume-weighted index rather than an equal-weighted one, and the same
+      question asked of order flow rather than price
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
-- [ ] Order-book collector with sequence-gap recovery, for depth beyond the touch
-- [ ] Position sizing from calibrated probabilities rather than a fixed unit
-- [ ] Holding period searched jointly with the entry threshold, since §12 shows
-      the label horizon is not the right one to hold for
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
 
@@ -610,25 +679,37 @@ Next, staying with taker execution:
       realised spread, slippage, fill rate. A strategy that is decaying looks
       exactly like one that is working until it does not
 
-Maker execution — deferred, deliberately
-----------------------------------------
-[§11](docs/results.md) measures what posting would be worth and finds +2.3 to
-+5.0 bp per trade after adverse selection, against the 0.37 bp the best taker
-configuration was short by. That is a **bound, not a strategy**, and the work
-below is what would be needed to turn it into one. Until it is done, everything
-in this repository is taker-only and should be read that way.
+Maker execution — built, and it does not pay
+--------------------------------------------
+An early section estimated what posting would be worth by assuming a figure for
+adverse selection. That estimate was replaced by a measurement, and the
+measurement disagreed with it.
 
-- [ ] Measure adverse selection at the moments a model wants to trade, not at
-      unconditional moments. Those are precisely the moments the market is about
-      to move — the worst case for a resting order, and the figure that decides
-      whether the margin above survives.
-- [ ] Passive exits. A position held to a horizon currently closes by crossing.
-      A fully passive strategy needs the same analysis on the way out, where
-      failing to fill is a risk rather than a missed opportunity.
-- [ ] A queue model that is not optimistic: size ahead that grows, cancellations
-      ahead of the order, and the order's own size treated as non-negligible.
-- [ ] Capacity. Fill rates in the teens mean a strategy that took 141 trades as
-      a taker takes about twenty as a maker, which establishes nothing.
+[`backtest/maker.py`](src/trading_research/backtest/maker.py) simulates the
+mechanism: an order joins the queue behind the size resting at its price and
+fills only once that much opposing volume has traded through, using Bybit's
+trade prints for the flow. Costs fall exactly as the arithmetic promised, from
+14–16 bp to 5.9–7.1 with a passive exit. **The gross edge inverts**: the same
+signal at the same moments is worth +3 to +8 bp crossing and −0.5 to −4.2 bp
+resting. Adverse selection is 5–11 bp — the same size as the fee saving. Zero of
+48 configurations positive on net or on gross.
+
+The mechanism shows in the detail: joining the touch is *worse* than posting
+behind it, because filling faster means filling when the market is moving
+against you, while the favourable moves leave the order unfilled.
+
+Three optimisms remain, stated in the module rather than buried: the queue ahead
+never grows, cancellations ahead are ignored, and the order's own size is
+treated as negligible. All three flatter the passive strategy, and it loses
+anyway.
+
+What is left to do here:
+
+- [ ] The conditional version of the same measurement for the reversion signal,
+      where being filled against the move may be an advantage rather than the
+      usual tax — see the roadmap item above.
+- [ ] Capacity. A fill rate in the teens turns a strategy that took 3,297 trades
+      into one that takes a few hundred, which establishes much less.
 
 ## Relationship to prior closed-source work
 
