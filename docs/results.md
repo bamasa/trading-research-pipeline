@@ -1447,122 +1447,324 @@ side.
 
 ---
 
-## 26. Everything searched again, with the answer held back
+## 26. Everything searched again, on three instruments, with the answer held back
 
 §25 killed a finding, and the natural objection is that it killed the wrong
 thing: perhaps the trade rate was never the interesting axis, and a search wide
-enough to move all of them at once — features, model, target, horizon, exits,
-refit policy, threshold — would find what a narrow one missed. The data had also
-grown, from the thirty-nine days most of this work used to eighty-four.
+enough to move all of them at once would find what a narrow one missed.
 
-So everything was searched again, on all of it.
+So everything was searched again. Twice, as it turned out — the first run was
+scored by code carrying nine defects that two adversarial reviews later found,
+including a market gate that silently let everything through and apply windows
+that overlapped fivefold. The numbers below are the second run, on corrected
+code, and this section was rewritten from its artefacts rather than from memory
+of the first.
 
 ### What was searched
 
-Ten axes, sampled rather than enumerated, 240 configurations through three
-rounds of successive halving:
+Thirteen axes, sampled rather than enumerated, 240 configurations per instrument
+through three rounds of successive halving:
 
 | Axis | Choices |
 |---|---|
 | Feature plane | 3 hand-picked / 8 microstructure / 12 with depth / 27 wide |
 | Model | 16, including rules, learned models, ensembles, composites, meta-labelling and confidence bounds |
-| Target | 7, classification and regression |
+| Target | 5, classification and regression |
 | Label horizon | 1, 2, 5, 10, 20 minutes |
 | Holding period | 1, 2, 5, 10, 20 minutes |
 | Cooldown | 0, 1x, 2x the holding period |
 | Exit rule | clock / take-profit-stop / trailing / flip / confidence decay |
+| Exit level | 3, 6, 12, 25 bp |
 | Threshold objective | total profit / profit per trade |
 | Refit policy | every 1, 2, 5 days, **or at detected regime breaks** |
 | Training window | 5, 10, 20 days |
 | Market gate | open / volatility floor / spread ceiling |
+| Feature selection | all columns / top 8 / top 16 / top 40, refitted per training block |
+| Normalisation window | 1,000 / 4,000 / 16,000 rows |
+| Model hyperparameters | per family: depth, learning rate, regularisation, penalty |
 
 Costs were not searched. The fee, the spread treatment and the slippage stay at
-the published Bybit numbers throughout — they are the one part of this that is
-not a modelling choice, and a search allowed to touch them is a search choosing
-its own scoreboard.
+the published Bybit numbers — they are the one part of this that is not a
+modelling choice, and a search allowed to touch them is choosing its own
+scoreboard.
+
+### Which instruments, and why it matters
+
+The first run went on BTCUSDT alone, which the project's own corrected screen
+ranks **34th of 44** by edge over cost. The decisive experiment had been run on
+one of the worst available candidates and its conclusion extended to the asset
+class. The second run adds CRVUSDT and BICOUSDT, ranked 2nd and 3rd.
 
 ### The protection
 
-A wider search is a stronger generator of false positives, not a weaker one, so
-the eighty-four days were cut once before anything ran: 54 days for the search,
-**29 days held back and read exactly once**, after the search had named a
-winner. Every feature, every hyperparameter, every threshold and the winner
-itself come from the search block alone.
+Each instrument's span is cut once before anything runs. Every choice — every
+feature, hyperparameter, threshold, and the winner itself — is made on the
+search block alone. The final block is read once, after the search has
+committed.
 
 ### The result
 
-The winner was a logistic model on the depth plane, a triple-barrier label at a
-ten-minute horizon, a five-minute hold with a trailing stop, refitting every
-five days behind a volatility floor.
+| Instrument | Rank | Block | Days | Trades | Gross | Cost | Net |
+|---|---|---|---|---|---|---|---|
+| BTCUSDT | 34 | search | 54 | 136 | +3.04 | 12.02 | **−8.98** |
+| | | final | 29 | 44 | −5.30 | 12.01 | **−17.32** |
+| CRVUSDT | 2 | search | 25 | 52 | +8.62 | 14.12 | **−5.49** |
+| | | final | 13 | 14 | −32.10 | 13.33 | **−45.43** |
+| BICOUSDT | 3 | search | 25 | 313 | +4.03 | 15.70 | **−11.68** |
+| | | final | 13 | 184 | +1.46 | 16.16 | **−14.70** |
 
-| | Days | Trades | Net per trade | Gross per trade | Hit rate | Max drawdown |
-|---|---|---|---|---|---|---|
-| Search block (chose it) | 54 | 931 | −9.78 bp | +2.23 bp | 21.8% | 9,114 bp |
-| Final block (never searched) | 29 | 387 | −12.22 bp | −0.21 bp | 17.3% | 4,734 bp |
+Negative everywhere, and the gross column is where the story is. On the block
+that chose it, every winner has a positive gross edge — 3 to 9 bp — and every
+one of them is a fraction of its cost. On the block that chose nothing, two of
+three gross edges have flipped sign.
 
-The round trip is 12.02 bp. The best of 240 configurations, chosen with every
-axis free, cleared **2.23 bp of it** on the block that selected it — the highest
-gross edge measured anywhere in this project, and still less than a fifth of
-what it needs.
+The one that did not flip is BICOUSDT, at +1.46 bp on 184 trades with a
+dispersion of 65, which is ±9.6 at two standard errors. Indistinguishable from
+zero, and the only reason BICOUSDT was worth the follow-up in the sections that
+come after.
 
-On the block that selected nothing, the gross edge is −0.21 bp, with a standard
-error of 0.90 — so what the final block establishes is that the gross edge is
-somewhere below about +1.6 bp, not that it is zero. An earlier draft of this
-section said "not reduced: gone", which reads the point estimate as if it were
-the measurement. The difference between the two blocks is 2.44 bp against a
-combined standard error of 1.19, which is two sigma: suggestive of decay,
-short of demonstrating it.
+### What the search found about the search
 
-The **net** conclusion needs none of that care. At −12.22 bp against a 12.02 bp
-round trip, on 387 trades with a standard error of 0.90, the strategy loses
-approximately the entire cost of trading, and no reading of the confidence
-interval rescues it.
+Grouped by each axis in turn over the first round's scored configurations, no
+choice moves the median candidate by more than about 0.7 bp against a 12 to 16 bp
+cost. Thirteen design decisions, each with a literature behind it, and their
+combined effect is an order of magnitude smaller than the gap they are meant to
+close.
 
-### No axis mattered
+The instrument matters more than any of them. The first round's median is −11.3
+on BTCUSDT, −13.1 on CRVUSDT and −15.7 on BICOUSDT, while its *best* cell is
+−3.7, +2.5 and +19.2 — an ordering that follows cost and dispersion rather than
+anything a search chose.
 
-The more useful reading is not the winner but the spread across candidates.
-Grouping the first round's 220 scored configurations by each axis in turn:
+### What this settles, and what it does not
 
-| Axis | Best median | Worst median | Range |
-|---|---|---|---|
-| Refit policy | −11.52 (1 day) | −11.85 (at breaks) | 0.33 bp |
-| Feature plane | −11.31 (3 columns) | −11.89 (27 columns) | 0.58 bp |
-| Exit rule | −11.24 (flip) | −11.85 (clock) | 0.61 bp |
-| Threshold objective | −11.62 (total) | −11.68 (per trade) | 0.06 bp |
-| Market gate | −11.35 (volatility floor) | −11.85 (spread ceiling) | 0.50 bp |
-| Target | −11.39 (magnitude) | −11.95 (normalised magnitude) | 0.56 bp |
+Directional prediction from an instrument's own book does not pay at these
+horizons, on any of the three instruments, under any of the thirteen axes. That
+is settled as firmly as this data can settle it.
 
-Every axis moves the median by less than 0.7 bp against a 12 bp cost. Ten design
-decisions, each of which has a literature and an argument behind it, and the
-whole of their combined effect is an order of magnitude smaller than the gap
-they are meant to close. The hand-picked three columns beat all twenty-seven;
-refitting daily beats refitting at detected breaks; and none of it is
-distinguishable from any of the rest.
-
-The one axis that does move the number is not in the table, because it is not a
-choice: how many trades a candidate takes. The candidates clustered near −10.8 bp
-took tens of thousands of trades and are measuring the cost precisely. The ones
-that look better took a few hundred and are measuring their own sample size — the
-first round's leader scored −5.54 bp on thirteen days and −9.78 bp on
-fifty-four, which is the same decay §25 documented, observed again as a matter
-of course.
-
-### What this settles
-
-The gap is not in the configuration. It was searched, on more data than any
-earlier section used, with the winner protected from the block it was judged on,
-and the answer is that the best configuration findable is a fifth of the way
-there on the data that chose it and nowhere at all on data that did not.
-
-Taker execution on a single crypto perpetual at these horizons does not support
-a profitable strategy, and no arrangement of the parts changes that. What
-remains is not a better search over the same space — it is a different space:
-maker execution, which changes the cost, or a horizon long enough that the move
-being predicted is large relative to a cost that does not grow with it.
+What it does not settle is whether the *source* was the problem rather than the
+configuration. Every feature in this search reads one instrument's own order
+book. §28 audits the alternatives, and finds one that is worth an order of
+magnitude more.
 
 ---
 
-## 27. What would have to change
+## 27. The market goes too far, and comes back
+
+Every section before this asked one instrument's order book where that
+instrument's price was going. §26 settled what that is worth: a gross edge of a
+few basis points against a round trip several times larger, on the best three
+instruments of forty-four, under thirteen axes of configuration.
+
+§28's audit of information sources found the reason, and it was not the model.
+The book of a single instrument does not carry enough. The cross-section does.
+
+### The claim
+
+An equal-weighted index of twenty-six USDT perpetuals overshoots over roughly
+ten minutes and comes back. Its recent return therefore predicts the *next* move
+of each constituent, with a negative sign.
+
+There is no model. The rule is two lines: measure the index's return over the
+last ten minutes, take the opposite side, close ten minutes later.
+
+### What it survived
+
+**Consistency.** A negative information coefficient on 26 instruments of 26, on
+both halves of the data. Median about −0.06 at a two-minute horizon, −0.098 at
+ten.
+
+**Not a measurement artefact.** This is the trap the effect had to clear.
+Microstructure noise in a price that ends a lookback window and begins a forward
+window enters the two with opposite signs and manufactures negative correlation
+out of nothing. Such an artefact collapses the instant a gap is inserted between
+the windows. This one does not:
+
+| Gap | Median IC | Instruments negative |
+|---|---|---|
+| 0 s | −0.056 | 26 / 26 |
+| 5 s | −0.058 | 26 / 26 |
+| 30 s | **−0.062** | 26 / 26 |
+| 2 min | −0.053 | 26 / 26 |
+| 10 min | −0.013 | 25 / 26 |
+
+It strengthens slightly out to thirty seconds and decays over about ten minutes.
+That is an economic shape, not an accounting one.
+
+**Market-wide, not cross-sectional.** Decisively, and this matters more than it
+first appears:
+
+| Signal → target | IC | Instruments negative |
+|---|---|---|
+| index past → own future | −0.056 | 26 / 26 |
+| index past → own future *net of the index* | +0.004 | 11 / 26 |
+| own past net of index → own future net of index | −0.015 | 18 / 26 |
+
+Against a market-neutral target the effect vanishes. So the twenty-six
+instruments carry **one bet**, expressed twenty-six ways. Agreement across them
+is far weaker evidence than it looks, and trading the whole panel buys leverage
+rather than diversification.
+
+### Does it clear the cost
+
+The identity says the horizon is the axis that matters: edge per trade is
+roughly the information coefficient times the dispersion of the move, and that
+dispersion grows with the square root of the holding period while the cost of a
+round trip does not grow at all.
+
+![Net per trade by holding period](images/reversion_horizon_profile.png)
+
+Both curves have the same shape — two minutes loses, ten minutes is best, longer
+decays — and the held-out curve sits uniformly below the search one. Median over
+520 configurations per point:
+
+| Hold | Search block | Positive | Held out | Positive |
+|---|---|---|---|---|
+| 2 min | −9.4 | 17% | −15.2 | 1% |
+| 5 min | +7.8 | 67% | −10.4 | 22% |
+| **10 min** | **+17.2** | **76%** | **+2.8** | **55%** |
+| 20 min | +14.2 | 70% | +1.2 | 51% |
+| 40 min | +8.1 | 64% | −8.2 | 41% |
+| 80 min | +16.8 | 66% | −3.0 | 47% |
+
+At the best cell — ten-minute lookback, ten-minute hold, sixty trades a day —
+twenty of twenty-six instruments are positive on the held-out block, median
++6.9 bp per trade on about 126 trades each. The ordering across instruments
+follows the identity rather than the search: DOGEUSDT +26.7, APTUSDT +21.2,
+UNIUSDT +19.7 at the top, BTCUSDT −5.1 and ETHUSDT −6.6 at the bottom. Volatile
+alts have the dispersion to clear a cost that BTCUSDT, moving a fifth as far for
+the same fee, does not.
+
+### What is wrong with it
+
+Recorded here rather than discovered later, and repeated in
+[`findings.md`](findings.md) with the conditions that would kill it:
+
+- **Sixfold decay** between blocks, +17.2 to +2.8. The direction of that trend
+  is the main reason this is a candidate and not a result.
+- **One bet.** See the table above. Twenty of twenty-six is not twenty
+  independent successes.
+- **+2.8 bp against a 14 bp round trip** is close enough to zero to be a period.
+- The decisive test — the frozen configuration on days neither block has seen —
+  has not been run. The venue began rate-limiting sustained downloads before the
+  fresh span could be fetched.
+
+The configuration is frozen as code in
+[`strategies/reversion.py`](../src/trading_research/strategies/reversion.py) so
+that it cannot drift or be quietly re-tuned into something that only ever
+worked once.
+
+---
+
+## 28. Where the information is, and what a model can add to a rule
+
+Two questions this project should have asked far earlier, in the right order.
+
+### Which source carries anything
+
+For most of this work the loop was: pick features, fit a model, look at the
+money, try a different model. That answers "did this arrangement work" and never
+answers "was there anything here to find", so every negative result was
+ambiguous — the source may have been empty, or the model wrong for it.
+
+[`evaluation/information.py`](../src/trading_research/evaluation/information.py)
+inverts the order. Each block of features is measured *before* a model is
+chosen: the linear ceiling it reaches on held-out data, its mutual information
+with the sign of the move, and — the column that decides anything — what it adds
+once the sources already accepted have had their say. A block correlating 0.05
+alone contributes nothing if the existing features already span it.
+
+On BICOUSDT at a two-minute horizon:
+
+| Source | Columns | Alone | Incremental | Best single column |
+|---|---|---:|---:|---|
+| touch | 10 | 0.026 | 0.026 | queue_imbalance, 0.022 |
+| depth | 13 | 0.016 | 0.016 | impact_imbalance_bp, 0.035 |
+| cross-instrument | 21 | 0.011 | −0.017 | **index_return_120, 0.046** |
+| flow (trade prints) | 11 | −0.009 | −0.005 | flow_imbalance_24, 0.021 |
+| calendar (control) | 3 | −0.003 | −0.008 | weekday, 0.013 |
+
+The calendar control scoring near zero is what makes the rest readable. The
+finding is the third row: a *single* cross-sectional column reaches 0.046 out of
+sample, twice the best column of the plane every earlier section used — and the
+block's linear combination is worse than its own best column, which is a
+statement about the fitting rather than the source. Following that one column is
+what produced §27.
+
+The audit also measured how good a forecast would need to be. Blending the
+model's held-out predictions with the realised future at increasing weight
+manufactures a forecast of known skill; running each through the same rule at
+the same costs traces profit against skill. Net crosses zero at an information
+coefficient of about **0.08 to 0.10**, identically at 5 and at 100 trades a day.
+The best of everything tried reaches 0.023.
+
+### What a model adds to a rule that already works
+
+The §27 rule enters on the index, holds for exactly ten minutes and stakes the
+same amount every time. Decomposing its trades says which of those three costs
+money:
+
+| | Held-out block |
+|---|---|
+| Trades never in front | 11–15% |
+| Given back from the peak | **51–86 bp** |
+| Peak arrives at row | 63 of 120 |
+| Still improving when the clock closed | 57% |
+| A perfect exit would earn | +116.6 bp |
+| The rule earns | +7.4 bp |
+
+The entry is sound and the exit is not. So the model is not asked to replace the
+rule — it is asked the questions the rule does not ask. This is meta-labelling:
+the rule picks the side, the model decides what to do about it.
+
+![Net per trade by variant](images/reversion_variants_ALL.png)
+
+On 3,297 held-out trades across 26 instruments, models fitted on the search
+block only. Comparisons are **paired** — the variants trade the same entries and
+differ only in exit or size, so an unpaired test would call a real difference
+noise:
+
+| Variant | Net per trade | vs rule | paired t |
+|---|---:|---:|---:|
+| *oracle: perfect exit* | *+116.6* | *+109.2* | *48.0* |
+| hold through the trigger when confident | **+18.8** | +11.4 | **10.0** |
+| per-trade take-profit level | +17.2 | +9.8 | 8.5 |
+| cut the dead ones early | +16.6 | +9.2 | 7.1 |
+| predicted exit time | +15.5 | +8.1 | 4.8 |
+| fixed take-profit, level chosen on search | +14.4 | +7.0 | 5.5 |
+| sized by predicted edge | +14.0 | +6.6 | 4.5 |
+| **baseline: fixed ten-minute clock** | **+7.4** | — | — |
+| fixed trailing stop, level chosen on search | +1.2 | −6.2 | −5.3 |
+
+![Cumulative result](images/reversion_equity_ALL.png)
+
+Every model variant beats the rule, both boosters agree closely, and the
+arrangement that works best asks the model *how far a trade will run* and leaves
+the decision to the rule. Asking the model to name the exit row outright is the
+weakest of the six — the peak moves too much between trades to be predicted from
+eight features.
+
+### Two accounting errors that had to be fixed first
+
+Neither is incidental; the first reversed the conclusion.
+
+**A take-profit was booked at the wrong price.** Paths were stored on a
+one-minute grid, so a trade that touched 80 bp and ran to 150 within the minute
+was credited 150. A limit order fills at its price. Paths are now stored per row
+and both the take-profit and the trailing stop book their trigger. On DOGEUSDT
+this moved the fixed take-profit from +44.0 to +23.7 — from comfortably beating
+every model to below the baseline — and what had looked like a simple rule
+outperforming machine learning turned out to be the accounting.
+
+**The sample was too small to see anything.** On DOGEUSDT alone, 113 trades, the
+same ranking appears with a paired *t* of 1.19, which is nothing. The oracle
+scores 10.94 on that same sample, so the test had the power and the sample did
+not have the trades. The gap between 113 and 3,297 is the whole reason the
+pooled figure is the one to read.
+
+---
+
+## 29. What would have to change
 
 - **Book depth.** One level is observed here because that is all any exchange
   publishes for free. Level imbalance, book slope and concentration need a

@@ -59,11 +59,88 @@ the pipeline finds the signal when there is one, and — with the signal switche
 off — that it finds nothing. A pipeline that reports an edge on data with no
 edge has a leak, and that is a test rather than a hope.
 
-## The finding
+## The findings
 
-Run on 38 days of BTCUSDT and 59 of XRPUSDT futures from early 2024, the
-pipeline reaches a definite negative conclusion, and — more usefully — explains
-it.
+Most of this project is a negative result, arrived at carefully. One part is
+not, and it is a candidate rather than a conclusion. Both are below, in that
+order, because the second only makes sense given the first.
+
+---
+
+## What works: the market goes too far, and comes back
+
+An equal-weighted index of twenty-six USDT perpetuals overshoots over roughly
+ten minutes and comes back. Its recent return predicts the *next* move of each
+constituent, negatively. There is no model in the rule: measure the index's
+return over ten minutes, take the opposite side, close ten minutes later.
+
+The holding period is the whole argument, and it comes from arithmetic rather
+than search. Edge per trade is roughly the information coefficient times the
+dispersion of the move; dispersion grows with the square root of the holding
+period and the cost of a round trip does not grow at all. So a horizon exists
+where prediction and cost cross.
+
+![Net per trade by holding period](docs/images/reversion_horizon_profile.png)
+
+Both curves have the same shape, and one of them was measured on days that chose
+nothing. At the peak — ten-minute lookback, ten-minute hold — **twenty of
+twenty-six instruments are positive on the held-out block**, median +6.9 bp per
+trade over about 126 trades each. The ordering follows the identity rather than
+the search: DOGEUSDT +26.7, APTUSDT +21.2, UNIUSDT +19.7, and BTCUSDT −5.1
+because it moves a fifth as far for the same fee.
+
+### A model doubles it, once it is asked the right question
+
+The rule holds for a fixed ten minutes and gives back 51–86 bp from each trade's
+peak, because the peak arrives around minute five. Asking a model to *name the
+exit row* fails on every architecture tried — the peak moves too much between
+trades. Asking it *how far this trade will run*, and leaving the decision to the
+rule, does not.
+
+![Net per trade by variant](docs/images/reversion_variants_ALL.png)
+
+On 3,297 held-out trades across 26 instruments, models fitted on the search
+block only, compared **paired** against the same entries:
+
+| Variant | Net per trade | paired *t* |
+|---|---:|---:|
+| hold through the trigger when confident | **+18.8 bp** | 10.0 |
+| per-trade take-profit level | +17.2 bp | 8.5 |
+| cut the dead ones early | +16.6 bp | 7.1 |
+| fixed take-profit, level chosen on search | +14.4 bp | 5.5 |
+| **baseline: fixed ten-minute clock** | **+7.4 bp** | — |
+| fixed trailing stop | +1.2 bp | −5.3 |
+
+![Cumulative result](docs/images/reversion_equity_ALL.png)
+
+### Why this is still called a candidate
+
+Four things are wrong with it, recorded in
+[`docs/findings.md`](docs/findings.md) alongside the conditions that would kill
+it — written before the tests, not after:
+
+- **Sixfold decay** between blocks: +17.2 bp median on the search block, +2.8 on
+  the held-out one.
+- **It is one bet, not twenty-six.** Against a market-neutral target the
+  coefficient collapses from −0.056 to +0.004 and the instruments stop agreeing.
+  Trading the panel is leverage, not diversification.
+- **Thirteen held-out days.** +2.8 bp against a 14 bp round trip is close enough
+  to zero to be a period rather than an effect.
+- **The decisive test has not been run.** The frozen configuration on days
+  neither block has seen is the only thing that would settle it, and the venue
+  began rate-limiting before that span could be fetched.
+
+Four earlier findings in this project looked at least this good and did not
+survive that test. [`docs/findings.md`](docs/findings.md) lists them with what
+killed each one.
+
+---
+
+## What does not work: direction from one instrument's own book
+
+Run on 38 days of BTCUSDT and 59 of XRPUSDT futures from early 2024, then again
+on three instruments over thirteen axes, the pipeline reaches a definite
+negative conclusion, and — more usefully — explains it.
 
 Short-horizon direction **is** predictable. Queue imbalance correlates with the
 next second's mid return at about 0.27, decaying to roughly 0.02 by ten
@@ -119,9 +196,24 @@ gross line to climb, and the fee takes it 1,200 basis points the other way.
 
 ![Where the model traded](assets/bt_trades.png)
 
-See [`docs/results.md`](docs/results.md) for the full picture and
-[`docs/limitations.md`](docs/limitations.md) for what it does not establish. No
-result here should be read as evidence that any strategy is or was profitable.
+### Why one works and the other does not
+
+The audit in [§28](docs/results.md) measures each source of information before a
+model is chosen, and the answer is not subtle. At a two-minute horizon on
+BICOUSDT, the best single column of the touch plane — the plane every earlier
+section used — reaches an information coefficient of 0.022 out of sample. The
+best single *cross-sectional* column reaches **0.046**, twice as much. Break-even
+needs about 0.08.
+
+So the ceiling was never the model. Eight features off the top of one book do
+not carry enough, and no arrangement of trees, ensembles, stacking or networks
+changes that — measured, in [§28](docs/results.md), rather than assumed.
+
+See [`docs/results.md`](docs/results.md) for the full picture,
+[`docs/findings.md`](docs/findings.md) for the register of every candidate and
+its status, and [`docs/limitations.md`](docs/limitations.md) for what none of it
+establishes. No backtest here should be read as evidence that any strategy is or
+was profitable.
 
 ---
 

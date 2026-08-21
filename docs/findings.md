@@ -27,7 +27,7 @@ the test — is what stopped that.
 
 **Status: candidate.** Frozen at
 [`strategies/reversion.py`](../src/trading_research/strategies/reversion.py);
-measured in [§27](results.md) and by
+measured in [§27](results.md#27-the-market-goes-too-far-and-comes-back) and by
 [`experiments/market_reversion.py`](../experiments/market_reversion.py).
 
 An equal-weighted index of 26 USDT perpetuals overshoots over roughly ten
@@ -70,6 +70,31 @@ Known weaknesses, recorded now rather than discovered later:
   buys leverage rather than diversification.
 - +2.8 bp against a 14 bp round trip is close enough to zero to be a period.
 
+### A model improving that rule
+
+**Status: candidate**, and dependent on the one above — if the reversion rule
+falls, this falls with it. Measured in
+[§28](results.md#28-where-the-information-is-and-what-a-model-can-add-to-a-rule)
+by [`experiments/reversion_boost.py`](../experiments/reversion_boost.py).
+
+The rule holds for a fixed ten minutes and gives back 51–86 bp from each trade's
+peak. Asked *how far a trade will run* rather than *when to exit*, a model
+improves it on 3,297 held-out trades:
+
+| Variant | Net per trade | paired *t* |
+|---|---:|---:|
+| hold through the trigger when confident | +18.8 | 10.0 |
+| per-trade take-profit level | +17.2 | 8.5 |
+| baseline rule | +7.4 | — |
+
+What would kill it: the same fresh-data test as the rule, and any sign that the
+ranking does not repeat when the trade population changes.
+
+Known weaknesses: it inherits every caveat of the rule it improves; the trades
+are pooled across instruments carrying one market-wide bet; and the models are
+fitted on 1,259 search-block trades, which is few enough that the DOGEUSDT-only
+version of the same comparison is not significant (*t* = 1.19).
+
 ---
 
 ## Killed
@@ -83,10 +108,12 @@ been positive before. The sweep had selected a period, not a rate.
 
 ### Best-of-240 configuration search
 
-**Status: killed** ([§26](results.md)). The winner of a ten-axis search cleared
-2.23 bp of a 12.02 bp round trip on the block that chose it and −0.21 bp on the
-block that chose nothing. No axis moved the median candidate by more than 0.7 bp
-against a 12 bp cost.
+**Status: killed** ([§26](results.md)). Re-run on corrected code across the
+three best-screened instruments, every winner is negative on both blocks:
+−8.98 and −17.32 on BTCUSDT, −5.49 and −45.43 on CRVUSDT, −11.68 and −14.70 on
+BICOUSDT. Gross edges are positive on the block that chose them and two of three
+flip sign on the block that chose nothing. No axis of thirteen moves the median
+candidate by more than about 0.7 bp against a 12–16 bp cost.
 
 ### Maker execution
 

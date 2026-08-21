@@ -292,6 +292,7 @@ def main() -> None:
     parser.add_argument("--universe", type=Path, default=Path("data/universe"))
     parser.add_argument("--symbol", default="DOGEUSDT")
     parser.add_argument("--models", nargs="+", default=["xgboost", "lightgbm", "tcn"])
+    parser.add_argument("--figures", action="store_true", help="Write charts to docs/images.")
     args = parser.parse_args()
     warnings.filterwarnings("ignore")
 
@@ -326,9 +327,34 @@ def main() -> None:
         f"\ntraining on {int((scope.block == 'search').sum())} trades, "
         f"testing on {int((scope.block == 'final').sum())} {args.symbol} trades"
     )
-    table = evaluate(scope, config, tuple(args.models))
+    table, curves = evaluate(scope, config, tuple(args.models))
     table.insert(0, "symbol", args.symbol)
     emit(table, f"reversion_boost_{args.symbol}")
+
+    if args.figures:
+        from trading_research.reporting import plots
+
+        images = Path("docs/images")
+        plots.equity_curves(
+            curves,
+            images / f"reversion_equity_{args.symbol}.png",
+            title=f"{args.symbol}: cumulative result on the held-out block",
+        )
+        shown = table[
+            (~table["variant"].str.startswith("  "))
+            & table["vs_baseline_bp"].notna()
+            & (~table["variant"].str.startswith("oracle"))
+        ].copy()
+        shown["variant"] = shown["variant"].str.replace(": ", " — ", regex=False)
+        plots.variant_comparison(
+            shown,
+            images / f"reversion_variants_{args.symbol}.png",
+            baseline=float(
+                table.loc[table["variant"].str.startswith("baseline"), "net_per_trade_bp"].iloc[0]
+            ),
+            title=f"{args.symbol}: net per trade, held-out block",
+        )
+        print(f"-> {images}")
 
 
 # ---------------------------------------------------------------------------
@@ -464,9 +490,13 @@ def evaluate(
             "paired_t": float(np.mean(difference) / error) if error > 0 else float("nan"),
         }
 
+    curves: dict[str, np.ndarray] = {}
+
     def summarise(label: str, net: np.ndarray, taken: int) -> dict:
         if taken == 0:
             return {"variant": label, "trades": 0, "net_per_trade_bp": np.nan, "total_bp": 0.0}
+        if len(net) == len(baseline):
+            curves[label] = net
         equity = np.cumsum(net)
         peak = np.maximum.accumulate(np.maximum(equity, 0.0))
         return {
@@ -618,7 +648,19 @@ def evaluate(
         ).items():
             rows.append(summarise(f"{name}: {label}", net, len(net)))
 
-    return pd.DataFrame(rows)
+    # Only the lines worth drawing: the rule, the best model variant, and the
+    # ceiling. A chart with fourteen overlapping curves communicates nothing.
+    scored = pd.DataFrame(rows)
+    ranked = scored[scored["vs_baseline_bp"].notna() & ~scored["variant"].str.startswith("oracle")]
+    # The oracle is deliberately absent from the curve. It earns six times the
+    # rule, so drawing it compresses the comparison that matters into the
+    # bottom eighth of the axis. Its number belongs in the table.
+    keep = ["baseline: fixed 10-minute clock"]
+    if not ranked.empty:
+        best_two = ranked.nlargest(2, "vs_baseline_bp")["variant"].tolist()
+        keep.extend(str(v) for v in best_two)
+    drawn = {k: curves[k] for k in keep if k in curves}
+    return scored, drawn
 
 
 # ---------------------------------------------------------------------------

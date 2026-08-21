@@ -196,6 +196,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--universe", type=Path, default=Path("data/universe"))
     parser.add_argument("--symbols", nargs="+", default=None)
+    parser.add_argument("--figures", action="store_true", help="Write charts to docs/images.")
     args = parser.parse_args()
     warnings.filterwarnings("ignore")
 
@@ -299,6 +300,38 @@ def main() -> None:
         )
         .reset_index(),
         "market_reversion_by_horizon",
+    )
+
+    if args.figures:
+        images = Path("docs/images")
+        draw_horizon_profile(scored, images / "reversion_horizon_profile.png")
+        print(f"-> {images}")
+
+
+def draw_horizon_profile(table: pd.DataFrame, path: Path) -> None:
+    """The holding-period profile on both blocks, which is the argument itself.
+
+    The claim is not that some cell was positive — a grid this size always has
+    one. It is that the *shape* repeats: two minutes loses, ten minutes is best,
+    longer decays, on a block the search chose parameters on and on a block it
+    never saw. A picture makes that either obvious or obviously absent.
+    """
+    from trading_research.reporting import plots
+
+    profile = (
+        table.dropna(subset=["search_net_bp", "final_net_bp"])
+        .groupby("hold_s")
+        .agg(search=("search_net_bp", "median"), final=("final_net_bp", "median"))
+        .reset_index()
+    )
+    plots.two_block_profile(
+        profile,
+        path,
+        x_column="hold_s",
+        search_column="search",
+        final_column="final",
+        x_label="holding period (seconds, log scale)",
+        title="Market reversion: net per trade by holding period",
     )
 
 

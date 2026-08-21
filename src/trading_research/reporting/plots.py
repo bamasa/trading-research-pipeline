@@ -756,3 +756,100 @@ def strategy_comparison(results: pd.DataFrame, path: Path | str, *, label: str =
     if label:
         title += f" — {label}"
     return _finish(fig, ax, title, Path(path))
+
+
+def equity_curves(
+    curves: dict[str, Sequence[float]], path: Path | str, *, title: str = "Cumulative result"
+) -> Path:
+    """Per-trade equity, one line per variant.
+
+    Cumulative basis points against trade number rather than against a clock:
+    the strategies compared here take the same entries and differ only in how
+    they leave, so trade number is the axis on which they are comparable. A
+    calendar axis would show flat stretches where nothing happened and read as
+    recovery.
+    """
+    plt = _pyplot()
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    for label, net in curves.items():
+        values = np.asarray(net, dtype="float64")
+        equity = np.concatenate([[0.0], np.cumsum(values)])
+        ax.plot(equity, linewidth=1.8, label=label)
+    ax.axhline(0.0, color="black", linewidth=0.8, alpha=0.5)
+    ax.set_xlabel("trade")
+    ax.set_ylabel("cumulative basis points")
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    return _finish(fig, ax, title, Path(path))
+
+
+def variant_comparison(
+    table: pd.DataFrame,
+    path: Path | str,
+    *,
+    label_column: str = "variant",
+    value_column: str = "net_per_trade_bp",
+    baseline: float | None = None,
+    title: str = "Net per trade",
+) -> Path:
+    """Horizontal bars, ordered, with the baseline drawn as a line.
+
+    Ordered because the ranking is the message, and horizontal because variant
+    names are sentences rather than words.
+    """
+    plt = _pyplot()
+    ordered = table.sort_values(value_column)
+    fig, ax = plt.subplots(figsize=(9, 0.42 * len(ordered) + 1.6))
+    colours = [
+        "#b3b3b3" if baseline is not None and v <= baseline else "#2b6cb0"
+        for v in ordered[value_column]
+    ]
+    ax.barh(ordered[label_column], ordered[value_column], color=colours, height=0.62)
+    if baseline is not None:
+        ax.axvline(baseline, color="#c53030", linewidth=1.2, linestyle="--", label="baseline rule")
+        ax.legend(frameon=False, fontsize=9, loc="lower right")
+    ax.set_xlabel("basis points per trade")
+    ax.grid(axis="x", alpha=0.25, linewidth=0.6)
+    ax.grid(axis="y", visible=False)
+    return _finish(fig, ax, title, Path(path))
+
+
+def two_block_profile(
+    table: pd.DataFrame,
+    path: Path | str,
+    *,
+    x_column: str,
+    search_column: str,
+    final_column: str,
+    title: str = "Search block against held-out block",
+    x_label: str = "",
+) -> Path:
+    """One quantity measured on both blocks, so agreement is visible at a glance.
+
+    The point of the picture is whether the two curves have the same *shape*. A
+    structure that repeats on a block the search never saw is worth something;
+    one that appears on only one of them is a period.
+    """
+    plt = _pyplot()
+    fig, ax = plt.subplots(figsize=(8, 4.2))
+    ax.plot(
+        table[x_column],
+        table[search_column],
+        marker="o",
+        linewidth=1.8,
+        color="#718096",
+        label="search block (chose the parameters)",
+    )
+    ax.plot(
+        table[x_column],
+        table[final_column],
+        marker="o",
+        linewidth=2.0,
+        color="#2b6cb0",
+        label="held out (never searched)",
+    )
+    ax.axhline(0.0, color="#c53030", linewidth=1.0, linestyle="--")
+    ax.set_xscale("log")
+    ax.set_xlabel(x_label or x_column)
+    ax.set_ylabel("net basis points per trade")
+    ax.legend(frameon=False, fontsize=9)
+    return _finish(fig, ax, title, Path(path))

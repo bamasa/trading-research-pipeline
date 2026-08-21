@@ -176,6 +176,23 @@ def ensure_trades(
     return plan(symbol, start, end, root)
 
 
+def _fetch_one_top_of_book(job: tuple[str, date, Path]) -> tuple[str, date, bool]:
+    """One instrument-day of top-of-book. Module level so it can be pickled.
+
+    A closure defined inside :func:`ensure_universe` cannot cross a process
+    boundary, and the failure is a pickling error at submit time rather than
+    anything to do with the download.
+    """
+    from trading_research.data.bybit import download_range
+
+    symbol, day, root = job
+    try:
+        download_range(symbol, day, day, root / symbol, depth=1, grid_ms=1000, workers=1)
+    except Exception:
+        return symbol, day, False
+    return symbol, day, True
+
+
 def ensure_universe(
     symbols: Sequence[str],
     start: date,
@@ -195,10 +212,8 @@ def ensure_universe(
     """
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
-    from trading_research.data.bybit import download_range
-
     plans = {s: plan(s, start, end, root) for s in symbols}
-    jobs = [(s, day) for s, p in plans.items() for day in p.missing]
+    jobs = [(s, day, root) for s, p in plans.items() for day in p.missing]
     if on_progress:
         have = sum(len(p.present) for p in plans.values())
         on_progress(
@@ -208,17 +223,9 @@ def ensure_universe(
     if dry_run or not jobs:
         return plans
 
-    def one(job: tuple[str, date]) -> tuple[str, date, bool]:
-        name, day = job
-        try:
-            download_range(name, day, day, root / name, depth=1, grid_ms=1000, workers=1)
-        except Exception:
-            return name, day, False
-        return name, day, True
-
     done = 0
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        for future in as_completed([pool.submit(one, job) for job in jobs]):
+        for future in as_completed([pool.submit(_fetch_one_top_of_book, job) for job in jobs]):
             future.result()
             done += 1
             if on_progress and done % 25 == 0:
