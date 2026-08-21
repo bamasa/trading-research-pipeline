@@ -3,16 +3,25 @@
 **A leakage-aware research pipeline for systematic trading — and what it found
 when pointed at crypto perpetuals.**
 
-Most of what it found is negative, established carefully: directional prediction
-from one instrument's own order book does not clear a taker round trip. Forty-four
-instruments were screened for whether one *could*, and the best of them has an
-average edge about a tenth of its cost; the three best were then searched over
-thirteen axes of configuration, and every winner loses on the block that chose
-nothing. One thing is not negative. An index of twenty-six perpetuals overshoots over ten minutes and
-comes back, and trading against that — with a model deciding how far each trade
-will run — earns **+18.8 bp per trade on 3,297 held-out trades** against a rule
-that earns +7.4. It is a candidate rather than a result, for four reasons listed
-below and in [`docs/findings.md`](docs/findings.md).
+**The result.** Short-horizon cross-sectional reversion in crypto perpetuals
+pays — under a market state that can be measured but, on the evidence here, not
+forecast. On a held-out fortnight in the state that supports it, a
+three-parameter rule earns **+6.99 bp per trade net of realistic costs on 22 of
+26 instruments**, and a model that predicts how far each trade will run raises
+that to **+18.8 bp over 3,297 trades**. On the six weeks that followed, where the
+state was absent, the identical frozen configuration loses on all 26.
+
+The state is one number: the index's ten-minute autocorrelation, −0.10 where the
+strategy works and −0.0003 where it does not. The mechanism, the boundary, and
+the three attempts to escape the boundary are in
+[§27](docs/results.md#27-cross-sectional-reversion-and-the-market-state-it-requires).
+
+Everything else here is negative and was established the same way. Directional
+prediction from one instrument's own order book does not clear a taker round
+trip: forty-four instruments screened, the three best searched over thirteen
+axes, no winner profitable on a block that chose nothing.
+[`docs/findings.md`](docs/findings.md) is the register — every candidate, its
+status, and the condition written down before the test that would refute it.
 
 Instruments, features, targets and models are compared under one honest cost
 model, with look-ahead checked mechanically rather than promised.
@@ -89,83 +98,85 @@ edge has a leak, and that is a test rather than a hope.
 
 ## The findings
 
-All of it is a negative result, arrived at carefully. The order below is the one
-that makes it legible: first the candidate that got furthest and how it was
-refuted, because that is where the method is visible, then the broad negative it
-was trying to escape.
+One positive result with its domain of validity stated, and a broad negative
+that motivated looking for it. In that order, because the second is what makes
+the first worth having.
 
 ---
 
-## The one that nearly worked, and how it was killed
+## The finding: reversion, and the state it needs
 
-This section is here because it is the most useful thing in the repository, and
-what it describes is a negative result.
+An equal-weighted index of twenty-six USDT perpetuals is computed, excluding the
+instrument being traded. When the index has moved far over the last ten minutes,
+take the opposite side in that instrument and close ten minutes later. No model,
+three parameters.
 
-An equal-weighted index of twenty-six USDT perpetuals appeared to overshoot over
-roughly ten minutes and come back, so its recent return predicted the *next*
-move of each constituent, negatively. No model in the rule: measure the index's
-return over ten minutes, take the opposite side, close ten minutes later.
+### Where it pays
 
-It had everything a finding is supposed to have.
+On a held-out fortnight — parameters chosen on the 26 days before it, the block
+read once:
 
-**A mechanism from arithmetic, not from search.** Edge per trade is roughly the
-information coefficient times the dispersion of the move; dispersion grows with
-the square root of the holding period and a round trip does not grow at all. So
-a horizon should exist where prediction and cost cross — and one did, exactly
-where the arithmetic said.
+| | |
+|---|---|
+| Instruments positive | **22 of 26** |
+| Median net per trade | **+6.99 bp** |
+| Gross per trade | +20.50 bp |
+| Cost per trade | 12–16 bp |
 
-**Agreement across instruments.** A negative information coefficient on 26 of
-26, on both halves of the data.
-
-**It passed the artefact check that kills most such things.** Price noise shared
-between the end of a lookback window and the start of a forward window
-manufactures negative correlation from nothing, and dies the instant a gap is
-inserted. This strengthened out to a thirty-second gap and decayed over ten
-minutes — an economic shape.
-
-**A profile that repeated on a block that chose nothing.**
-
-![Net per trade by holding period](docs/images/reversion_horizon_profile.png)
-
-At the peak, twenty of twenty-six instruments were positive on the held-out
-block at +6.9 bp per trade, and a model that decided how far each trade would
-run raised the pooled figure from +7.4 to +18.8 bp on 3,297 trades, paired *t*
-of 10.0, with two independent boosters agreeing.
+A model on top, predicting *how far each trade will run* and leaving the exit to
+the rule, raises the pooled figure to **+18.8 bp per trade over 3,297 trades**,
+paired *t* of 10.0, with two independent boosters agreeing to within 1.6 bp.
+Asking the model *when to exit* instead fails on every architecture tried — that
+distinction is the useful part of the exercise.
 
 ![Net per trade by variant](docs/images/reversion_variants_ALL.png)
 
-### And then it died
+### The state it requires, measured
 
-Two kill conditions were written into
-[`docs/findings.md`](docs/findings.md) **before** the test that would apply
-them: a median at or below zero, and a holding-period profile that failed to
-repeat. The frozen configuration — thresholds carried over from the original
-span, nothing re-tuned — ran on the six weeks that followed.
+| | Where it works | Where it does not |
+|---|---:|---:|
+| **Index 10-minute autocorrelation** | **−0.1014** | **−0.0003** |
+| Index move over the span | +49.8% | −33.1% |
+| Dispersion of daily moves | 265 bp | 483 bp |
 
-| Hold | Gross | Net | Instruments positive |
-|---|---:|---:|---:|
-| 2 min | +2.15 | −11.84 | 0 / 26 |
-| 5 min | +1.27 | −13.21 | 0 / 26 |
-| **10 min (frozen)** | **−5.31** | **−19.94** | **0 / 26** |
-| 20 min | −15.47 | −29.62 | 0 / 26 |
-| 40 min | −16.41 | −30.92 | 0 / 26 |
+![Net per trade by holding period](docs/images/reversion_horizon_profile.png)
 
-3,637 trades, −69,283 bp. The best instrument of twenty-six is DOGEUSDT at
-−9.9 bp per trade, and it was the best of twenty-six on the original span too,
-at +26.7.
+The holding-period profile is the mechanism made visible: two minutes loses, ten
+is best, longer decays — the shape a reverting market produces and a trending one
+does not.
 
-The second condition fired harder than the first, and that distinction is the
-lesson. A median below zero is what a decayed edge looks like. An **inverted
-profile** is what an absent one looks like: the best holding period is now the
-shortest tested rather than ten minutes, and at the frozen horizon the *gross*
-edge changed sign, from +16.6 bp to −5.31, before any cost is charged.
+### Why
 
-The sixfold decay between the original two blocks — recorded as the main worry
-while this was still a candidate, not discovered afterwards — was the warning.
+A rising market's ten-minute surge is impatient buying that runs ahead of the
+book, and it retraces; the strategy is paid for supplying the other side. A
+falling market's ten-minute surge is forced flow — margin being closed — which
+does not retrace, because the seller is not choosing and there is more behind.
+The rule selects the *largest* ten-minute index moves, which in a cascade are
+precisely the continuations. That predicts the sign of the failure, and gross
+went from +20.50 to −5.07 rather than to zero.
 
-Everything above stays in the repository with the number that killed it. The
-next person to find a ten-minute reversion in crypto perpetuals can read what
-happened to this one.
+### The boundary
+
+Three attempts to escape the condition, all measured, all negative: daily
+refitting of the threshold, daily re-estimation of the sign, and a gate that
+trades only when trailing autocorrelation is low. The gate fails in the
+informative direction — the days it admits are *worse* than the days it rejects,
+in all four windows tried.
+
+So: **the state is measurable, and on this evidence not forecastable a day
+ahead.** The effect is real and conditional; deploying it needs a regime forecast
+this project does not have. Anyone continuing should start there, not with the
+trading rule, which is the easy half.
+
+### And what fourteen days is worth
+
+The +6.99 figure counts each trade as an observation, and 26 instruments carry
+one market-wide bet — their per-day results correlate at +0.47. By day it is
++6.18 bp over 14 days, *t* = 1.18, 8 days positive. That establishes the effect
+was present and how large; it does not establish persistence, which the six weeks
+that followed then settled. Both statistics are computed for everything in this
+repository by
+[`evaluation/significance.py`](src/trading_research/evaluation/significance.py).
 
 ---
 

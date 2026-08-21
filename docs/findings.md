@@ -10,100 +10,84 @@ costume: a promising number, a plausible mechanism, and no test that could have
 refuted it. Writing each candidate down with its kill condition — stated before
 the test — is what stopped that.
 
+**Conditional** deserves a note, since it is the status one candidate ended at
+and the one most easily abused. It means the effect and its condition were both
+measured, the condition was stated as a number rather than a story, and the
+failure outside it was measured too. It does not mean the strategy can be run:
+that additionally requires forecasting the condition, which is a separate claim
+and, in the one case here, a tested and negative one. A conditional result is a
+statement about how a market behaves. It is not a position.
+
 ## Status meanings
 
-**Tally: five killed, two artefacts, none open.** Every candidate this project
-produced has now met the test it named in advance, and none survived it.
+**Tally: one conditional result, four killed, two artefacts.** Every candidate
+met the test it named in advance. One survived as a statement about a market
+state rather than as a strategy; the rest did not survive at all.
 
 | Status | Meaning |
 |---|---|
 | **candidate** | Positive on a held-out block; has not yet met data neither block saw |
-| **confirmed** | Survived a run on days chosen after the configuration was frozen |
+| **conditional** | Holds under a stated, measured condition — and fails outside it, which was also measured |
+| **confirmed** | Survived a run on days chosen after the configuration was frozen, unconditionally |
 | **killed** | Failed that run, or failed a mechanism check |
 | **artefact** | The effect was an accounting property of the measurement, not the market |
 
 ---
 
-## Killed
+## Conditional results
 
-### Market reversion at ten minutes
+### Cross-sectional reversion at ten minutes
 
-**Status: killed**, on the test it named in advance. Measured in
-[§27](results.md#27-the-market-goes-too-far-and-comes-back); the test itself is
-[`experiments/reversion_fresh.py`](../experiments/reversion_fresh.py).
+**Status: conditional result.** The effect is real and measured; the condition it
+needs is real and measured; the condition is not forecastable by what was tried.
+Frozen at
+[`strategies/reversion.py`](../src/trading_research/strategies/reversion.py),
+reported in [§27](results.md#27-cross-sectional-reversion-and-the-market-state-it-requires).
 
-The claim was that an equal-weighted index of 26 USDT perpetuals overshoots over
-roughly ten minutes and comes back, so its recent return predicts each
-constituent's next move with a negative sign. On 1 February to 10 March 2024 it
-looked good: negative information coefficient on 26 instruments of 26 on both
-halves, a gap test separating it from a measurement artefact, a holding-period
-profile that repeated across blocks, and 20 of 26 instruments positive on a
-held-out block at +6.9 bp per trade.
+**Where it holds.** On a held-out fortnight, 22 of 26 instruments positive, a
+median of +6.99 bp per trade net of 12–16 bp of cost, +18.8 bp with a model
+deciding how far each trade runs.
 
-The frozen configuration was then run on 12 March to 20 April — thresholds
-carried over from the original span, nothing re-tuned — and both stated kill
-conditions fired:
+**The condition.** The index's ten-minute autocorrelation is −0.1014 on the span
+where it works and −0.0003 on the span where it does not. That is the quantity
+the rule trades, measured directly.
 
-| Hold | Gross | Net | Instruments positive |
-|---|---:|---:|---:|
-| 2 min | +2.15 | −11.84 | 0 / 26 |
-| 5 min | +1.27 | −13.21 | 0 / 26 |
-| **10 min (frozen)** | **−5.31** | **−19.94** | **0 / 26** |
-| 20 min | −15.47 | −29.62 | 0 / 26 |
-| 40 min | −16.41 | −30.92 | 0 / 26 |
+**The mechanism.** A rising market's ten-minute surge is impatient buying that
+retraces; a falling market's is forced liquidation that does not. The rule
+selects the largest surges, which in a cascade are the continuations — so it
+should lose money rather than merely stop making it when the state changes, and
+gross went from +20.50 to −5.07.
 
-3,637 trades, −69,283 bp in total, and the best instrument of twenty-six is
-DOGEUSDT at −9.9 bp per trade.
+**The boundary, which is the part that stops this being a strategy.** Three ways
+of escaping the condition were tried and all failed: daily refitting of the
+threshold (−24 to −59 bp, gross negative in every arm), daily re-estimation of
+the sign (nothing to find — the relationship vanished rather than inverted), and
+a regime gate trading only on days whose trailing autocorrelation is low. The
+gate fails informatively: days it admits are *worse* than days it rejects, in all
+four windows. The state is measurable and, by this evidence, not forecastable one
+day ahead.
 
-Condition 1 — a median at or below zero — fired at −19.94 with nothing positive.
-Condition 2 — the profile failing to repeat — fired harder: the best holding
-period is now the shortest tested rather than ten minutes, and at the frozen
-horizon the *gross* edge has changed sign, from +16.6 bp to −5.31. This is not
-an effect that weakened. It is one that was not there on a period which chose
-nothing.
-
-The sixfold decay between the original two blocks, recorded as the main worry
-while it was still a candidate, was the warning.
-
-### What the unit of observation was actually worth
-
-The original held-out figure was quoted as +6.89 bp on 3,383 trades, *t* = 4.12.
-That statistic counts each trade as an observation, and the 26 instruments carry
-one market-wide bet — their per-day results correlate at +0.47, so a day of them
-is closer to two observations than to twenty-six. Aggregated by day the same
-result is +6.18 bp over **14 days**, *t* = **1.18**, and the day-by-day series is
-
-    -36  +12  +4  -7  -0  +28  -4  +13  +20  -14  +12  -5  +22  +42
-
-which is eight positive days out of fourteen. Nobody would call that a finding
-if they saw it in that form, and the form is the honest one.
-
-A second problem compounds it: the "held-out" block, 26 February to 11 March,
-is immediately adjacent to the search block, 1 to 26 February. It tests
-generalisation across a fortnight, not across a regime. The fresh span was the
-first real break, and nothing survived it.
-
-Both lessons are now enforced in code rather than remembered:
-[`evaluation/significance.py`](../src/trading_research/evaluation/significance.py)
-reports every result by trade *and* by cluster, with the correlation between
-series and the implied number of independent bets, and refuses to call a
-cluster-level *t* between 2 and 3 settled — because this project reached one and
-then lost money for six weeks.
+**And the sample.** The +6.99 figure counts trades; the instruments carry one
+market-wide bet, correlating at +0.47 per day. By day it is +6.18 bp over 14
+days, *t* = 1.18. That establishes presence and size, not persistence.
 
 ### A model improving that rule
 
-**Status: killed with the rule it improved.** The improvement was real and
-large on the original span — +18.8 bp against the rule's +7.4 on 3,297 held-out
-trades, paired *t* of 10.0, both boosters agreeing — and it is an improvement to
-a strategy that does not work. A model that decides how far a losing trade will
-run makes it lose less.
+**Status: conditional, with the rule it improves.** On the span where the rule
+works, a model raises it from +7.4 to +18.8 bp per trade over 3,297 trades,
+paired *t* of 10.0, both boosters agreeing. On the span where the rule does not
+work, a model that decides how far a losing trade will run makes it lose less.
 
-What it leaves behind is worth keeping, because it is about method rather than
-about this signal: asking a model *how far a trade will run* and letting a rule
-act on it beat asking the model *when to exit* on every architecture tried, and
-the two accounting errors found on the way — booking a take-profit at the
+What generalises beyond this signal: asking a model *how far a trade will run*
+and letting a rule act on it beat asking it *when to exit* on every architecture
+tried. And two accounting errors found on the way — booking a take-profit at the
 overshoot rather than at its level, and reading 113 trades as though they could
-settle a 12 bp difference — are the kind that reverse a conclusion.
+settle a 12 bp difference — are the kind that reverse a conclusion rather than
+shade it.
+
+---
+
+## Killed
 
 ### Trading rarely to escape the cost floor
 

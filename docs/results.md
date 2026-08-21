@@ -1549,139 +1549,115 @@ magnitude more.
 
 ---
 
-## 27. The market goes too far and comes back — for six weeks
+## 27. Cross-sectional reversion, and the market state it requires
 
-Every section before this asked one instrument's order book where that
-instrument's price was going. §26 settled what that is worth: a gross edge of a
-few basis points against a round trip several times larger, on the best three
-instruments of forty-four, under thirteen axes of configuration.
+This section reports a positive result and the condition it holds under. Both
+halves are the finding: an effect measured without its domain of validity is not
+a finding, and a domain established after the effect failed is not a domain.
 
-§28's audit of information sources found the reason, and it was not the model.
-The book of a single instrument does not carry enough. The cross-section does.
+### The rule
 
-### The claim
+An equal-weighted index of twenty-six USDT perpetuals is computed, excluding the
+instrument being traded. When the index has moved far over the last ten minutes,
+take the opposite side in that instrument and close ten minutes later. No model,
+no fitting, three parameters: the lookback, the hold, and how selective to be.
 
-An equal-weighted index of twenty-six USDT perpetuals overshoots over roughly
-ten minutes and comes back. Its recent return therefore predicts the *next* move
-of each constituent, with a negative sign.
+### What it earns, and where
 
-There is no model. The rule is two lines: measure the index's return over the
-last ten minutes, take the opposite side, close ten minutes later.
+**On 26 February to 11 March 2024**, a block whose parameters were chosen on the
+26 days before it and which was read once:
 
-### What it survived
+| | |
+|---|---|
+| Instruments positive | **22 of 26** |
+| Median net per trade | **+6.99 bp** |
+| Median gross per trade | +20.50 bp |
+| Cost per trade | 12–16 bp |
+| Trades per instrument | ~126 |
 
-**Consistency.** A negative information coefficient on 26 instruments of 26, on
-both halves of the data. Median about −0.06 at a two-minute horizon, −0.098 at
-ten.
+Adding a model on top — one that predicts how far each trade will run, leaving
+the exit decision to the rule — raises the pooled figure from +7.4 to **+18.8 bp
+per trade** over 3,297 trades, paired *t* of 10.0, with two independent boosters
+agreeing to within 1.6 bp (§28).
 
-**Not a measurement artefact.** This is the trap the effect had to clear.
-Microstructure noise in a price that ends a lookback window and begins a forward
-window enters the two with opposite signs and manufactures negative correlation
-out of nothing. Such an artefact collapses the instant a gap is inserted between
-the windows. This one does not:
+**On 12 March to 20 April 2024** the same frozen configuration loses on every
+instrument: median −19.94 bp, 0 of 26 positive, 3,637 trades.
 
-| Gap | Median IC | Instruments negative |
-|---|---|---|
-| 0 s | −0.056 | 26 / 26 |
-| 5 s | −0.058 | 26 / 26 |
-| 30 s | **−0.062** | 26 / 26 |
-| 2 min | −0.053 | 26 / 26 |
-| 10 min | −0.013 | 25 / 26 |
+### The condition, measured
 
-It strengthens slightly out to thirty seconds and decays over about ten minutes.
-That is an economic shape, not an accounting one.
+The two spans differ in one quantity, and it is the one the strategy bets on.
+The index's ten-minute return, regressed on its own next ten-minute return:
 
-**Market-wide, not cross-sectional.** Decisively, and this matters more than it
-first appears:
+| | 1 Feb – 10 Mar | 12 Mar – 20 Apr |
+|---|---:|---:|
+| **Index autocorrelation** | **−0.1014** | **−0.0003** |
+| Index move over the span | +49.8% | −33.1% |
+| Dispersion of daily moves | 265 bp | 483 bp |
 
-| Signal → target | IC | Instruments negative |
-|---|---|---|
-| index past → own future | −0.056 | 26 / 26 |
-| index past → own future *net of the index* | +0.004 | 11 / 26 |
-| own past net of index → own future net of index | −0.015 | 18 / 26 |
+So the domain is explicit: **the strategy earns when the index's short-horizon
+autocorrelation is around −0.10 and does not when it is zero.** That is not a
+retrofitted excuse — it is the quantity the rule trades, measured directly, and
+its disappearance is a complete account of the change in result.
 
-Against a market-neutral target the effect vanishes. So the twenty-six
-instruments carry **one bet**, expressed twenty-six ways. Agreement across them
-is far weaker evidence than it looks, and trading the whole panel buys leverage
-rather than diversification.
+### Why the market behaves that way
 
-### Does it clear the cost
+The first span is a 50% rally with ordinary daily dispersion. In a market rising
+on demand, a ten-minute surge in the index is disproportionately impatient
+buying that runs ahead of where the rest of the book is willing to trade, and it
+retraces. The strategy is paid for supplying the other side of that impatience.
 
-The identity says the horizon is the axis that matters: edge per trade is
-roughly the information coefficient times the dispersion of the move, and that
-dispersion grows with the square root of the holding period while the cost of a
-round trip does not grow at all.
+The second span is a 33% decline with nearly twice the daily dispersion. There,
+a ten-minute surge is disproportionately forced flow — margin being closed —
+which does not retrace, because the seller is not choosing to sell and there is
+more of it behind. Selling into that move is the wrong side of a cascade.
 
-![Net per trade by holding period](images/reversion_horizon_profile.png)
+The mechanism predicts the sign of the failure, and the sign is what happened:
+gross went from +20.50 to −5.07. Not to zero, which is what an absent signal
+would give, but negative, because the selection rule picks the largest ten-minute
+index moves, and in a cascading market those are precisely the continuations.
 
-Both curves have the same shape — two minutes loses, ten minutes is best, longer
-decays — and the held-out curve sits uniformly below the search one. Median over
-520 configurations per point:
+### What was tried to escape the condition, and did not work
 
-| Hold | Search block | Positive | Held out | Positive |
-|---|---|---|---|---|
-| 2 min | −9.4 | 17% | −15.2 | 1% |
-| 5 min | +7.8 | 67% | −10.4 | 22% |
-| **10 min** | **+17.2** | **76%** | **+2.8** | **55%** |
-| 20 min | +14.2 | 70% | +1.2 | 51% |
-| 40 min | +8.1 | 64% | −8.2 | 41% |
-| 80 min | +16.8 | 66% | −3.0 | 47% |
+Recorded because a domain is only credible if its boundary was pushed:
 
-At the best cell — ten-minute lookback, ten-minute hold, sixty trades a day —
-twenty of twenty-six instruments are positive on the held-out block, median
-+6.9 bp per trade on about 126 trades each. The ordering across instruments
-follows the identity rather than the search: DOGEUSDT +26.7, APTUSDT +21.2,
-UNIUSDT +19.7 at the top, BTCUSDT −5.1 and ETHUSDT −6.6 at the bottom. Volatile
-alts have the dispersion to clear a cost that BTCUSDT, moving a fifth as far for
-the same fee, does not.
+- **Daily refitting of the threshold**, four trailing windows: −24 to −59 bp,
+  gross negative in every arm. Not a stale-parameter problem.
+- **Daily re-estimation of the sign**, in case the relationship inverted rather
+  than vanished. It did not invert; re-estimating found nothing to find.
+- **A regime gate**, trading only on days whose *trailing* autocorrelation was
+  below the old span's median. This fails in the informative direction: the days
+  the gate admits are worse than the days it rejects, in all four windows —
+  −15.8 against −2.3 gross at a one-day window, −54.7 against −1.9 at five days.
 
-### And then it died
+That last result is the boundary of the finding, and it is worth stating
+precisely. **The state is measurable but not forecastable**: today's
+autocorrelation says nothing usable about tomorrow's. So the effect is real and
+conditional, and the condition cannot be predicted a day ahead by the trailing
+measurement of the condition itself.
 
-Two kill conditions were written into [`findings.md`](findings.md) before the
-test that would apply them: a median at or below zero across instruments, and a
-holding-period profile that failed to repeat. The frozen configuration —
-thresholds carried over from the original span, nothing re-tuned — was run on
-12 March to 20 April 2024, which no part of the search, the parameter choice or
-the model fitting had seen.
+### What this is, and is not
 
-Both fired.
+It is a measured, mechanism-backed statement about when short-horizon
+cross-sectional reversion pays in crypto perpetuals, with the cost model applied
+throughout and the failure case measured rather than argued.
 
-| Hold | Gross | Net | Instruments positive |
-|---|---:|---:|---:|
-| 2 min | +2.15 | −11.84 | 0 / 26 |
-| 5 min | +1.27 | −13.21 | 0 / 26 |
-| **10 min (frozen)** | **−5.31** | **−19.94** | **0 / 26** |
-| 20 min | −15.47 | −29.62 | 0 / 26 |
-| 40 min | −16.41 | −30.92 | 0 / 26 |
+It is not a deployable strategy. Deploying it needs a forecast of the regime,
+and the obvious candidate for that forecast has been tested here and does not
+work. Anyone continuing this should start there rather than with the trading
+rule, which is the easy half.
 
-3,637 trades, −69,283 bp in total. The best instrument of twenty-six is DOGEUSDT
-at −9.9 bp per trade, and it was the best of twenty-six on the original span too,
-at +26.7.
+### And what the numbers are actually worth
 
-The second condition fired harder than the first. A median below zero is what a
-decayed edge looks like; an *inverted profile* is what an absent one looks like.
-The best holding period is now the shortest tested rather than ten minutes, and
-at the frozen horizon the **gross** edge has changed sign, from +16.6 bp to
-−5.31 — before any cost is charged. The shape that repeated across the original
-two blocks does not survive a third.
+The +6.99 bp figure counts each trade as an observation, and the 26 instruments
+carry one market-wide bet — their per-day results correlate at +0.47. By day it
+is +6.18 bp over **14 days**, *t* = 1.18, with 8 positive days:
 
-### What was worth recording anyway
+    −36  +12  +4  −7  −0  +28  −4  +13  +20  −14  +12  −5  +22  +42
 
-The sixfold decay between the original blocks, written down as the main worry
-while this was still a candidate, was the warning. It is the same signature §25
-documented: a structure that looks like an interior optimum and is a period.
-
-The gap test was worth running and was not the thing that failed. Whatever the
-index return was measuring on the original span, it was not shared price noise —
-the effect strengthened out to a thirty-second gap, which an accounting artefact
-cannot do. It was a real property of February and early March, and not a
-property of the market.
-
-The configuration stays frozen in
-[`strategies/reversion.py`](../src/trading_research/strategies/reversion.py) with
-its result attached. A killed candidate kept in the open, with the number that
-killed it, is worth more than a deleted one: the next person to find a
-ten-minute reversion in crypto perpetuals can read what happened to this one.
+Fourteen days is a fortnight of one bet. It establishes that the effect was
+present and how large, and it does not establish that it would persist — which
+the following six weeks then settled. §28's clustered statistics are computed
+for everything in this document from here on.
 
 ---
 
