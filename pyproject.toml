@@ -134,7 +134,7 @@ no_implicit_optional = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["xgboost.*", "sklearn.*", "matplotlib.*", "torch.*", "skl2onnx.*", "onnxruntime.*"]
+module = ["xgboost.*", "sklearn.*", "matplotlib.*", "torch.*", "skl2onnx.*", "onnxruntime.*", "structural_break", "structural_break.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
