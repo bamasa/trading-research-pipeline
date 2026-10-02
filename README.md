@@ -675,6 +675,7 @@ Documented in [`docs/`](docs/) as it lands:
 | `execution_assumptions.md` | Cost model, fills, what the backtest does and does not simulate |
 | `limitations.md` | What this does not establish |
 | `disclosure_policy.md` | What is public here and why, and what is not |
+| `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
 
 ---
 
@@ -809,6 +810,19 @@ Next, and in this order, because the first one decides whether the rest matters:
 - [ ] Refitting at the breaks the whitened monitor flags, against the fixed
       cadences of §10, on the refit-policy axis `grand_search.py` already has
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
+
+**Market making, registered before it is built.** The maker case above is one
+of three hypotheses in a market-making study: a two-sided quoter with inventory
+limits, simulated in event time with a queue per order and fills only from
+Bybit's trade prints. The blocks, the instrument admission rule, the hypotheses
+with their kill conditions and placebos, the advantage ladder, the fee
+break-even and the amendment protocol are in
+[`docs/preregistration/market_making.md`](docs/preregistration/market_making.md),
+with the values the code will read in
+[`configs/mm_prereg.yaml`](configs/mm_prereg.yaml). Both were committed before
+any simulator code existed and before any market-making number was computed on
+any block. The simulator, the development-period search and the single read of
+the held-out fortnight follow as separate pull requests, in that order.
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
 
