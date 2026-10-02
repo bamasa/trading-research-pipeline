@@ -58,6 +58,10 @@ class Order:
     arrival_snapshot_ns: int = 0
     #: True until the first snapshot after it went live has been applied.
     in_arrival_interval: bool = False
+    #: In the arrival interval: print volume at its price beyond the queue
+    #: ahead, and how much of it the order has been given.
+    arrival_excess: float = 0.0
+    arrival_filled: float = 0.0
     #: Joined at the front by assumption (the ladder's upper-bound rung).
     front: bool = False
     #: Whether the latest snapshot showed the opposite touch at or through it.

@@ -45,6 +45,20 @@ def _order(side: int = 1, price: int = 100, size: float = 2.0, live_ns: int = 25
     )
 
 
+def _hit(
+    order: Order,
+    price: int,
+    size: float,
+    aggressor: int,
+    *,
+    ts: int = 50,
+    growth: ArrivalGrowth = ArrivalGrowth.NONE,
+) -> tuple[float, str]:
+    """A print at ``ts`` (after the order went live at 25); by default under the
+    arrival-growth rule that gives hidden joiners nothing."""
+    return on_print(order, price, size, aggressor, ts=ts, growth=growth)
+
+
 def _arrived(level: float, *, side: int = 1, size: float = 2.0) -> Order:
     order = _order(side=side, size=size)
     on_arrival(order, level, inside_spread=False, priority=QueuePriority.TAIL)
@@ -85,7 +99,7 @@ def test_inside_the_spread_starts_at_the_front() -> None:
     order = _order()
     on_arrival(order, 0.0, inside_spread=True, priority=QueuePriority.TAIL)
     assert order.queue_ahead == 0.0
-    filled, path = on_print(order, 100, 1.0, -1)
+    filled, path = _hit(order, 100, 1.0, -1)
     assert (filled, path) == (1.0, QUEUE)
 
 
@@ -106,7 +120,7 @@ def test_the_front_priority_rung_ignores_the_visible_queue() -> None:
 def test_an_order_beyond_the_visible_book_waits_for_the_level_to_appear() -> None:
     order = _order()
     on_arrival(order, None, inside_spread=False, priority=QueuePriority.TAIL)
-    assert on_print(order, 100, 50.0, -1) == (0.0, "")
+    assert _hit(order, 100, 50.0, -1) == (0.0, "")
     on_snapshot(
         order,
         6.0,
@@ -125,23 +139,23 @@ def test_an_order_beyond_the_visible_book_waits_for_the_level_to_appear() -> Non
 def test_prints_on_the_wrong_side_do_not_advance_the_queue() -> None:
     """A buyer lifting the offer at our bid's price does not touch the bid queue."""
     order = _arrived(5.0)
-    assert on_print(order, 100, 3.0, +1) == (0.0, "")
+    assert _hit(order, 100, 3.0, +1) == (0.0, "")
     assert order.queue_ahead == 5.0
 
 
 def test_prints_at_other_prices_do_not_advance_the_queue() -> None:
     """A sale above our bid does not reach it."""
     order = _arrived(5.0)
-    assert on_print(order, 101, 30.0, -1) == (0.0, "")
+    assert _hit(order, 101, 30.0, -1) == (0.0, "")
     assert order.queue_ahead == 5.0
     ask = _arrived(5.0, side=-1)
-    assert on_print(ask, 99, 30.0, +1) == (0.0, "")
+    assert _hit(ask, 99, 30.0, +1) == (0.0, "")
     assert ask.queue_ahead == 5.0
 
 
 def test_partial_fills_sum_to_the_print_beyond_the_queue() -> None:
     order = _arrived(3.0, size=5.0)
-    fills = [on_print(order, 100, size, -1)[0] for size in (2.0, 2.0, 1.5, 10.0)]
+    fills = [_hit(order, 100, size, -1)[0] for size in (2.0, 2.0, 1.5, 10.0)]
     assert fills == [0.0, 1.0, 1.5, 2.5]
     assert sum(fills) == 5.0
     assert order.remaining == 0.0
@@ -149,11 +163,11 @@ def test_partial_fills_sum_to_the_print_beyond_the_queue() -> None:
 
 def test_a_print_through_the_price_fills_at_the_limit_and_clears_the_queue() -> None:
     order = _arrived(40.0, size=3.0)
-    filled, path = on_print(order, 98, 2.0, -1)
+    filled, path = _hit(order, 98, 2.0, -1)
     assert (filled, path) == (2.0, THROUGH)
     assert order.queue_ahead == 0.0
     ask = _arrived(40.0, side=-1, size=3.0)
-    assert on_print(ask, 103, 7.0, +1) == (3.0, THROUGH)
+    assert _hit(ask, 103, 7.0, +1) == (3.0, THROUGH)
 
 
 def test_a_print_through_fills_at_the_order_price_in_the_simulator() -> None:
@@ -221,7 +235,7 @@ def test_cancellation_attribution_brackets_on_one_snapshot() -> None:
 def test_prints_at_the_price_are_not_counted_again_as_cancellations() -> None:
     order = _arrived(10.0)
     order.in_arrival_interval = False
-    on_print(order, 100, 4.0, -1)
+    _hit(order, 100, 4.0, -1)
     assert order.queue_ahead == 6.0
     _snapshot(order, 6.0, CancelAttribution.OPTIMISTIC, ArrivalGrowth.NONE)
     assert order.queue_ahead == 6.0
@@ -249,7 +263,14 @@ def _random_walk(seed: int, rule: CancelAttribution, growth: ArrivalGrowth) -> t
         before = order.queue_ahead
         if rng.random() < 0.6:
             price = 100 + int(rng.integers(-1, 2))
-            got, _ = on_print(order, price, float(rng.integers(1, 8)), int(rng.choice([-1, 1])))
+            got, _ = on_print(
+                order,
+                price,
+                float(rng.integers(1, 8)),
+                int(rng.choice([-1, 1])),
+                ts=100 * step + 50,
+                growth=growth,
+            )
             filled += got
             ok &= order.queue_ahead >= 0.0 and order.queue_ahead <= before
         else:
@@ -383,3 +404,191 @@ def test_assume_filled_reports_more_fills_than_trade_tape() -> None:
     )
     assert len(assumed.fills.query("maker")) > len(tape.fills.query("maker"))
     assert assumed.fills.query("maker")["path"].tolist() == ["crossed"]
+
+
+# ---------------------------------------------------------------------------
+# Prints before the first snapshot after arrival (review B1)
+# ---------------------------------------------------------------------------
+
+#: What each arrival-growth bracket leaves the order of a 3-unit excess printed
+#: 50 ms after the arrival snapshot, the order having arrived at 10 ms: hidden
+#: joiners get none of it, a fifth (10 of 50 ms) or all of it.
+_ARRIVAL_SHARE = {
+    ArrivalGrowth.NONE: 3.0,
+    ArrivalGrowth.PRO_RATA_TIME: 2.4,
+    ArrivalGrowth.ALL_AHEAD: 0.0,
+}
+
+
+@pytest.mark.parametrize("growth", list(ArrivalGrowth))
+def test_an_inside_order_shares_arrival_prints_with_hidden_earlier_joiners(
+    growth: ArrivalGrowth,
+) -> None:
+    """Our bid at 101 improves a 100 / 103 book and arrives at 10 ms with nothing
+    visible ahead. A sale of 3 at 101 at 50 ms proves someone else bid 101 by
+    then, having joined after the 0 ms snapshot — before us with probability
+    10/50 under the time split, certainly under all_ahead."""
+    book = _book(100, 103)
+    market = hand_built_market(
+        [(0.0, *book), (100.0, *book), (200.0, *book)],
+        [(50.0, 101, 3.0, -1)],
+    )
+    config = SimConfig(
+        clip_notional=10.0, clip_touch_share=1e9, warmup_s=0.0, arrival_growth=growth
+    )
+    fills = simulate_day(market, Fixed(bid=101), config).fills.query("maker")
+    assert fills["size"].sum() == pytest.approx(_ARRIVAL_SHARE[growth])
+
+
+@pytest.mark.parametrize("growth", list(ArrivalGrowth))
+def test_a_touch_order_shares_the_excess_in_its_arrival_interval(growth: ArrivalGrowth) -> None:
+    """Ten visible at 100; we join behind them at 10 ms. A sale of 13 at 50 ms:
+    the 3 beyond the visible 10 traded with orders that joined after the
+    snapshot, some of them before us."""
+    book = _book(100, 102)
+    market = hand_built_market(
+        [(0.0, *book), (100.0, *_book(100, 102, size=10.0)), (200.0, *book)],
+        [(50.0, 100, 13.0, -1)],
+    )
+    config = SimConfig(
+        clip_notional=10.0, clip_touch_share=1e9, warmup_s=0.0, arrival_growth=growth
+    )
+    fills = simulate_day(market, Fixed(bid=100), config).fills.query("maker")
+    assert fills["size"].sum() == pytest.approx(_ARRIVAL_SHARE[growth])
+
+
+def test_arrival_prints_are_shared_as_a_running_total_and_never_exceed_the_print() -> None:
+    """Two excess prints in one interval: the entitlement is recomputed on the
+    running total, and a print never fills more than it brought."""
+    order = _arrived(0.0, size=10.0)  # arrival snapshot at 0, live at 25
+    first = _hit(order, 100, 1.0, -1, ts=50, growth=ArrivalGrowth.PRO_RATA_TIME)
+    assert first[0] == pytest.approx(0.5)  # half of the first unit: 25 of 50 ns
+    second = _hit(order, 100, 1.0, -1, ts=250, growth=ArrivalGrowth.PRO_RATA_TIME)
+    # Entitled to 0.9 of 2 by now, 0.5 received: 1.3 due, capped at the 1 printed.
+    assert second[0] == pytest.approx(1.0)
+    # A larger print: 0.9 of the 7 printed so far, less the 1.5 received.
+    after = _hit(order, 100, 5.0, -1, ts=250, growth=ArrivalGrowth.PRO_RATA_TIME)
+    assert after[0] == pytest.approx(0.9 * 7 - 1.5)
+
+
+def test_arrival_growth_orders_the_fills_of_one_order() -> None:
+    """For one order on one stream, all_ahead <= pro_rata_time <= none."""
+    for seed in range(200):
+        for rule in CancelAttribution:
+            fills = {growth: _random_walk(seed, rule, growth)[0] for growth in ArrivalGrowth}
+            assert fills[ArrivalGrowth.ALL_AHEAD] <= fills[ArrivalGrowth.PRO_RATA_TIME] + 1e-12
+            assert fills[ArrivalGrowth.PRO_RATA_TIME] <= fills[ArrivalGrowth.NONE] + 1e-12
+
+
+def test_arrival_growth_brackets_the_fills_of_held_orders() -> None:
+    held = FUZZ.with_(clip_notional=1e12, soft_limit_clips=1e6)
+    strict = 0
+    for seed in range(40):
+        market = random_market(seed, n_snapshots=400, max_step=0, through_share=0.0)
+        quoter = Fixed(bid=int(market.bid_px[0, 0]), ask=int(market.ask_px[0, 0]))
+        volume = {
+            growth: float(
+                simulate_day(market, quoter, held.with_(arrival_growth=growth))
+                .fills.query("maker")["size"]
+                .sum()
+            )
+            for growth in ArrivalGrowth
+        }
+        assert volume[ArrivalGrowth.ALL_AHEAD] <= volume[ArrivalGrowth.PRO_RATA_TIME] + 1e-9
+        assert volume[ArrivalGrowth.PRO_RATA_TIME] <= volume[ArrivalGrowth.NONE] + 1e-9
+        strict += volume[ArrivalGrowth.ALL_AHEAD] < volume[ArrivalGrowth.NONE]
+    assert strict > 0
+
+
+# ---------------------------------------------------------------------------
+# Conservation, off-book prints, and a stated limitation
+# ---------------------------------------------------------------------------
+
+
+def test_own_fills_never_exceed_the_print_volume_that_reached_them() -> None:
+    """Long cancel latencies keep several own orders on one side at once. For
+    every (timestamp, side), own passive volume is at most the hitting side's
+    print volume; no order fills beyond its size; every fill is at its price."""
+    checked = several = 0
+    for seed in range(120):
+        market = random_market(seed, n_snapshots=200, prints_per_snapshot=2.0)
+        for latency in (10_000_000, 250_000_000):
+            config = FUZZ.with_(
+                cancel_latency_ns=latency, order_latency_ns=latency // 5, soft_limit_clips=50.0
+            )
+            result = simulate_day(market, TouchQuoter(), config)
+            maker = result.fills.query("maker")
+            orders = result.orders.set_index("oid")
+            for (ts, side), group in maker.groupby(["ts", "side"]):
+                here = (market.trade_ts == ts) & (market.trade_aggressor == -side)
+                assert group["size"].sum() <= market.trade_sz[here].sum() + 1e-9
+                several += group["oid"].nunique() > 1
+                checked += 1
+            filled = maker.groupby("oid")["size"].sum()
+            assert (filled <= orders.loc[filled.index, "size"] + 1e-9).all()
+            prices = orders.loc[maker["oid"], "price"].to_numpy() * market.spec.tick
+            np.testing.assert_allclose(maker["price"].to_numpy(), prices)
+    assert checked > 3000 and several > 0
+
+
+def test_off_book_prints_never_fill() -> None:
+    """A sale far below the deepest visible bid could not have swept this book;
+    it reaches no own order, and is counted."""
+    bids, asks = _book(100, 102)
+    market = hand_built_market(
+        [(0.0, bids, asks), (100.0, bids, asks)],
+        [(150.0, 80, 5.0, -1), (160.0, 99, 0.5, -1)],
+    )
+    assert market.trade_eligible.tolist() == [False, True]
+    result = simulate_day(market, Fixed(bid=100), CONFIG)
+    assert result.fills.query("maker")["size"].tolist() == [0.5]
+    assert result.counters["off_book_prints"] == 1
+    assert result.counters["off_book_prints_skipped"] == 1
+
+
+def test_a_second_own_order_reads_the_first_ones_fill_as_a_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stated limitation, pinned so that a fix shows: own impact is not
+    modelled. An old bid at 100 (its cancel in flight) and a new one at 99
+    behind 10. A sale of 4 at 99 sweeps through 100, filling the old bid 2,
+    and leaves 2 for the 99 queue; the historical 99 level shrank by 4, and the
+    2 we took reads at the next snapshot as a cancellation that moves the new
+    order forward (6 ahead where 8 is the truth)."""
+    from trading_research.market_making import simulator as sim
+
+    snapshots = [
+        (0.0, *_book(100, 102)),
+        (100.0, *_book(99, 102)),
+        (200.0, *_book(99, 102, size=10.0)),
+    ]
+    snapshots[2] = (200.0, [(99, 6.0), (98, 10.0), (97, 10.0)], snapshots[2][2])
+    market = hand_built_market(snapshots, [(150.0, 99, 4.0, -1)])
+
+    @dataclass(frozen=True)
+    class Down:
+        name: str = "down"
+        uses_future: bool = False
+
+        def quotes(self, view: MarketView, position: float) -> Quotes:
+            bid = 100 if view.ts == market.book_ts[0] else 99
+            return Quotes(Quote(bid, 2.0), Quote(None, 0.0))
+
+    seen: list[float] = []
+    original = sim.on_snapshot
+
+    def spy(order: Order, level: float | None, **kwargs: object) -> None:
+        original(order, level, **kwargs)  # type: ignore[arg-type]
+        if order.price == 99:
+            seen.append(order.queue_ahead)
+
+    monkeypatch.setattr(sim, "on_snapshot", spy)
+    config = SimConfig(
+        clip_notional=1e12,
+        clip_touch_share=1e9,
+        warmup_s=0.0,
+        soft_limit_clips=1e6,
+        cancel_latency_ns=250_000_000,
+    )
+    simulate_day(market, Down(), config)
+    assert seen[-1] == pytest.approx(6.0)

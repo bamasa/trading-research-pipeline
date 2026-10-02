@@ -158,3 +158,21 @@ def test_a_cancel_faster_than_its_order_waits_for_it() -> None:
     assert order["outcome"] == "cancelled"
     assert order["done_ns"] == order["live_ns"]
     assert result.fills.query("maker").empty
+
+
+def test_an_order_arriving_at_a_snapshots_timestamp_joins_that_snapshots_queue() -> None:
+    """Ties go to the market: the snapshot stamped with the arrival time is
+    processed first. The 10 ms snapshot shows 30 at 100, so the order decided
+    at 0 joins behind 30, not the 10 of the snapshot it was decided on, and a
+    sale of 15 at 20 ms does not reach it."""
+    market = hand_built_market(
+        [
+            (0.0, *BOOK),
+            (10.0, [(100, 30.0), (99, 10.0), (98, 10.0)], BOOK[1]),
+            (100.0, [(100, 15.0), (99, 10.0), (98, 10.0)], BOOK[1]),
+        ],
+        [(20.0, 100, 15.0, -1)],
+    )
+    result = simulate_day(market, ALWAYS_100, CONFIG.with_(clip_notional=10.0))
+    assert result.orders["live_ns"].iloc[0] - START == 10_000_000
+    assert result.fills.query("maker").empty

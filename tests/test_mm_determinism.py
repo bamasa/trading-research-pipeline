@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from dataclasses import replace
+from datetime import time, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from trading_research.market_making.events import DayEvents
 from trading_research.market_making.quoters import TouchQuoter
@@ -27,7 +29,7 @@ def test_the_same_inputs_give_identical_results() -> None:
     assert len(first.fills) > 50
 
 
-def _write(events: DayEvents, books: Path, trades: Path) -> None:
+def _write(events: DayEvents, books: Path, trades: Path, *, gaps: int = 0) -> None:
     """Put a synthetic day on disk in the layout the downloaders write."""
     tick = events.spec.tick
     symbol = events.spec.symbol
@@ -39,7 +41,9 @@ def _write(events: DayEvents, books: Path, trades: Path) -> None:
         book[f"ask_price_{level}"] = np.round(events.ask_px[:, level] * tick, 8)
         book[f"ask_size_{level}"] = events.ask_sz[:, level]
     (books / symbol).mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(book).to_parquet(books / symbol / name, index=False)
+    frame = pd.DataFrame(book)
+    frame.attrs["sequence_gaps"] = gaps
+    frame.to_parquet(books / symbol / name, index=False)
     prints = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(events.trade_ts, unit="ns", utc=True),
@@ -100,3 +104,128 @@ def test_a_day_missing_either_plane_is_reported_not_simulated(tmp_path: Path) ->
     )
     assert "no trades" in frame["status"].iloc[0]
     assert np.isnan(frame["net"].iloc[0])
+
+
+def _run(
+    books: Path,
+    trades: Path,
+    days: list,
+    cache: Path | None = None,
+    funding: Path | None = None,
+    config: SimConfig = CONFIG,
+):
+    return run_days(
+        "FUZZUSDT",
+        days,
+        TouchQuoter,
+        config,
+        book_roots=[books],
+        trades_root=trades,
+        funding_root=funding,
+        cache=cache,
+    )
+
+
+def test_the_cache_is_keyed_by_the_data_it_read(tmp_path: Path) -> None:
+    """Different data under different roots never shares a cached answer, and
+    rewriting a file under the same root invalidates it."""
+    cache = tmp_path / "cache"
+    a = (tmp_path / "a" / "book", tmp_path / "a" / "trades")
+    b = (tmp_path / "b" / "book", tmp_path / "b" / "trades")
+    _write(random_market(1, n_snapshots=500), *a)
+    _write(random_market(2, n_snapshots=500), *b)
+
+    first = _run(*a, [SYNTHETIC_DAY], cache)
+    fresh = _run(*b, [SYNTHETIC_DAY])
+    cached = _run(*b, [SYNTHETIC_DAY], cache)
+    assert first["net"].iloc[0] != fresh["net"].iloc[0]
+    assert cached["net"].iloc[0] == fresh["net"].iloc[0]
+
+    _write(random_market(3, n_snapshots=500), *a)  # same path, new content
+    rewritten = _run(*a, [SYNTHETIC_DAY], cache)
+    assert rewritten["net"].iloc[0] == _run(*a, [SYNTHETIC_DAY])["net"].iloc[0]
+    assert rewritten["net"].iloc[0] != first["net"].iloc[0]
+
+
+def test_a_change_to_the_simulator_or_the_funding_root_invalidates_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from trading_research.market_making import simulator
+
+    books, trades, cache = tmp_path / "book", tmp_path / "trades", tmp_path / "cache"
+    _write(random_market(1, n_snapshots=300), books, trades)
+
+    def keys() -> int:
+        return len([p for p in cache.iterdir() if p.is_dir()])
+
+    _run(books, trades, [SYNTHETIC_DAY], cache)
+    _run(books, trades, [SYNTHETIC_DAY], cache)
+    assert keys() == 1
+    monkeypatch.setattr(simulator, "source_fingerprint", lambda: "a different simulator")
+    _run(books, trades, [SYNTHETIC_DAY], cache)
+    assert keys() == 2
+    funding = tmp_path / "funding"
+    (funding / "FUZZUSDT").mkdir(parents=True)
+    start = pd.Timestamp(SYNTHETIC_DAY.isoformat(), tz="UTC").value
+    pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [start + h * 3600 * 10**9 for h in (0, 8, 16)], unit="ns", utc=True
+            ),
+            "rate": [1e-4, 1e-4, 1e-4],
+        }
+    ).to_parquet(funding / "FUZZUSDT" / f"{SYNTHETIC_DAY.isoformat()}.parquet", index=False)
+    with_funding = _run(books, trades, [SYNTHETIC_DAY], cache, funding)
+    assert keys() == 3
+    assert "no_funding" not in with_funding["flags"].iloc[0]
+
+
+def test_a_day_with_bad_data_is_skipped_with_its_reason(tmp_path: Path) -> None:
+    """An off-grid print or an unexpected funding interval skips that day, says
+    why, and the rest of the run goes on."""
+    books, trades, funding = tmp_path / "book", tmp_path / "trades", tmp_path / "funding"
+    days = [SYNTHETIC_DAY + timedelta(days=i) for i in range(3)]
+    for i, day in enumerate(days):
+        _write(random_market(i, n_snapshots=300, day=day), books, trades)
+    off_grid = trades / "FUZZUSDT" / f"{days[1].isoformat()}.parquet"
+    prints = pd.read_parquet(off_grid)
+    prints.loc[0, "price"] = prints.loc[0, "price"] + 0.005  # half a tick
+    prints.to_parquet(off_grid, index=False)
+    (funding / "FUZZUSDT").mkdir(parents=True)
+    for i, day in enumerate(days):
+        start = pd.Timestamp(day.isoformat(), tz="UTC").value
+        hours = (0, 4, 8, 12, 16, 20) if i == 2 else (0, 8, 16)
+        pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime(
+                    [start + h * 3600 * 10**9 for h in hours], unit="ns", utc=True
+                ),
+                "rate": [1e-4] * len(hours),
+            }
+        ).to_parquet(funding / "FUZZUSDT" / f"{day.isoformat()}.parquet", index=False)
+
+    # The synthetic days last half a minute: stop and flatten inside them.
+    inside = CONFIG.with_(stop_quoting_at=time(0, 0, 20), flatten_at=time(0, 0, 25))
+    frame = _run(books, trades, days, funding=funding, config=inside)
+    assert frame["status"].iloc[0] == "ok"
+    assert "tick" in frame["status"].iloc[1]
+    assert "every 4 h" in frame["status"].iloc[2]
+    assert frame["excluded"].tolist() == [False, True, True]
+
+
+def test_a_day_with_sequence_gaps_is_flagged_and_excluded(tmp_path: Path) -> None:
+    """The stored book counts its sequence gaps but cannot say where they fell,
+    so a day with more than the allowed number is kept out of verdicts."""
+    market = random_market(0, n_snapshots=200)
+    gapped = replace(market, sequence_gaps=2)
+    assert "sequence_gaps" in simulate_day(gapped, TouchQuoter(), CONFIG).flags
+    assert "sequence_gaps" not in simulate_day(market, TouchQuoter(), CONFIG).flags
+    tolerant = CONFIG.with_(max_sequence_gaps=5)
+    assert "sequence_gaps" not in simulate_day(gapped, TouchQuoter(), tolerant).flags
+
+    books, trades = tmp_path / "book", tmp_path / "trades"
+    _write(market, books, trades, gaps=3)
+    frame = _run(books, trades, [SYNTHETIC_DAY])
+    assert frame["excluded"].iloc[0]
+    assert "sequence_gaps" in frame["flags"].iloc[0]
+    assert frame["sequence_gaps"].iloc[0] == 3

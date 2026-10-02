@@ -150,3 +150,65 @@ def market_wide_markouts(events: DayEvents, horizons_s: Sequence[float]) -> pd.D
             }
         )
     return pd.DataFrame(rows)
+
+
+def clock_offset_profile(
+    events: DayEvents, deltas_ms: Sequence[int] = tuple(range(-50, 51, 5))
+) -> pd.DataFrame:
+    """How well the prints explain the touch's size changes, per clock shift.
+
+    The simulator assumes a snapshot reflects every print stamped at or before
+    it. If book rows are stamped later than the matches they reflect, a print
+    lands before a snapshot that does not show it yet (the queue model carries
+    such prints forward); if earlier, a snapshot shows prints stamped after it,
+    which would be look-ahead.
+
+    For each shift ``delta`` every print is moved by ``delta`` milliseconds and,
+    over snapshot intervals in which the touch price did not move, the change
+    of the touch size is compared with the prints at the touch inside the
+    interval. The shift with the smallest mean squared residual is the
+    effective offset: positive means the book lags the prints, negative that it
+    leads them, zero what the simulator assumes. Read it on a development day
+    only.
+    """
+    book_ts = events.book_ts
+    rows = []
+    planes = (
+        (1, events.bid_px[:, 0], events.bid_sz[:, 0]),
+        (-1, events.ask_px[:, 0], events.ask_sz[:, 0]),
+    )
+    for side, price, size in planes:
+        still = price[1:] == price[:-1]
+        hitting = events.trade_aggressor == -side
+        trade_ts = events.trade_ts[hitting]
+        trade_px = events.trade_px[hitting]
+        trade_sz = events.trade_sz[hitting]
+        for delta in deltas_ms:
+            shifted = trade_ts + int(delta) * 1_000_000
+            # Interval k covers (book_ts[k - 1], book_ts[k]].
+            interval = np.searchsorted(book_ts, shifted, side="left")
+            inside = (interval >= 1) & (interval < len(book_ts))
+            k = interval[inside]
+            at_touch = trade_px[inside] == price[k]
+            traded = np.bincount(
+                k[at_touch], weights=trade_sz[inside][at_touch], minlength=len(book_ts)
+            )[1:]
+            residual = (size[:-1] - traded - size[1:])[still]
+            rows.append(
+                {
+                    "side": side,
+                    "delta_ms": int(delta),
+                    "mean_sq_residual": float(np.mean(residual**2)) if len(residual) else np.nan,
+                    "share_negative": float(np.mean(residual < -1e-12))
+                    if len(residual)
+                    else np.nan,
+                }
+            )
+    frame = pd.DataFrame(rows)
+    return frame.groupby("delta_ms", as_index=False)[["mean_sq_residual", "share_negative"]].mean()
+
+
+def best_clock_offset_ms(profile: pd.DataFrame) -> int:
+    """The shift with the smallest residual in a :func:`clock_offset_profile`."""
+    best = int(np.argmin(profile["mean_sq_residual"].to_numpy(dtype=np.float64)))
+    return int(profile["delta_ms"].to_numpy(dtype=np.int64)[best])

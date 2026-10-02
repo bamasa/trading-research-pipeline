@@ -226,7 +226,7 @@ def test_funding_on_disk_joins_the_stream(tmp_path: Path) -> None:
     )
     assert events.has_funding
     assert list(events.funding_rate) == [1e-4, 2e-4, -1e-4]
-    with pytest.raises(ValueError, match="every 8 h"):
+    with pytest.raises(DayUnavailable, match="every 8 h"):
         load_day(
             "BICOUSDT",
             DAY,
@@ -236,3 +236,20 @@ def test_funding_on_disk_joins_the_stream(tmp_path: Path) -> None:
             depth=3,
             funding_interval_h=4,
         )
+
+
+def test_prints_far_outside_the_visible_book_are_not_eligible_to_fill() -> None:
+    """Within 25 bp of the deepest visible levels a print may be a deep sweep and
+    is kept; beyond that it could not have swept this book."""
+    from trading_research.market_making.events import OFF_BOOK_BP, off_book_eligible
+
+    book_ts = np.array([0, 100], dtype=np.int64)
+    bid_px = np.array([[10_000, 9_999, 9_998]] * 2, dtype=np.int64)  # deepest bid 9998
+    ask_px = np.array([[10_002, 10_003, 10_004]] * 2, dtype=np.int64)  # deepest ask 10004
+    trade_ts = np.array([-5, 50, 50, 50, 50, 50], dtype=np.int64)
+    trade_px = np.array([5_000, 9_997, 9_970, 10_030, 10_040, 10_001], dtype=np.int64)
+    eligible = off_book_eligible(book_ts, bid_px, ask_px, trade_ts, trade_px)
+    # Before any book: kept. 1 tick (1 bp) beyond: kept. 28 bp below and 36 bp
+    # above: off-book. 26 bp above: off-book. Inside: kept.
+    assert eligible.tolist() == [True, True, False, False, False, True]
+    assert OFF_BOOK_BP == 25.0

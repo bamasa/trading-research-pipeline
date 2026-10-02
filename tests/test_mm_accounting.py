@@ -184,3 +184,53 @@ def test_fee_tiers_are_looked_up_not_assumed() -> None:
         FeeTier("upside-down", 6.0, 5.5)
     with pytest.raises(ValueError):
         breakeven_maker_bp(1.0, 0.0, 2.0)
+
+
+def test_funding_is_charged_on_the_position_before_a_print_at_the_same_instant() -> None:
+    """Long one unit at 08:00 exactly, when a sale fills a second bid at the same
+    instant: funding comes first, on one unit, and a positive rate makes the
+    long pay."""
+    book = ([(100 - i, 10.0) for i in range(3)], [(102 + i, 10.0) for i in range(3)])
+    eight = 8 * 3_600_000.0
+
+    @dataclass(frozen=True)
+    class BidAlways:
+        name: str = "bid-always"
+        uses_future: bool = False
+
+        def quotes(self, view: MarketView, position: float) -> Quotes:
+            return Quotes(Quote(100, 1.0), Quote(None, 0.0))
+
+    market = hand_built_market(
+        [(500.0, *book), (1_000.0, *book)]
+        + [(eight - 2_000.0 + 100.0 * i, *book) for i in range(25)],
+        [(600.0, 99, 1.0, -1), (eight, 99, 1.0, -1)],
+        funding=[(eight, 1e-4)],
+    )
+    config = SimConfig(
+        clip_notional=1e12, clip_touch_share=1e9, warmup_s=0.0, suspend_after_pause_s=1e6
+    )
+    result = simulate_day(market, BidAlways(), config)
+    assert result.decomposition["funding"] == pytest.approx(-1.0 * 1.01 * 1e-4)
+
+
+def test_fees_and_net_recomputed_from_the_fills_agree() -> None:
+    """Every fee is the maker or taker rate on the fill's notional; the net is
+    the fills' cash plus funding; the fills alone leave the day flat; and a
+    taker always crosses the mid of the book it walked."""
+    for seed in range(30):
+        market = random_market(seed, n_snapshots=400, prints_per_snapshot=1.5, funding=True)
+        for maker_bp in (2.0, -0.5):
+            config = FUZZ.with_(soft_limit_clips=2.0, fees=FeeTier("t", maker_bp, 5.5))
+            result = simulate_day(market, TouchQuoter(), config)
+            fills = result.fills
+            notional = fills["price"] * fills["size"]
+            expected = np.where(fills["maker"], maker_bp, 5.5) * 1e-4 * notional
+            np.testing.assert_allclose(fills["fee"], expected, rtol=1e-12)
+            cash = float((-fills["side"] * notional).sum() - fills["fee"].sum())
+            assert result.decomposition["net"] == pytest.approx(
+                cash + result.decomposition["funding"], abs=1e-9
+            )
+            assert abs((fills["side"] * fills["size"]).sum()) < 1e-9
+            taker = fills[~fills["maker"]]
+            assert (taker["side"] * (taker["price"] - taker["mid_ref"]) > 0).all()

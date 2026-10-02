@@ -19,7 +19,7 @@ import pytest
 
 from trading_research.data.grid import to_grid
 from trading_research.market_making.events import NS_PER_S, DayEvents, assemble
-from trading_research.market_making.quoters import MarketView, Quotes, TouchQuoter
+from trading_research.market_making.quoters import MarketView, Quote, Quotes, TouchQuoter
 from trading_research.market_making.signals import SignalTape
 from trading_research.market_making.simulator import (
     OracleRefused,
@@ -218,3 +218,33 @@ def test_oracle_forecasts_are_refused_outside_the_ladder(tmp_path: Path) -> None
             trades_root=tmp_path,
             funding_root=None,
         )
+
+
+def test_the_reference_mid_of_a_fill_is_the_book_before_it() -> None:
+    """A sale through our bid at 100 ms, and a snapshot at 100 ms that already
+    shows the move: the fill's reference mid is the book before the print."""
+    from trading_research.market_making.synthetic import hand_built_market
+
+    def book(best_bid: int, best_ask: int):
+        return (
+            [(best_bid - i, 10.0) for i in range(3)],
+            [(best_ask + i, 10.0) for i in range(3)],
+        )
+
+    market = hand_built_market(
+        [(0.0, *book(100, 102)), (100.0, *book(98, 100)), (200.0, *book(98, 100))],
+        [(100.0, 99, 1.0, -1)],
+    )
+
+    @dataclass(frozen=True)
+    class Bid100:
+        name: str = "bid-100"
+        uses_future: bool = False
+
+        def quotes(self, view: MarketView, position: float) -> Quotes:
+            return Quotes(Quote(100, view.clip), Quote(None, 0.0))
+
+    fills = simulate_day(market, Bid100(), SimConfig(clip_notional=1e12, warmup_s=0.0)).fills
+    fill = fills[fills["maker"]].iloc[0]
+    assert fill["mid_ref"] == pytest.approx(1.01)
+    assert fill["markout_1s"] == pytest.approx((0.99 - 1.00) / 1.00 * 1e4)

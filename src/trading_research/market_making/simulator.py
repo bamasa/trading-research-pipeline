@@ -3,20 +3,25 @@
 The simulator walks the merged stream of :mod:`.events` once. Between events it
 applies what latency has made due — orders arriving at the venue, cancels
 landing, the timed stop and flatten — strictly before the event at hand, so an
-action that becomes due at a print's exact timestamp loses the tie. Then:
+action that becomes due at a market event's exact timestamp loses the tie.
+Then:
 
 * a **funding** settlement charges or pays the position held at that instant;
-* a **print** is offered to own orders on the side it hits, best price first,
-  and fills them only as :func:`.queue.on_print` allows;
-* a **book snapshot** updates the mark, corrects every resting order's queue
-  estimate (:func:`.queue.on_snapshot`), and, if quoting is allowed, asks the
-  quoter for its quotes and reconciles them with the orders already out.
+* a **print**, unless it lies off the visible book, is offered to own orders on
+  the side it hits, best price first, and fills them only as
+  :func:`.queue.on_print` allows;
+* a **book snapshot** updates the mark, executes the taker orders that have
+  arrived by then on it, corrects every resting order's queue estimate
+  (:func:`.queue.on_snapshot`), and, if quoting is allowed, asks the quoter for
+  its quotes and reconciles them with the orders already out.
 
 Reconciling keeps a resting order whose price is unchanged — priority is an
-asset — and turns a price change into a cancel and a new order, which joins the
-queue afresh. A size change alone never touches a resting order. New orders and
-cancels take effect after their latency; until a cancel lands the order can
-still fill.
+asset — unless the current clip or hard limit no longer allows it, and turns a
+price change into a cancel and a new order, which joins the queue afresh. Every
+cancel of a decision is sent before its new orders, and a bid and ask that
+would meet are pulled apart first. A size change alone never touches a resting
+order. New orders and cancels take effect after their latency; until a cancel
+lands the order can still fill.
 
 What the simulator decides, not the quoter
 ------------------------------------------
@@ -27,22 +32,26 @@ arrival are enforced here, identically for every quoter:
   touch)``, rounded down to the lot; below one lot the side is not quoted;
 * soft limit = ``soft_limit_clips * clip``: a side whose fill would take the
   position past it is not quoted;
-* hard limit = soft + one clip: a new order is sent only if the position plus
-  every order still out on that side (cancels in flight included) stays within
-  it, so the hard limit holds however long the latency;
-* a fill that takes the position past the soft limit is flattened back to it
-  by a taker order walking the last snapshot, with slippage on top;
+* hard limit = soft + one clip: a new order is sent, and a kept one stays, only
+  if the position plus every order still out on that side (cancels in flight
+  included) stays within it under the current clip;
+* a fill that takes the position past the soft limit sends a reduce-only taker
+  order back to it, which arrives after the order latency and walks the first
+  snapshot at or after its arrival, with slippage on top;
 * a quote beyond the tenth visible level is not placed, and an order at or
-  through the opposite touch when it arrives is rejected.
+  through the opposite touch, or our own opposite order, when it arrives is
+  rejected.
 
 The day
 -------
 Every day starts flat, quotes nothing before ``warmup_s`` or from
-``stop_quoting_at``, and is flattened by a costed taker order at
+``stop_quoting_at``, and is flattened by a costed taker order sent at
 ``flatten_at``. If no snapshot arrives for ``suspend_after_pause_s``, every
-order is pulled and nothing is quoted until the next snapshot. The accounting
-identity is checked after every change to the account and once more at the
-end. The full set of rules, each with the direction it biases a result and the
+order is pulled and nothing is quoted until the next snapshot. A day the
+stored book reports sequence gaps for, whose flatten found no fresh book, or
+that has no funding plane, is flagged and excluded from verdicts. The
+accounting identity is checked after every change to the account and once more
+at the end. The full set of rules, each with the direction it biases a result and the
 test that pins it, is in ``docs/market_making_simulator.md``.
 """
 
@@ -51,6 +60,7 @@ from __future__ import annotations
 import hashlib
 import heapq
 import json
+import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -96,6 +106,7 @@ from trading_research.market_making.quoters import MarketView, Quote, Quoter
 from trading_research.market_making.signals import SignalTape
 
 _EMPTY_SIGNALS: Mapping[str, float] = MappingProxyType({})
+_LOG = logging.getLogger(__name__)
 
 #: Pending actions, ordered by effective time and then by the order they were
 #: scheduled in.
@@ -134,6 +145,9 @@ class SimConfig:
     vol_half_life_s: float = 60.0
     markout_horizons_s: tuple[float, ...] = (1.0, 5.0, 30.0)
     decomposition_horizon_s: float = 5.0
+    #: A day whose stored book reports more sequence gaps than this is flagged
+    #: and excluded from verdicts: the stored book cannot say where they fell.
+    max_sequence_gaps: int = 0
 
     def __post_init__(self) -> None:
         if not self.clip_notional > 0:
@@ -181,6 +195,27 @@ class DayResult:
     decomposition: dict[str, float]
     #: True when the quoter read the future; such a day is an upper bound only.
     oracle: bool = False
+    #: Why the day cannot enter a verdict, if it cannot: ``sequence_gaps`` (the
+    #: book lost messages somewhere in the day), ``flatten_stale`` (a taker
+    #: order had no book within the pause threshold to walk), ``no_funding``
+    #: (simulated without a funding plane).
+    flags: tuple[str, ...] = ()
+
+    @property
+    def excluded(self) -> bool:
+        """True when the day is flagged and must be left out of every verdict."""
+        return bool(self.flags)
+
+
+@dataclass
+class _Taker:
+    """A taker order on its way: sent at ``decided``, at the venue at ``due``."""
+
+    side: int
+    size: float
+    decided: int
+    due: int
+    reason: str
 
 
 @dataclass
@@ -259,6 +294,7 @@ class _Day:
         self.trade_px: list[int] = events.trade_px.tolist()
         self.trade_sz: list[float] = events.trade_sz.tolist()
         self.trade_aggressor: list[int] = events.trade_aggressor.tolist()
+        self.trade_eligible: list[bool] = events.trade_eligible.tolist()
         self.funding_rate: list[float] = events.funding_rate.tolist()
         self.vol, self.touch_median = _per_second(events, config)
         self.signals: dict[str, list[float]] = {
@@ -291,6 +327,9 @@ class _Day:
         self.quote_start = self.start + round(config.warmup_s * NS_PER_S)
         self.next_minute = self.start + _NS_PER_MINUTE
         self.max_abs_position = 0.0
+        self.takers: list[_Taker] = []
+        self.taker_in_flight = 0.0
+        self.flatten_stale = False
         self.clip_over_touch_sum = 0.0
         self.clip_over_touch_n = 0
 
@@ -321,9 +360,9 @@ class _Day:
         elif action == _FLATTEN:
             self.stopped = True
             self._cancel_all(effective)
-            position = self.account.position
-            if position != 0.0:
-                self._taker(-1 if position > 0 else 1, abs(position), effective, "day_end")
+            projected = self.account.position + self.taker_in_flight
+            if projected != 0.0:
+                self._send_taker(-1 if projected > 0 else 1, abs(projected), effective, "day_end")
 
     # -- the loop -----------------------------------------------------------
 
@@ -368,6 +407,8 @@ class _Day:
         self.mid = self.mids[row]
         self.stale_deadline = t + self.pause_ns
         self.suspended = False
+        if self.takers and self.takers[0].due <= t:
+            self._execute_takers(row, t)
         config = self.config
         best_bid, best_ask = self.bid0[row], self.ask0[row]
         crossed_now: list[Order] = []
@@ -399,11 +440,15 @@ class _Day:
             self._decide(row, t)
 
     def _trade(self, row: int, t: int, side: int) -> None:
+        if not self.trade_eligible[row]:
+            self.counters.add("off_book_prints_skipped")
+            return
         price = self.trade_px[row]
         available = self.trade_sz[row]
         aggressor = self.trade_aggressor[row]
+        growth = self.config.arrival_growth
         for order in list(self.resting[side]):
-            filled, path = on_print(order, price, available, aggressor)
+            filled, path = on_print(order, price, available, aggressor, ts=t, growth=growth)
             if filled > 0.0:
                 self._fill(order, filled, path, t)
                 available -= filled
@@ -496,11 +541,27 @@ class _Day:
         )
         wanted = self.quoter.quotes(view, self.account.position)
         self.counters.add("decisions")
+        bid, ask = wanted.bid, wanted.ask
+        if bid.price is not None and ask.price is not None and bid.price >= ask.price:
+            # Own quotes never lock or cross: pull both apart around their middle.
+            total = int(bid.price) + int(ask.price)
+            bid = Quote((total + 1) // 2 - 1, bid.size)
+            ask = Quote(total // 2 + 1, ask.size)
+            self.counters.add("self_cross_clamped")
         decided = t + config.feed_latency_ns
-        self._reconcile(1, wanted.bid, row, decided)
-        self._reconcile(-1, wanted.ask, row, decided)
+        # Every cancel is sent before any new order, so that at equal latency a
+        # new order never arrives to find our own replaced order still there.
+        new_bid = self._reconcile(1, bid, row, decided)
+        new_ask = self._reconcile(-1, ask, row, decided)
+        for side, wanted_order in ((1, new_bid), (-1, new_ask)):
+            if wanted_order is not None:
+                self._place(side, wanted_order[0], wanted_order[1], decided, self.account.position)
 
-    def _reconcile(self, side: int, quote: Quote, row: int, decided: int) -> None:
+    def _reconcile(
+        self, side: int, quote: Quote, row: int, decided: int
+    ) -> tuple[int, float] | None:
+        """Send the cancels one side needs; return the (price, size) of a new
+        order to place, if one is due."""
         current = self.working[side]
         price = quote.price
         position = self.account.position
@@ -519,21 +580,30 @@ class _Day:
         if price is None:
             if current is not None:
                 self._send_cancel(current, decided)
-            return
+            return None
         if current is not None:
             if current.price == price:
-                return
-            self._send_cancel(current, decided)
-            self.counters.add("replaced")
+                outstanding = sum(order.remaining for order in self.open[side])
+                too_large = current.remaining > clock.clip + tolerance
+                over_hard = side * position + outstanding > clock.hard + tolerance
+                if not too_large and not over_hard:
+                    return None
+                # The clip shrank under a kept order: it gives up its place
+                # rather than let one fill cross the hard limit.
+                self._send_cancel(current, decided)
+                self.counters.add("cancelled_for_limits")
+            else:
+                self._send_cancel(current, decided)
+                self.counters.add("replaced")
         beyond = price < self.bid_last[row] if side == 1 else price > self.ask_last[row]
         if beyond:
             self.counters.add("not_placed_beyond_book")
-            return
+            return None
         outstanding = sum(order.remaining for order in self.open[side])
         if side * position + outstanding + size > clock.hard + tolerance:
             self.counters.add("not_placed_hard_limit")
-            return
-        self._place(side, int(price), size, decided, position)
+            return None
+        return int(price), size
 
     def _place(self, side: int, price: int, size: float, decided: int, position: float) -> None:
         self.next_oid += 1
@@ -590,6 +660,12 @@ class _Day:
             self._finish(order, effective, REJECTED)
             self.counters.add("rejected")
             return
+        for other in self.resting[-side]:
+            if (order.price - other.price) * side >= 0:
+                # At or through our own opposite order: never trade with ourselves.
+                self._finish(order, effective, REJECTED)
+                self.counters.add("rejected_self_cross")
+                return
         inside = order.price > self.bid0[row] if side == 1 else order.price < self.ask0[row]
         on_arrival(
             order,
@@ -659,19 +735,43 @@ class _Day:
         )
         self.counters.add(f"fills_{path}")
         soft = self.clock.soft
+        projected = position + self.taker_in_flight
         if (
             side * position > 0
             and abs(position) > abs(before)
-            and abs(position) > soft * (1 + 1e-9)
+            and side * projected > soft * (1 + 1e-9)
         ):
-            self._taker(-side, abs(position) - soft, t, "soft_limit")
+            self._send_taker(-side, side * projected - soft, t, "soft_limit")
 
-    def _taker(self, side: int, size: float, t: int, reason: str) -> None:
-        """Cross the spread for ``size``, walking the last snapshot."""
-        row = self.last_book
-        if row < 0:
-            raise RuntimeError("a taker order with no book to walk")
+    def _send_taker(self, side: int, size: float, decided: int, reason: str) -> None:
+        """Send a taker order; it reaches the venue after the order latency and
+        walks the first snapshot at or after that moment."""
+        due = decided + self.config.order_latency_ns
+        self.takers.append(_Taker(side, size, decided, due, reason))
+        self.taker_in_flight += side * size
+        self.counters.add("takers_sent")
+
+    def _execute_takers(self, row: int, t: int) -> None:
+        while self.takers and self.takers[0].due <= t:
+            taker = self.takers.pop(0)
+            self.taker_in_flight -= taker.side * taker.size
+            self._reduce_only(taker, row, t)
+
+    def _reduce_only(self, taker: _Taker, row: int, t: int) -> None:
+        """Execute a flatten as a reduce-only order: fills that arrived while it
+        travelled may have shrunk the position, and it never reverses it."""
+        size = min(taker.size, max(0.0, -taker.side * self.account.position))
+        if size <= self.lot * 1e-6:
+            self.counters.add("takers_reduced_to_nothing")
+            return
+        if size < taker.size:
+            taker = replace(taker, size=size)
+        self._walk(taker, row, t)
+
+    def _walk(self, taker: _Taker, row: int, t: int) -> None:
+        """Cross the spread for the taker's size, walking snapshot ``row``."""
         events = self.events
+        side, size = taker.side, taker.size
         prices = events.ask_px[row] if side == 1 else events.bid_px[row]
         sizes = events.ask_sz[row] if side == 1 else events.bid_sz[row]
         left = size
@@ -687,9 +787,11 @@ class _Day:
             self.counters.add("flatten_beyond_visible_book")
         slip = self.config.flatten_slippage_bp * 1e-4
         price = cost / size * self.tick * (1.0 + side * slip)
+        mid = self.mids[row]
         account = self.account
         fee = account.fill(side, price, size, self.config.fees.taker_bp, maker=False)
-        account.check_identity(self.mid)
+        account.check_identity(mid)
+        self.max_abs_position = max(self.max_abs_position, abs(account.position))
         self.fill_rows.append(
             (
                 t,
@@ -700,15 +802,15 @@ class _Day:
                 False,
                 fee,
                 FLATTEN,
-                0,
+                t - taker.decided,
                 account.position,
-                self.mid,
+                mid,
                 self.clock.soft,
                 self.clock.hard,
             )
         )
         self.counters.add("flattens")
-        self.counters.add(f"flattens_{reason}")
+        self.counters.add(f"flattens_{taker.reason}")
 
     # -- bookkeeping ----------------------------------------------------------
 
@@ -734,9 +836,24 @@ class _Day:
         for side in (1, -1):
             for order in list(self.open[side]):
                 self._finish(order, last, CANCELLED)
-        if self.account.position != 0.0:
-            position = self.account.position
-            self._taker(-1 if position > 0 else 1, abs(position), last, "close")
+        # Takers no snapshot arrived for: walked on the last book, and if that
+        # book is older than the pause threshold the day is flagged.
+        row = self.last_book
+        book_time = self.book_ts[row]
+        for taker in self.takers:
+            if taker.due - book_time > self.pause_ns:
+                self.flatten_stale = True
+            last = max(last, taker.due)
+            self._reduce_only(taker, row, last)
+        self.takers.clear()
+        self.taker_in_flight = 0.0
+        position = self.account.position
+        if position != 0.0:
+            if last - book_time > self.pause_ns:
+                self.flatten_stale = True
+            self._walk(
+                _Taker(-1 if position > 0 else 1, abs(position), last, last, "close"), row, last
+            )
         self.account.check_identity(self.mid)
         account = self.account
         self.equity_rows.append(
@@ -862,6 +979,15 @@ class _Day:
             if self.clip_over_touch_n
             else math.nan
         )
+        flags = []
+        if events.sequence_gaps > config.max_sequence_gaps:
+            flags.append("sequence_gaps")
+        if self.flatten_stale:
+            flags.append("flatten_stale")
+        if not events.has_funding:
+            flags.append("no_funding")
+        counters["off_book_prints"] = float((~events.trade_eligible).sum())
+        counters["excluded"] = float(bool(flags))
         return DayResult(
             symbol=events.spec.symbol,
             day=events.day,
@@ -872,6 +998,7 @@ class _Day:
             counters=counters,
             decomposition=decomposition,
             oracle=oracle,
+            flags=tuple(flags),
         )
 
 
@@ -962,6 +1089,9 @@ SUMMARY_COLUMNS = (
     "bid_quoted_s",
     "ask_quoted_s",
     "sequence_gaps",
+    "off_book_prints",
+    "flags",
+    "excluded",
 )
 
 
@@ -974,19 +1104,90 @@ def _summary(result: DayResult, quoter: str) -> dict[str, Any]:
     }
     for name in ("net", "gross", "spread", "adverse", "inventory", "fees", "funding", "making"):
         row[name] = float(result.decomposition[name])
+    row["flags"] = ",".join(result.flags)
+    row["excluded"] = result.excluded
     for name in SUMMARY_COLUMNS:
         if name not in row:
             row[name] = float(result.counters.get(name, 0.0))
     return row
 
 
-def _job_key(symbol: str, quoter: Quoter, config: SimConfig) -> str:
+def source_fingerprint() -> str:
+    """A hash of the source every simulated day depends on.
+
+    The market-making package, the loaders it reads data through and the fee
+    tiers. Part of the cache key, so a fix to the simulator cannot be answered
+    from results computed before it.
+    """
+    package = Path(__file__).resolve().parent
+    files = [
+        *sorted(package.glob("*.py")),
+        package.parent / "data" / "bybit_trades.py",
+        package.parent / "data" / "bybit_funding.py",
+        package.parent / "backtest" / "costs.py",
+    ]
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _file_stamp(path: Path | None) -> list[Any] | None:
+    """Where an input lives, how large it is and when it last changed."""
+    if path is None or not path.exists():
+        return None
+    stat = path.stat()
+    return [str(path.resolve()), stat.st_size, stat.st_mtime_ns]
+
+
+def _inputs(
+    symbol: str,
+    day: date,
+    book_roots: tuple[Path, ...],
+    trades_root: Path,
+    funding_root: Path | None,
+) -> dict[str, Any]:
+    from trading_research.data import bybit_funding, bybit_trades
+
+    name = f"{day.isoformat()}.parquet"
+    book = next((r / symbol / name for r in book_roots if (r / symbol / name).exists()), None)
+    return {
+        "book_roots": [str(r.resolve()) for r in book_roots],
+        "trades_root": str(trades_root.resolve()),
+        "funding_root": None if funding_root is None else str(funding_root.resolve()),
+        "book": _file_stamp(book),
+        "trades": _file_stamp(bybit_trades.day_path(symbol, day, trades_root)),
+        "funding": None
+        if funding_root is None
+        else _file_stamp(bybit_funding.day_path(symbol, day, funding_root)),
+    }
+
+
+def _job_key(
+    symbol: str,
+    day: date,
+    quoter: Quoter,
+    config: SimConfig,
+    book_roots: tuple[Path, ...],
+    trades_root: Path,
+    funding_root: Path | None,
+) -> str:
+    """Everything a cached day depends on: the quoter, the configuration, the
+    files it read (path, size, modification time) and the source that ran."""
     description = json.dumps(
-        {"symbol": symbol, "quoter": repr(quoter), "config": asdict(config)},
+        {
+            "symbol": symbol,
+            "day": day.isoformat(),
+            "quoter": repr(quoter),
+            "config": asdict(config),
+            "inputs": _inputs(symbol, day, book_roots, trades_root, funding_root),
+            "source": source_fingerprint(),
+        },
         sort_keys=True,
         default=str,
     )
-    return hashlib.sha256(description.encode()).hexdigest()[:16]
+    return hashlib.sha256(description.encode()).hexdigest()[:24]
 
 
 def _run_one(
@@ -1006,7 +1207,8 @@ def _run_one(
     quoter = make_quoter()
     target: Path | None = None
     if cache is not None:
-        target = cache / _job_key(symbol, quoter, config) / symbol / day.isoformat()
+        key = _job_key(symbol, day, quoter, config, book_roots, trades_root, funding_root)
+        target = cache / key / symbol / day.isoformat()
         summary = target / "summary.json"
         if summary.exists():
             loaded: dict[str, Any] = json.loads(summary.read_text(encoding="utf-8"))
@@ -1020,9 +1222,17 @@ def _run_one(
             funding_root=funding_root,
         )
     except DayUnavailable as exc:
+        _LOG.warning("%s %s not simulated: %s", symbol, day, exc)
         row: dict[str, Any] = dict.fromkeys(SUMMARY_COLUMNS, np.nan)
         row.update(
-            {"symbol": symbol, "day": day.isoformat(), "quoter": quoter.name, "status": str(exc)}
+            {
+                "symbol": symbol,
+                "day": day.isoformat(),
+                "quoter": quoter.name,
+                "status": str(exc),
+                "flags": "not_simulated",
+                "excluded": True,
+            }
         )
         return row
     result = simulate_day(events, quoter, config)
@@ -1051,11 +1261,15 @@ def run_days(
 
     Each day starts flat and ends flat, so days are independent jobs: with
     ``workers`` above one they run in separate processes, and the result does
-    not depend on how many. A day that lacks a plane is a row whose
-    ``status`` says why, with no numbers. With ``cache``, each day's fills,
-    equity and summary are written under a key of the symbol, quoter and
-    configuration, and a day already there is read back instead of re-run.
-    ``make_quoter`` must be picklable when ``workers`` is above one.
+    not depend on how many. A day that cannot be simulated (a plane missing,
+    a price off the tick grid, an unexpected funding interval) is a row whose
+    ``status`` says why, with no numbers, and the run goes on. A simulated day
+    that must stay out of verdicts has ``excluded`` set and says why in
+    ``flags``. With ``cache``, each day's fills, equity and summary are written
+    under a key of everything the day depends on — the quoter, the
+    configuration, the files read and the simulator's source — and a day
+    already there is read back instead of re-run. ``make_quoter`` must be
+    picklable when ``workers`` is above one.
     """
     probe = make_quoter()
     if probe.uses_future:

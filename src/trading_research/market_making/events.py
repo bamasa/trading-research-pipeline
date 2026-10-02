@@ -8,12 +8,20 @@ walks one integer index instead of three cursors.
 
 Ordering at equal timestamps
 ----------------------------
-Funding first, then (in the loop) order activations, then prints, then book
-snapshots. Prints before the book that follows them, because the snapshot
-already reflects the print: processing it first would count the consumed size
-once as a print and again as a cancellation. Activations lose ties to prints, so
-an order arriving at a print's exact timestamp misses it — pessimistic by at
-most one print per order.
+Among market events: funding first, then prints, then book snapshots. Prints
+come before the snapshot stamped with the same time because that snapshot is
+taken to reflect them. Own actions — an order arriving, a cancel landing — fire
+only strictly before the next market event, so at an equal timestamp every
+market event goes first: an order arriving at a print's exact timestamp misses
+it, a cancel landing at a print's timestamp is still filled by it, and an order
+arriving at a snapshot's timestamp joins the queue that snapshot shows. Ties go
+to the market, which is pessimistic by at most one print per order.
+
+The two clocks do not agree exactly: a book row carries the time the venue
+generated it, a print the time it matched. Measured on one development day the
+book lags the prints by about 3 ms, so a print just before a snapshot may not
+show in it yet; :mod:`.queue` carries such prints forward rather than counting
+them twice.
 
 Prints sharing a timestamp and an aggressor are one sweep, and are processed in
 the only order price priority allows: a buyer lifts the lowest ask first, so
@@ -31,12 +39,23 @@ greatest common divisor of its price levels — and every print must sit on that
 grid or the day is refused (:class:`OffGridPrice`), since a print between two
 ticks means the data or the tick is wrong.
 
+Off-book prints
+---------------
+A print more than :data:`OFF_BOOK_BP` outside the price range of the ten visible
+levels of the latest snapshot at or before it cannot have come from sweeping
+that book — a negotiated block trade, or a bad record — and is never offered to
+own orders (``trade_eligible``). It stays in the stream and is counted. On the
+one development day checked, 19 of 15,506 prints lay beyond the tenth level, all
+on the side they hit and at most three ticks (about 7 bp) beyond it, and none
+on the wrong side: deep sweeps, not off-book trades, and the rule keeps them.
+
 One day at a time
 -----------------
 :func:`load_day` reads one instrument-day of each plane from its per-day file
-and nothing else, so memory is one day however long the span. A day missing the
-book or the prints raises :class:`DayUnavailable`: it is reported, not
-simulated.
+and nothing else, so memory is one day however long the span. A day that
+cannot be simulated — a plane missing, a price off the tick grid, a funding
+interval other than the one assumed — raises :class:`DayUnavailable` with the
+reason: it is reported, not simulated, and the rest of a run goes on.
 """
 
 from __future__ import annotations
@@ -58,6 +77,10 @@ NS_PER_DAY = 86_400 * NS_PER_S
 
 #: Decimal places tried when deriving a tick or a lot from floats.
 _MAX_DECIMALS = 10
+
+#: A print this far outside the visible book's price range, in basis points of
+#: its price, is treated as off-book and never fills an own order.
+OFF_BOOK_BP = 25.0
 
 
 class DayUnavailable(RuntimeError):
@@ -117,6 +140,8 @@ class DayEvents:
     trade_aggressor: np.ndarray
     funding_ts: np.ndarray
     funding_rate: np.ndarray
+    #: False for a print too far outside the visible book to have swept it.
+    trade_eligible: np.ndarray
     sequence_gaps: int = 0
     #: False when the day was assembled without a funding plane at all, as
     #: opposed to one with no settlement in it.
@@ -205,6 +230,35 @@ def sweep_order(
     return np.lexsort((-np.asarray(size, dtype=np.float64), keyed_price, aggressor, ts))
 
 
+def off_book_eligible(
+    book_ts: np.ndarray,
+    bid_px: np.ndarray,
+    ask_px: np.ndarray,
+    trade_ts: np.ndarray,
+    trade_px: np.ndarray,
+    *,
+    limit_bp: float = OFF_BOOK_BP,
+) -> np.ndarray:
+    """True for each print within ``limit_bp`` of the visible book's price range.
+
+    The range is from the deepest visible bid to the deepest visible ask of the
+    latest snapshot at or before the print. A print before the first snapshot
+    has no book to compare with and is kept: no own order can rest by then.
+    """
+    row = np.searchsorted(book_ts, trade_ts, side="right") - 1
+    known = row >= 0
+    eligible = np.ones(len(trade_ts), dtype=bool)
+    if not known.any():
+        return eligible
+    rows = row[known]
+    price = trade_px[known].astype(np.float64)
+    low = bid_px[rows, -1].astype(np.float64)
+    high = ask_px[rows, -1].astype(np.float64)
+    outside = np.maximum(low - price, price - high)
+    eligible[known] = outside / price * 1e4 <= limit_bp
+    return eligible
+
+
 def _read_only(*arrays: np.ndarray) -> None:
     for array in arrays:
         array.flags.writeable = False
@@ -285,6 +339,8 @@ def assemble(
             f"{spec.funding_interval_h}-hour grid"
         )
 
+    trade_eligible = off_book_eligible(book_ts, bid_px, ask_px, trade_ts, trade_px)
+
     kinds = np.concatenate(
         [
             np.full(len(funding_ts), FUNDING, dtype=np.int8),
@@ -318,6 +374,7 @@ def assemble(
         trade_aggressor,
         funding_ts,
         funding_rate,
+        trade_eligible,
     )
     return DayEvents(
         spec=spec,
@@ -336,6 +393,7 @@ def assemble(
         trade_aggressor=trade_aggressor,
         funding_ts=funding_ts,
         funding_rate=funding_rate,
+        trade_eligible=trade_eligible,
         sequence_gaps=int(sequence_gaps),
         has_funding=has_funding,
     )
@@ -399,6 +457,26 @@ def load_day(
     gaps = int(book.attrs.get("sequence_gaps", 0))
     if book.empty:
         raise DayUnavailable(f"{symbol} {day}: the book file has no rows")
+    try:
+        return _from_frames(
+            symbol, day, book, trades, gaps, depth, funding_root, funding_interval_h
+        )
+    except (OffGridPrice, bybit_funding.BybitFundingError, ValueError) as exc:
+        # A data problem on one day: that day is not simulated, the run goes on.
+        raise DayUnavailable(f"{symbol} {day}: {exc}") from exc
+
+
+def _from_frames(
+    symbol: str,
+    day: date,
+    book: pd.DataFrame,
+    trades: pd.DataFrame,
+    gaps: int,
+    depth: int,
+    funding_root: Path | None,
+    funding_interval_h: int,
+) -> DayEvents:
+    from trading_research.data import bybit_funding
 
     def plane(side: str, what: str) -> np.ndarray:
         names = [f"{side}_{what}_{level}" for level in range(depth)]
@@ -415,15 +493,11 @@ def load_day(
     funding_ts: np.ndarray | None = None
     funding_rate: np.ndarray | None = None
     if funding_root is not None:
-        try:
-            funding = bybit_funding.load_day(symbol, day, funding_root)
-        except bybit_funding.BybitFundingError as exc:
-            raise DayUnavailable(f"{symbol} {day}: {exc}") from exc
+        funding = bybit_funding.load_day(symbol, day, funding_root)
         interval = bybit_funding.settlement_interval_h(funding["timestamp"])
         if interval is not None and interval != funding_interval_h:
             raise ValueError(
-                f"{symbol} {day}: funding settles every {interval} h, "
-                f"not the {funding_interval_h} h assumed"
+                f"funding settles every {interval} h, not the {funding_interval_h} h assumed"
             )
         funding_ts = to_ns(funding["timestamp"])
         funding_rate = funding["rate"].to_numpy(dtype=np.float64)

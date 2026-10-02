@@ -35,6 +35,33 @@ A level inside the visible ten but absent from the snapshot is empty, so
 nothing is ahead. A level beyond the tenth is unobservable: the estimate is left
 alone until it can be seen again, and an order that arrived there joins the tail
 of whatever is visible when it first can be.
+
+Prints before the first snapshot after arrival
+----------------------------------------------
+Until the order has seen a snapshot of its own, the only record of who joined
+the level after the arrival snapshot is the tape. A print at the order's price
+for more than the size ahead proves that others joined after that snapshot —
+the excess traded with them — and some of them may have joined before the
+order did. So in the arrival interval the excess goes first to those hidden
+earlier joiners, in the share the arrival-growth rule gives them: none
+(``none``), the share of the time from the arrival snapshot to the print that
+had passed when the order arrived (``pro_rata_time``), or all of it
+(``all_ahead``). The estimate is a running total over the interval: after
+cumulative excess ``E`` the order is entitled to ``(1 - share) * E`` of it,
+less what it has already received, and never to more than the print at hand
+brought.
+
+A snapshot that lags its prints
+-------------------------------
+Book rows carry the time the venue generated them, prints the time they
+matched, and the two clocks differ by a few milliseconds (measured on a
+development day: the book lags by about 3 ms). A print stamped just before a
+snapshot may not show in it yet. When a snapshot shows the level larger than the
+prints at the price allow, the part of the growth those prints could explain is
+carried into the next interval's traded volume instead of being forgotten, so
+the shrink that follows is not read as a cancellation a second time. If the
+growth was real, the carry only masks that much cancellation once, which is the
+conservative direction.
 """
 
 from __future__ import annotations
@@ -102,14 +129,38 @@ def on_arrival(
     order.level_at_last_snapshot = 0.0 if inside_spread else level_size
     order.traded_at_price_since_snapshot = 0.0
     order.in_arrival_interval = True
+    order.arrival_excess = 0.0
+    order.arrival_filled = 0.0
 
 
-def on_print(order: Order, price: int, size: float, aggressor: int) -> tuple[float, str]:
-    """Apply one print to one order; return the size filled and the path.
+def arrival_share(order: Order, at_ns: int, growth: ArrivalGrowth) -> float:
+    """Share of the level's hidden joiners up to ``at_ns`` that joined before the order."""
+    if order.front or growth is ArrivalGrowth.NONE:
+        return 0.0
+    if growth is ArrivalGrowth.ALL_AHEAD:
+        return 1.0
+    span = at_ns - order.arrival_snapshot_ns
+    if span <= 0:
+        return 1.0
+    return min(1.0, max(0.0, (order.live_ns - order.arrival_snapshot_ns) / span))
+
+
+def on_print(
+    order: Order,
+    price: int,
+    size: float,
+    aggressor: int,
+    *,
+    ts: int,
+    growth: ArrivalGrowth,
+) -> tuple[float, str]:
+    """Apply one print at time ``ts`` to one order; return the size filled and the path.
 
     The order's ``remaining`` is reduced by the fill. The caller passes as
     ``size`` what is left of the print after any own order with better price
-    priority took its share.
+    priority took its share. ``growth`` is the arrival-growth bracket, which
+    decides how much of a print at the price that exceeds the queue ahead went
+    to joiners hidden by the conflation interval, while the order is in it.
     """
     if aggressor != -order.side or size <= 0.0:
         return 0.0, ""
@@ -127,8 +178,18 @@ def on_print(order: Order, price: int, size: float, aggressor: int) -> tuple[flo
         return 0.0, ""
     excess = size - order.queue_ahead
     order.queue_ahead = 0.0
+    if order.in_arrival_interval:
+        # Never more than this print brought: an entitlement that grows because
+        # the share fell cannot reach back into earlier prints.
+        order.arrival_excess += excess
+        entitled = (1.0 - arrival_share(order, ts, growth)) * order.arrival_excess
+        excess = min(excess, max(0.0, entitled - order.arrival_filled))
     filled = min(order.remaining, excess)
     order.remaining -= filled
+    if order.in_arrival_interval:
+        order.arrival_filled += filled
+    if filled <= 0.0:
+        return 0.0, ""
     return filled, QUEUE
 
 
@@ -154,13 +215,15 @@ def on_snapshot(
 
     ahead = order.queue_ahead
     previous = order.level_at_last_snapshot
+    carried = 0.0
     if order.front:
         ahead = 0.0
     elif previous is None:
         # First sight of this level: join the tail of what is visible now.
         ahead = min(ahead, level_size)
     else:
-        expected = max(0.0, previous - order.traded_at_price_since_snapshot)
+        traded = order.traded_at_price_since_snapshot
+        expected = max(0.0, previous - traded)
         change = level_size - expected
         if change < 0.0:
             cancelled = -change
@@ -168,15 +231,12 @@ def on_snapshot(
                 ahead -= cancelled
             elif rule is CancelAttribution.PROPORTIONAL:
                 ahead -= cancelled * min(1.0, ahead / expected)
-        elif change > 0.0 and order.in_arrival_interval:
-            if growth is ArrivalGrowth.ALL_AHEAD:
-                ahead += change
-            elif growth is ArrivalGrowth.PRO_RATA_TIME:
-                span = snapshot_ns - order.arrival_snapshot_ns
-                if span > 0:
-                    share = (order.live_ns - order.arrival_snapshot_ns) / span
-                    ahead += change * min(1.0, max(0.0, share))
+        elif change > 0.0:
+            # Prints the snapshot may not show yet: carried, not forgotten.
+            carried = min(traded, change)
+            if order.in_arrival_interval:
+                ahead += change * arrival_share(order, snapshot_ns, growth)
     order.queue_ahead = min(max(ahead, 0.0), level_size)
     order.level_at_last_snapshot = level_size
-    order.traded_at_price_since_snapshot = 0.0
+    order.traded_at_price_since_snapshot = carried
     order.in_arrival_interval = False
