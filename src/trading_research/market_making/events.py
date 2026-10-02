@@ -52,7 +52,9 @@ on the wrong side: deep sweeps, not off-book trades, and the rule keeps them.
 One day at a time
 -----------------
 :func:`load_day` reads one instrument-day of each plane from its per-day file
-and nothing else, so memory is one day however long the span. A day that
+and nothing else, so memory is one day however long the span. Rows of those
+files stamped outside the day — the archives spill a few rows past midnight —
+are dropped (:func:`within_day`) and counted. A day that
 cannot be simulated — a plane missing, a price off the tick grid, a funding
 interval other than the one assumed — raises :class:`DayUnavailable` with the
 reason: it is reported, not simulated, and the rest of a run goes on.
@@ -61,7 +63,7 @@ reason: it is reported, not simulated, and the rest of a run goes on.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -146,6 +148,8 @@ class DayEvents:
     #: False when the day was assembled without a funding plane at all, as
     #: opposed to one with no settlement in it.
     has_funding: bool = True
+    #: Rows of the day's files stamped outside the day, dropped on loading.
+    rows_outside_day: int = 0
 
     @property
     def day_start_ns(self) -> int:
@@ -206,8 +210,17 @@ def derive_lot(sizes: np.ndarray) -> float:
 
 
 def to_ticks(prices: np.ndarray, tick: float) -> np.ndarray:
-    """Prices as integer ticks, refusing any price off the grid."""
+    """Prices as integer ticks, refusing any price off the grid.
+
+    Converted a column at a time, so a day's book needs no temporary larger
+    than one level.
+    """
     values = np.asarray(prices, dtype=np.float64)
+    if values.ndim == 2:
+        out = np.empty(values.shape, dtype=np.int64)
+        for level in range(values.shape[1]):
+            out[:, level] = to_ticks(values[:, level], tick)
+        return out
     ticks = np.round(values / tick)
     off = np.abs(ticks * tick - values) > 1e-6 * tick
     if np.any(off):
@@ -300,14 +313,15 @@ def assemble(
     if len(trade_ts) == 0:
         raise DayUnavailable(f"{spec.symbol} {day}: no trade prints")
 
-    order = np.argsort(book_ts, kind="stable")
-    book_ts, bid_px, bid_sz, ask_px, ask_sz = (
-        book_ts[order],
-        bid_px[order],
-        bid_sz[order],
-        ask_px[order],
-        ask_sz[order],
-    )
+    if len(book_ts) > 1 and np.any(np.diff(book_ts) < 0):
+        order = np.argsort(book_ts, kind="stable")
+        book_ts, bid_px, bid_sz, ask_px, ask_sz = (
+            book_ts[order],
+            bid_px[order],
+            bid_sz[order],
+            ask_px[order],
+            ask_sz[order],
+        )
 
     trade_ts = np.asarray(trade_ts, dtype=np.int64)
     trade_px = np.asarray(trade_px, dtype=np.int64)
@@ -407,6 +421,22 @@ def to_ns(stamps: pd.Series | pd.DatetimeIndex) -> np.ndarray:
     return index.as_unit("ns").to_numpy().astype(np.int64)
 
 
+def within_day(frame: pd.DataFrame, day: date, column: str = "timestamp") -> pd.DataFrame:
+    """The rows of ``frame`` stamped on ``day`` (UTC), and nothing else.
+
+    A day's archive can carry a few rows stamped just after the next midnight —
+    the book and the universe files on disk end up to five rows into the next
+    day. Kept, they would hand a day's simulation a moment of the next day, and
+    the last day of a block a moment of the block after it.
+    """
+    stamps = to_ns(frame[column])
+    start = day_start_ns(day)
+    keep = (stamps >= start) & (stamps < start + NS_PER_DAY)
+    if keep.all():
+        return frame
+    return frame.loc[keep].reset_index(drop=True)
+
+
 def _book_path(symbol: str, day: date, roots: Sequence[Path]) -> Path | None:
     for root in roots:
         path = Path(root) / symbol / f"{day.isoformat()}.parquet"
@@ -447,43 +477,91 @@ def load_day(
     except bybit_trades.BybitTradesError as exc:
         raise DayUnavailable(f"{symbol} {day}: {exc}") from exc
 
+    book_ts, planes, gaps, book_rows = _read_book(path, day, depth)
+    rows = book_rows + len(trades)
+    trades = within_day(trades, day)
+    outside = rows - len(book_ts) - len(trades)
+    if len(book_ts) == 0:
+        raise DayUnavailable(f"{symbol} {day}: the book file has no rows")
+    if trades.empty:
+        raise DayUnavailable(f"{symbol} {day}: the trade file has no rows on the day")
+    try:
+        events = _from_frames(
+            symbol, day, book_ts, planes, trades, gaps, funding_root, funding_interval_h
+        )
+    except (OffGridPrice, bybit_funding.BybitFundingError, ValueError) as exc:
+        # A data problem on one day: that day is not simulated, the run goes on.
+        raise DayUnavailable(f"{symbol} {day}: {exc}") from exc
+    return replace(events, rows_outside_day=outside)
+
+
+def _read_book(
+    path: Path, day: date, depth: int
+) -> tuple[np.ndarray, dict[tuple[str, str], np.ndarray], int, int]:
+    """One day's book as four [rows, depth] planes, read column by column.
+
+    Read through Arrow rather than a pandas frame of every column, and the
+    Arrow memory released before returning, so the peak is one copy of the
+    book and a column. Rows stamped outside ``day`` are dropped. Returns the
+    timestamps (ns), the planes keyed by (side, price or size), the stored
+    count of sequence gaps and the rows the file held.
+    """
+    import json
+
+    import pyarrow as pa  # type: ignore[import-untyped]
+    import pyarrow.parquet as pq  # type: ignore[import-untyped]
+
     columns = ["timestamp"] + [
         f"{side}_{what}_{level}"
         for level in range(depth)
         for side in ("bid", "ask")
         for what in ("price", "size")
     ]
-    book = pd.read_parquet(path, columns=columns)
-    gaps = int(book.attrs.get("sequence_gaps", 0))
-    if book.empty:
-        raise DayUnavailable(f"{symbol} {day}: the book file has no rows")
-    try:
-        return _from_frames(
-            symbol, day, book, trades, gaps, depth, funding_root, funding_interval_h
-        )
-    except (OffGridPrice, bybit_funding.BybitFundingError, ValueError) as exc:
-        # A data problem on one day: that day is not simulated, the run goes on.
-        raise DayUnavailable(f"{symbol} {day}: {exc}") from exc
+    table = pq.read_table(path, columns=columns)
+    metadata = table.schema.metadata or {}
+    attrs = json.loads(metadata.get(b"PANDAS_ATTRS", b"{}"))
+    gaps = int(attrs.get("sequence_gaps", 0))
+    total = table.num_rows
+    stamps = to_ns(pd.DatetimeIndex(table.column("timestamp").to_pandas()))
+    start = day_start_ns(day)
+    keep = (stamps >= start) & (stamps < start + NS_PER_DAY)
+    every = bool(keep.all())
+    planes: dict[tuple[str, str], np.ndarray] = {}
+    for side in ("bid", "ask"):
+        for what in ("price", "size"):
+            plane = np.empty((int(keep.sum()), depth), dtype=np.float64)
+            for level in range(depth):
+                values = table.column(f"{side}_{what}_{level}").to_numpy().astype(np.float64)
+                plane[:, level] = values if every else values[keep]
+            planes[side, what] = plane
+    del table
+    pa.default_memory_pool().release_unused()
+    return stamps[keep], planes, gaps, total
 
 
 def _from_frames(
     symbol: str,
     day: date,
-    book: pd.DataFrame,
+    book_ts: np.ndarray,
+    planes: dict[tuple[str, str], np.ndarray],
     trades: pd.DataFrame,
     gaps: int,
-    depth: int,
     funding_root: Path | None,
     funding_interval_h: int,
 ) -> DayEvents:
     from trading_research.data import bybit_funding
 
-    def plane(side: str, what: str) -> np.ndarray:
-        names = [f"{side}_{what}_{level}" for level in range(depth)]
-        return book[names].to_numpy(dtype=np.float64)
-
-    bid_price, ask_price = plane("bid", "price"), plane("ask", "price")
-    tick = derive_tick(np.concatenate([bid_price.ravel(), ask_price.ravel()]))
+    bid_price, ask_price = planes["bid", "price"], planes["ask", "price"]
+    # The distinct prices, column by column: the same set as the distinct
+    # prices of the whole book, without sorting a copy of every price.
+    distinct = np.concatenate(
+        [
+            pd.unique(price[:, level])
+            for price in (bid_price, ask_price)
+            for level in range(price.shape[1])
+        ]
+    )
+    tick = derive_tick(distinct)
     lot = derive_lot(trades["size"].to_numpy(dtype=np.float64))
     spec = InstrumentSpec(symbol, tick, lot, funding_interval_h)
 
@@ -502,14 +580,18 @@ def _from_frames(
         funding_ts = to_ns(funding["timestamp"])
         funding_rate = funding["rate"].to_numpy(dtype=np.float64)
 
+    bid_px = to_ticks(bid_price, tick)
+    del bid_price, planes["bid", "price"]
+    ask_px = to_ticks(ask_price, tick)
+    del ask_price, planes["ask", "price"]
     return assemble(
         spec,
         day,
-        book_ts=to_ns(book["timestamp"]),
-        bid_px=to_ticks(bid_price, tick),
-        bid_sz=plane("bid", "size"),
-        ask_px=to_ticks(ask_price, tick),
-        ask_sz=plane("ask", "size"),
+        book_ts=book_ts,
+        bid_px=bid_px,
+        bid_sz=planes["bid", "size"],
+        ask_px=ask_px,
+        ask_sz=planes["ask", "size"],
         trade_ts=trade_ts,
         trade_px=to_ticks(trades["price"].to_numpy(dtype=np.float64), tick),
         trade_sz=trades["size"].to_numpy(dtype=np.float64),

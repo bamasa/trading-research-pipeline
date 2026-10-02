@@ -121,12 +121,16 @@ class FeeTier:
 
     A negative ``maker_bp`` is a rebate: the venue pays the passive side. The
     market-making simulator charges ``maker_bp`` on every passive fill and
-    ``taker_bp`` on every flatten.
+    ``taker_bp`` on every flatten. ``group`` says which instruments the row
+    applies to (``all``, or one of the venue's instrument groups) and
+    ``requires`` what qualifies an account for it, as the venue states it.
     """
 
     name: str
     maker_bp: float
     taker_bp: float
+    group: str = "all"
+    requires: str = ""
 
     def __post_init__(self) -> None:
         if self.taker_bp < 0:
@@ -135,27 +139,84 @@ class FeeTier:
             raise ValueError(
                 f"maker fee {self.maker_bp} above taker fee {self.taker_bp} is not a schedule"
             )
+        if self.group not in FEE_GROUPS:
+            raise ValueError(f"unknown fee group {self.group!r}; known: {FEE_GROUPS}")
 
 
-#: Bybit's base tier for USDT perpetuals: 0.02% maker, 0.055% taker. The figure
-#: :class:`trading_research.backtest.maker.MakerCosts` already uses, and the
-#: one the market-making pre-registration fixes for every verdict.
-BYBIT_BASE = FeeTier("base", 2.0, 5.5)
+#: Instrument groups a row of Bybit's schedule can apply to. ``g1`` is what the
+#: venue calls its major coins; ``altcoin`` is every other perpetual, mid- and
+#: long-tail included.
+FEE_GROUPS: tuple[str, ...] = ("all", "g1", "altcoin")
 
-#: Where the schedule is published.
-BYBIT_FEE_SOURCE = "https://www.bybit.com/en/announcement-info/fee-rate/"
+#: Bybit's base tier for USDT perpetuals (VIP 0): 0.02% maker, 0.055% taker. The
+#: figure :class:`trading_research.backtest.maker.MakerCosts` already uses, and
+#: the one the market-making pre-registration fixes for every verdict.
+BYBIT_BASE = FeeTier("base", 2.0, 5.5, requires="none (VIP 0)")
 
-#: When the rows beyond the base tier were transcribed from the source. ``None``
-#: means they have not been: on 2 October 2026 the page refused automated
-#: requests from the development machine, and the pre-registration requires
-#: the VIP and market-maker programme rows to be transcribed, not assumed. They
-#: are added here, with this date set, before anything compares against them
-#: (the ladder's last rung and the fee break-even).
-BYBIT_FEE_RETRIEVED: str | None = None
+#: Where the schedule was transcribed from: the help-centre page "Trading Fee
+#: Structure", tabs "Non-VIP & VIP users" and "Pro Users & Market Makers", which
+#: said "Last updated on 2026-09-02". The page refuses scripted requests, so it
+#: was read in a browser.
+BYBIT_FEE_SOURCE = "https://www.bybit.com/en/help-center/article/Trading-Fee-Structure"
 
-#: The published linear-perpetual tiers, best maker fee last. Only the base
-#: tier until the rest are transcribed; see ``BYBIT_FEE_RETRIEVED``.
-BYBIT_LINEAR_TIERS: tuple[FeeTier, ...] = (BYBIT_BASE,)
+#: When the rows below were transcribed from the source.
+BYBIT_FEE_RETRIEVED: str = "2026-10-02"
+
+#: The caveat every number using a tier other than the base must carry.
+BYBIT_FEE_CAVEAT = (
+    "Bybit's linear-perpetual schedule as published in 2026 (page last updated "
+    "2026-09-02, transcribed 2026-10-02), applied to data from February to April "
+    "2024, when the schedule may have differed. Volumes are 30-day derivatives "
+    "volume in USDT; Pro levels require more than 20% of volume through the API."
+)
+
+#: The published linear-perpetual tiers, in the order the venue lists them:
+#: VIP levels first (one row for every instrument), then the Pro levels, whose
+#: rates differ between major coins (``g1``) and every other perpetual
+#: (``altcoin``). Only complete rows are here; the market-maker programme's
+#: rebate, which has no published taker rate, is :data:`BYBIT_MM_PROGRAMME_MAKER_BP`.
+BYBIT_LINEAR_TIERS: tuple[FeeTier, ...] = (
+    BYBIT_BASE,
+    FeeTier("vip1", 1.8, 4.0, requires=">= 10M volume, or >= 100K asset balance"),
+    FeeTier("vip2", 1.6, 3.75, requires=">= 25M volume"),
+    FeeTier("vip3", 1.4, 3.5, requires=">= 50M volume"),
+    FeeTier("vip4", 1.2, 3.2, requires=">= 100M volume, API volume <= 20%"),
+    FeeTier("vip5", 1.0, 3.2, requires=">= 250M volume, API volume <= 20%"),
+    FeeTier("supreme_vip", 0.0, 3.0, requires=">= 500M volume, API volume <= 20%"),
+    FeeTier("pro1_g1", 1.0, 2.8, "g1", ">= 100M volume, API volume > 20%"),
+    FeeTier("pro1_altcoin", 0.0, 2.8, "altcoin", ">= 100M volume, API volume > 20%"),
+    FeeTier("pro2_g1", 0.5, 2.5, "g1", ">= 250M volume, API volume > 20%"),
+    FeeTier("pro2_altcoin", 0.0, 2.8, "altcoin", ">= 250M volume, API volume > 20%"),
+    FeeTier("pro3_g1", 0.25, 2.2, "g1", ">= 750M volume, API volume > 20%"),
+    FeeTier("pro3_altcoin", 0.0, 2.5, "altcoin", ">= 750M volume, API volume > 20%"),
+    FeeTier("pro4_g1", 0.1, 2.0, "g1", ">= 1,500M volume, API volume > 20%"),
+    FeeTier("pro4_altcoin", 0.0, 2.3, "altcoin", ">= 1,500M volume, API volume > 20%"),
+    FeeTier("pro5_g1", 0.0, 1.8, "g1", ">= 3,000M volume, API volume > 20%"),
+    FeeTier("pro5_altcoin", 0.0, 2.1, "altcoin", ">= 3,000M volume, API volume > 20%"),
+    FeeTier("pro6_g1", 0.0, 1.5, "g1", ">= 5,000M volume, API volume > 20%"),
+    FeeTier("pro6_altcoin", 0.0, 1.8, "altcoin", ">= 5,000M volume, API volume > 20%"),
+)
+
+#: The market-maker incentive programme, as published: "up to 0.01% maker fee
+#: rebate", subject to the programme's requirements and an application. A
+#: bound on the maker fee, not a row of the schedule: no taker rate is published
+#: for it, so it is kept apart from :data:`BYBIT_LINEAR_TIERS` rather than
+#: completed with an assumed one.
+BYBIT_MM_PROGRAMME_MAKER_BP: float = -1.0
+
+#: The instruments the page names as major coins (``g1``), by example. The
+#: page's list is illustrative ("e.g."), so only these four are classified from
+#: it; the market-making study's other instruments, BICOUSDT and CRVUSDT, are
+#: mid-tail perpetuals and fall under ``altcoin``.
+BYBIT_G1_EXAMPLES: tuple[str, ...] = ("BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT")
+
+#: Groups of the instruments the market-making study uses.
+BYBIT_STUDY_GROUPS: dict[str, str] = {
+    "BTCUSDT": "g1",
+    "XRPUSDT": "g1",
+    "BICOUSDT": "altcoin",
+    "CRVUSDT": "altcoin",
+}
 
 
 def fee_tier(name: str, tiers: tuple[FeeTier, ...] = BYBIT_LINEAR_TIERS) -> FeeTier:
@@ -165,6 +226,21 @@ def fee_tier(name: str, tiers: tuple[FeeTier, ...] = BYBIT_LINEAR_TIERS) -> FeeT
             return tier
     known = ", ".join(t.name for t in tiers)
     raise KeyError(f"no fee tier {name!r}; transcribed tiers: {known}")
+
+
+def tiers_for(group: str, tiers: tuple[FeeTier, ...] = BYBIT_LINEAR_TIERS) -> list[FeeTier]:
+    """The rows that apply to an instrument of ``group``: every-instrument rows
+    and the group's own."""
+    if group not in FEE_GROUPS or group == "all":
+        raise ValueError(f"group must be one of {FEE_GROUPS[1:]}, got {group!r}")
+    return [t for t in tiers if t.group in ("all", group)]
+
+
+def best_maker_tier(group: str, tiers: tuple[FeeTier, ...] = BYBIT_LINEAR_TIERS) -> FeeTier:
+    """The published row with the lowest maker fee for ``group``; among equal
+    maker fees, the lowest taker fee, then the first listed."""
+    rows = tiers_for(group, tiers)
+    return min(rows, key=lambda t: (t.maker_bp, t.taker_bp))
 
 
 def breakeven_maker_bp(net: float, turnover: float, maker_bp: float) -> float:

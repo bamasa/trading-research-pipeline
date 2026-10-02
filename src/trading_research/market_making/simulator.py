@@ -78,10 +78,12 @@ from trading_research.market_making import analysis
 from trading_research.market_making.accounting import Account, IdentityError
 from trading_research.market_making.events import (
     BOOK,
+    NS_PER_DAY,
     NS_PER_S,
     TRADE,
     DayEvents,
     DayUnavailable,
+    day_start_ns,
     load_day,
 )
 from trading_research.market_making.orders import (
@@ -556,6 +558,20 @@ class _Day:
         for side, wanted_order in ((1, new_bid), (-1, new_ask)):
             if wanted_order is not None:
                 self._place(side, wanted_order[0], wanted_order[1], decided, self.account.position)
+        if wanted.cross:
+            self._cross(wanted.cross, decided)
+
+    def _cross(self, cross: float, decided: int) -> None:
+        """A taker order the quoter asked for: reduce-only against the position
+        once the takers already in flight have landed, so it can shrink the
+        position to zero and never grow or reverse it."""
+        side = 1 if cross > 0 else -1
+        projected = self.account.position + self.taker_in_flight
+        size = min(abs(cross), max(0.0, -side * projected))
+        if size <= self.lot * 1e-6:
+            self.counters.add("crosses_refused")
+            return
+        self._send_taker(side, size, decided, "strategy")
 
     def _reconcile(
         self, side: int, quote: Quote, row: int, decided: int
@@ -987,6 +1003,7 @@ class _Day:
         if not events.has_funding:
             flags.append("no_funding")
         counters["off_book_prints"] = float((~events.trade_eligible).sum())
+        counters["rows_outside_day"] = float(events.rows_outside_day)
         counters["excluded"] = float(bool(flags))
         return DayResult(
             symbol=events.spec.symbol,
@@ -1172,22 +1189,234 @@ def _job_key(
     book_roots: tuple[Path, ...],
     trades_root: Path,
     funding_root: Path | None,
+    tapes: Mapping[str, SignalTape] | None = None,
 ) -> str:
     """Everything a cached day depends on: the quoter, the configuration, the
-    files it read (path, size, modification time) and the source that ran."""
-    description = json.dumps(
+    files it read (path, size, modification time), the signals it was handed
+    and the source that ran."""
+    description: dict[str, Any] = {
+        "symbol": symbol,
+        "day": day.isoformat(),
+        "quoter": repr(quoter),
+        "config": asdict(config),
+        "inputs": _inputs(symbol, day, book_roots, trades_root, funding_root),
+        "source": source_fingerprint(),
+    }
+    if tapes:
+        description["tapes"] = {name: tape.fingerprint() for name, tape in sorted(tapes.items())}
+    encoded = json.dumps(description, sort_keys=True, default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()[:24]
+
+
+def day_tapes(tapes: Mapping[str, SignalTape] | None, day: date) -> dict[str, SignalTape] | None:
+    """The slice of each tape one day can read (with the value standing at its start)."""
+    if not tapes:
+        return None
+    start = day_start_ns(day)
+    return {name: tape.between(start, start + NS_PER_DAY) for name, tape in tapes.items()}
+
+
+@dataclass(frozen=True)
+class Cell:
+    """One configuration of a run: a label, a quoter factory and the settings.
+
+    ``make_quoter`` is called once per simulated day, so a stateful quoter
+    starts each day fresh; it must be picklable to run in worker processes.
+    """
+
+    label: str
+    make_quoter: Callable[[], Quoter]
+    config: SimConfig
+
+
+#: Day counters carried into a cell's row beside :data:`SUMMARY_COLUMNS`.
+EXTRA_COUNTERS = (
+    "fills_queue",
+    "fills_through",
+    "flattens_soft_limit",
+    "flattens_day_end",
+    "flattens_strategy",
+    "decisions",
+    "clip_over_touch",
+    "not_quoted_soft_limit",
+    "feed_pauses",
+)
+
+
+def _peak_rss_mb() -> float:
+    """This process's peak resident set, MB (bytes on macOS, kB on Linux)."""
+    import resource
+    import sys
+
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return peak / 1e6 if sys.platform == "darwin" else peak / 1e3
+
+
+def _unavailable_row(symbol: str, day: date, quoter: str, reason: str) -> dict[str, Any]:
+    row: dict[str, Any] = dict.fromkeys(SUMMARY_COLUMNS, np.nan)
+    row.update(
         {
             "symbol": symbol,
             "day": day.isoformat(),
-            "quoter": repr(quoter),
-            "config": asdict(config),
-            "inputs": _inputs(symbol, day, book_roots, trades_root, funding_root),
-            "source": source_fingerprint(),
-        },
-        sort_keys=True,
-        default=str,
+            "quoter": quoter,
+            "status": reason,
+            "flags": "not_simulated",
+            "excluded": True,
+        }
     )
-    return hashlib.sha256(description.encode()).hexdigest()[:24]
+    return row
+
+
+def _run_cells(
+    job: tuple[
+        str,
+        date,
+        tuple[Cell, ...],
+        dict[str, SignalTape] | None,
+        tuple[Path, ...],
+        Path,
+        Path | None,
+        Path | None,
+    ],
+) -> list[dict[str, Any]]:
+    """Every cell of a job on one instrument-day, loading the day at most once.
+
+    Module level so a worker process can receive it. A cell whose result is
+    already in the cache is read back; the day is loaded only if some cell
+    still has to run.
+    """
+    symbol, day, cells, tapes, book_roots, trades_root, funding_root, cache = job
+    rows: list[dict[str, Any] | None] = [None] * len(cells)
+    pending: list[tuple[int, Quoter, Path | None]] = []
+    for position, cell in enumerate(cells):
+        quoter = cell.make_quoter()
+        target: Path | None = None
+        if cache is not None:
+            key = _job_key(
+                symbol, day, quoter, cell.config, book_roots, trades_root, funding_root, tapes
+            )
+            target = cache / key / symbol / day.isoformat()
+            summary = target / "summary.json"
+            if summary.exists():
+                loaded: dict[str, Any] = json.loads(summary.read_text(encoding="utf-8"))
+                loaded["cell"] = cell.label
+                rows[position] = loaded
+                continue
+        pending.append((position, quoter, target))
+    if pending:
+        try:
+            events = load_day(
+                symbol,
+                day,
+                book_roots=book_roots,
+                trades_root=trades_root,
+                funding_root=funding_root,
+            )
+        except DayUnavailable as exc:
+            _LOG.warning("%s %s not simulated: %s", symbol, day, exc)
+            for position, quoter, _ in pending:
+                row = _unavailable_row(symbol, day, quoter.name, str(exc))
+                row["cell"] = cells[position].label
+                rows[position] = row
+            events = None
+        if events is not None:
+            for position, quoter, target in pending:
+                cell = cells[position]
+                result = simulate_day(events, quoter, cell.config, tapes)
+                row = _summary(result, quoter.name)
+                for name in EXTRA_COUNTERS:
+                    row[name] = float(result.counters.get(name, 0.0))
+                for name, count in sorted(getattr(quoter, "counts", {}).items()):
+                    row[f"quoter_{name}"] = float(count)
+                summarise = getattr(quoter, "summarise", None)
+                if callable(summarise):
+                    for name, value in sorted(summarise(result.fills).items()):
+                        row[f"quoter_{name}"] = float(value)
+                if target is not None:
+                    target.mkdir(parents=True, exist_ok=True)
+                    result.fills.to_parquet(target / "fills.parquet", index=False)
+                    result.equity.to_parquet(target / "equity.parquet", index=False)
+                    (target / "summary.json").write_text(
+                        json.dumps(row, sort_keys=True), encoding="utf-8"
+                    )
+                row["cell"] = cell.label
+                rows[position] = row
+                del result
+            del events
+    peak = _peak_rss_mb()
+    out: list[dict[str, Any]] = []
+    for done in rows:
+        assert done is not None
+        done["worker_peak_rss_mb"] = peak
+        out.append(done)
+    return out
+
+
+def run_cells(
+    symbol: str,
+    days: Sequence[date],
+    cells: Sequence[Cell],
+    *,
+    book_roots: Sequence[Path],
+    trades_root: Path,
+    funding_root: Path | None,
+    tapes: Mapping[str, SignalTape] | None = None,
+    workers: int = 1,
+    cache: Path | None = None,
+    cells_per_job: int = 8,
+    day_guard: Callable[[Sequence[date]], None] | None = None,
+) -> pd.DataFrame:
+    """Simulate every cell on every day; one row per (cell, day), sorted.
+
+    The work is cut into jobs of one instrument-day and up to ``cells_per_job``
+    cells, so a worker holds one day in memory at a time and loads it once for
+    all its cells. Each day is handed only its slice of ``tapes``. The rows do
+    not depend on ``workers`` or ``cells_per_job``. ``day_guard``, when given,
+    is called with every day before anything is read, and may refuse them.
+    """
+    labels = [c.label for c in cells]
+    if len(set(labels)) != len(labels):
+        raise ValueError("cell labels must be unique")
+    if day_guard is not None:
+        day_guard(list(days))
+    for cell in cells:
+        if cell.make_quoter().uses_future:
+            raise OracleRefused(
+                f"cell {cell.label!r} reads the future; its days cannot enter a results table"
+            )
+    chunk = max(1, int(cells_per_job))
+    jobs = []
+    for day in sorted(set(days)):
+        sliced = day_tapes(tapes, day)
+        for first in range(0, len(cells), chunk):
+            jobs.append(
+                (
+                    symbol,
+                    day,
+                    tuple(cells[first : first + chunk]),
+                    sliced,
+                    tuple(Path(r) for r in book_roots),
+                    Path(trades_root),
+                    None if funding_root is None else Path(funding_root),
+                    None if cache is None else Path(cache),
+                )
+            )
+    if workers <= 1:
+        batches = [_run_cells(job) for job in jobs]
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            batches = list(pool.map(_run_cells, jobs))
+    rows = [row for batch in batches for row in batch]
+    seen = {name for row in rows for name in row}
+    fixed = [*SUMMARY_COLUMNS, *EXTRA_COUNTERS]
+    columns = [c for c in fixed if c in seen]
+    columns += sorted(seen - set(fixed) - {"cell", "worker_peak_rss_mb"})
+    columns += ["cell", "worker_peak_rss_mb"]
+    frame = pd.DataFrame(rows, columns=columns)
+    order = {label: i for i, label in enumerate(labels)}
+    frame["_order"] = frame["cell"].map(order)
+    frame = frame.sort_values(["_order", "day"], kind="stable").drop(columns="_order")
+    return frame.reset_index(drop=True)
 
 
 def _run_one(
@@ -1200,48 +1429,28 @@ def _run_one(
         Path,
         Path | None,
         Path | None,
+    ]
+    | tuple[
+        str,
+        date,
+        Callable[[], Quoter],
+        SimConfig,
+        tuple[Path, ...],
+        Path,
+        Path | None,
+        Path | None,
+        dict[str, SignalTape] | None,
     ],
 ) -> dict[str, Any]:
     """One instrument-day. Module level so a worker process can receive it."""
-    symbol, day, make_quoter, config, book_roots, trades_root, funding_root, cache = job
-    quoter = make_quoter()
-    target: Path | None = None
-    if cache is not None:
-        key = _job_key(symbol, day, quoter, config, book_roots, trades_root, funding_root)
-        target = cache / key / symbol / day.isoformat()
-        summary = target / "summary.json"
-        if summary.exists():
-            loaded: dict[str, Any] = json.loads(summary.read_text(encoding="utf-8"))
-            return loaded
-    try:
-        events = load_day(
-            symbol,
-            day,
-            book_roots=book_roots,
-            trades_root=trades_root,
-            funding_root=funding_root,
-        )
-    except DayUnavailable as exc:
-        _LOG.warning("%s %s not simulated: %s", symbol, day, exc)
-        row: dict[str, Any] = dict.fromkeys(SUMMARY_COLUMNS, np.nan)
-        row.update(
-            {
-                "symbol": symbol,
-                "day": day.isoformat(),
-                "quoter": quoter.name,
-                "status": str(exc),
-                "flags": "not_simulated",
-                "excluded": True,
-            }
-        )
-        return row
-    result = simulate_day(events, quoter, config)
-    row = _summary(result, quoter.name)
-    if target is not None:
-        target.mkdir(parents=True, exist_ok=True)
-        result.fills.to_parquet(target / "fills.parquet", index=False)
-        result.equity.to_parquet(target / "equity.parquet", index=False)
-        (target / "summary.json").write_text(json.dumps(row, sort_keys=True), encoding="utf-8")
+    symbol, day, make_quoter, config, book_roots, trades_root, funding_root, cache = job[:8]
+    tapes = job[8] if len(job) > 8 else None
+    cell = Cell("only", make_quoter, config)
+    (row,) = _run_cells((symbol, day, (cell,), tapes, book_roots, trades_root, funding_root, cache))
+    for name in ("cell", "worker_peak_rss_mb", *EXTRA_COUNTERS):
+        row.pop(name, None)
+    for name in [k for k in row if k.startswith("quoter_")]:
+        row.pop(name)
     return row
 
 
@@ -1256,6 +1465,7 @@ def run_days(
     funding_root: Path | None,
     workers: int = 1,
     cache: Path | None = None,
+    tapes: Mapping[str, SignalTape] | None = None,
 ) -> pd.DataFrame:
     """Simulate independent days, one row each, sorted by day.
 
@@ -1269,7 +1479,9 @@ def run_days(
     under a key of everything the day depends on — the quoter, the
     configuration, the files read and the simulator's source — and a day
     already there is read back instead of re-run. ``make_quoter`` must be
-    picklable when ``workers`` is above one.
+    picklable when ``workers`` is above one. ``tapes`` are external signals;
+    each day is handed its own slice of them, and they are part of the cache
+    key.
     """
     probe = make_quoter()
     if probe.uses_future:
@@ -1286,6 +1498,7 @@ def run_days(
             Path(trades_root),
             None if funding_root is None else Path(funding_root),
             None if cache is None else Path(cache),
+            day_tapes(tapes, day),
         )
         for day in sorted(set(days))
     ]

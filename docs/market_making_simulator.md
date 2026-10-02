@@ -37,17 +37,24 @@ conflation interval. So:
 | [`orders.py`](../src/trading_research/market_making/orders.py) | `OrderState`, `Order` |
 | [`queue.py`](../src/trading_research/market_making/queue.py) | `CancelAttribution`, `ArrivalGrowth`, `QueuePriority`, `CrossedPolicy`, `on_arrival`, `on_print`, `on_snapshot` |
 | [`accounting.py`](../src/trading_research/market_making/accounting.py) | `Account`, `IdentityError` |
-| [`quoters.py`](../src/trading_research/market_making/quoters.py) | `MarketView`, `Quote`, `Quotes`, `Quoter`, `TouchQuoter` (S0) |
-| [`signals.py`](../src/trading_research/market_making/signals.py) | `SignalTape` |
-| [`simulator.py`](../src/trading_research/market_making/simulator.py) | `SimConfig`, `DayResult`, `simulate_day`, `run_days`, `source_fingerprint`, `OracleRefused` |
+| [`quoters.py`](../src/trading_research/market_making/quoters.py) | `MarketView`, `Quote`, `Quotes`, `Quoter`, `TouchQuoter` (S0), `SkewQuoter` (S1), `InsideQuoter` (S2 and H1's twin), `RegimeGuard` (S3), `ReversionLean` (S4), `SignalExecutor` (X1) |
+| [`signals.py`](../src/trading_research/market_making/signals.py) | `SignalTape`, `UniversePanel`, `load_universe_panel`, `reversion_tape`, `fit_theta`, `fit_beta`, `lean_trigger_tape`, `Triggers`, `reversion_triggers`, `taker_twin` |
+| [`flags.py`](../src/trading_research/market_making/flags.py) | `FlagTimeline`, `flags_from_grids`, `read_grids`, `build_flags`, `guard_share`, `flag_counts` |
+| [`screen.py`](../src/trading_research/market_making/screen.py) | `coverage`, `day_statistics`, `combine`, `screen`, `admit` |
+| [`prereg.py`](../src/trading_research/market_making/prereg.py) | `PreRegistration`, `freeze_text`, `BLOCKS`, `Access`, `development_access`, `HeldOutLedger`, `HeldOutLocked` |
+| [`simulator.py`](../src/trading_research/market_making/simulator.py) | `SimConfig`, `DayResult`, `simulate_day`, `run_days`, `Cell`, `run_cells`, `source_fingerprint`, `OracleRefused` |
 | [`analysis.py`](../src/trading_research/market_making/analysis.py) | `markouts`, `decompose`, `summarise_markouts`, `market_wide_markouts`, `mid_at`, `book_mid`, `clock_offset_profile`, `best_clock_offset_ms` |
 | [`synthetic.py`](../src/trading_research/market_making/synthetic.py) | `known_answer_market`, `random_market`, `hand_built_market` |
 
 Outside the package: `data/bybit_trades.load_day` and a stable sort that keeps
 Bybit's match id; `data/bybit_funding.py` (the funding history from the public
 REST endpoint) and `data/ensure.ensure_funding`; `data/grid.to_grid(label=...)`;
-`backtest/costs.FeeTier`, `BYBIT_BASE`, `BYBIT_LINEAR_TIERS`, `fee_tier` and
-`breakeven_maker_bp`.
+`backtest/costs.FeeTier`, `BYBIT_BASE`, `BYBIT_LINEAR_TIERS` (Bybit's published
+schedule, transcribed), `fee_tier`, `best_maker_tier` and `breakeven_maker_bp`;
+`strategies/reversion.trailing_autocorrelation` and `reversion_tape`;
+`validation/search.neighbourhood_scores` and the batch form of
+`successive_halving`. The development-period run is
+[`experiments/market_making.py`](../experiments/market_making.py).
 
 ## The event loop
 
@@ -362,6 +369,15 @@ other participant sees, and a second own order at another price reads the
 volume the first one took as a cancellation at its level (a stated limitation,
 pinned by a test). The mean clip over the touch is reported (`clip_over_touch`).
 
+A quoter may also ask for a taker order itself (`Quotes.cross`, a signed size):
+X1 does, to cross for an exit that timed out. It is a reduce-only taker order
+exactly like a flatten — it pays the order latency, walks the first snapshot at
+or after its arrival with `flatten_slippage_bp` and the taker fee — and it never
+grows or reverses the position: a request beyond what is held, counting the
+takers already in flight, is cut to it, and one from a flat position is refused
+(`crosses_refused`). Its fills are `flatten` fills, counted as
+`flattens_strategy`.
+
 *Bias.* Ignoring own impact is optimistic, bounded by keeping the clip near a
 tenth of the touch. Charging size beyond the visible book at the tenth level is
 optimistic and counted (`flatten_beyond_visible_book`). The flatten's latency
@@ -376,6 +392,8 @@ three soft limits, latencies of 10 and 250 ms),
 `test_the_hard_limit_holds_when_the_clip_shrinks`,
 `test_a_clip_below_one_lot_is_not_quoted`,
 `test_the_clip_adapts_to_the_trailing_touch` (`test_mm_limits.py`);
+`test_a_cross_never_grows_the_position`,
+`test_x1_in_the_simulator_buys_the_fade_and_gets_out` (`test_mm_quoters.py`);
 `test_a_second_own_order_reads_the_first_ones_fill_as_a_cancellation`
 (`test_mm_queue.py`).
 
@@ -388,15 +406,23 @@ break-even maker fee of a quoter whose decisions do not read the fee (S0) is
 
 *Bias.* Neutral; the tier is swept.
 
+*The published schedule.* `backtest/costs.BYBIT_LINEAR_TIERS` holds Bybit's
+linear-perpetual tiers as transcribed on 2 October 2026 from the help-centre page
+"Trading Fee Structure" (`BYBIT_FEE_SOURCE`; the page said "last updated
+2026-09-02" and refuses scripted requests, so it was read in a browser): VIP 0
+(the base tier, 2.0 / 5.5 bp) to VIP 5 and Supreme VIP for every instrument,
+and Pro 1 to Pro 6 with separate rows for major coins (`g1`: BTCUSDT and XRPUSDT
+among the study's instruments) and altcoins (BICOUSDT, CRVUSDT). The
+market-maker programme's "up to 0.01% maker fee rebate" has no published taker
+rate, so it is kept apart (`BYBIT_MM_PROGRAMME_MAKER_BP = -1.0`) rather than
+completed with an assumed one. **The schedule is the one published in 2026,
+applied to data from 2024**, when it may have differed; `BYBIT_FEE_CAVEAT` says
+so, and every number that uses a tier other than the base must carry it.
+
 *Tests.* `test_maker_rebate_is_a_negative_fee`,
 `test_fee_breakeven_matches_a_rerun_at_that_fee`,
-`test_fee_tiers_are_looked_up_not_assumed` (`test_mm_accounting.py`).
-
-*Not yet done.* Only the base tier is in `backtest/costs.BYBIT_LINEAR_TIERS`.
-Bybit's fee page refused automated requests when this was written, and the
-pre-registration requires the VIP and market-maker rows to be transcribed, not
-assumed; `BYBIT_FEE_RETRIEVED` is `None` until they are. They are needed only by
-the ladder's last rung and the fee break-even comparison.
+`test_fee_tiers_are_looked_up_not_assumed`,
+`test_the_bybit_schedule_is_transcribed_with_its_source` (`test_mm_accounting.py`).
 
 ### R13 — Mark
 
@@ -448,6 +474,12 @@ flatten, pays the order latency and walks the first snapshot at or after its
 arrival — after a pause in the book, the first snapshot after the pause. If no
 snapshot arrives for `suspend_after_pause_s` (5 s), every order is pulled at
 that moment and nothing is quoted until the next snapshot.
+
+A day is its own files, and only the rows in them stamped on that day: the
+archives on disk spill up to five book rows past midnight into the next day,
+and those are dropped on loading and counted (`rows_outside_day`), so a day's
+simulation never reads a moment of the next day — and the last day of a block
+never reads the block after it.
 
 A day that cannot be simulated — the book or the prints missing, a price off
 the tick grid, a funding interval other than the one assumed — is reported with
@@ -573,10 +605,135 @@ computed from them. Extrapolated at that rate, a BTCUSDT day of the held-out
 block (about three million events) would take about 16 s; quoters richer than
 the touch quoter will be slower.
 
+## The quoters
+
+Every quoter sees the same `MarketView` and is held to the same simulator rules
+(clip, limits, depth, post-only). Fair value is the mid; economic quantities are
+in basis points and prices in integer ticks. The parameters the pre-registration
+searches are listed in its YAML; the values chosen on block D are written there
+by its Amendment 2.
+
+**S1 (`SkewQuoter`).** With `q` the position, `Q` the soft limit and `sigma` the
+one-minute volatility,
+
+```
+r     = mid * (1 - skew_bp * 1e-4 * clamp((sigma / sigma_ref)^2, 0.25, 4) * q / Q)
+delta = maker_bp + min_edge_bp + k * sigma                             (bp)
+bid   = min(floor_tick(r * (1 - delta * 1e-4)), best bid)
+ask   = max(ceil_tick (r * (1 + delta * 1e-4)), best ask)
+```
+
+Long inventory lowers both quotes; S1 never improves the touch, and the gate
+keeps it off a touch too close to fair value to clear the fee. `sigma_ref` is
+the instrument's median one-minute volatility over D.
+
+**S2 (`InsideQuoter`).** S1, plus: when the spread is at least `m_ticks`, a side
+improves to one tick inside the touch if that price still clears the gate
+(`r - bid >= delta`, `ask - r >= delta`) and is post-only safe. At a spread of
+exactly two ticks the two improved prices would meet, so only the side that
+reduces `|q|` improves, and the bid when flat. `inside=False` is H1's twin: S2's
+parameters with the rule off, which is S1.
+
+**S3 (`RegimeGuard`).** Wraps S1 or S2. A flag effective at `e` opens a window
+`(e, e + G]`; overlapping windows merge, because the latest flag extends the
+window. Inside it the action is `pull` (no quotes, so resting orders are
+cancelled at the next decision) or `widen` (the half-spread doubled).
+
+**S4 (`ReversionLean`).** S1 with, while a trigger (`|s| >= theta`) is less than
+ten minutes old, `r <- r * (1 + lambda * beta * s * 1e-4)` with the index signal
+`s` read live; with `one_sided`, the side that would follow the move (the bid
+after a rise) is not quoted in the window. `lambda < 0` is the flipped placebo.
+
+**X1 (`SignalExecutor`).** At each new trigger of §27's frozen rule, post the
+fading side at the touch with the clip, following the touch for at most ten
+minutes from the trigger; unfilled, the attempt is a miss. Once the position
+shows a fill, the rest of the entry is pulled and the exit posted at the
+opposite touch for the position held; whatever is open ten minutes after the
+fill was seen is crossed (`Quotes.cross`, above). The fill is seen at the first
+decision after it, so the exit clock starts within one snapshot of the fill.
+Triggers are the entries of `thin` with §27's hold and cooldown (120 rows each)
+on the five-second tape, so they do not depend on prices; X1 acts only on those
+known between 00:10 (the end of the warm-up) and 23:35 (`Triggers.eligible`),
+and the taker twin (`signals.taker_twin`: entry across the spread at the
+trigger, exit 120 rows later, `TakerCosts(5.5, 0.5)`) is scored on exactly the
+same set. X1 is the only stateful quoter: a fresh instance per day.
+`SignalExecutor.attempts` assigns each fill to the attempt that owns it, so the
+day's net splits into attempts exactly.
+
+*Tests.* `test_mm_quoters.py`: S1's skew direction, its volatility scaling and
+clamp, never improving the touch, the gate on a one-tick touch; S2 inside only
+when the spread and the gate allow, the two-tick rule, post-only safety over 500
+random views; S3 pulling for exactly its window (by hand and through the
+simulator) and widening by two; S4's lean sign, its window and the one-sided
+rule; X1 posting the fading side, its timeouts, its exit and cross, and a full
+round trip through the simulator in both outcomes.
+
+## Signals, flags and the admission screen
+
+**The reversion tape** (`signals.py`). The universe's top of book is read one
+instrument at a time, only on the days asked for, put on a right-labelled
+five-second grid and forward-filled across the union of rows; the tape is the
+equal-weighted index's 120-row return excluding the instrument, in bp, at each
+bin end. `theta` is `threshold_for_rate` at the frozen 60 signals a day over D;
+`beta` is the no-intercept OLS slope of the instrument's next 120-row return on
+the signal over D's rows with `|s| >= theta`. *Tests* (`test_mm_signals.py`):
+the panel's labels are bin ends and its first value is the last update before
+it; the tape is unchanged by truncation and by rewriting data after a moment;
+it excludes its own instrument; theta, beta, the triggers' thinning, direction
+and causality, and the taker twin are each checked against their definitions.
+
+**The regime flags** (`flags.py`). `changepoint.detect` on the one-second grid
+(mid, spread) with its defaults, and `structural_breaks.detect_breaks` on
+one-minute log mid returns with `MonitorSpec(250, 60, ("scale", "dependence"))`
+at the recorded thresholds 7.77 and 7.65, both on right-labelled grids and run
+continuously from the first day given. A changepoint break at `Break.index` is
+effective at the label of row `index - 1`, when its block closed; a structural
+break at the label of the return that produced it; both plus 10 ms. The guard
+reads them as the `flag_s` tape. `FlagTimeline.shifted` is H3's placebo: every
+flag moved by one offset around the span, count and spacing kept. *Tests*
+(`test_mm_flags.py`): each detector's effective times against the detector
+called directly; the flags of a prefix are exactly the whole's flags inside it;
+the shift keeps the count and the circular gaps.
+
+**The admission screen** (`screen.py`). Per instrument over D: the time-weighted
+tick and spread in bp and share of time at two ticks or more (each snapshot
+weighted by the time to the next), the median touch over the median print, prints
+a day, the market-wide passive markout at 1, 5 and 30 s, and the coverage of D
+and H; and, from the same pass, the clip's notional cap (a tenth of the median
+touch notional) and `sigma_ref`. The coverage of H is computed from the file
+system alone — whether a non-empty file exists for the day — and opens no file.
+*Tests* (`test_mm_screen.py`): the statistics on a hand-built day, the admission
+thresholds, and coverage that opens nothing.
+
+## The pre-registration in code: the loader and the ledger
+
+`prereg.PreRegistration` loads `configs/mm_prereg.yaml` and validates it against
+the registered schema: every section, block, grid and fixed setting, and each
+placeholder either `null` or a value of its kind (a grid value on its grid, an
+instrument map of positive numbers, and so on). Nothing outside the 26
+placeholders may move: with every placeholder put back to `null` the file must
+hash to the registered sha256, `27471cd6…`. `freeze_text` writes the chosen
+values into the placeholders, one line each, and nothing else.
+
+`prereg.BLOCKS` are the registered dates, and every reader of the study —
+`screen.screen`, `signals.load_universe_panel`, `flags.read_grids`, and
+`run_cells` through its `day_guard` — checks each day against an `Access` before
+any file of it is opened. `development_access()` permits D only. The only way to
+an `Access` for H or F is `HeldOutLedger.open`, which refuses unless the
+amendment records the configuration's sha256 (`Frozen configuration sha256:` in
+the document), the file has that hash, is fully frozen and is committed, the
+working tree is clean, and the block has not been read before (a second read
+needs `force=True` and is stamped `second read`); F additionally needs H's read
+recorded and committed. The read is written to
+`experiments/results/mm_heldout_ledger.json` — block, commit, configuration
+sha256, UTC time — before the access is returned. *Tests* (`test_mm_prereg.py`,
+in a throwaway git repository): each refusal path, the first read's record, the
+forced second read, F after H, and the schema's refusal of any change outside
+the placeholders.
+
 ## Not in this simulator yet
 
-The quoters the study compares (S1–S4, X1), the reversion tape and the regime
-flags, the admission screen, the pre-registration loader and the held-out
-ledger, the advantage ladder and the fee-grid break-even, the pipeline stage and
-the command-line entry points arrive in later pull requests, in the order the
-pre-registration sets.
+The advantage ladder and its forecast rungs, the fee-grid break-even, the
+placebos' runs (stale trigger, flipped, shuffled state, shifted flags), the
+robustness sweeps, the pipeline stage and the command-line entry points arrive
+in later pull requests, in the order the pre-registration sets.

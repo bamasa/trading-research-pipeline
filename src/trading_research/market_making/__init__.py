@@ -8,11 +8,17 @@ The modules, in the order an instrument-day passes through them:
   the queue at its price, advanced only by prints;
 * :mod:`.accounting` — average-cost position, cash, fees and funding, with an
   identity checked at every change;
-* :mod:`.quoters` — what a quoting rule may see and what it returns;
-* :mod:`.signals` — external signals joined at the end of their bin;
+* :mod:`.quoters` — what a quoting rule may see and what it returns, and the
+  rules the study compares (S0-S4, X1);
+* :mod:`.signals` — external signals joined at the end of their bin, and the
+  reversion tape, its thresholds, triggers and taker twin;
+* :mod:`.flags` — regime flags from both detectors, effective when known;
 * :mod:`.simulator` — the event loop, latency, limits, flattening and the
-  per-day result;
+  per-day result, and the runners over many days and configurations;
 * :mod:`.analysis` — markouts and the profit decomposition, after the loop;
+* :mod:`.screen` — instrument admission, computed on the development block;
+* :mod:`.prereg` — the pre-registration's YAML, its blocks, and the ledger
+  that guards the held-out reads;
 * :mod:`.synthetic` — known-answer markets for the tests.
 
 The rules the simulator follows, each with the direction it biases a result

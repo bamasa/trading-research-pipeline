@@ -49,6 +49,11 @@ class SearchError(ValueError):
 #: more reliable — and what it means is the caller's business.
 Scorer = Callable[[Any, int], dict[str, float]]
 
+#: Scores every candidate of a rung at once, in the order given, so the caller
+#: can spread the work over processes. An entry may be an exception instead of
+#: metrics: that candidate is skipped, as a :data:`Scorer` raising would be.
+BatchScorer = Callable[[Sequence[Any], int], Sequence["dict[str, float] | BaseException"]]
+
 
 @dataclass
 class Rung:
@@ -87,8 +92,9 @@ class SearchOutcome:
 
 def successive_halving(
     candidates: Sequence[Any],
-    score: Scorer,
+    score: Scorer | None = None,
     *,
+    score_batch: BatchScorer | None = None,
     objective: str = "net_per_trade_bp",
     budgets: Sequence[int] = (4, 8, 24),
     keep_fraction: float = 0.34,
@@ -106,11 +112,17 @@ def successive_halving(
     ranked. Without it the early rounds promote whichever candidate happened to
     take three lucky trades in four windows, and the search spends its budget on
     noise.
+
+    Give either ``score``, called once per candidate, or ``score_batch``, called
+    once per rung with every candidate still alive; the search is the same
+    either way, and the batch form lets the scoring run in parallel.
     """
     if not candidates:
         raise SearchError("no candidates to search")
     if not budgets:
         raise SearchError("no budgets given")
+    if (score is None) == (score_batch is None):
+        raise SearchError("give exactly one of score and score_batch")
 
     name = label or (lambda c: str(c))
     alive = list(candidates)
@@ -121,21 +133,35 @@ def successive_halving(
         survivors = max(1, int(len(alive) * keep_fraction)) if depth + 1 < len(budgets) else 1
         rung = Rung(budget=budget, candidates=len(alive), survivors=survivors)
 
-        for candidate in alive:
-            try:
-                metrics = score(candidate, budget)
-            except Exception as exc:  # a bad candidate must not end the search
+        outcomes: list[dict[str, float] | BaseException]
+        if score_batch is not None:
+            outcomes = list(score_batch(alive, budget))
+            if len(outcomes) != len(alive):
+                raise SearchError(
+                    f"the batch scorer returned {len(outcomes)} results for {len(alive)} candidates"
+                )
+        else:
+            assert score is not None
+            outcomes = []
+            for candidate in alive:
+                try:
+                    outcomes.append(score(candidate, budget))
+                except Exception as exc:  # a bad candidate must not end the search
+                    outcomes.append(exc)
+
+        for candidate, outcome in zip(alive, outcomes, strict=True):
+            if isinstance(outcome, BaseException):
                 rows.append(
                     {
                         "rung": depth,
                         "budget": budget,
                         "candidate": name(candidate),
-                        "skipped": f"{type(exc).__name__}: {exc}",
+                        "skipped": f"{type(outcome).__name__}: {outcome}",
                     }
                 )
                 continue
-            rung.results.append((candidate, metrics))
-            rows.append({"rung": depth, "budget": budget, "candidate": name(candidate), **metrics})
+            rung.results.append((candidate, outcome))
+            rows.append({"rung": depth, "budget": budget, "candidate": name(candidate), **outcome})
 
         if on_rung is not None:
             on_rung(rung)
@@ -211,3 +237,45 @@ def sample_configurations(
         seen.add(choice)
         out.append(dict(zip(keys, choice, strict=True)))
     return out
+
+
+def neighbourhood_scores(table: pd.DataFrame, axes: Sequence[str], value: str) -> pd.Series:
+    """Each cell's ``value`` as the median over the cell and its grid neighbours.
+
+    The generalisation of the neighbourhood choice in
+    :mod:`trading_research.pipeline.discovery` to any set of ordered axes.
+    Taking the outright best of many cells is how §25 and §26 were fooled: the
+    maximum of a noisy surface is whichever cell noise favoured. A cell whose
+    neighbours also score well describes a region, and a region is what an
+    effect looks like.
+
+    The neighbourhood of a cell is every cell of ``table`` that lies within one
+    step of it along every axis in ``axes`` — the block of up to ``3 ** len(axes)``
+    cells around it, the cell itself included — where a step is to the adjacent
+    value among those each axis takes in ``table``. Cells absent from
+    ``table`` (not measured) simply do not contribute. Scored by the median, so
+    one adjacent outlier cannot carry the group. Rows with a missing ``value``
+    neither score nor contribute.
+
+    Returns a series aligned with ``table``'s index.
+    """
+    if not axes:
+        raise SearchError("a neighbourhood needs at least one axis")
+    missing = [a for a in [*axes, value] if a not in table.columns]
+    if missing:
+        raise SearchError(f"columns {missing} are not in the table")
+    if table[list(axes)].duplicated().any():
+        raise SearchError("two rows share one cell of the grid; one value per cell is needed")
+    levels = {a: sorted(table[a].dropna().unique().tolist()) for a in axes}
+    position = pd.DataFrame(
+        {a: table[a].map({v: i for i, v in enumerate(levels[a])}) for a in axes},
+        index=table.index,
+    )
+    values = table[value].to_numpy(dtype=np.float64)
+    coordinates = position.to_numpy(dtype=np.float64)
+    known = np.isfinite(values) & np.all(np.isfinite(coordinates), axis=1)
+    out = np.full(len(table), np.nan)
+    for row in np.flatnonzero(known):
+        near = known & np.all(np.abs(coordinates - coordinates[row]) <= 1, axis=1)
+        out[row] = float(np.median(values[near]))
+    return pd.Series(out, index=table.index, name=f"{value}_neighbourhood")

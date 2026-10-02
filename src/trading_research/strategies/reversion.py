@@ -1,61 +1,43 @@
-"""A refuted candidate, kept with the number that refuted it.
+"""Cross-sectional reversion at ten minutes: a conditional result, frozen.
 
-This looked like the one thing in the project that worked, and it does not. It
-is kept — parameters frozen, result attached — because a killed candidate in the
-open is worth more than a deleted one: the next person to find a ten-minute
-reversion in crypto perpetuals can read what happened to this one.
-
-The register in ``docs/findings.md`` carries the full account.
-
-The claim
----------
 An equal-weighted index of USDT perpetuals overshoots over roughly ten minutes
-and comes back. The index's recent return therefore predicts the *next* move of
-each constituent with a negative sign, and trading against it at a ten-minute
-holding period clears the taker round trip on the more volatile instruments.
+and comes back, so the index's recent return, excluding the instrument being
+traded, predicts that instrument's next move with a negative sign. The rule
+trades against large index moves and holds ten minutes. Its status in
+``docs/findings.md`` is **conditional result**, reported in §27 of
+``docs/results.md``: the effect and the market state it needs are both
+measured, and the state is not forecastable by what was tried. The parameters
+here are frozen; nothing re-tunes them.
 
-What has been checked
----------------------
-* **Consistency.** Negative information coefficient on 26 of 26 instruments,
-  on both halves of the data. Median about -0.06 at a two-minute horizon and
-  -0.098 at ten minutes.
-* **Not a measurement artefact.** Shared price noise between the end of a
-  lookback window and the start of a forward window manufactures negative
-  correlation from nothing, and such an artefact dies the instant a gap is
-  inserted between the windows. This one strengthens slightly out to a
-  thirty-second gap and then decays over about ten minutes, which is an
-  economic shape rather than an accounting one.
-* **Market-wide, not cross-sectional.** Against a market-neutral target the
-  coefficient collapses from -0.056 to +0.004 and the instruments stop agreeing.
-  This matters for sizing: 26 instruments carry *one* bet, so trading them all
-  is leverage rather than diversification.
-* **Structure repeats across blocks.** The holding-period profile is the same
-  on the search and held-out blocks — two minutes loses, ten minutes is best,
-  longer decays — and configuration ranks correlate across blocks at +0.35.
-* **The instrument ordering follows the identity.** Edge per trade is roughly
-  IC times the dispersion of the move, so high-volatility alts should beat
-  BTCUSDT and ETHUSDT at similar cost. They do, in that order.
-
-What killed it
+Where it holds
 --------------
-The test the whole project is built around: the same frozen configuration, with
-thresholds carried over unchanged, on days neither block had seen. Run on 12
-March to 20 April 2024, immediately after the original span.
+On the held-out fortnight of 26 February to 11 March 2024, read once with the
+configuration below, 22 of 26 instruments were positive at a median of +6.99 bp
+per trade net of 12-16 bp of taker cost (by day, +6.18 bp over 14 days,
+t = 1.18); :data:`HELD_OUT_RESULT` records slightly different figures for the
+same block (20 of 26, +6.86 bp), and §27's are the ones quoted. The checks
+behind it: a negative information coefficient on 26 of 26
+instruments on both halves of the data; an effect that strengthens out to a
+thirty-second gap between the windows and then decays, which an accounting
+artefact would not do; a market-wide rather than cross-sectional effect (the 26
+instruments carry one bet); and the instrument ordering the identity "edge is
+IC times dispersion" predicts.
 
-Nothing was positive. Median -19.94 bp per trade at the frozen ten-minute hold,
-0 instruments of 26, 3,637 trades, -69,283 bp in total.
+Where it does not, and why that is the condition
+------------------------------------------------
+On 12 March to 20 April 2024 the same frozen configuration lost on every
+instrument: median -19.94 bp per trade, 0 of 26 positive, 3,637 trades, and the
+holding-period profile inverted. The two spans differ in the quantity the rule
+bets on: the index's ten-minute autocorrelation was -0.1014 where it pays and
+-0.0003 where it does not. :func:`trailing_autocorrelation` measures it causally;
+a gate on its trailing value (§27) admitted worse days than it rejected, so the
+state is measurable but not forecastable one day ahead.
 
-Both kill conditions stated in advance fired, and the second is the informative
-one. A median below zero is what a decayed edge looks like; the *profile
-inverted* — the best holding period is now the shortest tested rather than ten
-minutes, and at the frozen horizon the gross edge changed sign from +16.6 bp to
--5.31, before any cost. The shape that repeated across two blocks did not
-survive a third.
-
-The warning was already recorded while this was a candidate: a sixfold decay
-between the original blocks, +17.2 bp median falling to +2.8. That is the same
-signature §25 documented — a structure that looks like an interior optimum and
-is a period.
+:data:`FRESH_SPAN_RESULT` and :data:`HELD_OUT_RESULT` keep both numbers beside
+the configuration. :func:`reversion_tape` is the signal as an event-time
+consumer (the market-making study) must read it: labelled by the end of each
+grid bin, so that an as-of join on the label never reads a value before it was
+observed.
 """
 
 from __future__ import annotations
@@ -64,6 +46,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 #: Seconds per row on the grid these numbers were measured on. Every window
 #: below is a count of those rows, so changing the grid changes their meaning.
@@ -199,3 +182,73 @@ def threshold_for_rate(values: np.ndarray, rows_per_day: float, config: Reversio
     wanted = max(1, int(config.trades_per_day * days))
     share = min(0.999, wanted / len(usable))
     return float(np.quantile(np.abs(usable), 1.0 - share))
+
+
+#: Rows of the five-second grid in one day.
+ROWS_PER_DAY = 86_400 // GRID_SECONDS
+
+
+def trailing_autocorrelation(
+    level: np.ndarray, lag: int, window_rows: int, *, known_at_open: bool = False
+) -> np.ndarray:
+    """Index autocorrelation over a trailing window, per row, strictly causal.
+
+    The correlation of the index's ``lag``-row return with its next
+    ``lag``-row return, over the ``window_rows`` rows that end before each day
+    starts, computed once per day and held for that day: a value updating
+    within the day would let the afternoon's behaviour decide the morning's
+    trades. Days are blocks of :data:`ROWS_PER_DAY` rows from the start of
+    ``level``; rows before the first full window are NaN, and so is a day whose
+    window holds fewer than 500 usable pairs or no variation.
+
+    By default the window's forward returns end up to ``lag`` rows after the
+    window, so the value for a day reads the first ``lag`` rows of that day:
+    the regime-gate experiment of §27 used exactly this definition, and it is
+    kept rather than silently changed. ``known_at_open=True`` moves the window
+    ``lag`` rows earlier, so every pair it uses ended before the day's first
+    row and the value is known when the day opens.
+    """
+    n = len(level)
+    past = np.full(n, np.nan)
+    past[lag:] = (level[lag:] - level[:-lag]) * 1e4
+    forward = np.full(n, np.nan)
+    forward[:-lag] = (level[lag:] - level[:-lag]) * 1e4
+
+    shift = lag if known_at_open else 0
+    out = np.full(n, np.nan)
+    for start in range(window_rows, n, ROWS_PER_DAY):
+        # With the shift, the first window is clipped at the start of the data
+        # rather than dropped.
+        window = slice(max(0, start - window_rows - shift), start - shift)
+        a, b = past[window], forward[window]
+        ok = np.isfinite(a) & np.isfinite(b)
+        if ok.sum() < 500 or np.std(a[ok]) == 0 or np.std(b[ok]) == 0:
+            continue
+        out[start : start + ROWS_PER_DAY] = float(np.corrcoef(a[ok], b[ok])[0, 1])
+    return out
+
+
+def reversion_tape(panel: pd.DataFrame, symbol: str, config: ReversionConfig) -> pd.Series:
+    """The index's ten-minute return excluding ``symbol``, in bp, causally labelled.
+
+    ``panel`` holds one column of log mids per instrument on the five-second
+    grid, **labelled by the end of each bin** (``to_grid(..., label="right")``)
+    and forward-filled, so a row's label is after every observation it carries.
+    The value at a label is the return of the equal-weighted index of every
+    other column over the :attr:`ReversionConfig.lookback` rows ending there:
+    the quantity :func:`signal` computes, on a timeline where an as-of join on
+    the label is causal. NaN until a full lookback has passed.
+
+    Nothing after a label enters its value: the index at a row reads that row
+    and earlier rows only, and the forward fill carries values forward, never
+    back. Truncating the panel at any label leaves every earlier value of the
+    tape unchanged.
+    """
+    if symbol not in panel.columns:
+        raise KeyError(f"{symbol} is not in the panel")
+    if not isinstance(panel.index, pd.DatetimeIndex) or not panel.index.is_monotonic_increasing:
+        raise ValueError("the panel needs an increasing DatetimeIndex of bin-end labels")
+    values = panel.to_numpy(dtype=np.float64)
+    column = list(panel.columns).index(symbol)
+    level = index_level(values, exclude=column)
+    return pd.Series(signal(level, config), index=panel.index, name="index_return_bp")

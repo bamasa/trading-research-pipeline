@@ -8,11 +8,14 @@ import pytest
 from trading_research.strategies.reversion import (
     GRID_SECONDS,
     HELD_OUT_RESULT,
+    ROWS_PER_DAY,
     ReversionConfig,
     decide,
     index_level,
+    reversion_tape,
     signal,
     threshold_for_rate,
+    trailing_autocorrelation,
 )
 
 
@@ -144,3 +147,42 @@ def test_a_higher_rate_means_a_lower_threshold() -> None:
 def test_too_few_rows_to_set_a_threshold_is_refused() -> None:
     with pytest.raises(ValueError, match="usable rows"):
         threshold_for_rate(np.zeros(100), 17_280, ReversionConfig())
+
+
+def test_the_trailing_autocorrelation_known_at_the_open_reads_nothing_of_its_day() -> None:
+    """With ``known_at_open`` a day's value is fixed before the day starts:
+    rewriting the day (and every later one) leaves it unchanged. Without it,
+    the window's last forward returns reach ``lag`` rows into the day, as in
+    the regime-gate experiment of section 27."""
+    rng = np.random.default_rng(1)
+    level = np.cumsum(rng.normal(0, 1e-4, 4 * ROWS_PER_DAY))
+    shocked = level.copy()
+    shocked[2 * ROWS_PER_DAY :] += np.cumsum(rng.normal(0, 5e-4, 2 * ROWS_PER_DAY))
+    for at_open, same in ((True, True), (False, False)):
+        a = trailing_autocorrelation(level, 120, ROWS_PER_DAY, known_at_open=at_open)
+        b = trailing_autocorrelation(shocked, 120, ROWS_PER_DAY, known_at_open=at_open)
+        day_two = slice(2 * ROWS_PER_DAY, 3 * ROWS_PER_DAY)
+        assert np.isfinite(a[day_two]).all()
+        assert np.array_equal(a[day_two], b[day_two]) is same
+    first = trailing_autocorrelation(level, 120, ROWS_PER_DAY, known_at_open=True)
+    assert np.isnan(first[:ROWS_PER_DAY]).all()
+    assert np.isfinite(first[ROWS_PER_DAY : 2 * ROWS_PER_DAY]).all()
+
+
+def test_the_tape_needs_bin_end_labels_and_its_instrument() -> None:
+    import pandas as pd
+
+    index = pd.date_range("2024-02-01 00:00:05", periods=300, freq="5s", tz="UTC")
+    rng = np.random.default_rng(2)
+    panel = pd.DataFrame(
+        np.cumsum(rng.normal(0, 1e-4, (300, 3)), axis=0), index=index, columns=["A", "B", "C"]
+    )
+    tape = reversion_tape(panel, "A", ReversionConfig())
+    assert tape.index.equals(index)
+    level = panel[["B", "C"]].to_numpy().mean(axis=1)
+    assert tape.iloc[200] == pytest.approx((level[200] - level[80]) * 1e4)
+    assert np.isnan(tape.iloc[:120]).all()
+    with pytest.raises(KeyError):
+        reversion_tape(panel, "Z", ReversionConfig())
+    with pytest.raises(ValueError, match="DatetimeIndex"):
+        reversion_tape(panel.reset_index(drop=True), "A", ReversionConfig())
