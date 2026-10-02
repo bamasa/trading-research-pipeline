@@ -44,10 +44,11 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > models from parameter-free rules to dilated convolutions, bagging, stacking on
 > forward-chained out-of-fold predictions, a bias-variance decomposition that
 > says which ensemble is worth using, calibration, cost-aware backtesting, a
-> queue-level maker model, two regime-break detectors, an information audit that
+> queue-level maker model, an event-time market-making simulator that fills only
+> from trade prints, two regime-break detectors, an information audit that
 > measures each data source before a model is chosen, successive-halving search
 > over thirteen axes, and the experiment script behind every published table.
-> 798 tests, a disclosure audit in CI.
+> 899 tests, a disclosure audit in CI.
 
 ---
 
@@ -295,6 +296,50 @@ See [`docs/results.md`](docs/results.md) for the full picture,
 its status, and [`docs/limitations.md`](docs/limitations.md) for what none of it
 establishes. No backtest here should be read as evidence that any strategy is or
 was profitable.
+
+---
+
+## Market making: quoting both sides on public Bybit data
+
+A study in progress, and nothing in this section is a result yet: no quoter has
+been run on any block.
+
+**What was pre-registered.** Before any market-making code existed,
+[`docs/preregistration/market_making.md`](docs/preregistration/market_making.md)
+and [`configs/mm_prereg.yaml`](configs/mm_prereg.yaml) (commit `cb4ae4c`) fixed
+the blocks, the instrument admission rule, three hypotheses with their kill
+conditions and placebos, and the rule that the held-out fortnight is read once:
+
+- **H1** — quoting one tick inside a wide spread, first in the queue, earns more
+  than the same quoter at the touch;
+- **H2** — the reversion state of [§27](docs/results.md#27-cross-sectional-reversion-and-the-market-state-it-requires)
+  pays a market maker that leans against the index's move (H2.1), and passive
+  execution of the frozen reversion signal beats crossing for it (H2.2);
+- **H3** — pulling or widening quotes after a regime-break flag earns more than
+  quoting through it.
+
+**The simulator, in six rules.** Built first, tested on synthetic markets with
+known answers, and documented rule by rule with the direction each one biases a
+result in [`docs/market_making_simulator.md`](docs/market_making_simulator.md):
+
+1. **Fills only from prints.** A resting order fills only when a print reaches
+   its price from the side that hits it, never because a snapshot moved.
+2. **A queue per order.** It joins the tail of the visible size, moves up only
+   as prints consume what is ahead, and gains on cancellations by a rule that is
+   bracketed — and a verdict must survive the pessimistic bracket.
+3. **Latency.** Orders and cancels take 10 ms; a cancel in flight does not
+   protect the order; a price change loses priority.
+4. **Own size and limits.** A tenth of the touch at most; soft and hard
+   inventory limits; past the soft limit a taker order flattens back.
+5. **Fees and funding.** Maker fee on passive fills, taker fee on flattens,
+   funding on the position held at each settlement; days start and end flat.
+6. **What it does not model.** The book is a 100 ms photograph, so queue
+   dynamics inside 100 ms are a stated rule rather than an observation; own
+   impact on others is ignored; a snapshot that crosses an order fills nothing
+   without a print, which is optimistic and is bracketed.
+
+The quoters, the development-period search and the single read of the held-out
+fortnight follow, in that order.
 
 ---
 
@@ -672,7 +717,8 @@ Documented in [`docs/`](docs/) as it lands:
 |---|---|
 | `data_contract.md` | Column semantics, units, time conventions, quality rules |
 | `methodology.md` | Features, labels, splits, model comparison protocol |
-| `execution_assumptions.md` | Cost model, fills, what the backtest does and does not simulate |
+| [`execution_assumptions.md`](docs/execution_assumptions.md) | Cost model, fills, what each execution mode (taker, passive entry, market maker) does and does not simulate |
+| [`market_making_simulator.md`](docs/market_making_simulator.md) | The event-time market-making simulator: every rule, the direction of its bias, and the test that pins it |
 | `limitations.md` | What this does not establish |
 | `disclosure_policy.md` | What is public here and why, and what is not |
 | `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
@@ -688,9 +734,14 @@ one:
   read as evidence that any strategy is or was profitable.
 - **Synthetic results are circular.** They demonstrate that the pipeline works,
   not that markets behave this way.
-- **The backtest is a simulation.** It does not model queue position, partial
-  fills against a real book, latency, market impact, or the fact that a real
-  order changes the book it is trading against.
+- **The backtest is a simulation.** The taker backtest does not model queue
+  position, partial fills against a real book, latency, market impact, or the
+  fact that a real order changes the book it is trading against. The
+  market-making simulator models queue position, partial fills and latency, but
+  from a 100 ms book rather than a message feed, with cancellations attributed
+  by rule, own impact ignored, and a crossed snapshot filling nothing without a
+  print — each stated with its direction in
+  [`docs/market_making_simulator.md`](docs/market_making_simulator.md).
 - **Public data is coarser than production data.** Exchange archives are
   aggregated; a real system runs on a live feed with different timing.
 - **Short horizons are the hardest regime for this.** Costs dominate, edges are
@@ -821,8 +872,15 @@ break-even and the amendment protocol are in
 with the values the code will read in
 [`configs/mm_prereg.yaml`](configs/mm_prereg.yaml). Both were committed before
 any simulator code existed and before any market-making number was computed on
-any block. The simulator, the development-period search and the single read of
-the held-out fortnight follow as separate pull requests, in that order.
+any block.
+
+- [x] **The event-time simulator**: fills only from prints, a queue per order
+      with bracketed cancellation rules, latency, post-only, inventory limits,
+      fees, funding and an accounting identity checked at every change, tested
+      on known-answer markets ([rules](docs/market_making_simulator.md))
+- [ ] The quoters, the regime flags and the development-period search, with
+      the pre-registration's single amendment
+- [ ] The held-out fortnight, read once
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
 

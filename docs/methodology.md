@@ -270,7 +270,12 @@ Stated plainly, because these all push in the optimistic direction:
   the book it trades against.
 - No latency between the decision and the order arriving, beyond the flat
   slippage allowance.
-- No latency between decision and arrival beyond the flat slippage allowance.
+
+The market-making simulator is a separate execution mode that does model a
+single netted position with limits, queue position, partial fills and latency,
+though not its own impact on the book: see
+[`execution_assumptions.md`](execution_assumptions.md) for what each mode does
+and does not simulate.
 
 ## Trade thinning
 
