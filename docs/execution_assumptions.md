@@ -57,17 +57,17 @@ rules, each with its bias and the test that pins it — is in
 
 | Rule | Assumption | Bias |
 |---|---|---|
-| Fills | only from prints at or through the order's price, from the side that hits it; never from a snapshot | neutral; through-fills sized by the print are mildly pessimistic |
-| Queue | joins the tail of the visible size; growth in the arrival interval split by time; later growth behind | neutral; the 100 ms staleness is bracketed (`none` / `all_ahead`) |
-| Cancellations | attributed in proportion to the size ahead | optimistic against queue-reactive evidence; a verdict must survive `pessimistic` |
+| Fills | only from prints at or through the order's price, from the side that hits it; never from a snapshot; prints more than 25 bp outside the visible book never fill | neutral; through-fills sized by the print are mildly pessimistic; the off-book rule is mildly optimistic (it removed nothing on the day checked) |
+| Queue | joins the tail of the visible size; growth in the arrival interval, and print volume beyond the queue before the first snapshot, shared with hidden earlier joiners by time; later growth behind | neutral; the 100 ms staleness is bracketed (`none` / `all_ahead`) |
+| Cancellations | attributed in proportion to the size ahead; prints a lagging snapshot does not show yet are carried forward, not read as cancellations | proportional is optimistic against queue-reactive evidence, and a verdict must survive `pessimistic`; the carry-forward is conservative |
 | Crossed snapshots | fill nothing without a print | optimistic in profit; counted and bracketed by `assume_filled` |
-| Latency | 10 ms to arrive and to cancel; a cancel in flight can still be filled; feed latency 0 | feed latency 0 is optimistic; swept |
-| Post-only | an order at or through the opposite touch on arrival is rejected | pessimistic |
-| Size | a tenth of the trailing touch at most; own impact ignored | optimistic, bounded by the clip |
-| Inventory | soft limit stops the growing side; hard limit is never crossed; past the soft limit a taker order flattens back | conservative |
+| Latency | 10 ms to arrive and to cancel, flattens included; a cancel in flight can still be filled; feed latency 0 | feed latency 0 is optimistic; swept |
+| Post-only | an order at or through the opposite touch, or our own opposite order, on arrival is rejected; our own bid and ask never meet | pessimistic |
+| Size | a tenth of the trailing touch at most; own impact ignored, including a second own order reading the first one's fill as a cancellation | optimistic, bounded by the clip |
+| Inventory | soft limit stops the growing side; hard limit checked for new and kept orders against the current clip; past the soft limit a reduce-only taker order, after the order latency, walks the first book after its arrival | realistic; the hard limit can lag a shrinking clip by one cancel latency |
 | Fees | maker on passive fills, taker on flattens, by tier | neutral; swept |
 | Funding | settled on the position held at each settlement, mid as the mark | neutral; the 00:00 settlement is never held through |
-| Day | flat at the start and the end; quoting stops after a 5 s feed pause | conservative |
+| Day | flat at the start and the end; quoting stops after a 5 s feed pause; a day with sequence gaps, a flatten on a stale book, or no funding plane is flagged and excluded from verdicts; a day with bad data is skipped with its reason | conservative |
 
 The study these serve, and the settings a verdict depends on, are fixed in
 [`preregistration/market_making.md`](preregistration/market_making.md).

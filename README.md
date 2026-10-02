@@ -48,7 +48,7 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > from trade prints, two regime-break detectors, an information audit that
 > measures each data source before a model is chosen, successive-halving search
 > over thirteen axes, and the experiment script behind every published table.
-> 899 tests, a disclosure audit in CI.
+> 933 tests, a disclosure audit in CI.
 
 ---
 
@@ -308,7 +308,9 @@ been run on any block.
 [`docs/preregistration/market_making.md`](docs/preregistration/market_making.md)
 and [`configs/mm_prereg.yaml`](configs/mm_prereg.yaml) (commit `cb4ae4c`) fixed
 the blocks, the instrument admission rule, three hypotheses with their kill
-conditions and placebos, and the rule that the held-out fortnight is read once:
+conditions and placebos, and the rule that the held-out fortnight is read once
+(corrections to the simulator found in code review, before any result, are
+recorded there as Amendment 1). The hypotheses:
 
 - **H1** — quoting one tick inside a wide spread, first in the queue, earns more
   than the same quoter at the touch;
@@ -327,16 +329,19 @@ result in [`docs/market_making_simulator.md`](docs/market_making_simulator.md):
 2. **A queue per order.** It joins the tail of the visible size, moves up only
    as prints consume what is ahead, and gains on cancellations by a rule that is
    bracketed — and a verdict must survive the pessimistic bracket.
-3. **Latency.** Orders and cancels take 10 ms; a cancel in flight does not
-   protect the order; a price change loses priority.
+3. **Latency.** Orders, cancels and flattens take 10 ms; a cancel in flight
+   does not protect the order; a price change loses priority.
 4. **Own size and limits.** A tenth of the touch at most; soft and hard
-   inventory limits; past the soft limit a taker order flattens back.
+   inventory limits; past the soft limit a reduce-only taker order flattens
+   back, walking the first book after it arrives.
 5. **Fees and funding.** Maker fee on passive fills, taker fee on flattens,
    funding on the position held at each settlement; days start and end flat.
 6. **What it does not model.** The book is a 100 ms photograph, so queue
    dynamics inside 100 ms are a stated rule rather than an observation; own
    impact on others is ignored; a snapshot that crosses an order fills nothing
-   without a print, which is optimistic and is bracketed.
+   without a print, which is optimistic and is bracketed. A day whose stored
+   book lost messages, or whose flatten found no fresh book, is flagged and
+   kept out of every verdict.
 
 The quoters, the development-period search and the single read of the held-out
 fortnight follow, in that order.

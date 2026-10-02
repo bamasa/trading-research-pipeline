@@ -471,4 +471,74 @@ are committed.
 
 ## Amendments
 
-None yet.
+### Amendment 1 (2026-10-02, before any result): simulator corrections from code review
+
+**When this was made, no market-making number had been computed on any block**:
+no quote, fill, markout or profit of any strategy, on D, H or F. The simulator
+had been built and tested on synthetic markets only. Making these corrections
+read one development day already disclosed above (BICOUSDT, 2024-02-15), for
+three things and nothing else: the offset between the book's and the prints'
+clocks (the book lags by about 3 ms; it does not lead), a count of prints
+outside the visible book (19 of 15,506 beyond the tenth level, all on the side
+they hit and at most three ticks out; none on the wrong side), and the event
+loop's speed. The development-period amendment planned above becomes
+Amendment 2.
+
+Each correction in one line (the full rules are in
+[`docs/market_making_simulator.md`](../market_making_simulator.md)):
+
+1. **Prints before an order's first snapshot.** Print volume at the order's price
+   beyond the size ahead goes first to joiners hidden by the conflation
+   interval, in the arrival-growth bracket's share (none / time share / all), as a
+   running total, never more than the print brought.
+2. **A snapshot that lags its prints.** When a snapshot shows the level larger
+   than the prints at the price allow, the part of the growth they could explain
+   is carried into the next interval, so one print is not also read as a
+   cancellation.
+3. **Ordering.** Own arrivals and cancels fire only strictly before the next
+   market event, so at an equal timestamp funding, prints and snapshots come
+   first and an arriving order joins the queue of a snapshot stamped with its
+   arrival time. This replaces "funding, then activations, then trades, then
+   books" under "Simulator settings a verdict depends on"; the code already did
+   this, and the text said otherwise.
+4. **Flattens pay latency.** A flatten (past the soft limit, or at 23:59) is a
+   reduce-only taker order that arrives after the order latency and walks the
+   first snapshot at or after its arrival, plus 0.5 bp and the taker fee. This
+   replaces "walking the last snapshot".
+5. **The hard limit under a shrinking clip.** At every decision an order kept at
+   its price is cancelled and re-placed if it is larger than the current clip
+   or its side's exposure exceeds the current hard limit.
+6. **Own quotes never meet.** A bid at or above the quoter's own ask is pulled
+   apart around the middle, every cancel of a decision is sent before its new
+   orders, and an order arriving at or through our own resting opposite order
+   is rejected.
+7. **Sequence gaps.** The stored book keeps a day's count of sequence gaps but
+   not where they fell, so the quoter cannot be suspended from a gap onward. A
+   day with more than `max_sequence_gaps` gaps is instead flagged and excluded
+   from every verdict, and counted. The threshold is 0 (any gap) unless
+   Amendment 2 sets another value from D's gap counts, before H is read. This
+   replaces "after a book gap ... the quoter is suspended until the next
+   snapshot" for gaps; a pause over 5 s still suspends it.
+8. **A stale day-end book.** A flatten with no snapshot within 5 s of its
+   arrival walks the first snapshot after the pause; if there is none, the day
+   is flagged `flatten_stale` and excluded from every verdict.
+9. **No funding plane.** A day simulated without its funding history is flagged
+   and excluded from every verdict.
+10. **Bad data skips a day, not a run.** A price off the tick grid or a funding
+    interval other than 8 h makes that day unavailable, with its reason; the
+    other days run.
+11. **Off-book prints.** A print more than 25 bp outside the price range of the
+    ten visible levels of the latest snapshot at or before it is never offered
+    to an own order, and is counted. On the day checked it excluded nothing.
+12. **The run cache** is keyed by the files each day read (path, size,
+    modification time), the data and funding roots, and a hash of the
+    simulator's source, as well as the quoter and the configuration.
+13. **Own impact** stays unmodelled, now stated explicitly: an own order does
+    not change the book others see, and a second own order reads the volume the
+    first took as a cancellation at its level.
+
+[`configs/mm_prereg.yaml`](../../configs/mm_prereg.yaml) is unchanged: none of
+the fields it holds changes, and the new settings — `max_sequence_gaps` 0, the
+25 bp off-book limit, flatten latency equal to the order latency — are
+registered here. Its sha256 remains
+`27471cd62ef4bbc67a29467bcff0ea5fda4ddd2c7d00413ca05a9541eac9b272`.

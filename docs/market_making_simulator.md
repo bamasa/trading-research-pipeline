@@ -33,14 +33,14 @@ conflation interval. So:
 
 | Module | What it holds |
 |---|---|
-| [`events.py`](../src/trading_research/market_making/events.py) | `InstrumentSpec`, `DayEvents`, `assemble`, `load_day`, `derive_tick`, `derive_lot`, `to_ticks`, `sweep_order`, `DayUnavailable`, `OffGridPrice` |
+| [`events.py`](../src/trading_research/market_making/events.py) | `InstrumentSpec`, `DayEvents`, `assemble`, `load_day`, `derive_tick`, `derive_lot`, `to_ticks`, `sweep_order`, `off_book_eligible`, `OFF_BOOK_BP`, `DayUnavailable`, `OffGridPrice` |
 | [`orders.py`](../src/trading_research/market_making/orders.py) | `OrderState`, `Order` |
 | [`queue.py`](../src/trading_research/market_making/queue.py) | `CancelAttribution`, `ArrivalGrowth`, `QueuePriority`, `CrossedPolicy`, `on_arrival`, `on_print`, `on_snapshot` |
 | [`accounting.py`](../src/trading_research/market_making/accounting.py) | `Account`, `IdentityError` |
 | [`quoters.py`](../src/trading_research/market_making/quoters.py) | `MarketView`, `Quote`, `Quotes`, `Quoter`, `TouchQuoter` (S0) |
 | [`signals.py`](../src/trading_research/market_making/signals.py) | `SignalTape` |
-| [`simulator.py`](../src/trading_research/market_making/simulator.py) | `SimConfig`, `DayResult`, `simulate_day`, `run_days`, `OracleRefused` |
-| [`analysis.py`](../src/trading_research/market_making/analysis.py) | `markouts`, `decompose`, `summarise_markouts`, `market_wide_markouts`, `mid_at`, `book_mid` |
+| [`simulator.py`](../src/trading_research/market_making/simulator.py) | `SimConfig`, `DayResult`, `simulate_day`, `run_days`, `source_fingerprint`, `OracleRefused` |
+| [`analysis.py`](../src/trading_research/market_making/analysis.py) | `markouts`, `decompose`, `summarise_markouts`, `market_wide_markouts`, `mid_at`, `book_mid`, `clock_offset_profile`, `best_clock_offset_ms` |
 | [`synthetic.py`](../src/trading_research/market_making/synthetic.py) | `known_answer_market`, `random_market`, `hand_built_market` |
 
 Outside the package: `data/bybit_trades.load_day` and a stable sort that keeps
@@ -55,50 +55,73 @@ REST endpoint) and `data/ensure.ensure_funding`; `data/grid.to_grid(label=...)`;
 pending = heap of (effective time, sequence, action)   # arrivals, cancels, stop, flatten
 for each event in the day's merged stream, at time t:
     if no snapshot for 5 s: pull every order (cancels decided at the 5 s mark)
-    apply every pending action effective strictly before t
+    apply every pending action effective strictly before t   # ties go to the market
     funding:  settle on the position held now, at the last mid
-    print:    offer it to own orders on the side it hits, best price first
-              (each fill: book it, check the identity, flatten past the soft limit)
-    snapshot: update the mark; correct every resting order's queue estimate;
-              if quoting is allowed, ask the quoter, then reconcile:
-              keep an unchanged price, cancel-and-new on a change,
-              never resize in place
+    print:    if on the book, offer it to own orders on the side it hits, best price
+              first (each fill: book it, check the identity; past the soft limit,
+              send a reduce-only taker order)
+    snapshot: update the mark; execute the taker orders that have arrived, walking
+              this snapshot; correct every resting order's queue estimate;
+              if quoting is allowed, ask the quoter, pull a self-crossing pair
+              apart, then reconcile: every cancel before any new order; keep an
+              unchanged price unless the current clip or hard limit forbids it;
+              cancel-and-new on a change; never resize in place
 after the stream: apply what is still pending (stop at 23:58, flatten at 23:59),
-                  close, check the identity, then markouts and the decomposition
+                  close (flag the day if a taker had no fresh book), check the
+                  identity, then markouts and the decomposition
 ```
 
 `simulate_day(events, quoter, config, tapes=None)` runs one instrument-day and
 returns a `DayResult`: fills, orders, one equity row a minute, crossed episodes,
-counters and the decomposition. `run_days` runs independent days, optionally in
-worker processes and resumably against a cache, and returns one row a day;
-a day that lacks a plane is a row whose status says why.
+counters, the decomposition and the day's flags. A flagged day (`excluded`) is
+simulated and reported but must stay out of every verdict. `run_days` runs
+independent days, optionally in worker processes and resumably against a cache,
+and returns one row a day; a day that cannot be simulated is a row whose status
+says why, and the run goes on.
 
 ## The rules
 
 Each rule: what it does; the direction of its bias; the test that pins it.
 Defaults are the pre-registered settings; every bracketed alternative is a
-`SimConfig` field.
+`SimConfig` field. The corrections made after code review, before any result,
+are recorded as Amendment 1 of the
+[pre-registration](preregistration/market_making.md#amendments).
 
 ### R1 — Ordering
 
-One merged stream per instrument-day. At equal timestamps: funding, then order
-arrivals, then prints, then snapshots. A pending arrival or cancel fires only if
-its effective time is strictly before the event. Prints sharing a timestamp and
-an aggressor are one sweep and are processed in sweep order: buys by ascending
-price, sells by descending, larger prints first at one price, then file order.
-At one timestamp, sells come before buys (arbitrary, fixed). Print timestamps
-are rounded to the microsecond on loading, removing the float noise of the
+One merged stream per instrument-day. Among market events at one timestamp:
+funding, then prints, then snapshots. Own actions — an order arriving, a cancel
+landing, a timed stop or flatten — fire only strictly before the next market
+event, so at an equal timestamp every market event goes first: an order arriving
+at a print's timestamp misses it, a cancel landing at a print's timestamp is
+still filled by it, and an order arriving at a snapshot's timestamp joins the
+queue that snapshot shows. Prints sharing a timestamp and an aggressor are one
+sweep and are processed in sweep order: buys by ascending price, sells by
+descending, larger prints first at one price, then file order. At one
+timestamp, sells come before buys (arbitrary, fixed). Print timestamps are
+rounded to the microsecond on loading, removing the float noise of the
 archive's second-resolution format.
 
-*Bias.* Prints before snapshots avoids counting a print twice (once as a print,
-once as a cancellation): neutral. Arrivals losing ties to prints is pessimistic
-by at most one print per order. Sweep order is the only order consistent with
-price priority.
+The two clocks are not the same clock. A book row carries the time the venue
+generated it, a print the time it matched. `analysis.clock_offset_profile`
+measures the offset as the shift of the prints that best explains the touch's
+size changes; on the one development day it was run on (BICOUSDT, 2024-02-15)
+the book lags the prints by about 3 ms (5 ms on a 5 ms grid; the residual is
+flat within 0 to 10 ms). A lagging book is the direction that double-counts,
+which R8 corrects; a leading book would be look-ahead, and was not found.
+
+*Bias.* Ties going to the market is pessimistic by at most one print per order.
+Sweep order is the only order consistent with price priority. Prints before a
+snapshot stamped with the same time assumes that snapshot reflects them; the
+measured lag says it may not yet, and R8's carry-forward covers that case.
 
 *Tests.* `test_events_are_time_ordered_with_trades_before_books`,
 `test_prints_sharing_a_timestamp_are_ordered_as_a_sweep`,
 `test_the_assembled_stream_holds_prints_in_sweep_order` (`test_mm_events.py`);
-`test_an_order_arriving_at_a_prints_timestamp_misses_it` (`test_mm_latency.py`).
+`test_an_order_arriving_at_a_prints_timestamp_misses_it`,
+`test_an_order_arriving_at_a_snapshots_timestamp_joins_that_snapshots_queue`
+(`test_mm_latency.py`); `test_the_offset_diagnostic_recovers_a_known_lag`
+(`test_mm_clock.py`).
 
 ### R2 — Information set
 
@@ -144,17 +167,26 @@ does not protect" is pessimistic, and correct.
 
 ### R4 — Post-only
 
-On arrival, an order at or through the opposite touch of the latest snapshot
-before it is rejected and counted. Quotes never take liquidity.
+On arrival, an order at or through the opposite touch of the latest snapshot at
+or before its arrival is rejected and counted (`rejected`). So is an order at or
+through one of our own resting opposite orders (`rejected_self_cross`): our bid
+and ask never meet. Before anything is sent, a quoter's bid at or above its own
+ask is pulled apart around the middle, to at least one tick each side
+(`self_cross_clamped`), and every cancel of a decision is sent before its new
+orders, so at equal latency a new order never finds our own replaced order
+still resting. Quotes never take liquidity.
 
 *Bias.* Pessimistic: some rejected orders would have rested at a better price.
 
-*Test.* `test_post_only_rejects_an_order_that_would_cross_on_arrival`.
+*Tests.* `test_post_only_rejects_an_order_that_would_cross_on_arrival`
+(`test_mm_latency.py`); `test_own_quotes_never_lock_or_cross`,
+`test_an_order_arriving_at_our_own_opposite_order_is_rejected`
+(`test_mm_limits.py`).
 
 ### R5 — Queue on arrival
 
 The size ahead is the visible size at the order's price in the latest snapshot
-before it arrived: it joins the tail. A price better than its own side's touch
+at or before its arrival: it joins the tail. A price better than its own side's touch
 is a new level: nothing ahead. A price inside the visible levels but absent from
 them is an empty level: nothing ahead. Growth of the level during the snapshot
 interval in which the order arrived is split by time — the share of the
@@ -185,14 +217,47 @@ orders rest on one side (an old order whose cancel is in flight and its
 replacement), a print is offered to them in price priority, and each sees what
 the better-priced ones left of it.
 
-*Bias.* Neutral under price-time priority, which Bybit uses.
+**Before the first snapshot after arrival**, a print at the price for more than
+the size ahead proves that others joined the level after the arrival snapshot,
+and some may have joined before the order. The excess goes to those hidden
+earlier joiners first, in the share the arrival-growth bracket gives them —
+none (`none`), `(arrival - t_snap) / (print - t_snap)` (`pro_rata_time`), all
+(`all_ahead`) — as a running total over the interval: after cumulative excess
+`E` the order is entitled to `(1 - share) * E`, less what it has received, and
+never to more than the print at hand brought. Without this, an order improving
+the spread was filled first by every print at its price until the next
+snapshot, whichever bracket was set: exactly the fills a faster competitor
+reacting to the same snapshot would have taken.
+
+**Off-book prints.** A print more than 25 bp outside the price range of the ten
+visible levels of the latest snapshot at or before it could not have swept that
+book (a negotiated block trade, or a bad record) and is offered to no own order;
+it is counted (`off_book_prints`). On the development day checked (BICOUSDT,
+2024-02-15), 19 of 15,506 prints lay beyond the tenth level, all on the side
+they hit and at most three ticks (about 7 bp) out, none on the wrong side: deep
+sweeps, which the rule keeps. None was excluded.
+
+*Bias.* Neutral under price-time priority, which Bybit uses. The arrival-interval
+share is bracketed with the growth rule, and the order of the bracket is pinned.
+Excluding off-book prints removes fills that are usually adverse, so it is
+mildly optimistic, and on the day checked it removed nothing.
 
 *Tests.* `test_no_fill_without_a_print_at_or_through_the_price` (200 random
 streams: every fill has a print at its timestamp, on the hitting side, at its
 price for a queue fill or through it for a through fill),
+`test_own_fills_never_exceed_the_print_volume_that_reached_them` (240 runs,
+several own orders on a side at once),
 `test_prints_on_the_wrong_side_do_not_advance_the_queue`,
 `test_prints_at_other_prices_do_not_advance_the_queue`,
-`test_partial_fills_sum_to_the_print_beyond_the_queue` (`test_mm_queue.py`).
+`test_partial_fills_sum_to_the_print_beyond_the_queue`,
+`test_an_inside_order_shares_arrival_prints_with_hidden_earlier_joiners`,
+`test_a_touch_order_shares_the_excess_in_its_arrival_interval`,
+`test_arrival_prints_are_shared_as_a_running_total_and_never_exceed_the_print`,
+`test_arrival_growth_orders_the_fills_of_one_order`,
+`test_arrival_growth_brackets_the_fills_of_held_orders`,
+`test_off_book_prints_never_fill` (`test_mm_queue.py`);
+`test_prints_far_outside_the_visible_book_are_not_eligible_to_fill`
+(`test_mm_events.py`).
 
 ### R7 — Trade-through
 
@@ -217,10 +282,19 @@ cancelled. `proportional` (default) removes it from ahead in proportion,
 it behind; `optimistic` all of it ahead. The estimate is then clamped to
 `[0, L_now]`.
 
+When a snapshot shows the level larger than the prints at the price allow, the
+part of the growth those prints could explain, `min(traded, growth)`, is carried
+into the next interval's traded volume: a print stamped just before a snapshot
+that does not show it yet (the book lags, R1) is then not read as a
+cancellation one snapshot later. If the growth was real, the carry masks at
+most that much cancellation once.
+
 *Bias.* Proportional is optimistic against the queue-reactive evidence that
 later arrivals cancel more (Huang, Lehalle and Rosenbaum, 2015). Hence the
 pre-registered kill condition K-pess: a positive verdict must also be positive
-under `pessimistic`.
+under `pessimistic`. The carry-forward is conservative: without it a lagging
+book moved orders forward twice for one print; with it, a real growth after
+prints delays one later cancellation.
 
 *Tests.* `test_cancellation_attribution_brackets_on_one_snapshot`,
 `test_cancellation_attribution_orders_the_fills_of_one_order` (200 streams,
@@ -229,7 +303,9 @@ on every stream for orders held all day; for the touch quoter, which re-quotes
 after each fill so that paths diverge, in total over forty streams),
 `test_queue_ahead_is_never_negative_and_never_exceeds_the_level` (200 streams
 under each of the nine rule pairs; the estimate also never rises except at the
-first snapshot after arrival), `test_prints_at_the_price_are_not_counted_again_as_cancellations`.
+first snapshot after arrival), `test_prints_at_the_price_are_not_counted_again_as_cancellations`
+(`test_mm_queue.py`); `test_a_lagged_snapshot_does_not_count_a_print_twice`
+(`test_mm_clock.py`).
 
 ### R9 — Growth behind
 
@@ -267,22 +343,41 @@ rounded down to the lot; below one lot the side is not quoted. The soft limit is
 not quoted (and an order resting there is cancelled). The hard limit is the soft
 limit plus one clip, and a new order is sent only if the position plus every
 order still out on its side (cancels in flight included) plus the new clip stays
-within it — so the hard limit holds whatever the latency. A fill that takes the
-position past the soft limit is flattened back to it at once by a taker order
-walking the last snapshot, with `flatten_slippage_bp` (0.5) on top; size beyond
-the visible book is charged at the tenth level and counted. Own impact on others
-is not modelled; the mean clip over the touch is reported (`clip_over_touch`).
+within it. The check is repeated at every decision for an order kept at its
+price: if the clip has shrunk below its size, or the side's exposure exceeds the
+current hard limit, it is cancelled and re-placed at the current clip
+(`cancelled_for_limits`), losing its place. So the hard limit holds whatever the
+latency, up to one cancel latency after the clip shrinks.
+
+A fill that takes the position past the soft limit sends a taker order back to
+it. Like every order it pays the order latency, and it walks the first snapshot
+at or after its arrival — not the book the sweep had just consumed — with
+`flatten_slippage_bp` (0.5) on top and the taker fee; size beyond the visible
+book is charged at the tenth level and counted. It is reduce-only: if passive
+fills shrank the position while it travelled, it trades only what is left and
+never reverses the position.
+
+Own impact on others is not modelled: an own order does not change the book any
+other participant sees, and a second own order at another price reads the
+volume the first one took as a cancellation at its level (a stated limitation,
+pinned by a test). The mean clip over the touch is reported (`clip_over_touch`).
 
 *Bias.* Ignoring own impact is optimistic, bounded by keeping the clip near a
 tenth of the touch. Charging size beyond the visible book at the tenth level is
-optimistic and counted (`flatten_beyond_visible_book`).
+optimistic and counted (`flatten_beyond_visible_book`). The flatten's latency
+and fresh book are the realistic pricing of an exit taken at a toxic moment;
+priced at the pre-sweep book, as first written, it was optimistic.
 
 *Tests.* `test_inventory_never_exceeds_the_hard_limit` (forty random streams,
 three soft limits, latencies of 10 and 250 ms),
 `test_the_growing_side_is_not_quoted_beyond_the_soft_limit`,
 `test_a_sweep_past_the_soft_limit_is_flattened_back_to_it`,
+`test_a_flatten_never_reverses_the_position`,
+`test_the_hard_limit_holds_when_the_clip_shrinks`,
 `test_a_clip_below_one_lot_is_not_quoted`,
-`test_the_clip_adapts_to_the_trailing_touch` (`test_mm_limits.py`).
+`test_the_clip_adapts_to_the_trailing_touch` (`test_mm_limits.py`);
+`test_a_second_own_order_reads_the_first_ones_fill_as_a_cancellation`
+(`test_mm_queue.py`).
 
 ### R12 — Fees
 
@@ -347,19 +442,38 @@ fees, rebates and funding), `test_a_broken_ledger_raises`,
 ### R16 — The day
 
 No quoting in the first `warmup_s` (10 minutes, the volatility warm-up) or from
-`stop_quoting_at` (23:58), when every order is cancelled; flattened by a costed
-taker order at `flatten_at` (23:59). If no snapshot arrives for
-`suspend_after_pause_s` (5 s), every order is pulled at that moment and nothing
-is quoted until the next snapshot. A day missing the book or the prints is
-reported, not simulated. The stored book carries a day's count of sequence gaps
-but not where they fell, so a gap is reported (`sequence_gaps`) rather than
-acted on.
+`stop_quoting_at` (23:58), when every order is cancelled; flattened at
+`flatten_at` (23:59) by a reduce-only taker order that, like the soft-limit
+flatten, pays the order latency and walks the first snapshot at or after its
+arrival — after a pause in the book, the first snapshot after the pause. If no
+snapshot arrives for `suspend_after_pause_s` (5 s), every order is pulled at
+that moment and nothing is quoted until the next snapshot.
+
+A day that cannot be simulated — the book or the prints missing, a price off
+the tick grid, a funding interval other than the one assumed — is reported with
+its reason and skipped; the rest of the run goes on. A simulated day is
+**flagged and excluded from every verdict** when:
+
+- `sequence_gaps`: the stored book reports more sequence gaps than
+  `max_sequence_gaps` (0: any gap). After a missed update the reconstructed book
+  is wrong until the next full snapshot — a missed addition reads as an empty
+  level, which empties every queue estimate there — and the stored book keeps
+  only the day's count, not where the gaps fell, so the day cannot be
+  suspended from the gap onward;
+- `flatten_stale`: a taker order found no snapshot within the pause threshold of
+  its arrival and had to walk an older book (the book ended early);
+- `no_funding`: the day was simulated without a funding plane.
 
 *Bias.* Conservative.
 
-*Tests.* `test_days_start_and_end_flat` (`test_mm_limits.py`),
-`test_quotes_are_pulled_across_a_book_gap` (`test_mm_latency.py`),
-`test_a_day_missing_either_plane_is_reported_not_simulated`
+*Tests.* `test_days_start_and_end_flat`,
+`test_the_day_end_flatten_crosses_the_spread_and_walks_the_depth`,
+`test_a_day_end_flatten_with_no_fresh_book_is_flagged`,
+`test_a_day_end_flatten_after_a_pause_walks_the_first_book_after_it`
+(`test_mm_limits.py`), `test_quotes_are_pulled_across_a_book_gap`
+(`test_mm_latency.py`), `test_a_day_missing_either_plane_is_reported_not_simulated`,
+`test_a_day_with_bad_data_is_skipped_with_its_reason`,
+`test_a_day_with_sequence_gaps_is_flagged_and_excluded`
 (`test_mm_determinism.py`), `test_a_day_missing_a_plane_on_disk_is_reported`
 (`test_mm_events.py`).
 
@@ -393,10 +507,18 @@ the end of the day.
 ### R19 — Determinism
 
 No randomness in the simulator. Days are independent jobs; `run_days` sorts its
-output by day, so the number of workers cannot change it.
+output by day, so the number of workers cannot change it. Its cache is keyed by
+everything a day depends on: the quoter, the configuration, the data roots, the
+path, size and modification time of every file the day reads (book, prints,
+funding), and a hash of the simulator's source (`source_fingerprint`). New
+data, newly fetched funding or a fix to the simulator therefore cannot be
+answered from an old result.
 
 *Tests.* `test_the_same_inputs_give_identical_results`,
-`test_worker_count_does_not_change_results` (`test_mm_determinism.py`).
+`test_worker_count_does_not_change_results`,
+`test_the_cache_is_keyed_by_the_data_it_read`,
+`test_a_change_to_the_simulator_or_the_funding_root_invalidates_the_cache`
+(`test_mm_determinism.py`).
 
 ### R20 — Oracle isolation
 
@@ -443,11 +565,13 @@ Pure Python over per-day arrays; numba is not installed and is not added. On
 one development day already listed as read in the pre-registration's
 disclosure (BICOUSDT, 2024-02-15: 249,105 snapshots and 15,506 prints), with the
 touch quoter, the event loop ran at about 217,000 events a second (1.2 s for the
-day) with a peak resident set of about 600 MB, most of it the Parquet read. That
-run built no result: no markout, fill statistic or profit was computed from it.
-Extrapolated at that rate, a BTCUSDT day of the held-out block (about three
-million events) would take about 14 s; quoters richer than the touch quoter will
-be slower.
+day) with a peak resident set of about 600 MB, most of it the Parquet read.
+After the review fixes (re-checking kept orders against the limits at every
+decision, the arrival-interval rule) it runs at about 186,000 events a second
+(1.4 s). Neither run built a result: no markout, fill statistic or profit was
+computed from them. Extrapolated at that rate, a BTCUSDT day of the held-out
+block (about three million events) would take about 16 s; quoters richer than
+the touch quoter will be slower.
 
 ## Not in this simulator yet
 
