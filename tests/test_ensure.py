@@ -10,7 +10,9 @@ import pytest
 from trading_research.data.ensure import (
     DataUnavailable,
     FetchPlan,
+    ensure_bars,
     ensure_book,
+    load_bars,
     plan,
 )
 
@@ -122,3 +124,63 @@ def test_days_the_venue_lacks_are_skipped_when_others_arrive(
     )
     assert len(result.present) == 2
     assert [d.isoformat() for d in result.missing] == ["2024-02-01"]
+
+
+def test_bars_nest_below_the_symbol_by_interval(tmp_path: Path) -> None:
+    """Two intervals of one instrument must never be mistaken for each other."""
+    _write(tmp_path / "BTCUSDT", "klines-1d", ["2024-02-01"])
+    daily = plan("BTCUSDT", date(2024, 2, 1), date(2024, 2, 1), tmp_path, subdirectory="klines-1d")
+    hourly = plan("BTCUSDT", date(2024, 2, 1), date(2024, 2, 1), tmp_path, subdirectory="klines-1h")
+    assert daily.complete
+    assert not hourly.complete
+
+
+def test_complete_bars_are_not_fetched_again(tmp_path: Path) -> None:
+    _write(tmp_path / "BTCUSDT", "klines-1d", ["2024-02-01", "2024-02-02"])
+    result = ensure_bars(
+        "BTCUSDT", "1d", date(2024, 2, 1), date(2024, 2, 2), root=tmp_path, on_progress=None
+    )
+    assert result.complete
+
+
+def test_bars_dry_run_names_the_interval(tmp_path: Path) -> None:
+    said: list[str] = []
+    result = ensure_bars(
+        "BTCUSDT",
+        "1h",
+        date(2024, 2, 1),
+        date(2024, 2, 3),
+        root=tmp_path,
+        dry_run=True,
+        on_progress=said.append,
+    )
+    assert len(result.missing) == 3
+    assert said and "1h bars" in said[0]
+
+
+def test_loading_bars_reads_the_span_once_in_order(tmp_path: Path) -> None:
+    """Days are selected by file name, read back ordered by close, each bar once."""
+    import pandas as pd
+
+    directory = tmp_path / "BTCUSDT" / "klines-1d"
+    directory.mkdir(parents=True)
+    for day, close in (("2024-02-02", 101.0), ("2024-02-01", 100.0), ("2024-02-03", 102.0)):
+        stamp = pd.Timestamp(day, tz="UTC")
+        pd.DataFrame(
+            {
+                "timestamp": [stamp + pd.Timedelta(hours=23, minutes=59)],
+                "open_time": [stamp],
+                "symbol": pd.array(["BTCUSDT"], dtype="string"),
+                "open": [close],
+                "high": [close + 1],
+                "low": [close - 1],
+                "close": [close],
+                "volume": [1.0],
+                "source": pd.array(["binance-futures-um-klines-1d"], dtype="string"),
+            }
+        ).to_parquet(directory / f"{day}.parquet", index=False)
+
+    bars = load_bars("BTCUSDT", "1d", root=tmp_path, start=date(2024, 2, 1), end=date(2024, 2, 2))
+    assert list(bars["close"]) == [100.0, 101.0]
+    with pytest.raises(DataUnavailable, match="no 1h bars"):
+        load_bars("BTCUSDT", "1h", root=tmp_path)

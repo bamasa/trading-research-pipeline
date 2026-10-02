@@ -54,6 +54,12 @@ export = [
     "skl2onnx>=1.16,<2",
     "onnxruntime>=1.17,<2",
 ]
+# Regime monitoring on the whitened stream: the ADIA structural-break solution,
+# installed from its tag rather than copied. Pulls scipy, which lightgbm already
+# resolves, so the environment gains nothing but the library itself.
+breaks = [
+    "structural-break>=0.1,<0.2",
+]
 dev = [
     "pytest>=8,<9",
     "pytest-cov>=5,<7",
@@ -72,6 +78,9 @@ Issues = "https://github.com/bamasa/trading-research-pipeline/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_research"]
+
+[tool.uv.sources]
+structural-break = { git = "https://github.com/bamasa/adia-structural-break", tag = "v0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Tooling

@@ -21,6 +21,10 @@ A few read the raw book instead, because they need bid and ask sizes that
 `prepare` does not carry forward — order-flow imbalance among them. Those need
 `data/raw/<symbol>/` as the downloader leaves it.
 
+`structural_breaks.py` reads daily bars and fetches them itself (a few
+kilobytes a month from Binance's public archives, kept under `data/bars/`); it
+needs the `breaks` extra.
+
 | Script | Document | What it answers |
 |---|---|---|
 | `ceiling.py` | §1 | Share of moments whose move clears the cost, assuming perfect foresight |
@@ -37,6 +41,7 @@ A few read the raw book instead, because they need bid and ask sizes that
 | `daily_allocation.py` | §15 | Several strategies side by side, one chosen each day or none |
 | `joint_search.py` | §13 | Retraining schedule and holding period searched together |
 | `maker_threshold.py` | §11 | Adverse selection of passive fills, measured against what posting saves |
+| `structural_breaks.py` | README, regime monitoring | Where the whitened monitor flags BTCUSDT daily as having changed, with which statistic, and how often the same walk fires on shuffled copies |
 
 Two searches are not here, because they run through the CLI rather than a
 script: retraining schedules (§10) as `trading-research retrain-search`, and

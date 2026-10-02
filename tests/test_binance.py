@@ -25,11 +25,12 @@ from trading_research.data.binance import (
     iter_days,
     parse_agg_trades,
     parse_book_ticker,
+    parse_klines,
     read_archive_csv,
     resample_book,
 )
-from trading_research.data.schema import TRADE_SCHEMA, book_schema
-from trading_research.data.validate import validate_book, validate_trades
+from trading_research.data.schema import BARS_SCHEMA, TRADE_SCHEMA, book_schema
+from trading_research.data.validate import validate_bars, validate_book, validate_trades
 
 
 def make_archive(csv: str, name: str = "data.csv") -> bytes:
@@ -41,6 +42,7 @@ def make_archive(csv: str, name: str = "data.csv") -> bytes:
 
 TRADES_SPEC = ArchiveSpec(market="futures-um", kind="aggTrades", symbol="BTCUSDT")
 BOOK_SPEC = ArchiveSpec(market="futures-um", kind="bookTicker", symbol="BTCUSDT")
+KLINES_SPEC = ArchiveSpec(market="futures-um", kind="klines", symbol="BTCUSDT", interval="1d")
 
 # Real layouts. Futures aggTrades carry a header and lower-case booleans;
 # older spot exports have neither, and an extra is_best_match column.
@@ -59,6 +61,20 @@ BOOK_TICKER = (
     "3932256034651,42570.3,0.821,42570.4,7.207,1707091200006,1707091200012\n"
     "3932256034700,42570.2,1.500,42570.5,2.000,1707091200150,1707091200160\n"
     "3932256034800,42570.1,3.000,42570.6,1.000,1707091200280,1707091200290\n"
+)
+# Daily klines as the futures archive publishes them (a header, milliseconds)
+# and as the spot archive does (no header, microseconds since 2025).
+FUTURES_KLINES = (
+    "open_time,open,high,low,close,volume,close_time,quote_volume,count,"
+    "taker_buy_volume,taker_buy_quote_volume,ignore\n"
+    "1707004800000,42580.0,43400.0,42200.0,43100.0,250000.1,1707091199999,1.07e10,3000000,"
+    "125000.0,5.3e9,0\n"
+    "1707091200000,43100.0,43500.0,42900.0,43300.0,180000.5,1707177599999,7.8e9,2500000,"
+    "90000.0,3.9e9,0\n"
+)
+SPOT_KLINES_HEADERLESS = (
+    "1750032000000000,105594.02,106000.00,105000.00,105800.00,1000.5,1750118399999999,"
+    "1.05e8,120000,500.0,5.2e7,0\n"
 )
 
 
@@ -87,7 +103,7 @@ def test_unknown_market_is_rejected() -> None:
 def test_unsupported_kind_is_rejected() -> None:
     """A dataset with no parser must fail at construction, not mid-download."""
     with pytest.raises(ValueError, match="kind"):
-        ArchiveSpec(market="spot", kind="klines", symbol="BTCUSDT")
+        ArchiveSpec(market="spot", kind="indexPriceKlines", symbol="BTCUSDT")
 
 
 def test_source_tag_records_market_and_dataset() -> None:
@@ -222,6 +238,58 @@ def test_book_ticker_missing_column_is_reported() -> None:
     broken = "update_id,best_bid_price\n1,2.0\n"
     with pytest.raises(BinanceArchiveError, match="missing column"):
         parse_book_ticker(make_archive(broken), BOOK_SPEC)
+
+
+# ---------------------------------------------------------------------------
+# klines
+# ---------------------------------------------------------------------------
+
+
+def test_klines_url_carries_the_interval() -> None:
+    assert KLINES_SPEC.url(date(2025, 3, 14), "monthly").endswith(
+        "/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2025-03.zip"
+    )
+    assert KLINES_SPEC.url(date(2025, 3, 14), "daily").endswith(
+        "/data/futures/um/daily/klines/BTCUSDT/1d/BTCUSDT-1d-2025-03-14.zip"
+    )
+    assert KLINES_SPEC.source_tag == "binance-futures-um-klines-1d"
+    assert KLINES_SPEC.directory == "klines-1d"
+
+
+def test_klines_spec_without_interval_is_rejected() -> None:
+    with pytest.raises(ValueError, match="interval"):
+        ArchiveSpec(market="futures-um", kind="klines", symbol="BTCUSDT")
+    with pytest.raises(ValueError, match="interval"):
+        ArchiveSpec(market="futures-um", kind="aggTrades", symbol="BTCUSDT", interval="1d")
+
+
+def test_klines_parse_to_the_bars_contract() -> None:
+    frame = parse_klines(make_archive(FUTURES_KLINES), KLINES_SPEC)
+    BARS_SCHEMA.validate(frame)
+    assert len(frame) == 2
+    assert validate_bars(frame).ok
+    assert (frame["source"] == "binance-futures-um-klines-1d").all()
+
+    spot = ArchiveSpec(market="spot", kind="klines", symbol="BTCUSDT", interval="1d")
+    headerless = parse_klines(make_archive(SPOT_KLINES_HEADERLESS), spot)
+    BARS_SCHEMA.validate(headerless)
+    assert len(headerless) == 1
+    assert headerless["close"].iloc[0] == 105800.0
+    assert headerless["timestamp"].iloc[0].year == 2025
+
+
+def test_klines_timestamp_is_the_close() -> None:
+    """A bar is observable when it closes, not when it opens."""
+    frame = parse_klines(make_archive(FUTURES_KLINES), KLINES_SPEC)
+    assert frame["timestamp"].iloc[0] == pd.Timestamp("2024-02-04 23:59:59.999", tz="UTC")
+    assert frame["open_time"].iloc[0] == pd.Timestamp("2024-02-04 00:00:00", tz="UTC")
+    assert (frame["open_time"] < frame["timestamp"]).all()
+
+
+def test_klines_missing_column_is_reported() -> None:
+    broken = "open_time,open,close\n1,2.0,3.0\n"
+    with pytest.raises(BinanceArchiveError, match="missing column"):
+        parse_klines(make_archive(broken), KLINES_SPEC)
 
 
 # ---------------------------------------------------------------------------

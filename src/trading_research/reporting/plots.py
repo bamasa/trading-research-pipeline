@@ -14,7 +14,7 @@ dependency: ``uv sync --extra report``.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -909,3 +909,125 @@ def two_block_profile(
     ax.set_ylabel("net basis points per trade")
     ax.legend(frameon=False, fontsize=9)
     return _finish(fig, ax, title, Path(path))
+
+
+def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
+    """Half-open ``[start, end)`` index ranges where ``mask`` is true."""
+    out: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, flag in enumerate(mask):
+        if flag and start is None:
+            start = i
+        elif not flag and start is not None:
+            out.append((start, i))
+            start = None
+    if start is not None:
+        out.append((start, len(mask)))
+    return out
+
+
+def structural_breaks(
+    table: pd.DataFrame,
+    path: Path | str,
+    *,
+    thresholds: Mapping[str, float],
+    title: str = "Regime breaks on the whitened stream",
+    history_len: int | None = None,
+    null_note: str = "",
+) -> Path:
+    """A return series, the breaks the whitened monitor flagged, and the odds behind them.
+
+    Two panels sharing the clock. Top: the series as a cumulative return index
+    from 100 on a log axis — the shape of the price without a price, since the
+    committed table carries returns rather than closes — with a vertical line at
+    each flagged step labelled by what moved, and light shading over every
+    stretch where the history was shorter than asked, which is the cost of
+    re-anchoring made visible. Bottom: each family's Shiryaev-Roberts log-odds
+    with its threshold as a dashed line. The odds fall back to zero at every
+    window start, and the figure shows that rather than smoothing it, because
+    the resets are the protocol and a curve that never existed would read as a
+    detector that never forgets.
+
+    ``table`` is ``MonitorResult.annotate(returns)`` or the CSV written from it:
+    ``timestamp`` (optional), ``log_return``, ``window``, ``history_len``,
+    ``odds_<family>``, ``flag``, ``direction``.
+    """
+    plt = _pyplot()
+    fig, (top, bottom) = plt.subplots(
+        2, 1, figsize=(10.0, 6.4), sharex=True, gridspec_kw={"height_ratios": [2.0, 1.3]}
+    )
+    if "timestamp" in table.columns:
+        x = pd.to_datetime(table["timestamp"], utc=True).reset_index(drop=True)
+    else:
+        x = pd.Series(np.arange(len(table)))
+    table = table.reset_index(drop=True)
+    colours = {"scale": COLOURS["cost"], "dependence": COLOURS["accent"], "mean": COLOURS["edge"]}
+
+    level = 100.0 * np.exp(np.cumsum(table["log_return"].to_numpy(dtype="float64")))
+    top.plot(x, level, linewidth=1.0, color=COLOURS["signal"], zorder=2)
+    top.set_yscale("log")
+    top.set_ylabel("cumulative return index, from 100 (log)")
+
+    used = table["history_len"].to_numpy(dtype="float64")
+    asked = float(history_len) if history_len is not None else float(np.nanmax(used))
+    short = np.nan_to_num(used, nan=asked) < asked
+    for start, end in _runs(short):
+        top.axvspan(
+            x.iloc[start], x.iloc[end - 1], color=COLOURS["neutral"], alpha=0.12, linewidth=0
+        )
+
+    flagged = np.flatnonzero((table["flag"].fillna("").astype(str) != "").to_numpy())
+    for i in flagged:
+        row = table.iloc[int(i)]
+        family = str(row["flag"])
+        colour = colours.get(family, COLOURS["neutral"])
+        for ax in (top, bottom):
+            ax.axvline(x.iloc[int(i)], color=colour, linewidth=1.1, alpha=0.9, zorder=3)
+        arrow = "up" if int(row["direction"]) > 0 else "down"
+        top.text(
+            x.iloc[int(i)],
+            0.97,
+            f" {family} {arrow}",
+            transform=top.get_xaxis_transform(),
+            fontsize=8,
+            color=colour,
+            va="top",
+            ha="left",
+        )
+
+    for family, colour in colours.items():
+        column = f"odds_{family}"
+        if column not in table.columns or family not in thresholds:
+            continue
+        bottom.plot(x, table[column], linewidth=1.0, color=colour, label=family, zorder=2)
+        bottom.axhline(
+            thresholds[family], color=colour, linewidth=0.9, linestyle="--", alpha=0.8, zorder=1
+        )
+    starts = table["window"].notna() & (table["window"] != table["window"].shift())
+    for i in np.flatnonzero(starts.to_numpy()):
+        bottom.axvline(
+            x.iloc[int(i)], ymin=0.0, ymax=0.06, color=COLOURS["neutral"], linewidth=0.8, alpha=0.7
+        )
+    bottom.axhline(0.0, color=COLOURS["neutral"], linewidth=0.8, alpha=0.5)
+    bottom.set_ylabel("log-odds of a change")
+    bottom.legend(frameon=False, fontsize=9, loc="upper left")
+    bottom.spines["top"].set_visible(False)
+    bottom.spines["right"].set_visible(False)
+    bottom.grid(axis="y", alpha=0.25, linewidth=0.6)
+    bottom.set_axisbelow(True)
+
+    note = f"{len(flagged)} break(s) · shaded: history shorter than asked · ticks: window starts"
+    if null_note:
+        note = f"{note} · {null_note}"
+    bottom.text(
+        0.995,
+        0.03,
+        note,
+        transform=bottom.transAxes,
+        ha="right",
+        fontsize=8,
+        color=COLOURS["neutral"],
+    )
+    if "timestamp" in table.columns:
+        fig.autofmt_xdate()
+    return _finish(fig, top, title, Path(path))

@@ -1,6 +1,6 @@
 # Data contract
 
-Everything downstream reads one of two frames. Pinning their meaning in one
+Everything downstream reads one of three frames. Pinning their meaning in one
 place is what keeps the rest of the pipeline honest: a feature cannot quietly
 depend on a column that exists for only one source, and a new source cannot
 silently change what a column means.
@@ -27,7 +27,7 @@ scaling and no ticks-as-integers: a column means what it says.
 change to the columns or to the meaning of a column bumps it, so stored data
 cannot be silently misread by later code.
 
-## The two planes
+## The three planes
 
 They are separate because their availability differs, and pretending otherwise
 would hide a real limitation.
@@ -36,6 +36,7 @@ would hide a real limitation.
 |---|---|---|
 | `trades` | a trade or aggregated trade | public exchange archives |
 | `book` | an order-book snapshot, *N* levels per side | a dedicated collector |
+| `bars` | a closed bar at a stated interval | public exchange archives |
 
 A full order book **cannot** be reconstructed from public trade archives. The
 resting size that was never hit leaves no trace in the trade tape, so depth,
@@ -82,6 +83,29 @@ levels should fail loudly on a five-level frame rather than quietly return
 than in the feature registry, because labelling and mark-to-market must use the
 same definition of price. If those two ever drift apart, a backtest reports
 profit on a price nobody could have traded.
+
+## Bars
+
+| Column | Type | Unit | Meaning |
+|---|---|---|---|
+| `timestamp` | `datetime64[ns, UTC]` | UTC | **close** of the bar |
+| `open_time` | `datetime64[ns, UTC]` | UTC | open of the bar |
+| `symbol` | `string` | | instrument identifier |
+| `open`, `high`, `low`, `close` | `float64` | quote | the bar's prices |
+| `volume` | `float64` | base | base volume traded in the bar |
+| `source` | `string` | | provenance, with the interval: `binance-futures-um-klines-1d` |
+
+One row is a closed bar. `timestamp` is the close, so a value stamped at
+`timestamp` has seen the whole bar and nothing after it — stamping a bar at its
+open would let a feature read a close that was still a day away. The interval
+is part of `source`, so bars at two frequencies cannot be concatenated by
+accident.
+
+This is the coarse plane, and the only thing that reads it is regime
+monitoring (`validation/structural_breaks.py`), where a year of market in a few
+hundred rows is the point. Nothing at the trade or book level should be built
+from it: a feature at bar frequency has already thrown away the order the
+trades happened in.
 
 ## Quality checks
 

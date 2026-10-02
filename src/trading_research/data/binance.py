@@ -66,7 +66,7 @@ from typing import Final, Literal
 import numpy as np
 import pandas as pd
 
-from trading_research.data.schema import TRADE_SCHEMA, book_schema
+from trading_research.data.schema import BARS_SCHEMA, TRADE_SCHEMA, book_schema
 
 BASE_URL: Final = "https://data.binance.vision"
 LISTING_URL: Final = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
@@ -83,7 +83,14 @@ _MARKET_PREFIX: Final[dict[str, str]] = {
 }
 
 #: Datasets this module knows how to convert into a project contract.
-SUPPORTED_KINDS: Final = ("aggTrades", "bookTicker", "bookDepth", "metrics", "fundingRate")
+SUPPORTED_KINDS: Final = (
+    "aggTrades",
+    "bookTicker",
+    "bookDepth",
+    "metrics",
+    "fundingRate",
+    "klines",
+)
 
 
 class BinanceArchiveError(RuntimeError):
@@ -92,11 +99,18 @@ class BinanceArchiveError(RuntimeError):
 
 @dataclass(frozen=True)
 class ArchiveSpec:
-    """Identifies one dataset for one instrument."""
+    """Identifies one dataset for one instrument.
+
+    ``interval`` is the bar length and exists only for ``klines``, where the
+    archive layout carries one extra path segment for it. It is part of the
+    source tag and the output directory, so bars at two frequencies can never
+    be mistaken for one another on disk.
+    """
 
     market: Market
     kind: str
     symbol: str
+    interval: str | None = None
 
     def __post_init__(self) -> None:
         if self.market not in _MARKET_PREFIX:
@@ -107,18 +121,30 @@ class ArchiveSpec:
             raise ValueError(
                 f"unsupported kind {self.kind!r}; expected one of {list(SUPPORTED_KINDS)}"
             )
+        if self.kind == "klines" and not self.interval:
+            raise ValueError("klines need an interval, e.g. '1d' or '1h'")
+        if self.kind != "klines" and self.interval is not None:
+            raise ValueError(f"interval applies to klines only, not to {self.kind!r}")
 
     @property
     def source_tag(self) -> str:
         """Value written into the ``source`` column of every produced row."""
-        return f"binance-{self.market}-{self.kind.lower()}"
+        tag = f"binance-{self.market}-{self.kind.lower()}"
+        return f"{tag}-{self.interval}" if self.interval else tag
+
+    @property
+    def directory(self) -> str:
+        """Name of the per-kind output directory under the symbol."""
+        return f"{self.kind}-{self.interval}" if self.interval else self.kind
 
     def prefix(self, frequency: Frequency) -> str:
-        return f"data/{_MARKET_PREFIX[self.market]}/{frequency}/{self.kind}/{self.symbol}/"
+        base = f"data/{_MARKET_PREFIX[self.market]}/{frequency}/{self.kind}/{self.symbol}/"
+        return f"{base}{self.interval}/" if self.interval else base
 
     def filename(self, period: date, frequency: Frequency) -> str:
         stamp = period.strftime("%Y-%m-%d") if frequency == "daily" else period.strftime("%Y-%m")
-        return f"{self.symbol}-{self.kind}-{stamp}.zip"
+        middle = self.interval if self.interval else self.kind
+        return f"{self.symbol}-{middle}-{stamp}.zip"
 
     def url(self, period: date, frequency: Frequency) -> str:
         return f"{BASE_URL}/{self.prefix(frequency)}{self.filename(period, frequency)}"
@@ -281,6 +307,22 @@ def _looks_numeric(token: str) -> bool:
     return True
 
 
+#: The twelve kline fields Binance publishes, in archive order.
+_KLINE_COLUMNS: Final = (
+    "open_time",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "close_time",
+    "quote_volume",
+    "count",
+    "taker_buy_volume",
+    "taker_buy_quote_volume",
+    "ignore",
+)
+
 #: Column names for headerless exports, keyed by field count. Only the layouts
 #: this module converts are listed; anything else is rejected loudly rather
 #: than guessed at.
@@ -306,6 +348,8 @@ _POSITIONAL_COLUMNS: Final[dict[int, list[str]]] = {
         "transact_time",
         "is_buyer_maker",
     ],
+    # klines, every market: the layout has not changed, only the header's presence.
+    12: list(_KLINE_COLUMNS),
 }
 
 
@@ -587,6 +631,44 @@ def parse_funding_rate(payload: bytes, spec: ArchiveSpec) -> pd.DataFrame:
     return out.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
+def parse_klines(payload: bytes, spec: ArchiveSpec) -> pd.DataFrame:
+    """Convert a ``klines`` archive into a frame satisfying ``BARS_SCHEMA``.
+
+    The one plane here that is coarse by construction: a bar summarises an
+    interval, and the interval is the resolution. That is what regime
+    monitoring wants — a year of market in a few hundred rows — and what nothing
+    else in the pipeline should read, because a feature at bar frequency has
+    already thrown away the order the trades happened in.
+
+    ``timestamp`` is the bar's *close*, the moment the whole bar became
+    observable; ``open_time`` is kept as its own column. Stamping a bar at its
+    open would let a feature at ``timestamp`` read a close that was still a day
+    away.
+    """
+    frame = read_archive_csv(payload)
+    required = {"open_time", "open", "high", "low", "close", "volume", "close_time"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise BinanceArchiveError(f"klines archive is missing column(s): {sorted(missing)}")
+
+    out = pd.DataFrame(
+        {
+            "timestamp": to_utc(frame["close_time"]),
+            "open_time": to_utc(frame["open_time"]),
+            "symbol": pd.array([spec.symbol] * len(frame), dtype="string"),
+            "open": frame["open"].astype("float64"),
+            "high": frame["high"].astype("float64"),
+            "low": frame["low"].astype("float64"),
+            "close": frame["close"].astype("float64"),
+            "volume": frame["volume"].astype("float64"),
+            "source": pd.array([spec.source_tag] * len(frame), dtype="string"),
+        }
+    )
+    out = out.sort_values("timestamp", kind="stable").reset_index(drop=True)
+    BARS_SCHEMA.validate(out)
+    return out
+
+
 def _keep_day(frame: pd.DataFrame, day: date) -> pd.DataFrame:
     """Trim a monthly archive to the requested day.
 
@@ -605,10 +687,17 @@ PARSERS: Final = {
     "bookDepth": parse_book_depth,
     "metrics": parse_metrics,
     "fundingRate": parse_funding_rate,
+    "klines": parse_klines,
 }
 
 #: Kinds Binance only publishes as monthly archives.
 MONTHLY_ONLY: Final = frozenset({"fundingRate"})
+
+#: Kinds published both ways where the month is the sensible unit: a daily
+#: archive of daily bars holds one row. The month is fetched and the day cut
+#: out of it, falling back to the daily archive for a month Binance has not
+#: closed yet — the monthly file appears a few days after the month ends.
+MONTHLY_PREFERRED: Final = frozenset({"klines"})
 
 
 # ---------------------------------------------------------------------------
@@ -663,9 +752,9 @@ def download_range(
     Already-converted days are skipped unless ``overwrite``, so re-running after
     a failure costs only the days that are actually missing.
     """
-    out_dir = Path(output) / spec.symbol / spec.kind
+    out_dir = Path(output) / spec.symbol / spec.directory
     out_dir.mkdir(parents=True, exist_ok=True)
-    cache_dir = Path(output) / "_archives" / spec.symbol / spec.kind
+    cache_dir = Path(output) / "_archives" / spec.symbol / spec.directory
     if keep_raw:
         cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -692,7 +781,7 @@ def download_range(
 
         frame = PARSERS[spec.kind](payload, spec)
         del payload
-        if spec.kind in MONTHLY_ONLY:
+        if spec.kind in MONTHLY_ONLY or spec.kind in MONTHLY_PREFERRED:
             frame = _keep_day(frame, day)
         if spec.kind == "bookTicker" and grid:
             frame = resample_book(frame, grid)
@@ -734,21 +823,37 @@ def _payload_for(
     day inside it. The cache makes that cheap: the first day of a month pays for
     the download and the rest read it back.
     """
-    frequency: Frequency = "monthly" if spec.kind in MONTHLY_ONLY else "daily"
-    period = day.replace(day=1) if frequency == "monthly" else day
+    frequencies: tuple[Frequency, ...]
+    if spec.kind in MONTHLY_ONLY:
+        frequencies = ("monthly",)
+    elif spec.kind in MONTHLY_PREFERRED:
+        frequencies = ("monthly", "daily")
+    else:
+        frequencies = ("daily",)
 
-    cached = cache_dir / spec.filename(period, frequency)
-    if cached.exists():
-        return cached.read_bytes(), 0
-
-    payload = fetch_archive(spec.url(period, frequency), verify=verify)
-    # A monthly archive is always cached whatever ``keep_raw`` says: re-fetching
-    # sixty megabytes once per day of the month to extract one day from it is a
-    # waste the caller did not ask for.
-    if keep_raw or frequency == "monthly":
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cached.write_bytes(payload)
-    return payload, len(payload)
+    last: BinanceArchiveError | None = None
+    for frequency in frequencies:
+        period = day.replace(day=1) if frequency == "monthly" else day
+        cached = cache_dir / spec.filename(period, frequency)
+        if cached.exists():
+            return cached.read_bytes(), 0
+        try:
+            payload = fetch_archive(spec.url(period, frequency), verify=verify)
+        except BinanceArchiveError as exc:
+            # The month is not published yet; the day may be. Any other
+            # failure, or the last frequency tried, surfaces to the caller.
+            last = exc
+            if frequency == frequencies[-1] or "HTTP 404" not in str(exc):
+                raise
+            continue
+        # A monthly archive is always cached whatever ``keep_raw`` says:
+        # re-fetching sixty megabytes once per day of the month to extract one
+        # day from it is a waste the caller did not ask for.
+        if keep_raw or frequency == "monthly":
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(payload)
+        return payload, len(payload)
+    raise last if last is not None else BinanceArchiveError(f"{spec.url(day, 'daily')}: no archive")
 
 
 def _write_manifest(
@@ -773,12 +878,14 @@ def _write_manifest(
     from trading_research.data.schema import SCHEMA_VERSION
 
     converted = [r for r in results if r.output is not None and r.skipped is None]
+    planes = {"bookTicker": "book", "klines": "bars"}
     payload = {
         "source": spec.source_tag,
         "market": spec.market,
         "kind": spec.kind,
         "symbol": spec.symbol,
-        "plane": "book" if spec.kind == "bookTicker" else "trades",
+        "interval": spec.interval,
+        "plane": planes.get(spec.kind, "trades"),
         "schema_version": SCHEMA_VERSION,
         "trading_research_version": __version__,
         "requested_range": [start.isoformat(), end.isoformat()],
@@ -788,12 +895,7 @@ def _write_manifest(
         "resample_grid": grid,
         "depth": 1 if spec.kind == "bookTicker" else None,
         "attribution": "Binance public market data, https://data.binance.vision",
-        "notes": (
-            "bookTicker carries only the best bid and ask. Depth beyond the touch "
-            "is not published and requires the collector."
-            if spec.kind == "bookTicker"
-            else "Aggregated trades: consecutive fills of one aggressing order at one price are one row."
-        ),
+        "notes": _manifest_note(spec),
     }
     if grid:
         payload["resample_note"] = (
@@ -802,3 +904,17 @@ def _write_manifest(
         )
 
     (out_dir / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _manifest_note(spec: ArchiveSpec) -> str:
+    if spec.kind == "bookTicker":
+        return (
+            "bookTicker carries only the best bid and ask. Depth beyond the touch "
+            "is not published and requires the collector."
+        )
+    if spec.kind == "klines":
+        return (
+            f"Closed {spec.interval} bars; timestamp is the bar close, open_time the open. "
+            "One row per bar, one file per day."
+        )
+    return "Aggregated trades: consecutive fills of one aggressing order at one price are one row."
