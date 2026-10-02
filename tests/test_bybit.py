@@ -137,7 +137,7 @@ def test_a_clean_stream_reports_no_gaps(simple) -> None:
 
 def test_the_grid_samples_at_most_once_per_interval(tmp_path) -> None:
     """A photograph, not an average: several updates inside one interval leave
-    one row carrying the state at the end of it."""
+    one row, the state after the first of them, at that update's timestamp."""
     start = 1_707_091_200_000
     messages = [
         message("snapshot", start, levels(100.0, 12, -0.1), levels(101.0, 12, 0.1), update=1)
@@ -148,6 +148,8 @@ def test_the_grid_samples_at_most_once_per_interval(tmp_path) -> None:
     ]
     frame = reconstruct(write(tmp_path, messages), symbol="TESTUSDT", depth=10, grid_ms=1000)
     assert len(frame) == 1
+    assert frame["bid_size_0"].iloc[0] == pytest.approx(1.0)  # the snapshot, not the last delta
+    assert frame["timestamp"].iloc[0] == pd.Timestamp(start, unit="ms", tz="UTC")
 
 
 def test_a_thinner_book_than_requested_is_skipped(tmp_path) -> None:
