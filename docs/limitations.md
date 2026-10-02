@@ -50,6 +50,12 @@ Every one of these pushes results in the optimistic direction. The accounting is
 honest about direction and cost per trade; it is not a simulation of a trading
 system.
 
+That describes the taker backtest. The market-making simulator is a separate
+mode that does model queue position, partial fills, latency, inventory limits
+and funding, in event time; what it cannot observe — queue dynamics inside a
+100 ms snapshot, its own impact on others — is replaced by stated rules, each
+with its direction, in [`market_making_simulator.md`](market_making_simulator.md).
+
 ## Running the models needs one process each
 
 The TCN now runs the full seven-fold schedule, but only because each model gets

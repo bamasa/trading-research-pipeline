@@ -147,10 +147,18 @@ def reconstruct(
     ten is what the feature registry needs and what keeps a day's output to a
     size the rest of the pipeline can hold.
 
-    Rows are emitted at most once per ``grid_ms``, carrying the book as it stood
-    when that interval ended. Intervals with no update at all produce no row —
-    the same choice the Binance resampler makes, so a quiet stretch is visibly
-    absent rather than silently forward-filled.
+    Rows are emitted at most once per ``grid_ms``: the first update in each
+    interval produces a row carrying the book as it stood right after that
+    update, stamped with that update's own timestamp. Later updates in the same
+    interval are applied to the book but appear only in the next interval's
+    row, so a row is never ahead of its timestamp, and can be up to one
+    interval behind the venue's book. Intervals with no update at all produce
+    no row — the same choice the Binance resampler makes, so a quiet stretch is
+    visibly absent rather than silently forward-filled.
+
+    The stamp is the message's ``ts``, the time the venue generated it; prints
+    carry their match time. The two differ by a few milliseconds (see
+    ``market_making.analysis.clock_offset_profile``).
     """
     state = BookState()
     rows: list[dict[str, Any]] = []

@@ -137,7 +137,7 @@ def test_a_clean_stream_reports_no_gaps(simple) -> None:
 
 def test_the_grid_samples_at_most_once_per_interval(tmp_path) -> None:
     """A photograph, not an average: several updates inside one interval leave
-    one row carrying the state at the end of it."""
+    one row, the state after the first of them, at that update's timestamp."""
     start = 1_707_091_200_000
     messages = [
         message("snapshot", start, levels(100.0, 12, -0.1), levels(101.0, 12, 0.1), update=1)
@@ -148,6 +148,8 @@ def test_the_grid_samples_at_most_once_per_interval(tmp_path) -> None:
     ]
     frame = reconstruct(write(tmp_path, messages), symbol="TESTUSDT", depth=10, grid_ms=1000)
     assert len(frame) == 1
+    assert frame["bid_size_0"].iloc[0] == pytest.approx(1.0)  # the snapshot, not the last delta
+    assert frame["timestamp"].iloc[0] == pd.Timestamp(start, unit="ms", tz="UTC")
 
 
 def test_a_thinner_book_than_requested_is_skipped(tmp_path) -> None:
@@ -182,3 +184,102 @@ def test_the_archive_url_names_the_day_and_symbol() -> None:
     url = archive_url("BTCUSDT", date(2024, 2, 5))
     assert "BTCUSDT" in url and "2024-02-05" in url
     assert str(ARCHIVE_DEPTH) in url
+
+
+# ---------------------------------------------------------------------------
+# Trade prints: order within a timestamp, and one day at a time
+# ---------------------------------------------------------------------------
+
+_HEADER = (
+    "timestamp,symbol,side,size,price,tickDirection,trdMatchID,"
+    "grossValue,homeNotional,foreignNotional"
+)
+
+
+def _archive(rows: list[tuple[float, str, float, float, str]], *, match_id: bool = True) -> bytes:
+    header = _HEADER if match_id else "timestamp,symbol,side,size,price"
+    lines = [header]
+    for stamp, side, size, price, match in rows:
+        tail = f",PlusTick,{match},0,0,0" if match_id else ""
+        lines.append(f"{stamp},TESTUSDT,{side},{size},{price}{tail}")
+    return "\n".join(lines).encode()
+
+
+def test_parse_keeps_the_file_order_of_equal_timestamps_and_the_match_id() -> None:
+    """Ties are the norm in the tape, and an unstable sort reorders them; with
+    two thousand prints over five timestamps it reliably does."""
+    import numpy as np
+
+    from trading_research.data.bybit_trades import parse
+
+    rng = np.random.default_rng(0)
+    stamps = rng.choice([1707955200.1, 1707955200.2, 1707955200.3, 1707955200.4], 2000)
+    rows = [
+        (float(stamp), "Buy" if i % 3 else "Sell", 1.0, 0.41, f"m{i:05d}")
+        for i, stamp in enumerate(stamps)
+    ]
+    frame = parse(_archive(rows))
+    assert frame["timestamp"].is_monotonic_increasing
+    assert "match_id" in frame.columns
+    for _, group in frame.groupby("timestamp"):
+        assert list(group["match_id"]) == sorted(group["match_id"])
+    assert set(frame["aggressor"]) == {-1, 1}
+
+
+def test_parse_reads_an_archive_without_a_match_id() -> None:
+    from trading_research.data.bybit_trades import parse
+
+    frame = parse(_archive([(1707955200.5, "Sell", 2.0, 0.41, "")], match_id=False))
+    assert "match_id" not in frame.columns
+    assert frame["aggressor"].tolist() == [-1]
+
+
+def test_one_day_of_prints_is_read_alone(tmp_path) -> None:
+    from trading_research.data.bybit_trades import BybitTradesError, load_day
+
+    directory = tmp_path / "TESTUSDT"
+    directory.mkdir()
+    pd.DataFrame({"price": [1.0], "size": [2.0]}).to_parquet(directory / "2024-02-15.parquet")
+    (directory / "2024-02-16.parquet").write_bytes(b"unreadable on purpose")
+    assert load_day("TESTUSDT", date(2024, 2, 15), tmp_path)["size"].tolist() == [2.0]
+    with pytest.raises(BybitTradesError, match="no trades"):
+        load_day("TESTUSDT", date(2024, 2, 17), tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# The grid's label
+# ---------------------------------------------------------------------------
+
+
+def _observed_book() -> pd.DataFrame:
+    """A bid equal to the second it was observed at: 0.0, 4.9, 7.0, 12.3."""
+    seconds = [0.0, 4.9, 7.0, 12.3]
+    stamps = pd.to_datetime([1_706_745_600 + s for s in seconds], unit="s", utc=True)
+    return pd.DataFrame({"timestamp": stamps, "bid_price_0": seconds, "ask_price_0": seconds})
+
+
+def test_a_left_labelled_grid_is_five_seconds_ahead_when_joined_at_its_label() -> None:
+    """The look-ahead the right label removes, pinned: the row labelled
+    00:00:00 carries the value observed at 00:00:04.9."""
+    from trading_research.data.grid import to_grid
+
+    grid = to_grid(_observed_book(), 5)
+    label = (grid["timestamp"] - grid["timestamp"].iloc[0]).dt.total_seconds()
+    assert grid["bid_price_0"].iloc[0] == 4.9
+    assert (grid["bid_price_0"] - label).max() == pytest.approx(4.9)
+
+
+def test_a_right_labelled_grid_never_carries_a_value_from_after_its_label() -> None:
+    from trading_research.data.grid import to_grid
+
+    left = to_grid(_observed_book(), 5)
+    right = to_grid(_observed_book(), 5, label="right")
+    origin = left["timestamp"].iloc[0]
+    label = (right["timestamp"] - origin).dt.total_seconds()
+    assert (right["bid_price_0"] < label).all()
+    assert list(label) == [5.0, 10.0, 15.0]
+    # The same values, one bin later.
+    assert right["bid_price_0"].tolist() == left["bid_price_0"].tolist()
+    assert ((right["timestamp"] - left["timestamp"]).dt.total_seconds() == 5.0).all()
+    with pytest.raises(ValueError, match="label"):
+        to_grid(_observed_book(), 5, label="middle")  # type: ignore[arg-type]

@@ -108,3 +108,74 @@ def breakeven_share(forward_move_bp: pd.Series, cost_bp: float | pd.Series) -> f
     """
     move = forward_move_bp.abs()
     return float((move > cost_bp).mean())
+
+
+# ---------------------------------------------------------------------------
+# Fee tiers, for the market maker
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FeeTier:
+    """One row of a venue's fee schedule, in basis points of notional.
+
+    A negative ``maker_bp`` is a rebate: the venue pays the passive side. The
+    market-making simulator charges ``maker_bp`` on every passive fill and
+    ``taker_bp`` on every flatten.
+    """
+
+    name: str
+    maker_bp: float
+    taker_bp: float
+
+    def __post_init__(self) -> None:
+        if self.taker_bp < 0:
+            raise ValueError(f"a taker fee cannot be a rebate, got {self.taker_bp}")
+        if self.maker_bp > self.taker_bp:
+            raise ValueError(
+                f"maker fee {self.maker_bp} above taker fee {self.taker_bp} is not a schedule"
+            )
+
+
+#: Bybit's base tier for USDT perpetuals: 0.02% maker, 0.055% taker. The figure
+#: :class:`trading_research.backtest.maker.MakerCosts` already uses, and the
+#: one the market-making pre-registration fixes for every verdict.
+BYBIT_BASE = FeeTier("base", 2.0, 5.5)
+
+#: Where the schedule is published.
+BYBIT_FEE_SOURCE = "https://www.bybit.com/en/announcement-info/fee-rate/"
+
+#: When the rows beyond the base tier were transcribed from the source. ``None``
+#: means they have not been: on 2 October 2026 the page refused automated
+#: requests from the development machine, and the pre-registration requires
+#: the VIP and market-maker programme rows to be transcribed, not assumed. They
+#: are added here, with this date set, before anything compares against them
+#: (the ladder's last rung and the fee break-even).
+BYBIT_FEE_RETRIEVED: str | None = None
+
+#: The published linear-perpetual tiers, best maker fee last. Only the base
+#: tier until the rest are transcribed; see ``BYBIT_FEE_RETRIEVED``.
+BYBIT_LINEAR_TIERS: tuple[FeeTier, ...] = (BYBIT_BASE,)
+
+
+def fee_tier(name: str, tiers: tuple[FeeTier, ...] = BYBIT_LINEAR_TIERS) -> FeeTier:
+    """Look a tier up by name, refusing one that has not been transcribed."""
+    for tier in tiers:
+        if tier.name == name:
+            return tier
+    known = ", ".join(t.name for t in tiers)
+    raise KeyError(f"no fee tier {name!r}; transcribed tiers: {known}")
+
+
+def breakeven_maker_bp(net: float, turnover: float, maker_bp: float) -> float:
+    """The maker fee at which ``net`` would have been zero.
+
+    ``net`` was earned at ``maker_bp`` over ``turnover`` of passive notional.
+    Every basis point less fee adds ``turnover * 1e-4`` to the net, so the
+    break-even is ``maker_bp + net / turnover * 1e4``. Exact only for a strategy
+    whose decisions do not read the fee — the touch quoter does not; a gated
+    strategy quotes differently at a different fee and has to be re-run.
+    """
+    if turnover <= 0:
+        raise ValueError(f"turnover must be positive, got {turnover}")
+    return maker_bp + net / turnover * 1e4
