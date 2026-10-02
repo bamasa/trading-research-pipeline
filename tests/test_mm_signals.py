@@ -55,7 +55,7 @@ def write_universe(
             # The archive spills a row past midnight; it must never be read.
             spill = pd.DataFrame(
                 {
-                    "timestamp": [start + pd.Timedelta(days=1, milliseconds=50)],
+                    "timestamp": [start + np.timedelta64(86_400_050, "ms")],
                     "bid_price_0": [999.0],
                     "ask_price_0": [999.2],
                 }
@@ -84,7 +84,7 @@ def test_the_panel_is_labelled_by_bin_ends_and_reads_only_its_days(universe: Pat
     panel = panel_of(universe, DAYS)
     labels = pd.DatetimeIndex(panel.log_mid.index)
     assert pd.Timestamp(DAYS[-1], tz="UTC") < labels[-1]
-    assert labels[-1] <= pd.Timestamp(DAYS[-1], tz="UTC") + pd.Timedelta(days=1)
+    assert labels[-1] <= pd.Timestamp(DAYS[-1], tz="UTC") + np.timedelta64(1, "D")
     assert (labels.second % 5 == 0).all() and (labels.microsecond == 0).all()
     # The first label holds the last update of its five seconds, never a later one.
     first = pd.read_parquet(universe / SYMBOLS[0] / f"{DAYS[0]}.parquet")
@@ -229,10 +229,10 @@ def test_within_day_keeps_only_the_days_rows() -> None:
     frame = pd.DataFrame(
         {
             "timestamp": [
-                start - pd.Timedelta(milliseconds=1),
+                start - np.timedelta64(1, "ms"),
                 start,
-                start + pd.Timedelta(hours=23, minutes=59, seconds=59),
-                start + pd.Timedelta(days=1),
+                start + np.timedelta64(86_399, "s"),
+                start + np.timedelta64(1, "D"),
             ],
             "x": [0, 1, 2, 3],
         }

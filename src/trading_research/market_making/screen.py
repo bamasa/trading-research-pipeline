@@ -205,6 +205,7 @@ def combine(days: Sequence[DayStatistics]) -> dict[str, float]:
     touch = np.concatenate([d.touch for d in days])
     notional = np.concatenate([d.touch_notional for d in days])
     vol = np.concatenate([d.vol_bp_1m for d in days])
+    vol = vol[np.isfinite(vol)]
     out: dict[str, float] = {
         "days": float(len(days)),
         "tick_bp": sum(d.tick_bp_seconds for d in days) / seconds,
@@ -215,7 +216,7 @@ def combine(days: Sequence[DayStatistics]) -> dict[str, float]:
         "median_touch_over_median_print": float(np.nanmedian(touch)) / median_print,
         "prints_per_day": float(np.mean([d.prints for d in days])),
         "median_touch_notional_usdt": float(np.nanmedian(notional)),
-        "sigma_ref_bp_1m": float(np.nanmedian(vol)),
+        "sigma_ref_bp_1m": float(np.median(vol)) if len(vol) else float("nan"),
         "sequence_gap_days": float(sum(d.sequence_gaps > 0 for d in days)),
     }
     out["clip_notional_usdt"] = CLIP_SHARE_OF_MEDIAN_TOUCH * out["median_touch_notional_usdt"]

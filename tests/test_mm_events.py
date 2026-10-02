@@ -196,9 +196,7 @@ def test_rows_stamped_after_the_days_midnight_are_never_read(tmp_path: Path) -> 
     path = books / "BICOUSDT" / f"{DAY.isoformat()}.parquet"
     frame = pd.read_parquet(path)
     spill = frame.iloc[[-1]].copy()
-    spill["timestamp"] = pd.Timestamp(DAY.isoformat(), tz="UTC") + pd.Timedelta(
-        days=1, milliseconds=7
-    )
+    spill["timestamp"] = pd.Timestamp(DAY.isoformat(), tz="UTC") + np.timedelta64(86_400_007, "ms")
     spill["bid_price_0"] = 9.0  # off the day's grid: reading it would refuse the day
     both = pd.concat([frame, spill], ignore_index=True)
     both.attrs["sequence_gaps"] = 1

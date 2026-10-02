@@ -57,6 +57,7 @@ test that pins it, is in ``docs/market_making_simulator.md``.
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import heapq
 import json
@@ -1342,6 +1343,7 @@ def _run_cells(
                 row["cell"] = cell.label
                 rows[position] = row
                 del result
+                gc.collect()
             del events
     peak = _peak_rss_mb()
     out: list[dict[str, Any]] = []
@@ -1370,8 +1372,9 @@ def run_cells(
 
     The work is cut into jobs of one instrument-day and up to ``cells_per_job``
     cells, so a worker holds one day in memory at a time and loads it once for
-    all its cells. Each day is handed only its slice of ``tapes``. The rows do
-    not depend on ``workers`` or ``cells_per_job``. ``day_guard``, when given,
+    all its cells; with ``workers`` above one, each job runs in a fresh spawned
+    process. Each day is handed only its slice of ``tapes``. The rows do not
+    depend on ``workers`` or ``cells_per_job``. ``day_guard``, when given,
     is called with every day before anything is read, and may refuse them.
     """
     labels = [c.label for c in cells]
@@ -1404,8 +1407,14 @@ def run_cells(
     if workers <= 1:
         batches = [_run_cells(job) for job in jobs]
     else:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            batches = list(pool.map(_run_cells, jobs))
+        # A fresh process per job: memory a day's simulation fragmented is
+        # returned to the system before the next day is loaded, so a worker's
+        # peak is one job's, not the largest of everything it ran.
+        import multiprocessing
+
+        context = multiprocessing.get_context("spawn")
+        with context.Pool(processes=workers, maxtasksperchild=1) as pool:
+            batches = pool.map(_run_cells, jobs, chunksize=1)
     rows = [row for batch in batches for row in batch]
     seen = {name for row in rows for name in row}
     fixed = [*SUMMARY_COLUMNS, *EXTRA_COUNTERS]

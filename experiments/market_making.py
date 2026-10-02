@@ -422,7 +422,7 @@ def reversion_stage(
     # open, one value per day; its median over D is the frozen threshold.
     labels = pd.DatetimeIndex(panel.log_mid.index)
     first = labels[0]
-    if first != pd.Timestamp(d_days[0], tz="UTC") + pd.Timedelta(seconds=5):
+    if first != pd.Timestamp(d_days[0], tz="UTC") + np.timedelta64(5, "s"):
         raise SystemExit(f"the panel starts at {first}, not at the first bin end of D")
     if len(labels) != ROWS_PER_DAY * len(d_days):
         raise SystemExit(f"the panel has {len(labels)} rows, not {ROWS_PER_DAY} a day")
@@ -687,7 +687,9 @@ def main() -> None:
             for one_sided in grids["S4"]["one_sided"]
         ]
         tapes = {"index_return_bp": info["tape"], "lean_trigger_s": info["lean"]}
-        s4_rows_all.append(runner.run(instrument, d_days, cells, tapes, cells_per_job=6))
+        # Three cells a job: a busy instrument-day (XRPUSDT holds about a
+        # million events) then stays well inside a worker's memory budget.
+        s4_rows_all.append(runner.run(instrument, d_days, cells, tapes, cells_per_job=3))
         baseline = Cell("S1", constant(base), config_for(instrument, soft))
         s1_h2_rows.append(tagged(runner.run(instrument, d_days, [baseline]), "S1-h2"))
     s4_rows = pd.concat(s4_rows_all, ignore_index=True)
