@@ -1,0 +1,4 @@
+setting,index,timestamp,statistic,direction,log_odds,threshold,excursion,history_len,step_in_window
+"history 365, online 90",620,2025-09-13,scale,-1,9.356238846247448,9.09,1.02928920200742,365,75
+"history 250, online 60",766,2026-02-06,scale,1,8.742942970219373,7.77,1.1252178854851187,250,36
+"history 250, online 60",955,2026-08-14,scale,-1,7.793946572063153,7.77,1.0030819269064548,143,46

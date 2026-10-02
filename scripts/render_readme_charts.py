@@ -133,6 +133,32 @@ def gross_against_net() -> None:
     )
 
 
+def structural_breaks() -> None:
+    """BTCUSDT daily with the breaks the whitened monitor flagged, from the committed table."""
+    table = pd.read_csv(RESULTS / "structural_breaks_BTCUSDT.csv")
+    thresholds = {
+        column.removeprefix("threshold_"): float(table[column].iloc[0])
+        for column in table.columns
+        if column.startswith("threshold_")
+    }
+    null = pd.read_csv(RESULTS / "structural_breaks_BTCUSDT_null.csv").iloc[0]
+    note = (
+        f"same walk on {int(null['null_paths'])} shuffled copies: "
+        f"{null['null_flags_per_path']:.2f} flag(s) per copy"
+    )
+    plots.both_themes(
+        lambda path: plots.structural_breaks(
+            table,
+            path,
+            thresholds=thresholds,
+            title="BTCUSDT daily: breaks on the whitened stream, history 365, online 90",
+            history_len=365,
+            null_note=note,
+        ),
+        IMAGES / "structural_breaks_BTCUSDT.png",
+    )
+
+
 def main() -> None:
     IMAGES.mkdir(parents=True, exist_ok=True)
     reversion_variants()
@@ -151,6 +177,8 @@ def main() -> None:
     print("strategies done")
     gross_against_net()
     print("gross/net done")
+    structural_breaks()
+    print("structural breaks done")
 
 
 if __name__ == "__main__":

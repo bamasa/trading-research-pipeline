@@ -30,6 +30,7 @@ from typing import Final
 import pandas as pd
 
 from trading_research.data.schema import (
+    BARS_SCHEMA,
     TRADE_SCHEMA,
     Schema,
     SchemaError,
@@ -290,6 +291,63 @@ def validate_trades(df: pd.DataFrame) -> ValidationReport:
                 Severity.ERROR,
                 f"{symbol}: trade_id decreases at {n_back} row(s); the frame is not in exchange order",
                 count=n_back,
+            )
+
+    _report_time_gaps(df, report)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Bars plane
+# ---------------------------------------------------------------------------
+
+
+def validate_bars(df: pd.DataFrame) -> ValidationReport:
+    """Check a bars frame against the bars contract and for usability.
+
+    Beyond the schema: prices positive, ``low <= open, close <= high`` within a
+    bar, the open before the close, and closes strictly increasing in time so
+    that two archives of the same month cannot be concatenated into a frame
+    with every bar twice.
+    """
+    report = ValidationReport(plane="bars", rows=len(df))
+    if not _check_empty(df, report) or not _check_schema(df, BARS_SCHEMA, report):
+        return report
+
+    _check_timestamps(df, report)
+    _check_positive(df, ["open", "high", "low", "close"], report, check="positive_values")
+    _check_positive(df, ["volume"], report, check="positive_values", allow_zero=True)
+
+    inverted = (df["low"] > df[["open", "close"]].min(axis=1)) | (
+        df["high"] < df[["open", "close"]].max(axis=1)
+    )
+    if inverted.any():
+        report.add(
+            "bar_range",
+            Severity.ERROR,
+            f"{int(inverted.sum())} bar(s) whose open or close lies outside [low, high]",
+            count=int(inverted.sum()),
+            examples=tuple(df.index[inverted][:3]),
+        )
+
+    backwards = df["open_time"] >= df["timestamp"]
+    if backwards.any():
+        report.add(
+            "bar_order",
+            Severity.ERROR,
+            f"{int(backwards.sum())} bar(s) that close before they open",
+            count=int(backwards.sum()),
+            examples=tuple(df.index[backwards][:3]),
+        )
+
+    for symbol, group in df.groupby("symbol", sort=False):
+        repeated = int(group["timestamp"].duplicated().sum())
+        if repeated:
+            report.add(
+                "bar_unique",
+                Severity.ERROR,
+                f"{symbol}: {repeated} bar(s) share a close time; the frame holds duplicates",
+                count=repeated,
             )
 
     _report_time_gaps(df, report)
@@ -566,4 +624,6 @@ def validate(
         return validate_trades(df)
     if plane == "book":
         return validate_book(df, depth=depth, sampled=sampled)
-    raise ValueError(f"unknown plane {plane!r}; expected 'trades' or 'book'")
+    if plane == "bars":
+        return validate_bars(df)
+    raise ValueError(f"unknown plane {plane!r}; expected 'trades', 'book' or 'bars'")

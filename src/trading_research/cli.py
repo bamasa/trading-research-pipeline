@@ -32,7 +32,7 @@ from rich.table import Table
 
 from trading_research import __version__
 from trading_research.data import store, synthetic
-from trading_research.data.schema import BOOK_SCHEMA, TRADE_SCHEMA
+from trading_research.data.schema import BARS_SCHEMA, BOOK_SCHEMA, TRADE_SCHEMA
 from trading_research.data.validate import (
     Severity,
     ValidationReport,
@@ -238,9 +238,18 @@ def download(
     kind: Annotated[
         str,
         typer.Option(
-            "--kind", "-k", help="Dataset: 'aggTrades' (trades) or 'bookTicker' (best bid/ask)."
+            "--kind",
+            "-k",
+            help="Dataset: 'aggTrades' (trades), 'bookTicker' (best bid/ask) or 'klines' (bars).",
         ),
     ] = "aggTrades",
+    interval: Annotated[
+        str | None,
+        typer.Option(
+            "--interval",
+            help="Bar length for --kind klines, e.g. '1d' or '1h'. Fetched a month at a time.",
+        ),
+    ] = None,
     market: Annotated[
         str,
         typer.Option(
@@ -292,7 +301,7 @@ def download(
     )
 
     try:
-        spec = ArchiveSpec(market=market, kind=kind, symbol=symbol.upper())  # type: ignore[arg-type]
+        spec = ArchiveSpec(market=market, kind=kind, symbol=symbol.upper(), interval=interval)  # type: ignore[arg-type]
         first = date.fromisoformat(start)
         last = date.fromisoformat(end)
     except ValueError as exc:
@@ -311,7 +320,8 @@ def download(
 
     n_days = (last - first).days + 1
     console.print(
-        f"[bold]{spec.symbol} {spec.kind}[/bold] ({spec.market}), {first} → {last}, {n_days} day(s)"
+        f"[bold]{spec.symbol} {spec.directory}[/bold] ({spec.market}), "
+        f"{first} → {last}, {n_days} day(s)"
     )
     if grid:
         console.print(
@@ -357,7 +367,7 @@ def download(
     converted = [r for r in results if r.output and not r.skipped]
     console.print(
         f"\n[green]{len(converted)} day(s) converted[/green], {rows:,} rows, "
-        f"{downloaded / 1e9:.2f} GB downloaded → [bold]{Path(output) / spec.symbol / spec.kind}[/bold]"
+        f"{downloaded / 1e9:.2f} GB downloaded → [bold]{Path(output) / spec.symbol / spec.directory}[/bold]"
     )
     if failures:
         console.print(
@@ -758,6 +768,209 @@ def retrain_search_cmd(
     console.print(f"\n-> {out}")
 
 
+@app.command("breaks")
+def breaks_cmd(
+    symbol: Annotated[str, typer.Option("--symbol", "-s", help="Instrument.")] = "BTCUSDT",
+    interval: Annotated[str, typer.Option("--interval", help="Bar length, e.g. '1d'.")] = "1d",
+    market: Annotated[str, typer.Option("--market", "-m")] = "futures-um",
+    start: Annotated[
+        str | None, typer.Option("--start", help="First bar, YYYY-MM-DD. Not needed with --prices.")
+    ] = None,
+    end: Annotated[
+        str | None, typer.Option("--end", help="Last bar, inclusive. Not needed with --prices.")
+    ] = None,
+    prices: Annotated[
+        Path | None,
+        typer.Option(
+            "--prices",
+            help="A CSV with 'timestamp' and 'close' columns, instead of fetching bars. "
+            "Needs no network.",
+        ),
+    ] = None,
+    history: Annotated[
+        int, typer.Option("--history", min=50, help="Returns the monitor is fitted on.")
+    ] = 365,
+    online: Annotated[
+        int, typer.Option("--online", min=1, help="Returns streamed before a refit.")
+    ] = 90,
+    statistics: Annotated[
+        str, typer.Option("--statistics", help="Comma-separated: scale, dependence, mean.")
+    ] = "scale,dependence",
+    threshold: Annotated[
+        str | None,
+        typer.Option(
+            "--threshold",
+            help="Log-odds threshold: one number, or per family as 'scale=9,dependence=8'. "
+            "Default: the recorded null calibration.",
+        ),
+    ] = None,
+    calibrate_now: Annotated[
+        bool,
+        typer.Option(
+            "--calibrate", help="Calibrate the thresholds on Gaussian nulls for this setting."
+        ),
+    ] = False,
+    plot: Annotated[
+        bool, typer.Option("--plot", help="Render the figure for both themes (needs matplotlib).")
+    ] = False,
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/breaks"),
+) -> None:
+    """Where a return series stopped behaving as before, and what changed.
+
+    The second regime detector: the series is whitened by its own history
+    (an AR(p) fit, a conditional scale, the innovation distribution) and the
+    Shiryaev-Roberts odds of a change are read per family on the whitened
+    stream — scale, dependence, mean. A break is the first step a family's
+    odds clear a threshold calibrated against a null, and the history is
+    re-anchored there.
+
+    Bars come from Binance's public klines archives, fetched once and kept
+    under data/, or from any CSV of closes with --prices.
+    """
+    import json
+
+    from trading_research.data.ensure import DataUnavailable, ensure_bars, load_bars
+    from trading_research.pipeline.stages import StageManifest
+    from trading_research.validation.changepoint import ChangepointError
+    from trading_research.validation.structural_breaks import (
+        MonitorSpec,
+        calibrate,
+        detect_breaks,
+        log_returns,
+        read_prices,
+    )
+
+    families = tuple(part.strip() for part in statistics.split(",") if part.strip())
+
+    def parse_threshold(text: str) -> float | dict[str, float]:
+        if "=" not in text:
+            try:
+                return float(text)
+            except ValueError as exc:
+                raise typer.BadParameter("--threshold must be a number or name=number,…") from exc
+        out: dict[str, float] = {}
+        for part in text.split(","):
+            name, _, value = part.partition("=")
+            try:
+                out[name.strip()] = float(value)
+            except ValueError as exc:
+                raise typer.BadParameter(f"--threshold: {part!r} is not name=number") from exc
+        return out
+
+    try:
+        if prices is not None:
+            close = read_prices(prices)
+            source = str(prices)
+        else:
+            if start is None or end is None:
+                err_console.print(
+                    "[red]--start and --end are needed unless --prices is given[/red]"
+                )
+                raise typer.Exit(code=2)
+            first, last = _as_date(start, "--start"), _as_date(end, "--end")
+            ensure_bars(
+                symbol,
+                interval,
+                first,
+                last,
+                market=market,  # type: ignore[arg-type]
+                on_progress=lambda line: console.print(f"  [dim]{line}[/dim]"),
+            )
+            bars = load_bars(symbol, interval, start=first, end=last)
+            close = bars.set_index("timestamp")["close"]
+            source = f"binance-{market}-klines-{interval}"
+        returns = log_returns(close)
+
+        level: float | dict[str, float] | None = None
+        if calibrate_now:
+            console.print(f"calibrating on Gaussian nulls for history {history}, online {online}")
+            level = calibrate(history, online, statistics=families)
+        elif threshold is not None:
+            level = parse_threshold(threshold)
+        spec = MonitorSpec(
+            history_len=history, online_len=online, statistics=families, threshold=level
+        )
+        console.print(
+            f"{symbol} {interval}: {len(returns)} returns, {returns.index[0]:%Y-%m-%d} → "
+            f"{returns.index[-1]:%Y-%m-%d}; history {history}, online {online}, "
+            f"families {', '.join(families)}"
+        )
+        result = detect_breaks(
+            returns, spec, on_progress=lambda line: console.print(f"  [dim]{line}[/dim]")
+        )
+    except (ChangepointError, DataUnavailable, ImportError) as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    table = result.table()
+    rendered = Table(title=f"Breaks flagged on {symbol} {interval}", show_edge=False)
+    for column in ("date", "statistic", "direction", "log_odds", "threshold", "excursion"):
+        rendered.add_column(column, justify="left" if column in ("date", "statistic") else "right")
+    rendered.add_column("history", justify="right")
+    rendered.add_column("step", justify="right")
+    for _, row in table.iterrows():
+        rendered.add_row(
+            f"{row['timestamp']:%Y-%m-%d}",
+            str(row["statistic"]),
+            "up" if row["direction"] > 0 else "down",
+            f"{row['log_odds']:.2f}",
+            f"{row['threshold']:.2f}",
+            f"{row['excursion']:.2f}",
+            str(row["history_len"]),
+            str(row["step_in_window"]),
+        )
+    console.print(rendered)
+    if table.empty:
+        console.print("[green]no break flagged[/green]")
+    console.print(
+        f"\n{len(result.windows)} window(s) walked; thresholds "
+        + ", ".join(f"{k} {v:.2f}" for k, v in result.thresholds.items())
+    )
+
+    out = Path(output)
+    out.mkdir(parents=True, exist_ok=True)
+    annotated = result.annotate(returns)
+    annotated.to_csv(out / "steps.csv", index=False)
+    table.to_csv(out / "breaks.csv", index=False)
+    (out / "thresholds.json").write_text(
+        json.dumps(result.thresholds, indent=2) + "\n", encoding="utf-8"
+    )
+    StageManifest(
+        stage="breaks",
+        inputs={"source": source, "symbol": symbol, "interval": interval, "returns": len(returns)},
+        params={
+            "history_len": history,
+            "online_len": online,
+            "statistics": list(families),
+            "thresholds": result.thresholds,
+        },
+        outputs={
+            "breaks": len(result.breaks),
+            "windows": len(result.windows),
+            "flagged": [f"{t:%Y-%m-%d}" for t in table.get("timestamp", [])],
+        },
+    ).write(out)
+    if plot:
+        try:
+            from trading_research.reporting import plots
+
+            written = plots.both_themes(
+                lambda path: plots.structural_breaks(
+                    annotated,
+                    path,
+                    thresholds=result.thresholds,
+                    title=f"{symbol} {interval}: breaks on the whitened stream",
+                    history_len=history,
+                ),
+                out / "breaks.png",
+            )
+        except ImportError as exc:
+            err_console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+        console.print(f"figure -> {', '.join(str(p) for p in written)}")
+    console.print(f"\n-> {out}")
+
+
 @app.command("exit-search")
 def exit_search_cmd(
     prepared: Annotated[Path, typer.Option("--prepared")] = Path("artifacts/prepared"),
@@ -1135,13 +1348,15 @@ def download_book_cmd(
 @app.command("describe-schema")
 def describe_schema(
     plane: Annotated[
-        str, typer.Argument(help="Which contract to print: 'trades' or 'book'.")
+        str, typer.Argument(help="Which contract to print: 'trades', 'book' or 'bars'.")
     ] = "trades",
 ) -> None:
     """Print a data contract, so the expected columns and units are never guesswork."""
-    schema = {"trades": TRADE_SCHEMA, "book": BOOK_SCHEMA}.get(plane)
+    schema = {"trades": TRADE_SCHEMA, "book": BOOK_SCHEMA, "bars": BARS_SCHEMA}.get(plane)
     if schema is None:
-        err_console.print(f"[red]Unknown plane[/red] {plane!r}; expected 'trades' or 'book'")
+        err_console.print(
+            f"[red]Unknown plane[/red] {plane!r}; expected 'trades', 'book' or 'bars'"
+        )
         raise typer.Exit(code=2)
 
     table = Table(title=f"{schema.name} (schema version {schema.version})", title_justify="left")

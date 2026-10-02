@@ -44,10 +44,10 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > models from parameter-free rules to dilated convolutions, bagging, stacking on
 > forward-chained out-of-fold predictions, a bias-variance decomposition that
 > says which ensemble is worth using, calibration, cost-aware backtesting, a
-> queue-level maker model, regime-break detection, an information audit that
+> queue-level maker model, two regime-break detectors, an information audit that
 > measures each data source before a model is chosen, successive-halving search
 > over thirteen axes, and the experiment script behind every published table.
-> 746 tests, a disclosure audit in CI.
+> 798 tests, a disclosure audit in CI.
 
 ---
 
@@ -376,6 +376,49 @@ not moves that merely happen.
 from the label's horizon rather than guessed. A label at *t* reads prices to
 *t+H*, so the tail of every training block is dropped.
 
+**Regime monitoring.** A model fitted on one stretch of market is expected to
+apply until the market changes, and a fixed retraining cadence is a guess about
+when that is. Two detectors say instead when the data changed. The first
+([`validation/changepoint.py`](src/trading_research/validation/changepoint.py))
+reads book statistics in non-overlapping blocks at tick frequency. The second
+([`validation/structural_breaks.py`](src/trading_research/validation/structural_breaks.py))
+comes from [adia-structural-break](https://github.com/bamasa/adia-structural-break),
+the author's solution to the ADIA Lab Structural Break Challenge, Real-Time
+Edition (CrunchDAO, 2026; 0.6299 TS-AUC at the close of submissions, about rank 160
+of 1,716 registered participants on the public leaderboard),
+installed as a dependency rather than copied: the return series is whitened by
+its own history — an AR(p) fit by BIC, a conditional scale and the empirical
+distribution of the innovations — and every test runs on the whitened stream,
+with Shiryaev-Roberts odds of a change read per family (scale, dependence,
+mean). Thresholds are calibrated against a null, not chosen by eye; the figure
+below is BTCUSDT daily from January 2024, with the breaks the monitor flags, the
+odds behind them, and the window resets that keep the odds from accumulating
+forever. `uv sync --extra breaks`, then
+`trading-research breaks --symbol BTCUSDT --interval 1d --start 2024-01-01 --end 2026-09-30 --plot`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/structural_breaks_BTCUSDT_dark.png">
+  <img alt="BTCUSDT daily: breaks flagged on the whitened stream, with the family log-odds" src="docs/images/structural_breaks_BTCUSDT_light.png">
+</picture>
+
+On 1,003 daily returns the walk opens six windows and flags one break: **13
+September 2025, scale, downward** — the odds of a fall in variance cleared the
+calibrated threshold (9.36 against 9.09) seventy-five days into the window that
+opened on 30 June, after a near miss on 29 June (8.96). Monitoring then paused
+until the re-anchored history reached a third of a year, which is the shaded
+stretch. The same walk over forty shuffled copies of the returns — the same
+marginal distribution, no regime — flags one copy, so the null reading is one
+flag in forty against one on the real series; the shorter-memory setting
+(history 250, online 60) flags two scale breaks, 6 February 2026 up and 14
+August 2026 down, at six flags in forty on its null, and is reported beside
+it in [`experiments/results/`](experiments/results/structural_breaks_BTCUSDT_breaks.csv)
+rather than preferred. No dependence break is flagged on this series at either
+setting.
+
+What the figure does not claim: that refitting at these breaks would have
+improved any trading result. That comparison belongs to the refit-policy axis of
+`grand_search.py` and is listed under the roadmap.
+
 **5. Fit and choose the model.** Rule-based strategies (momentum, mean
 reversion, order-flow, breakout) run through the identical machinery as the
 learned ones (logistic, gradient boosting, a dilated causal network) and their
@@ -570,9 +613,11 @@ else.
 **Public exchange data.** Two venues, for two different things.
 
 *Binance* publishes best bid and ask, aggregated trades, open interest and
-funding as daily archives. Used for the instrument screen, which needs breadth
-rather than depth. Note that daily `bookTicker` archives stop after 30 March
-2024, which is why the screen can be measured on two windows and not more.
+funding as daily archives, and bars (`klines`) at every interval as monthly
+ones. Used for the instrument screen, which needs breadth rather than depth,
+and — the bars — for regime monitoring, which needs years rather than days.
+Note that daily `bookTicker` archives stop after 30 March 2024, which is why the
+screen can be measured on two windows and not more.
 
 *Bybit* publishes the **full order book** as an incremental stream — a snapshot
 and its deltas — which reconstructs to ten levels a side, and publishes trade
@@ -599,13 +644,16 @@ are deliberate:
 
 ```python
 from datetime import date
-from trading_research.data.ensure import ensure_book, ensure_universe
+from trading_research.data.ensure import ensure_bars, ensure_book, ensure_universe
 
 # ten levels a side, about two minutes of replay per day
 ensure_book("DOGEUSDT", date(2024, 2, 1), date(2024, 3, 10))
 
 # top of book only for a cross-section: eleven seconds per instrument-day
 ensure_universe(["BTCUSDT", "ETHUSDT"], date(2024, 2, 1), date(2024, 3, 10))
+
+# daily bars for regime monitoring: a few kilobytes a month
+ensure_bars("BTCUSDT", "1d", date(2024, 1, 1), date(2026, 9, 30))
 ```
 
 The venue rate-limits sustained downloading. A stalled fetch is the venue, not
@@ -713,8 +761,13 @@ Done:
 - [x] **A queue-level maker model**: an order joins behind the size resting at
       its price and fills only once that much opposing volume has traded
       through. Measures adverse selection rather than assuming a figure for it
-- [x] Regime-break detection (CUSUM over four block statistics), with its
-      threshold calibrated against forty synthetic nulls rather than by eye
+- [x] Regime-break detection: a CUSUM over four block statistics of the book at
+      tick frequency, with its threshold calibrated against forty synthetic
+      nulls rather than by eye
+- [x] Regime monitoring on the whitened stream, from the ADIA structural-break
+      solution, as a dependency: scale, dependence and mean breaks on any
+      return series, thresholds calibrated against Gaussian nulls, the history
+      re-anchored at each break
 - [x] Randomised tree ensembles, a second booster, bagging over stretches of
       history, voting with a diversity figure, and stacking on forward-chained
       out-of-fold predictions
@@ -753,6 +806,8 @@ Next, and in this order, because the first one decides whether the rest matters:
       execution everywhere else may work in its favour here.
 - [ ] A volume-weighted index rather than an equal-weighted one, and the same
       question asked of order flow rather than price
+- [ ] Refitting at the breaks the whitened monitor flags, against the fixed
+      cadences of §10, on the refit-policy axis `grand_search.py` already has
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:

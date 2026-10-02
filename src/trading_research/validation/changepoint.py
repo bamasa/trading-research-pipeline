@@ -273,12 +273,21 @@ def segment(
     bounds and breaks stay consistent with each other.
     """
     breaks = detect(mid, spread_bp, **kwargs)  # type: ignore[arg-type]
-    total = len(np.asarray(mid))
+    return cut_at_breaks(breaks, len(np.asarray(mid)), minimum_rows=minimum_rows)
 
+
+def cut_at_breaks(breaks: Sequence[Break], total: int, *, minimum_rows: int) -> Segments:
+    """Turn a list of breaks into ``Segments`` over a series of ``total`` rows.
+
+    Shared by both detectors so that a refit-at-breaks policy cuts the series
+    the same way whichever found the breaks. Breaks closer than ``minimum_rows``
+    to the previous cut are dropped, and so is a final cut that would leave a
+    tail too short to fit on.
+    """
     kept: list[Break] = []
     cuts: list[int] = []
     previous = 0
-    for b in breaks:
+    for b in sorted(breaks, key=lambda b: b.index):
         if b.index - previous < minimum_rows:
             continue
         cuts.append(b.index)

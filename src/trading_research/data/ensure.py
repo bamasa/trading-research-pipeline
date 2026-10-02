@@ -36,11 +36,18 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from trading_research.data.binance import Market
 
 #: Where each kind of data lives, relative to the repository root.
 BOOK_ROOT = Path("data/book")
 UNIVERSE_ROOT = Path("data/universe")
 TRADES_ROOT = Path("data/trades")
+BARS_ROOT = Path("data/bars")
 
 
 class DataUnavailable(RuntimeError):
@@ -69,9 +76,14 @@ def _days(start: date, end: date) -> list[date]:
     return [start + timedelta(days=i) for i in range((end - start).days + 1)]
 
 
-def plan(symbol: str, start: date, end: date, root: Path) -> FetchPlan:
-    """Which days of ``symbol`` are on disk and which are not."""
-    directory = root / symbol
+def plan(symbol: str, start: date, end: date, root: Path, *, subdirectory: str = "") -> FetchPlan:
+    """Which days of ``symbol`` are on disk and which are not.
+
+    ``subdirectory`` is for kinds that nest below the symbol — bars live under
+    ``<root>/<symbol>/klines-<interval>/`` so that two intervals of the same
+    instrument cannot be confused for one another.
+    """
+    directory = root / symbol / subdirectory if subdirectory else root / symbol
     out = FetchPlan(symbol=symbol)
     for day in _days(start, end):
         path = directory / f"{day.isoformat()}.parquet"
@@ -241,3 +253,89 @@ def ensure_universe(
         dropped = sorted(set(symbols) - set(usable))
         on_progress(f"  no data at all for: {', '.join(dropped)}")
     return usable
+
+
+def ensure_bars(
+    symbol: str,
+    interval: str,
+    start: date,
+    end: date,
+    *,
+    root: Path = BARS_ROOT,
+    market: Market = "futures-um",
+    dry_run: bool = False,
+    on_progress: Callable[[str], None] | None = print,
+) -> FetchPlan:
+    """Closed bars at ``interval`` for one instrument, from Binance's archives.
+
+    The coarse plane: a year of daily bars is a few hundred rows and a few
+    kilobytes, fetched a month at a time and cut into the same one-file-per-day
+    layout as everything else so the plan, resume and skip logic is shared. The
+    month Binance has not closed yet falls back to its daily archives.
+    """
+    from trading_research.data.binance import ArchiveSpec, download_range
+
+    spec = ArchiveSpec(market=market, kind="klines", symbol=symbol, interval=interval)
+    wanted = plan(symbol, start, end, root, subdirectory=spec.directory)
+    if wanted.complete:
+        return wanted
+    if on_progress:
+        on_progress(f"{wanted.describe()} ({interval} bars)")
+    if dry_run:
+        return wanted
+
+    def fetch(name: str, day: date) -> None:
+        # download_range records a missing archive as a skipped day rather than
+        # raising; the plan needs the failure to count it as unavailable.
+        results = download_range(spec, day, day, root, keep_raw=True)
+        if not results or results[0].output is None:
+            raise DataUnavailable(results[0].skipped if results else f"{name} {day}: no result")
+
+    fetched, unavailable = _fetch_days(symbol, wanted.missing, fetch, on_progress=on_progress)
+    if fetched == 0 and not wanted.present:
+        raise DataUnavailable(
+            f"no {interval} bars for {symbol} between {start} and {end}; "
+            f"{len(unavailable)} day(s) unavailable from the archive"
+        )
+    return plan(symbol, start, end, root, subdirectory=spec.directory)
+
+
+def load_bars(
+    symbol: str,
+    interval: str,
+    *,
+    root: Path = BARS_ROOT,
+    start: date | None = None,
+    end: date | None = None,
+) -> pd.DataFrame:
+    """Read the bars :func:`ensure_bars` left on disk into one contract frame.
+
+    Days are selected by file name, so a span can be read without touching the
+    files outside it. The result satisfies ``BARS_SCHEMA``, is ordered by close
+    and carries each bar once, whichever archives it was cut from.
+    """
+    import pandas as pd
+
+    from trading_research.data.schema import BARS_SCHEMA
+
+    directory = root / symbol / f"klines-{interval}"
+    files = sorted(directory.glob("*.parquet"))
+    if start is not None:
+        files = [f for f in files if date.fromisoformat(f.stem) >= start]
+    if end is not None:
+        files = [f for f in files if date.fromisoformat(f.stem) <= end]
+    if not files:
+        raise DataUnavailable(
+            f"no {interval} bars for {symbol} under {directory}; fetch them first"
+        )
+
+    frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    for column in ("symbol", "source"):
+        frame[column] = frame[column].astype("string")
+    frame = (
+        frame.sort_values("timestamp", kind="stable")
+        .drop_duplicates(subset=["symbol", "timestamp"], keep="last")
+        .reset_index(drop=True)
+    )
+    BARS_SCHEMA.validate(frame)
+    return frame

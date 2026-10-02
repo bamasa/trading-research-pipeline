@@ -2157,6 +2157,17 @@ wheels = [
 ]
 
 [[package]]
+name = "structural-break"
+version = "0.1.0"
+source = { git = "https://github.com/bamasa/adia-structural-break?tag=v0.1.0#0636813fdd4ccc9f25490d97f62d6fccecb01881" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+
+[[package]]
 name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2291,6 +2302,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+breaks = [
+    { name = "structural-break" },
+]
 deep = [
     { name = "torch" },
 ]
@@ -2339,12 +2353,13 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6,<1" },
     { name = "scikit-learn", marker = "extra == 'models'", specifier = ">=1.4,<2" },
     { name = "skl2onnx", marker = "extra == 'export'", specifier = ">=1.16,<2" },
+    { name = "structural-break", marker = "extra == 'breaks'", git = "https://github.com/bamasa/adia-structural-break?tag=v0.1.0" },
     { name = "torch", marker = "extra == 'deep'", specifier = ">=2.2,<3" },
     { name = "typer", specifier = ">=0.12,<1" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6" },
     { name = "xgboost", marker = "extra == 'models'", specifier = ">=2.0,<4" },
 ]
-provides-extras = ["models", "report", "deep", "fast", "export", "dev"]
+provides-extras = ["models", "report", "deep", "fast", "export", "breaks", "dev"]
 
 [[package]]
 name = "triton"

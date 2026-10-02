@@ -1,13 +1,13 @@
-"""Data contracts for trade events and order-book snapshots.
+"""Data contracts for trade events, order-book snapshots and bars.
 
 Everything downstream — features, labels, splits, the backtest — reads one of
-the two frames defined here. Pinning the contract in one place is what lets the
+the frames defined here. Pinning the contract in one place is what lets the
 rest of the pipeline stay honest: a feature cannot quietly depend on a column
 that only exists for one data source, and a new source cannot silently change
 the meaning of a column.
 
-Two planes, deliberately separate
----------------------------------
+Three planes, deliberately separate
+-----------------------------------
 ``TradeSchema``
     One row per trade (or aggregated trade). Available from public exchange
     archives, so this is the plane the first real-data experiments run on.
@@ -17,6 +17,11 @@ Two planes, deliberately separate
     plane needs a dedicated collector. It is defined and exercised from day one
     against synthetic data, so that book features and their tests exist before
     the collector does rather than after.
+``BARS_SCHEMA``
+    One row per closed bar at a stated interval — the coarse plane regime
+    monitoring reads, since a year of market is a few hundred daily bars and
+    tens of millions of book updates. Its ``timestamp`` is the bar's close, so
+    a value at ``timestamp`` has seen the whole bar and nothing after it.
 
 Conventions that hold for both planes
 -------------------------------------
@@ -43,7 +48,7 @@ SCHEMA_VERSION: Final = "1.0"
 Side = Literal["bid", "ask"]
 
 #: Which plane a frame belongs to.
-Plane = Literal["trades", "book"]
+Plane = Literal["trades", "book", "bars"]
 
 
 class SchemaError(ValueError):
@@ -295,6 +300,40 @@ def infer_depth(df: pd.DataFrame) -> int:
 #: Convenience contract for the depth used by the synthetic generator and demo.
 DEFAULT_BOOK_DEPTH: Final = 10
 BOOK_SCHEMA: Final = book_schema(DEFAULT_BOOK_DEPTH)
+
+
+# ---------------------------------------------------------------------------
+# Bars plane
+# ---------------------------------------------------------------------------
+
+BARS_SCHEMA: Final = Schema(
+    name="bars",
+    plane="bars",
+    columns=(
+        Column(
+            "timestamp",
+            "datetime64[ns, UTC]",
+            "Close of the bar, timezone-aware UTC: the moment the whole bar became "
+            "observable. A feature stamped here has seen the bar and nothing after it.",
+            "UTC",
+        ),
+        Column("open_time", "datetime64[ns, UTC]", "Open of the bar.", "UTC"),
+        Column("symbol", "string", "Instrument identifier, e.g. BTCUSDT.", ""),
+        Column("open", "float64", "First trade price in the bar.", "quote"),
+        Column("high", "float64", "Highest trade price in the bar.", "quote"),
+        Column("low", "float64", "Lowest trade price in the bar.", "quote"),
+        Column("close", "float64", "Last trade price in the bar.", "quote"),
+        Column("volume", "float64", "Base volume traded in the bar.", "base"),
+        Column(
+            "source",
+            "string",
+            "Where the row came from, e.g. 'binance-futures-um-klines-1d'. The "
+            "interval is part of the tag so frames at different frequencies "
+            "cannot be concatenated by accident.",
+            "",
+        ),
+    ),
+)
 
 
 # ---------------------------------------------------------------------------
