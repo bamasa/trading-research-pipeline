@@ -48,6 +48,7 @@ BOOK_ROOT = Path("data/book")
 UNIVERSE_ROOT = Path("data/universe")
 TRADES_ROOT = Path("data/trades")
 BARS_ROOT = Path("data/bars")
+FUNDING_ROOT = Path("data/funding")
 
 
 class DataUnavailable(RuntimeError):
@@ -186,6 +187,43 @@ def ensure_trades(
             f"{len(unavailable)} day(s) unavailable"
         )
     return plan(symbol, start, end, root)
+
+
+def ensure_funding(
+    symbol: str,
+    start: date,
+    end: date,
+    *,
+    root: Path = FUNDING_ROOT,
+    dry_run: bool = False,
+    on_progress: Callable[[str], None] | None = print,
+) -> FetchPlan:
+    """Bybit funding settlements, which a position held through one pays.
+
+    Not an archive: the venue serves funding from its public REST endpoint,
+    newest first, so the missing days are fetched as one span, from the first
+    missing day to the last, and written a file per day. A day the venue has no
+    settlement for stays missing.
+    """
+    from trading_research.data.bybit_funding import download_range
+
+    wanted = plan(symbol, start, end, root)
+    if wanted.complete:
+        return wanted
+    if on_progress:
+        on_progress(f"{wanted.describe()} (funding)")
+    if dry_run:
+        return wanted
+
+    try:
+        download_range(symbol, wanted.missing[0], wanted.missing[-1], root)
+    except Exception as exc:  # the venue refusing is reported like a missing day
+        if on_progress:
+            on_progress(f"  {symbol}: funding unavailable ({type(exc).__name__})")
+    refreshed = plan(symbol, start, end, root)
+    if not refreshed.present:
+        raise DataUnavailable(f"no funding history for {symbol} between {start} and {end}")
+    return refreshed
 
 
 def _fetch_one_top_of_book(job: tuple[str, date, Path]) -> tuple[str, date, bool]:

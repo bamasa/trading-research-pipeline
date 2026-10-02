@@ -53,8 +53,22 @@ def parse(raw: bytes) -> pd.DataFrame:
     ``side`` column is the aggressor's side, not the maker's — the opposite of
     Binance's ``is_buyer_maker``, and the kind of detail that inverts a result
     silently.
+
+    The sort is **stable**: prints sharing a timestamp keep the order the
+    archive wrote them in. Distinct timestamps are only a third to two thirds of
+    a day's prints, so ties are the norm, and pandas' default sort is free to
+    shuffle them — a resting order's fills would then depend on the sorting
+    algorithm. Bybit's ``trdMatchID`` is kept as ``match_id`` when the archive
+    carries it, so a print can be traced back to the venue's own record. Files
+    written before this change have neither property; the market-making loader
+    imposes its own deterministic order within a timestamp, so it does not
+    depend on either.
     """
-    frame = pd.read_csv(io.BytesIO(raw), usecols=["timestamp", "side", "size", "price"])
+    wanted = {"timestamp", "side", "size", "price", "trdMatchID"}
+    frame = pd.read_csv(io.BytesIO(raw), usecols=lambda column: column in wanted)
+    missing = sorted({"timestamp", "side", "size", "price"} - set(frame.columns))
+    if missing:
+        raise BybitTradesError(f"archive lacks columns {missing}")
     if frame.empty:
         raise BybitTradesError("archive contained no rows")
     out = pd.DataFrame(
@@ -65,7 +79,9 @@ def parse(raw: bytes) -> pd.DataFrame:
             "aggressor": (frame["side"].astype("string") == "Buy").map({True: 1, False: -1}),
         }
     )
-    return out.sort_values("timestamp").reset_index(drop=True)
+    if "trdMatchID" in frame.columns:
+        out["match_id"] = frame["trdMatchID"].astype("string")
+    return out.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
 def download_day(symbol: str, day: date, out_dir: Path | str, *, timeout: float = 120.0) -> Path:
@@ -115,7 +131,32 @@ def download_range(
     return written
 
 
+def day_path(symbol: str, day: date, root: Path | str) -> Path:
+    """Where :func:`download_day` writes one instrument-day."""
+    return Path(root) / symbol / f"{day.isoformat()}.parquet"
+
+
+def load_day(symbol: str, day: date, root: Path | str) -> pd.DataFrame:
+    """One instrument-day of prints, without touching any other day.
+
+    The unit the market-making simulator works in: it reads one day, simulates
+    it and lets it go, so its memory is one day's prints however long the span.
+    A missing or empty file raises rather than returning an empty frame, since
+    a day without prints is a day that cannot be simulated, not a quiet one.
+    """
+    path = day_path(symbol, day, root)
+    if not path.exists() or path.stat().st_size == 0:
+        raise BybitTradesError(f"no trades for {symbol} on {day} under {root}")
+    return pd.read_parquet(path)
+
+
 def load(symbol: str, root: Path | str) -> pd.DataFrame:
+    """Every day of one instrument's prints, concatenated.
+
+    Memory grows with the span: BTCUSDT runs to about 110 million rows over the
+    days on disk here, several gigabytes once read. Anything that can work a
+    day at a time should use :func:`load_day` instead.
+    """
     files = sorted((Path(root) / symbol).glob("*.parquet"))
     if not files:
         raise BybitTradesError(f"no trades for {symbol} under {root}")

@@ -184,3 +184,63 @@ def test_loading_bars_reads_the_span_once_in_order(tmp_path: Path) -> None:
     assert list(bars["close"]) == [100.0, 101.0]
     with pytest.raises(DataUnavailable, match="no 1h bars"):
         load_bars("BTCUSDT", "1h", root=tmp_path)
+
+
+def test_funding_is_planned_and_skipped_like_the_rest(tmp_path: Path) -> None:
+    from trading_research.data.ensure import ensure_funding
+
+    _write(tmp_path, "BICOUSDT", ["2024-02-01", "2024-02-02"])
+    complete = ensure_funding(
+        "BICOUSDT", date(2024, 2, 1), date(2024, 2, 2), root=tmp_path, on_progress=None
+    )
+    assert complete.complete
+
+    said: list[str] = []
+    planned = ensure_funding(
+        "BICOUSDT",
+        date(2024, 2, 1),
+        date(2024, 2, 4),
+        root=tmp_path,
+        dry_run=True,
+        on_progress=said.append,
+    )
+    assert [d.isoformat() for d in planned.missing] == ["2024-02-03", "2024-02-04"]
+    assert said and "(funding)" in said[0]
+
+
+def test_only_the_missing_span_of_funding_is_fetched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import trading_research.data.bybit_funding as funding
+    from trading_research.data.ensure import ensure_funding
+
+    _write(tmp_path, "BICOUSDT", ["2024-02-01"])
+    asked: list[tuple[date, date]] = []
+
+    def fake(symbol: str, start: date, end: date, root: Path) -> list[Path]:
+        asked.append((start, end))
+        _write(root, symbol, ["2024-02-02", "2024-02-03"])
+        return []
+
+    monkeypatch.setattr(funding, "download_range", fake)
+    result = ensure_funding(
+        "BICOUSDT", date(2024, 2, 1), date(2024, 2, 3), root=tmp_path, on_progress=None
+    )
+    assert asked == [(date(2024, 2, 2), date(2024, 2, 3))]
+    assert result.complete
+
+
+def test_a_venue_that_refuses_funding_raises_when_nothing_is_here(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import trading_research.data.bybit_funding as funding
+    from trading_research.data.ensure import ensure_funding
+
+    def refuse(*args: object, **kwargs: object) -> list[Path]:
+        raise funding.BybitFundingError("403")
+
+    monkeypatch.setattr(funding, "download_range", refuse)
+    with pytest.raises(DataUnavailable, match="no funding"):
+        ensure_funding(
+            "NOPEUSDT", date(2024, 2, 1), date(2024, 2, 2), root=tmp_path, on_progress=None
+        )

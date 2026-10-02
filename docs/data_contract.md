@@ -66,6 +66,18 @@ the meaning of every order-flow feature without making anything fail.
 aggressor and signed flow is **negative**. Use `schema.signed_quantity(df)`
 rather than rederiving it.
 
+### Bybit prints and funding
+
+Bybit's prints (`data/bybit_trades.py`) are stored a file per instrument-day
+with `timestamp`, `price`, `size` and `aggressor` (+1 a buyer crossed, -1 a
+seller), and, for archives downloaded after the market-making simulator was
+added, the venue's `match_id`. Rows are sorted stably by time, so prints sharing
+a timestamp keep the archive's order; files written earlier may not have, and the
+market-making loader imposes its own sweep order within a timestamp rather
+than relying on either. Funding settlements (`data/bybit_funding.py`) are a
+file per instrument-day with `timestamp` and `rate` (a fraction per settlement;
+positive means longs pay). Both are read one day at a time by `load_day`.
+
 ## Book
 
 Per snapshot: `timestamp`, `symbol`, `sequence_id`, `source`, and for each level
