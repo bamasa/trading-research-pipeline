@@ -23,7 +23,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras --no-extra breaks
+      - run: uv sync --all-extras
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync mypy
@@ -40,7 +40,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras --no-extra breaks --python ${{ matrix.python-version }}
+      - run: uv sync --all-extras --python ${{ matrix.python-version }}
       - run: uv run --no-sync pytest --cov --cov-report=term-missing
 
   demo:
@@ -51,7 +51,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras --no-extra breaks
+      - run: uv sync --all-extras
       - name: Generate and validate the synthetic demo dataset
         run: |
           uv run --no-sync trading-research generate-demo-data --output data/demo
