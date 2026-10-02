@@ -20,12 +20,14 @@ statement about how a market behaves. It is not a position.
 
 ## Status meanings
 
-**Tally: one conditional result, four killed, two artefacts.** Every candidate
-met the test it named in advance. One survived as a statement about a market
-state rather than as a strategy; the rest did not survive at all.
+**Tally: one conditional result, four killed, two artefacts; three hypotheses
+pre-registered and not yet tested.** Every tested candidate met the test it
+named in advance. One survived as a statement about a market state rather than
+as a strategy; the rest did not survive at all.
 
 | Status | Meaning |
 |---|---|
+| **pre-registered** | Hypothesis, metric and kill conditions committed before any code or number; not yet tested |
 | **candidate** | Positive on a held-out block; has not yet met data neither block saw |
 | **conditional** | Holds under a stated, measured condition — and fails outside it, which was also measured |
 | **confirmed** | Survived a run on days chosen after the configuration was frozen, unconditionally |
@@ -144,3 +146,31 @@ comparable to a clean forward label.
 column was missing, and an empty dict masks nothing — so three instrument-wide
 searches ran ungated while reporting a gate axis. A test asserted the empty dict
 as correct behaviour. Both fixed.
+
+---
+
+## Pre-registered
+
+### Market making on public Bybit data
+
+**Status: pre-registered.** Registered in
+[`preregistration/market_making.md`](preregistration/market_making.md), with the
+values the code will read in [`configs/mm_prereg.yaml`](../configs/mm_prereg.yaml),
+before any market-making code existed and before any market-making number was
+computed on any block. A two-sided quoter with inventory limits, simulated in
+event time with fills only from trade prints. Three hypotheses, four tests in one
+Holm family, each with its kill conditions written there:
+
+- **H1, inside the spread.** Quoting one tick inside a wide spread earns a
+  positive daily net on the held-out fortnight, and more than the same quoter
+  without the inside rule.
+- **H2, the reversion state.** Leaning quotes against the index's ten-minute
+  move earns more than not leaning (H2.1), and passive execution of the frozen
+  reversion signal beats taker execution on the same triggers (H2.2) — the maker
+  case for the conditional result above. Both are predicted to fail where the
+  state is absent.
+- **H3, the regime guard.** Pulling or widening quotes after a regime-break flag
+  earns more than the quoter it guards.
+
+Every verdict must also hold under pessimistic cancellation attribution, must
+not be a funding result, and must not be inventory drift.
