@@ -1,0 +1,17 @@
+stage,wall_s
+funding,0.0
+screen,17.0
+reversion tape,14.6
+flags,33.9
+search S1,370.5
+search S2,1111.0
+chosen strategies,13.6
+S3,40.2
+S4,308.0
+X1,28.2
+power,0.0
+total,1937.0
+"peak RSS, any simulation worker (MB)",1671.0
+"peak RSS, any worker process (MB)",1740.0
+"peak RSS, driver (MB)",1417.0
+workers,8.0

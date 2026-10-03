@@ -1,0 +1,2 @@
+symbol,flags,flags_per_day,testable_K3,guard_share_15min,guard_share_60min,guard_share_240min,flags_changepoint:autocorrelation,flags_changepoint:intensity,flags_changepoint:spread,flags_changepoint:volatility,flags_structural_breaks:dependence,flags_structural_breaks:scale
+BICOUSDT,222,8.88,True,0.08814259259259259,0.32380416666666667,0.8292305509259259,16,31,22,30,6,117
