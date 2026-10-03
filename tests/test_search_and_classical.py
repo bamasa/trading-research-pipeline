@@ -16,6 +16,7 @@ from trading_research.models.classical import MAX_CONFIDENCE, NEUTRAL, Breakout,
 from trading_research.pipeline.stages import build_model
 from trading_research.validation.search import (
     SearchError,
+    neighbourhood_scores,
     sample_configurations,
     successive_halving,
 )
@@ -121,6 +122,63 @@ def test_the_summary_reports_the_saving() -> None:
 
 
 SPACE = {"a": [1, 2, 3, 4], "b": ["x", "y", "z"], "c": [True, False]}
+
+
+def test_a_batch_scorer_runs_the_same_search() -> None:
+    quality = {c: float(i % 7) for i, c in enumerate("abcdefghijklmn")}
+    one_by_one = successive_halving(list(quality), scorer(quality, noise=3.0), budgets=(2, 4, 8))
+    single = scorer(quality, noise=3.0)
+    calls: list[int] = []
+
+    def batch(alive, budget):
+        calls.append(len(alive))
+        return [single(c, budget) for c in alive]
+
+    batched = successive_halving(list(quality), score_batch=batch, budgets=(2, 4, 8))
+    assert batched.best == one_by_one.best
+    pd.testing.assert_frame_equal(batched.table, one_by_one.table)
+    assert calls == [rung.candidates for rung in batched.rungs]
+
+
+def test_a_batch_scorer_may_report_a_failed_candidate() -> None:
+    quality = {"a": 1.0, "b": 2.0, "c": 3.0}
+    single = scorer(quality)
+
+    def batch(alive, budget):
+        return [ValueError("no data") if c == "c" else single(c, budget) for c in alive]
+
+    outcome = successive_halving(list(quality), score_batch=batch, budgets=(1, 2))
+    assert outcome.best == "b"
+    assert "ValueError: no data" in outcome.table["skipped"].dropna().tolist()[0]
+    with pytest.raises(SearchError, match="exactly one"):
+        successive_halving(list(quality), scorer(quality), score_batch=batch)
+
+
+def test_the_neighbourhood_is_the_median_of_the_block_around_a_cell() -> None:
+    rows = [
+        {"x": x, "y": y, "value": float(10 * x + y)} for x in (1, 2, 3) for y in (0.5, 1.0, 2.0)
+    ]
+    table = pd.DataFrame(rows)
+    table.loc[(table["x"] == 2) & (table["y"] == 1.0), "value"] = 100.0  # an isolated peak
+    scores = neighbourhood_scores(table, ["x", "y"], "value")
+    centre = table.index[(table["x"] == 2) & (table["y"] == 1.0)][0]
+    corner = table.index[(table["x"] == 1) & (table["y"] == 0.5)][0]
+    # The centre's block is all nine cells; its median ignores its own outlier.
+    assert scores[centre] == pytest.approx(np.median(table["value"]))
+    # A corner's block is the four cells around it.
+    block = table[(table["x"] <= 2) & (table["y"] <= 1.0)]["value"]
+    assert scores[corner] == pytest.approx(np.median(block))
+
+
+def test_cells_not_measured_do_not_enter_a_neighbourhood() -> None:
+    table = pd.DataFrame({"x": [1, 2, 4], "y": [0, 0, 0], "value": [1.0, 3.0, 50.0]})
+    scores = neighbourhood_scores(table, ["x", "y"], "value")
+    # Adjacency is by the values measured: 4 is next to 2 here, not 1.
+    assert scores.tolist() == pytest.approx([2.0, 3.0, 26.5])
+    with pytest.raises(SearchError, match="share one cell"):
+        neighbourhood_scores(pd.concat([table, table]), ["x", "y"], "value")
+    with pytest.raises(SearchError, match="not in the table"):
+        neighbourhood_scores(table, ["z"], "value")
 
 
 def test_sampling_returns_distinct_configurations() -> None:

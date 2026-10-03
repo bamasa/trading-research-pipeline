@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -183,7 +184,47 @@ def test_fee_tiers_are_looked_up_not_assumed() -> None:
     with pytest.raises(ValueError):
         FeeTier("upside-down", 6.0, 5.5)
     with pytest.raises(ValueError):
+        FeeTier("nowhere", 1.0, 2.0, group="g9")
+    with pytest.raises(ValueError):
         breakeven_maker_bp(1.0, 0.0, 2.0)
+
+
+def test_the_bybit_schedule_is_transcribed_with_its_source() -> None:
+    """The rows of the published schedule, as read on 2 October 2026."""
+    from trading_research.backtest import costs
+
+    assert costs.BYBIT_FEE_RETRIEVED == "2026-10-02"
+    assert "Trading-Fee-Structure" in costs.BYBIT_FEE_SOURCE
+    assert "2024" in costs.BYBIT_FEE_CAVEAT and "2026" in costs.BYBIT_FEE_CAVEAT
+    rows = {t.name: (t.maker_bp, t.taker_bp, t.group) for t in BYBIT_LINEAR_TIERS}
+    assert rows["base"] == (2.0, 5.5, "all")
+    assert rows["vip1"] == (1.8, 4.0, "all")
+    assert rows["vip5"] == (1.0, 3.2, "all")
+    assert rows["supreme_vip"] == (0.0, 3.0, "all")
+    assert rows["pro1_g1"] == (1.0, 2.8, "g1")
+    assert rows["pro1_altcoin"] == (0.0, 2.8, "altcoin")
+    assert rows["pro6_g1"] == (0.0, 1.5, "g1")
+    assert rows["pro6_altcoin"] == (0.0, 1.8, "altcoin")
+    assert len(BYBIT_LINEAR_TIERS) == 7 + 12
+    vip = [t for t in BYBIT_LINEAR_TIERS if t.group == "all"]
+    assert all(a.maker_bp >= b.maker_bp for a, b in pairwise(vip))
+    assert all(a.taker_bp >= b.taker_bp for a, b in pairwise(vip))
+    assert all(t.requires for t in BYBIT_LINEAR_TIERS)
+    # The market-maker programme's rebate has no published taker rate, so it is
+    # kept apart from the complete rows rather than completed by assumption.
+    assert costs.BYBIT_MM_PROGRAMME_MAKER_BP == -1.0
+    assert all(t.maker_bp >= 0.0 for t in BYBIT_LINEAR_TIERS)
+    assert costs.BYBIT_STUDY_GROUPS == {
+        "BTCUSDT": "g1",
+        "XRPUSDT": "g1",
+        "BICOUSDT": "altcoin",
+        "CRVUSDT": "altcoin",
+    }
+    assert costs.best_maker_tier("altcoin").name == "pro6_altcoin"
+    assert costs.best_maker_tier("g1").name == "pro6_g1"
+    assert {t.group for t in costs.tiers_for("g1")} == {"all", "g1"}
+    with pytest.raises(ValueError):
+        costs.tiers_for("all")
 
 
 def test_funding_is_charged_on_the_position_before_a_print_at_the_same_instant() -> None:

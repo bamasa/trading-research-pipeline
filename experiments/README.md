@@ -42,6 +42,7 @@ needs the `breaks` extra.
 | `joint_search.py` | §13 | Retraining schedule and holding period searched together |
 | `maker_threshold.py` | §11 | Adverse selection of passive fills, measured against what posting saves |
 | `structural_breaks.py` | README, regime monitoring | Where the whitened monitor flags BTCUSDT daily as having changed, with which statistic, and how often the same walk fires on shuffled copies |
+| `market_making.py` | README, market making; the pre-registration's Amendment 2 | The market-making study's development block only: admission screen, reversion tape, regime flags, the two successive-halving searches, S3, S4, X1 and the minimum detectable effects; `--freeze` writes the chosen values into `configs/mm_prereg.yaml`. Reads nothing after 2024-02-25 |
 
 Two searches are not here, because they run through the CLI rather than a
 script: retraining schedules (§10) as `trading-research retrain-search`, and

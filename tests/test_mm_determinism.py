@@ -229,3 +229,106 @@ def test_a_day_with_sequence_gaps_is_flagged_and_excluded(tmp_path: Path) -> Non
     assert frame["excluded"].iloc[0]
     assert "sequence_gaps" in frame["flags"].iloc[0]
     assert frame["sequence_gaps"].iloc[0] == 3
+
+
+def _cells() -> list:
+    from functools import partial
+
+    from trading_research.market_making.quoters import SkewQuoter
+    from trading_research.market_making.simulator import Cell
+
+    skew = SkewQuoter(skew_bp=5.0, k=0.5, min_edge_bp=0.0, sigma_ref=5.0, maker_bp=0.0)
+    return [
+        Cell("S0", TouchQuoter, CONFIG),
+        Cell("S1", partial(SkewQuoter, **{**skew.__dict__}), CONFIG.with_(soft_limit_clips=3.0)),
+    ]
+
+
+def test_cells_run_like_days_whatever_the_split(tmp_path: Path) -> None:
+    from trading_research.market_making.simulator import SUMMARY_COLUMNS, run_cells
+
+    books, trades = tmp_path / "book", tmp_path / "trades"
+    days = [SYNTHETIC_DAY + timedelta(days=i) for i in range(3)]
+    for i, day in enumerate(days):
+        _write(random_market(10 + i, n_snapshots=400, day=day), books, trades)
+
+    def run(workers: int, chunk: int, cache: Path | None = None) -> pd.DataFrame:
+        frame = run_cells(
+            "FUZZUSDT",
+            list(reversed(days)),
+            _cells(),
+            book_roots=[books],
+            trades_root=trades,
+            funding_root=None,
+            workers=workers,
+            cache=cache,
+            cells_per_job=chunk,
+        )
+        return frame.drop(columns="worker_peak_rss_mb")
+
+    one = run(1, 1)
+    assert one["cell"].tolist() == ["S0"] * 3 + ["S1"] * 3
+    assert one["day"].tolist() == [d.isoformat() for d in days] * 2
+    pd.testing.assert_frame_equal(one, run(2, 2))
+    cached = run(1, 2, tmp_path / "cache")
+    pd.testing.assert_frame_equal(one, cached)
+    pd.testing.assert_frame_equal(one, run(2, 1, tmp_path / "cache"))
+    alone = run_days(
+        "FUZZUSDT",
+        days,
+        TouchQuoter,
+        CONFIG,
+        book_roots=[books],
+        trades_root=trades,
+        funding_root=None,
+    )
+    columns = list(SUMMARY_COLUMNS)
+    pd.testing.assert_frame_equal(
+        one[one["cell"] == "S0"][columns].reset_index(drop=True), alone[columns]
+    )
+
+
+def test_the_signals_a_day_read_are_part_of_its_cache_key(tmp_path: Path) -> None:
+    from trading_research.market_making.quoters import (
+        INDEX_SIGNAL,
+        LEAN_TRIGGER_SIGNAL,
+        ReversionLean,
+        SkewQuoter,
+    )
+    from trading_research.market_making.signals import SignalTape
+    from trading_research.market_making.simulator import Cell, day_start_ns, run_cells
+
+    books, trades = tmp_path / "book", tmp_path / "trades"
+    _write(random_market(3, n_snapshots=600, prints_per_snapshot=1.5), books, trades)
+    start = day_start_ns(SYNTHETIC_DAY)
+    stamps = start + np.arange(1, 70) * 1_000_000_000
+
+    def tapes(level: float) -> dict[str, SignalTape]:
+        return {
+            INDEX_SIGNAL: SignalTape(INDEX_SIGNAL, stamps, np.full(len(stamps), level)),
+            LEAN_TRIGGER_SIGNAL: SignalTape(LEAN_TRIGGER_SIGNAL, stamps, stamps / 1e9),
+        }
+
+    lean = ReversionLean(
+        SkewQuoter(0.0, 0.0, 0.0, 5.0, maker_bp=0.0), beta=-1.0, lam=1.0, one_sided=True
+    )
+
+    def run(level: float) -> pd.DataFrame:
+        return run_cells(
+            "FUZZUSDT",
+            [SYNTHETIC_DAY],
+            [Cell("S4", lambda: lean, CONFIG)],
+            book_roots=[books],
+            trades_root=trades,
+            funding_root=None,
+            tapes=tapes(level),
+            cache=tmp_path / "cache",
+        )
+
+    up, down = run(50.0), run(-50.0)
+    assert up["net"].iloc[0] != down["net"].iloc[0]
+    assert len(list((tmp_path / "cache").iterdir())) == 2
+    again = run(50.0)
+    pd.testing.assert_frame_equal(
+        up.drop(columns="worker_peak_rss_mb"), again.drop(columns="worker_peak_rss_mb")
+    )

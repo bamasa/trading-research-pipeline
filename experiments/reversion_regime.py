@@ -57,6 +57,7 @@ from trading_research.strategies.reversion import (
     index_level,
     signal,
     threshold_for_rate,
+    trailing_autocorrelation,
 )
 
 COSTS = TakerCosts(fee_bp_per_side=5.5, slippage_bp=0.5)
@@ -65,30 +66,6 @@ ROWS_PER_DAY = 86_400 // 5
 #: Trailing days the regime is measured over. Short enough to react, long
 #: enough to measure a correlation on.
 REGIME_WINDOWS = (1, 2, 3, 5)
-
-
-def trailing_autocorrelation(level: np.ndarray, lag: int, window_rows: int) -> np.ndarray:
-    """Index autocorrelation over a trailing window, per row, strictly causal.
-
-    Computed once per day and held for that day, because a value that updates
-    within the day would let the afternoon's behaviour decide the morning's
-    trades.
-    """
-    n = len(level)
-    past = np.full(n, np.nan)
-    past[lag:] = (level[lag:] - level[:-lag]) * 1e4
-    forward = np.full(n, np.nan)
-    forward[:-lag] = (level[lag:] - level[:-lag]) * 1e4
-
-    out = np.full(n, np.nan)
-    for start in range(window_rows, n, ROWS_PER_DAY):
-        window = slice(start - window_rows, start)
-        a, b = past[window], forward[window]
-        ok = np.isfinite(a) & np.isfinite(b)
-        if ok.sum() < 500 or np.std(a[ok]) == 0 or np.std(b[ok]) == 0:
-            continue
-        out[start : start + ROWS_PER_DAY] = float(np.corrcoef(a[ok], b[ok])[0, 1])
-    return out
 
 
 def trade(

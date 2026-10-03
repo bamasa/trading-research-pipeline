@@ -187,6 +187,30 @@ def test_one_day_is_read_from_its_own_files(tmp_path: Path) -> None:
     assert list(events.trade_ts - start) == [123_400_000, 200_000_000]
 
 
+def test_rows_stamped_after_the_days_midnight_are_never_read(tmp_path: Path) -> None:
+    """The archives spill a few rows past midnight; a day reads its own rows
+    only, so the last day of a block never reads the next block."""
+    books, trades = tmp_path / "book", tmp_path / "trades"
+    _write_book(books, "BICOUSDT", DAY, gaps=1)
+    _write_trades(trades, "BICOUSDT", DAY)
+    path = books / "BICOUSDT" / f"{DAY.isoformat()}.parquet"
+    frame = pd.read_parquet(path)
+    spill = frame.iloc[[-1]].copy()
+    spill["timestamp"] = pd.Timestamp(DAY.isoformat(), tz="UTC") + np.timedelta64(86_400_007, "ms")
+    spill["bid_price_0"] = 9.0  # off the day's grid: reading it would refuse the day
+    both = pd.concat([frame, spill], ignore_index=True)
+    both.attrs["sequence_gaps"] = 1
+    both.to_parquet(path, index=False)
+
+    events = load_day(
+        "BICOUSDT", DAY, book_roots=[books], trades_root=trades, funding_root=None, depth=3
+    )
+    assert len(events.book_ts) == 5
+    assert events.rows_outside_day == 1
+    assert events.sequence_gaps == 1
+    assert int(events.book_ts.max()) < day_start_ns(DAY) + 86_400_000_000_000
+
+
 def test_a_day_missing_a_plane_on_disk_is_reported(tmp_path: Path) -> None:
     books, trades = tmp_path / "book", tmp_path / "trades"
     _write_book(books, "BICOUSDT", DAY)

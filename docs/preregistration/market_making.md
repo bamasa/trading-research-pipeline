@@ -542,3 +542,239 @@ the fields it holds changes, and the new settings — `max_sequence_gaps` 0, the
 25 bp off-book limit, flatten latency equal to the order latency — are
 registered here. Its sha256 remains
 `27471cd62ef4bbc67a29467bcff0ea5fda4ddd2c7d00413ca05a9541eac9b272`.
+
+### Amendment 2 (2026-10-03, before any held-out read): values frozen on the development period
+
+**When this was made, no day from 2024-02-26 onward had been read by any
+market-making code**: no book, print, funding rate or universe row of blocks H,
+buffer, F or P was opened, loaded, simulated or counted. Every reader of the
+study checks each day against `prereg.Access` before any file is opened, and the
+development run held only `development_access()` (block D). Two things touched
+later days without reading them, both required by the protocol: the admission
+rule's coverage of H was computed from the file system alone (whether a
+non-empty book and print file exists for each H day; no file opened), and the
+Bybit funding history was downloaded for D, H and F into the gitignored data
+directory, with only D's files opened. The runs are
+[`experiments/market_making.py`](../../experiments/market_making.py); their
+tables are `experiments/results/mm_*_D.csv`. The values below are written into
+the placeholders of [`configs/mm_prereg.yaml`](../../configs/mm_prereg.yaml),
+and nothing else in that file changed (with every placeholder put back to
+`null` it hashes to the registered `27471cd6…b272`, which the loader checks).
+
+#### Admission (computed on D, 2024-02-01 to 2024-02-25)
+
+| Instrument | Tick (bp) | Spread, time-weighted (bp) | Time at ≥ 2 ticks | Touch / median print | Prints a day | Market-wide passive markout 1 / 5 / 30 s (bp) | Coverage D / H | MM | H2 |
+|---|---:|---:|---:|---:|---:|---|---|:-:|:-:|
+| BICOUSDT | 2.62 | 6.08 | 0.792 | 12.9 | 14,790 | −0.53 / −0.94 / −0.65 | 1.00 / 1.00 | yes | yes |
+| CRVUSDT | 1.96 | 2.13 | 0.082 | 10.7 | 72,163 | −0.59 / −0.75 / −0.86 | 1.00 / 1.00 | no | yes |
+| XRPUSDT | 1.88 | 1.88 | 0.000 | 2,462.7 | 263,038 | −0.98 / −0.98 / −0.67 | 1.00 / 1.00 | no | yes |
+| BTCUSDT | 0.0209 | 0.0214 | 0.002 | 474.8 | 1,090,765 | −0.44 / −0.53 / −0.40 | 1.00 / 1.00 | no | no |
+
+MM-admitted: **BICOUSDT**. H2-admitted: **BICOUSDT, CRVUSDT, XRPUSDT**.
+References: all four. As expected at registration. No D day of any of the four
+instruments has a book sequence gap, so `max_sequence_gaps` stays 0
+(Amendment 1, item 7).
+
+Per instrument, the clip's notional cap (a tenth of D's median touch notional,
+sampled every second) and `sigma_ref` (the median over D's quoting hours of the
+one-minute volatility the simulator computes):
+
+| Instrument | Clip notional cap (USDT) | `sigma_ref` (bp, one minute) |
+|---|---:|---:|
+| BICOUSDT | 20.0434 | 7.92472 |
+| CRVUSDT | 55.8147 | 8.04503 |
+| XRPUSDT | 3,402.63 | 4.70073 |
+| BTCUSDT | 25,256.8 | 3.42176 |
+
+#### The development search (S1 and S2)
+
+Successive halving with the registered budgets of 5, 12 and 25 D days, a nested
+subset of D drawn with seed 0 (the 5 days: 2024-02-05 2024-02-11 2024-02-12 2024-02-20 2024-02-25; the 12: 2024-02-03 2024-02-04 2024-02-05 2024-02-07 2024-02-11 2024-02-12 2024-02-17 2024-02-20 2024-02-22 2024-02-23 2024-02-24 2024-02-25), keep
+fraction 0.34, objective the mean daily net in USDT on the MM-admitted
+instrument, minimum 20 fills a day. S1: 144 cells, 48 kept after 5 days, 16
+measured on all 25. S2: 432, 146, 49. The choice is
+`validation.search.neighbourhood_scores` over the cells measured at the full
+budget: the median of a cell and every measured cell within one step of it on
+each ordered axis, ties broken by the cell's own value; the outright peak is
+reported beside it.
+
+| | S1 chosen | S2 chosen |
+|---|---:|---:|
+| `skew_bp` | 2 | 2 |
+| `k` | 0.5 | 0.5 |
+| `min_edge_bp` | 4 | 4 |
+| `soft_limit_clips` | 6 | 6 |
+| `m_ticks` | — | 3 |
+| Own mean daily net on D (USDT) | +0.0976 | +0.0868 |
+| Neighbourhood median (USDT/day) | −0.1497 | −0.1236 |
+| Cells in the neighbourhood | 8 | 25 |
+| Outright peak at the full budget | 2/0.5/4/6 at +0.0976 | 2/0.5/4/6/2 at +0.0868 |
+
+S1's neighbourhood (`skew_bp`, `k`, `min_edge_bp`, `soft_limit_clips`: mean daily
+net in USDT):
+
+| `skew_bp` | `k` | `min_edge_bp` | `soft_limit_clips` | Mean daily net (USDT) |
+|---:|---:|---:|---:|---:|
+| 2 | 0.5 | 4 | 6 | +0.0976 |
+| 5 | 0.5 | 4 | 12 | +0.0469 |
+| 2 | 0.5 | 4 | 12 | −0.0459 |
+| 2 | 1 | 2 | 6 | −0.1237 |
+| 5 | 1 | 2 | 6 | −0.1756 |
+| 5 | 1 | 2 | 12 | −0.1827 |
+| 2 | 1 | 2 | 12 | −0.1872 |
+| 2 | 0.5 | 2 | 12 | −0.5941 |
+
+S2's neighbourhood is in `d_search.neighbourhood.S2` of the YAML (25
+cells). On D, `m_ticks` 2, 3 and 4 give identical days for S2's other chosen
+values: with a gate near 10 bp, one tick inside clears it only when the spread
+is far wider than four ticks, so the inside rule's decisions do not depend on
+`m` there. Cells with `m` 2 and 3 tie exactly, on their neighbourhood median and
+their own value; the tie went to `m = 3` by the order the search scored them in,
+which is deterministic. H1's twin is S2's chosen parameters with the inside rule
+off, which here is S1's chosen cell.
+
+On D, S1 earned +0.0976 USDT/day and S2 +0.0868: **S3 guards S1.**
+
+#### The regime guard (S3) and the flags
+
+Flags from both detectors with the registered settings, run on BICOUSDT's book
+continuously from 2024-02-01 over D: **222 flags in 25 days, 8.88
+a day** (changepoint:autocorrelation 16; changepoint:intensity 31; changepoint:spread 22; changepoint:volatility 30; structural breaks:dependence 6; structural breaks:scale 117). That is inside K3's 0.2 to 24 a day, so **H3 is
+testable**, declared here before H is read. On H the flags will be computed by
+the same detectors run continuously from 2024-02-01 through H.
+
+S3's six cells, each on all 25 D days, chosen by the mean daily net (the
+pre-registration names no neighbourhood rule for six cells):
+
+| Action | `G` (min) | Mean daily net (USDT) | Minus S1, paired (USDT/day) | Passive fills a day |
+|---|---:|---:|---:|---:|
+| pull | 15 | +0.0822 | −0.0154 | 86.2 |
+| pull | 60 | −0.1721 | −0.2697 | 61.8 |
+| pull | 240 | −0.1323 | −0.2300 | 14.4 |
+| widen | 15 | +0.0988 | +0.0012 | 86.6 |
+| widen | 60 | −0.1035 | −0.2011 | 65.4 |
+| widen | 240 | −0.1754 | −0.2730 | 26.6 |
+
+Chosen: **guards S1, action `widen`, `G` = 15 minutes.**
+
+#### The reversion signal (S4, X1, H2.3)
+
+The tape is §27's frozen signal on a right-labelled five-second grid built from
+D's universe files only (26 instruments, 432,000 rows); the index
+autocorrelation over D is −0.0327.
+
+| Instrument | θ (bp) | β̂ | Labels with \|s\| ≥ θ a day | Triggers a day (thinned) | X1 attempts on D | Taker twin on D: trades, net bp a trade |
+|---|---:|---:|---:|---:|---:|---:|
+| BICOUSDT | 98.3829 | −0.254135 | 60.0 | 1.92 | 34 | 48, −0.87 |
+| CRVUSDT | 97.7647 | −0.146584 | 60.0 | 1.96 | 43 | 49, +5.85 |
+| XRPUSDT | 99.7363 | −0.134149 | 60.0 | 1.92 | 48 | 48, −6.01 |
+
+The thinned triggers reproduce §27's search block: it took 48 to 51 trades per
+instrument on its 25-day search block at the frozen configuration
+([`market_reversion.csv`](../../experiments/results/market_reversion.csv)); the
+taker twin takes 48, 49 and 48 here.
+
+S4's six cells on all 25 D days for the three H2-admitted instruments, on S1's
+chosen parameters, chosen by the mean paired daily difference S4 − S1 pooled
+over the instruments:
+
+| λ | `one_sided` | S4 − S1 pooled (USDT/day) | BICOUSDT | CRVUSDT | XRPUSDT |
+|---:|---|---:|---:|---:|---:|
+| 0.5 | false | +12.007 | +0.190 | +0.309 | +11.508 |
+| 0.5 | true | +10.628 | +0.162 | +0.363 | +10.102 |
+| 1 | false | +23.236 | +0.109 | +0.689 | +22.438 |
+| 1 | true | +22.941 | +0.071 | +0.652 | +22.218 |
+| 2 | false | −12.069 | +0.132 | +0.357 | −12.559 |
+| 2 | true | −10.206 | +0.123 | +0.380 | −10.709 |
+
+Chosen: **λ = 1, `one_sided` = false.** The pooled difference is in USDT and
+is dominated by XRPUSDT, whose clip cap is about 170 times BICOUSDT's: the
+registered clip rule sizes every instrument by its own touch, so the pooled
+metric weights instruments by their touch notional. This is the registered
+metric, stated here so the verdict on H is read with it.
+
+H2.3's gate threshold, the median over D of the trailing one-day index
+autocorrelation known at each day's open (24 days), is **−0.0541**.
+
+#### Spread of daily results on D, and the minimum detectable effect
+
+`2 × σ_D / √13`, from `experiments/results/mm_power_D.csv`. The YAML's single
+value is that of the chosen strategy (S1, which S3 guards); the others are
+recorded here for each primary.
+
+| Quantity | Primary | Unit | Days | Mean on D | σ_D | MDE on H (2σ/√13) |
+|---|---|---|---:|---:|---:|---:|
+| S1 (the chosen strategy, guarded by S3) daily net | the registered MDE | USDT/day | 25 | +0.098 | 1.606 | 0.891 |
+| S1 daily net | H2.1's comparator on the MM-admitted instruments | USDT/day | 25 | +0.098 | 1.606 | 0.891 |
+| S2 daily net | H1 K1 | USDT/day | 25 | +0.087 | 1.602 | 0.889 |
+| S2 − twin, paired daily | H1 K2 | USDT/day | 25 | −0.011 | 0.055 | 0.031 |
+| S3 − guarded, paired daily | H3 K1 | USDT/day | 25 | +0.001 | 0.355 | 0.197 |
+| S4 − S1, paired daily, pooled over H2 instruments | H2.1 K1 | USDT/day | 25 | +23.236 | 125.469 | 69.598 |
+| X1 net per attempt (misses zero), pooled | H2.2 K2 | bp/attempt | 19 | −2.515 | 5.143 | 2.853 |
+| X1 − taker twin, paired daily, pooled | H2.2 K1 | bp/attempt | 19 | −8.844 | 39.571 | 21.950 |
+
+Two consequences, stated before H is read. H1's paired difference is tiny on D
+because the inside rule rarely fires at the chosen gate (above), so H1 is
+expected to turn on the fee tier, as the pre-registration anticipated. H2.2
+needs 100 fills in H (K5); on D, X1 made 125 attempts over 25 days on
+three instruments, every one filled: about 5.0 a day across the three. At
+that rate H's 13 days would give about 65 attempts, and H2.2 would be
+inconclusive by K5 unless H's trigger rate is higher than D's.
+
+#### Corrections and choices made in the code since Amendment 1
+
+None changes a registered value; each is disclosed because it is a choice the
+registration did not spell out, or a correction to how data is read.
+
+1. **A day reads only its own rows.** The book and universe files on disk carry
+   up to five rows stamped just after the next midnight. Every reader now drops
+   rows stamped outside the day (`events.within_day`), so a day's simulation
+   never reads the next day and D's last day never reads H. Found while building
+   this amendment's readers, before any run.
+2. **The minimum of 20 fills a day** is applied to the mean passive fills a day
+   over the days a cell was measured on (flattens excluded).
+3. **The neighbourhood** is the block of measured cells within one step on every
+   axis (up to 3^4 or 3^5 cells), the generalisation of `pipeline/discovery.py`'s
+   two-axis block; cells below the fill minimum at the full budget take no part.
+4. **S3 and S4** are chosen by their objective alone (six cells each).
+5. **X1** acts on triggers known between 00:10 (the end of the simulator's
+   warm-up) and 23:35 (no entries in the last 25 minutes); the taker twin is
+   scored on exactly the same triggers. The exit clock starts at the first
+   decision that sees the fill, within one snapshot of it. The exit cross is a
+   reduce-only taker order priced as a flatten.
+6. **H2.3's trailing autocorrelation** uses only pairs whose forward return ended
+   before the day opened (`known_at_open=True`); §27's version reads the first
+   ten minutes of the gated day.
+7. **The simulation runs** each instrument-day job in a fresh process (results
+   do not depend on it; it bounds memory).
+
+#### The compute record
+
+The development run was made twice, from commit `0dcb596` and from `2c1fa62`
+(which only runs each job in a fresh process); every table and every frozen
+value came out byte-identical, and the amendment's date was then set to the day
+it is committed. The second run, whose outputs are committed, took
+32 minutes of compute on 8 worker processes of a 10-core, 32 GB machine (stage
+times on the monotonic clock, which stops while the machine sleeps; the run's
+wall time was longer because the machine slept during it):
+
+| Stage | Wall time (s) |
+|---|---:|
+| screen | 17 |
+| reversion tape | 15 |
+| flags | 34 |
+| search S1 | 370 |
+| search S2 | 1,111 |
+| chosen strategies | 14 |
+| S3 | 40 |
+| S4 | 308 |
+| X1 | 28 |
+| total | 1,937 |
+
+Peak resident memory: 1,671 MB in the largest simulation worker, 1,740 MB
+in the largest worker of any kind (one of the screen's, which read every
+instrument's days, BTCUSDT's included), 1,417 MB in the driver. The first run's largest worker reached 1,955 MB, before each job had a
+fresh process; both are above the 1.5 GB a worker the run was budgeted for, and
+eight such workers stay well inside the machine.
+
+Frozen configuration sha256: `ed79d5ff520f5e93e9a8ea142058305117b530041534b1dc115b9e3507379c9d`

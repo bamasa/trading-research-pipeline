@@ -121,7 +121,7 @@ admission:
     instruments: [BICOUSDT, CRVUSDT, XRPUSDT, BTCUSDT]
     verdict: false
   if_unexpected: the committed D table wins
-  table: null  # frozen by the D amendment
+  table: [{symbol: BICOUSDT, tick_bp: 2.619, spread_bp: 6.08, share_two_ticks: 0.7917, touch_over_print: 12.9, prints_per_day: 14790, markout_1s_bp: -0.5251, markout_5s_bp: -0.9361, markout_30s_bp: -0.6483, coverage_D: 1.0, coverage_H: 1.0, mm_admitted: true, h2_admitted: true}, {symbol: CRVUSDT, tick_bp: 1.96, spread_bp: 2.13, share_two_ticks: 0.08189, touch_over_print: 10.72, prints_per_day: 72163, markout_1s_bp: -0.5948, markout_5s_bp: -0.7549, markout_30s_bp: -0.858, coverage_D: 1.0, coverage_H: 1.0, mm_admitted: false, h2_admitted: true}, {symbol: XRPUSDT, tick_bp: 1.884, spread_bp: 1.885, share_two_ticks: 0.0001818, touch_over_print: 2463.0, prints_per_day: 263038, markout_1s_bp: -0.983, markout_5s_bp: -0.9782, markout_30s_bp: -0.6664, coverage_D: 1.0, coverage_H: 1.0, mm_admitted: false, h2_admitted: true}, {symbol: BTCUSDT, tick_bp: 0.02087, spread_bp: 0.02141, share_two_ticks: 0.001968, touch_over_print: 474.8, prints_per_day: 1090765, markout_1s_bp: -0.4435, markout_5s_bp: -0.5319, markout_30s_bp: -0.4014, coverage_D: 1.0, coverage_H: 1.0, mm_admitted: false, h2_admitted: false}]  # frozen by the D amendment
 
 fees:
   base:
@@ -142,7 +142,7 @@ simulator:
     rule: min(notional_usdt, touch_share x trailing one-hour median touch), rounded down to the lot
     notional_share_of_d_median_touch: 0.10
     touch_share: 0.10
-    notional_usdt: null  # per instrument; frozen by the D amendment
+    notional_usdt: {BICOUSDT: 20.0434, CRVUSDT: 55.8147, XRPUSDT: 3402.63, BTCUSDT: 25256.8}  # per instrument; frozen by the D amendment
   soft_limit_clips_s0: 6.0
   hard_limit: soft limit plus one clip
   flatten_slippage_bp: 0.5
@@ -157,7 +157,7 @@ simulator:
   volatility:
     estimator: EWMA of 1 s mid returns, scaled to 1 min
     half_life_s: 60
-    sigma_ref: null  # D median, per instrument; frozen by the D amendment
+    sigma_ref: {BICOUSDT: 7.92472, CRVUSDT: 8.04503, XRPUSDT: 4.70073, BTCUSDT: 3.42176}  # D median, per instrument; frozen by the D amendment
   skew_clamp: [0.25, 4.0]
 
 strategies:
@@ -175,10 +175,10 @@ strategies:
       soft_limit_clips: [3, 6, 12]
     cells: 144
     chosen:
-      skew_bp: null  # frozen by the D amendment
-      k: null  # frozen by the D amendment
-      min_edge_bp: null  # frozen by the D amendment
-      soft_limit_clips: null  # frozen by the D amendment
+      skew_bp: 2  # frozen by the D amendment
+      k: 0.5  # frozen by the D amendment
+      min_edge_bp: 4  # frozen by the D amendment
+      soft_limit_clips: 6  # frozen by the D amendment
   S2:
     name: inside
     hypothesis: H1
@@ -191,11 +191,11 @@ strategies:
     cells: 432
     twin: S2's chosen parameters with the inside rule off
     chosen:
-      skew_bp: null  # frozen by the D amendment
-      k: null  # frozen by the D amendment
-      min_edge_bp: null  # frozen by the D amendment
-      soft_limit_clips: null  # frozen by the D amendment
-      m_ticks: null  # frozen by the D amendment
+      skew_bp: 2  # frozen by the D amendment
+      k: 0.5  # frozen by the D amendment
+      min_edge_bp: 4  # frozen by the D amendment
+      soft_limit_clips: 6  # frozen by the D amendment
+      m_ticks: 3  # frozen by the D amendment
   S3:
     name: guard
     hypothesis: H3
@@ -206,9 +206,9 @@ strategies:
       guard_window_min: [15, 60, 240]
     cells: 6
     chosen:
-      guards: null  # S1 or S2; frozen by the D amendment
-      action: null  # frozen by the D amendment
-      guard_window_min: null  # frozen by the D amendment
+      guards: S1  # S1 or S2; frozen by the D amendment
+      action: widen  # frozen by the D amendment
+      guard_window_min: 15  # frozen by the D amendment
   S4:
     name: lean
     hypothesis: H2.1
@@ -223,11 +223,11 @@ strategies:
     cells: 6
     search_days: 25
     search_instruments: [BICOUSDT, CRVUSDT, XRPUSDT]
-    theta_bp: null  # per H2-admitted instrument; frozen by the D amendment
-    beta: null  # per H2-admitted instrument; frozen by the D amendment
+    theta_bp: {BICOUSDT: 98.3829, CRVUSDT: 97.7647, XRPUSDT: 99.7363}  # per H2-admitted instrument; frozen by the D amendment
+    beta: {BICOUSDT: -0.254135, CRVUSDT: -0.146584, XRPUSDT: -0.134149}  # per H2-admitted instrument; frozen by the D amendment
     chosen:
-      lambda: null  # frozen by the D amendment
-      one_sided: null  # frozen by the D amendment
+      lambda: 1  # frozen by the D amendment
+      one_sided: false  # frozen by the D amendment
   X1:
     name: passive reversion
     hypothesis: H2.2
@@ -258,8 +258,8 @@ d_search:
   choice_over: cells measured at the full budget
   peak_reported_beside: true
   neighbourhood:
-    S1: null  # chosen cell and its neighbours; frozen by the D amendment
-    S2: null  # chosen cell and its neighbours; frozen by the D amendment
+    S1: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [2, 0.5, 4, 6], median: -0.149666, own: 0.0976023, cells: [[2, 0.5, 4, 12, -0.0459298], [2, 1, 2, 12, -0.187232], [2, 0.5, 2, 12, -0.594127], [5, 1, 2, 12, -0.182673], [5, 0.5, 4, 12, 0.0469313], [2, 0.5, 4, 6, 0.0976023], [2, 1, 2, 6, -0.123747], [5, 1, 2, 6, -0.175585]], peak: [2, 0.5, 4, 6, 0.0976023], full_budget_cells: 16}  # chosen cell and its neighbours; frozen by the D amendment
+    S2: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips, m_ticks], chosen: [2, 0.5, 4, 6, 3], median: -0.123638, own: 0.0867689, cells: [[2, 0.5, 4, 12, 2, -0.0579701], [2, 0.5, 4, 12, 3, -0.0579701], [2, 0.5, 4, 12, 4, -0.0579701], [2, 1, 2, 12, 2, -0.18826], [2, 1, 2, 12, 3, -0.18826], [2, 1, 2, 12, 4, -0.18826], [2, 0.5, 2, 12, 2, -0.607402], [2, 0.5, 2, 12, 3, -0.60865], [2, 0.5, 2, 12, 4, -0.608568], [5, 1, 2, 12, 2, -0.180857], [5, 1, 2, 12, 3, -0.1831], [5, 1, 2, 12, 4, -0.183107], [5, 0.5, 4, 12, 2, 0.030401], [5, 0.5, 4, 12, 3, 0.0280153], [5, 0.5, 4, 12, 4, 0.0270928], [2, 0.5, 4, 6, 2, 0.0867689], [2, 0.5, 4, 6, 3, 0.0867689], [2, 0.5, 4, 6, 4, 0.0867689], [2, 1, 2, 6, 2, -0.123638], [2, 1, 2, 6, 3, -0.123638], [2, 1, 2, 6, 4, -0.123638], [5, 1, 2, 6, 2, -0.183089], [5, 1, 2, 6, 3, -0.184514], [5, 1, 2, 6, 4, -0.184473], [5, 1, 4, 12, 2, 0.016672]], peak: [2, 0.5, 4, 6, 2, 0.0867689], full_budget_cells: 49}  # chosen cell and its neighbours; frozen by the D amendment
 
 metrics:
   primary: net_usd_day
@@ -285,8 +285,8 @@ metrics:
     deciding_level: day
   minimum_detectable_effect:
     formula: 2 x sigma_D(daily net of the chosen strategy) / sqrt(13)
-    sigma_d_usd_day: null  # frozen by the D amendment
-    value_usd_day: null  # frozen by the D amendment
+    sigma_d_usd_day: 1.60556  # frozen by the D amendment
+    value_usd_day: 0.890603  # frozen by the D amendment
 
 family:
   members: [H1, H2.1, H2.2, H3]
@@ -389,7 +389,7 @@ hypotheses:
     instruments: [BICOUSDT]
     blocks: [H, F]
     gate: trailing one-day index autocorrelation at or below D's median
-    gate_threshold: null  # D median; frozen by the D amendment
+    gate_threshold: -0.0541278  # D median; frozen by the D amendment
     statement: admitted days have a larger S4 - S1 difference than rejected days
     kill_conditions:
       K1: {test: admitted mean <= rejected mean, outcome: killed}
@@ -437,7 +437,7 @@ hypotheses:
         seed_last: 49
         offset_h: [6, block length - 6]  # uniform
     reported_beside: unguarded net per hour inside and outside the guard windows
-    flag_rate_on_d_per_day: null  # frozen by the D amendment
+    flag_rate_on_d_per_day: 8.88  # frozen by the D amendment
 
 ladder:
   block: H
@@ -487,5 +487,5 @@ amendment:
   records: [admission table, every searched parameter's chosen value with its neighbourhood,
             theta and beta per instrument, guard settings, flag rate on D,
             sigma of daily net, minimum detectable effect, sha256 of this file]
-  date: null  # frozen by the D amendment
+  date: 2026-10-03  # frozen by the D amendment
   config_sha256: recorded in the amendment, not in this file
