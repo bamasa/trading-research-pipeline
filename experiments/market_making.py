@@ -79,7 +79,7 @@ UNIVERSE_ROOT = Path("data/universe")
 CACHE = Path("artifacts/mm/cache")
 
 #: The amendment's date.
-AMENDMENT_DATE = date(2026, 10, 2)
+AMENDMENT_DATE = date(2026, 10, 3)
 
 #: Minimum fills a day for a cell to be ranked (the pre-registration's "minimum
 #: 20 fills a day"), applied to the mean over the days measured.
