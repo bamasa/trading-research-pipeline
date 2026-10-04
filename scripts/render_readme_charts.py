@@ -171,7 +171,10 @@ def market_making(results: Path = RESULTS, images: Path = IMAGES, suffix: str = 
     symbol = "BICOUSDT"
     charts = (
         ("mm_markouts", lambda p: mm_plots.markouts_by_path(table("markouts"), p, symbol=symbol)),
-        ("mm_decomposition", lambda p: mm_plots.decomposition(table("strategies"), p, symbol=symbol)),
+        (
+            "mm_decomposition",
+            lambda p: mm_plots.decomposition(table("strategies"), p, symbol=symbol),
+        ),
         ("mm_inventory", lambda p: mm_plots.inventory(table("inventory"), p)),
         ("mm_placebos", lambda p: mm_plots.placebos(table("placebos"), p)),
         ("mm_ladder", lambda p: mm_plots.ladder(table("ladder"), p)),
