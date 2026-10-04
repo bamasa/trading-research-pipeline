@@ -1188,6 +1188,20 @@ Next, and in this order, because the first one decides whether the rest matters:
       cadences of §10, on the refit-policy axis `grand_search.py` already has
 - [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
 
+**Longer horizons, in the same pipeline.** Everything above trades in seconds to
+minutes, where costs and queue position decide the result. The same validation,
+costs and search apply at hours and days, where a move is many times the cost of
+a trade:
+
+- [ ] Horizon as a searched axis, next to execution, with a first screen of the
+      typical move over the horizon against the round-trip cost, per instrument
+- [ ] **Funding-rate carry**: long spot and short the perpetual in equal size,
+      so the price cancels and the position collects the funding that leveraged
+      longs pay; on Binance and Bybit history from 2019, pre-registered, with
+      held-out years
+- [ ] Trend and cross-sectional momentum on daily and four-hour bars across a
+      basket, with a portfolio backtest that rebalances on a schedule
+
 **Market making, registered before it is built.** The maker case above is one
 of three hypotheses in a market-making study: a two-sided quoter with inventory
 limits, simulated in event time with a queue per order and fills only from
