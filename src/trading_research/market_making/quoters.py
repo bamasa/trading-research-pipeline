@@ -24,6 +24,11 @@ The rules the pre-registration compares:
 * :class:`SignalExecutor` (X1, H2.2) — one-sided passive execution of the
   frozen reversion rule's triggers, with a taker exit on timeout.
 
+Two more exist only to test the others: :class:`StaleInsideQuoter`, H1's
+placebo, which decides on the spread of a minute earlier, and
+:class:`ForecastTouchQuoter`, the advantage ladder's oracle rungs, which reads
+the future and is refused outside the ladder.
+
 Fair value is the mid; economic quantities are in basis points and prices in
 integer ticks. Signals arrive in :attr:`MarketView.signals` by name, as of
 strictly before the snapshot (see :mod:`.signals` and :mod:`.flags`).
@@ -239,8 +244,20 @@ class InsideQuoter:
         return SkewQuoter(self.skew_bp, self.k, self.min_edge_bp, self.sigma_ref, self.maker_bp)
 
     def quote_prices(
-        self, view: MarketView, position: float, *, delta_scale: float = 1.0
+        self,
+        view: MarketView,
+        position: float,
+        *,
+        delta_scale: float = 1.0,
+        decision_spread: int | None = None,
     ) -> tuple[int, int] | None:
+        """S1's prices, improved where the inside rule allows.
+
+        ``decision_spread`` replaces the snapshot's spread, in ticks, in the
+        decision whether to improve (and which side may, at two ticks); the
+        improved prices are still one tick inside the current touch. H1's
+        stale-trigger placebo passes the spread of a minute earlier.
+        """
         base = self.base
         if not base.usable(view):
             return None
@@ -250,7 +267,7 @@ class InsideQuoter:
         if not self.inside:
             return bid, ask
         best_bid, best_ask = view.best_bid, view.best_ask
-        spread = best_ask - best_bid
+        spread = best_ask - best_bid if decision_spread is None else int(decision_spread)
         if spread < self.m_ticks:
             return bid, ask
         tick = view.tick
@@ -273,6 +290,74 @@ class InsideQuoter:
         if prices is None:
             return NO_QUOTES
         return Quotes(Quote(prices[0], view.clip), Quote(prices[1], view.clip))
+
+
+#: The tape :class:`StaleInsideQuoter` reads: the touch spread in ticks of the
+#: last snapshot strictly before ``lag`` seconds ago.
+STALE_SPREAD_SIGNAL = "spread_ticks_lagged"
+
+
+@dataclass(frozen=True)
+class StaleInsideQuoter:
+    """H1's stale-trigger placebo: S2 deciding on the spread of a minute ago.
+
+    The decision whether to step inside (and which side may at two ticks)
+    reads the spread of ``lag_s`` earlier from the ``spread_ticks_lagged``
+    tape; the price is still one tick inside the current touch and must clear
+    the same gate, and the simulator still rejects it on arrival if it is not
+    post-only. Without a lagged spread (the first ``lag_s`` of a day) the
+    inside rule stays off. If the gain of S2 comes from reacting to a wide
+    spread, this version must gain less.
+    """
+
+    base: InsideQuoter
+    lag_s: float = 60.0
+    name: str = "S2-stale"
+    uses_future: bool = False
+
+    def quotes(self, view: MarketView, position: float) -> Quotes:
+        lagged = view.signals.get(STALE_SPREAD_SIGNAL, math.nan)
+        spread = int(lagged) if lagged == lagged else 0
+        prices = self.base.quote_prices(view, position, decision_spread=spread)
+        if prices is None:
+            return NO_QUOTES
+        return Quotes(Quote(prices[0], view.clip), Quote(prices[1], view.clip))
+
+
+#: The tape :class:`ForecastTouchQuoter` reads: a forecast of the mid's change
+#: over the next second, in price units, for the snapshot being decided on.
+FORECAST_SIGNAL = "forecast_mid_change"
+
+
+@dataclass(frozen=True)
+class ForecastTouchQuoter:
+    """The advantage ladder's forecast rungs: S0 with an oracle fair value.
+
+    Fair value is ``mid + forecast``, the forecast being an oracle blend of the
+    realised change over the next second with seeded noise (built outside the
+    simulator, see :func:`trading_research.market_making.heldout.forecast_tape`).
+    Each side is quoted at its touch only if it clears the maker fee against
+    that fair value: the bid ``b`` when ``(fair - b) / b >= maker_bp``, the ask
+    ``a`` when ``(a - fair) / a >= maker_bp``. It reads the future, so it runs
+    only inside the ladder and its days are upper bounds.
+    """
+
+    maker_bp: float
+    name: str = "S0-forecast"
+    uses_future: bool = True
+
+    def quotes(self, view: MarketView, position: float) -> Quotes:  # noqa: ARG002
+        forecast = view.signals.get(FORECAST_SIGNAL, math.nan)
+        if forecast != forecast:
+            return NO_QUOTES
+        fair = view.mid + forecast
+        bid_price = view.best_bid * view.tick
+        ask_price = view.best_ask * view.tick
+        # The gate, less a rounding allowance, so an edge of exactly the fee clears it.
+        gate = self.maker_bp * 1e-4 - _TICK_EPS
+        bid = Quote(view.best_bid, view.clip) if fair - bid_price >= gate * bid_price else NO_QUOTE
+        ask = Quote(view.best_ask, view.clip) if ask_price - fair >= gate * ask_price else NO_QUOTE
+        return Quotes(bid, ask)
 
 
 #: The name of the tape :class:`RegimeGuard` reads: the effective time, in

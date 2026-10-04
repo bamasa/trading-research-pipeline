@@ -159,6 +159,32 @@ def structural_breaks() -> None:
     )
 
 
+def market_making(results: Path = RESULTS, images: Path = IMAGES, suffix: str = "H") -> bool:
+    """The six market-making charts, from the held-out block's tables."""
+    from trading_research.reporting import mm_plots
+
+    def table(name: str) -> pd.DataFrame:
+        return pd.read_csv(results / f"mm_{name}_{suffix}.csv")
+
+    if not (results / f"mm_hypotheses_{suffix}.csv").exists():
+        return False
+    symbol = "BICOUSDT"
+    charts = (
+        ("mm_markouts", lambda p: mm_plots.markouts_by_path(table("markouts"), p, symbol=symbol)),
+        (
+            "mm_decomposition",
+            lambda p: mm_plots.decomposition(table("strategies"), p, symbol=symbol),
+        ),
+        ("mm_inventory", lambda p: mm_plots.inventory(table("inventory"), p)),
+        ("mm_placebos", lambda p: mm_plots.placebos(table("placebos"), p)),
+        ("mm_ladder", lambda p: mm_plots.ladder(table("ladder"), p)),
+        ("mm_fee_breakeven", lambda p: mm_plots.fee_breakeven(table("fee_breakeven"), p)),
+    )
+    for name, draw in charts:
+        plots.both_themes(draw, images / f"{name}.png")
+    return True
+
+
 def main() -> None:
     IMAGES.mkdir(parents=True, exist_ok=True)
     reversion_variants()
@@ -179,6 +205,10 @@ def main() -> None:
     print("gross/net done")
     structural_breaks()
     print("structural breaks done")
+    if market_making():
+        print("market making done")
+    else:
+        print("market making skipped: experiments/results/mm_hypotheses_H.csv is absent")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,11 @@ Everything else here is negative and was established the same way. Directional
 prediction from one instrument's own order book does not clear a taker round
 trip: forty-four instruments screened, the three best searched over thirteen
 axes, no winner profitable on a block that chose nothing.
+Market making was tested the same way, pre-registered and read once on a
+held-out fortnight: all four hypotheses are killed, because on the one
+instrument whose spread admits a market maker the spread captured is smaller
+than the move that follows the fills
+([below](#market-making-quoting-both-sides-on-public-bybit-data)).
 [`docs/findings.md`](docs/findings.md) is the register — every candidate, its
 status, and the condition written down before the test that would refute it.
 
@@ -38,7 +43,7 @@ features, they tune on the data they report on, or they ignore what it costs to
 cross a spread two hundred times a day. This project is built so that each of
 those failure modes is a test that fails, not a caveat in a footnote.
 
-> **Status: complete end to end, taker and maker.** Data contracts, a synthetic
+> **Status: complete end to end: taker, passive entry and market making.** Data contracts, a synthetic
 > market, downloaders for two venues with data that fetches itself when missing,
 > a feature registry with look-ahead checks, purged walk-forward splits, sixteen
 > models from parameter-free rules to dilated convolutions, bagging, stacking on
@@ -48,7 +53,7 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > from trade prints, two regime-break detectors, an information audit that
 > measures each data source before a model is chosen, successive-halving search
 > over thirteen axes, and the experiment script behind every published table.
-> 933 tests, a disclosure audit in CI.
+> 1,048 tests, a disclosure audit in CI.
 
 ---
 
@@ -301,24 +306,36 @@ was profitable.
 
 ## Market making: quoting both sides on public Bybit data
 
-A study in progress, and nothing in this section is a result yet: no quoter has
-been run on any block.
+**The result: all four pre-registered hypotheses are killed** on the held-out
+fortnight, read once. On the one instrument whose spread admits a market maker,
+quoting loses to the move that follows its fills; stepping inside the spread,
+leaning on the reversion state, resting on the reversion signal and pulling back
+after regime flags each failed a condition written down before the test. No
+strategy there breaks even at any maker fee Bybit publishes.
 
 **What was pre-registered.** Before any market-making code existed,
 [`docs/preregistration/market_making.md`](docs/preregistration/market_making.md)
 and [`configs/mm_prereg.yaml`](configs/mm_prereg.yaml) (commit `cb4ae4c`) fixed
 the blocks, the instrument admission rule, three hypotheses with their kill
-conditions and placebos, and the rule that the held-out fortnight is read once
-(corrections to the simulator found in code review, before any result, are
-recorded there as Amendment 1). The hypotheses:
+conditions and placebos, and the rule that the held-out fortnight is read once.
+Amendment 1 recorded simulator corrections found in review, before any result;
+Amendment 2 froze every value searched on the 25-day development block, with the
+configuration's hash, before the held-out block was opened. The hypotheses:
 
-- **H1** — quoting one tick inside a wide spread, first in the queue, earns more
-  than the same quoter at the touch;
+- **H1** — quoting one tick inside a wide spread, first in the queue, earns a
+  positive net and more than the same quoter without the rule;
 - **H2** — the reversion state of [§27](docs/results.md#27-cross-sectional-reversion-and-the-market-state-it-requires)
   pays a market maker that leans against the index's move (H2.1), and passive
   execution of the frozen reversion signal beats crossing for it (H2.2);
-- **H3** — pulling or widening quotes after a regime-break flag earns more than
-  quoting through it.
+- **H3** — widening quotes after a regime-break flag earns more than quoting
+  through it.
+
+**The held-out fortnight was read once**, 26 February to 9 March 2024, through a
+ledger that refuses to open it unless the frozen configuration is committed and
+the tree clean, and records the read
+([`mm_heldout_ledger.json`](experiments/results/mm_heldout_ledger.json): commit
+`2a7daaa`, 2026-10-04 12:34:52 UTC). Every day of every instrument was simulated
+and none was excluded.
 
 **The simulator, in six rules.** Built first, tested on synthetic markets with
 known answers, and documented rule by rule with the direction each one biases a
@@ -343,8 +360,147 @@ result in [`docs/market_making_simulator.md`](docs/market_making_simulator.md):
    book lost messages, or whose flatten found no fresh book, is flagged and
    kept out of every verdict.
 
-The quoters, the development-period search and the single read of the held-out
-fortnight follow, in that order.
+### What each increment earns
+
+BICOUSDT, the only instrument the admission rule (spread at least twice the base
+maker fee, two ticks or more a quarter of the time) let through, over the
+held-out fortnight, USDT a day
+([`mm_strategies_H.csv`](experiments/results/mm_strategies_H.csv)):
+
+| Strategy | Net | Net, bp of turnover | Fills a day | RMS position (BICO) | Spread | Adverse, 5 s | Inventory | Fees | Funding |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| S0 at the touch | −43.41 | −5.00 | 12,277 | 103 | +21.49 | −47.26 | −0.30 | 17.37 | +0.03 |
+| S1 skewed, gated | −1.20 | −7.50 | 192 | 56 | +2.45 | −2.96 | −0.35 | 0.33 | −0.01 |
+| S2 + one tick inside | −1.21 | −7.54 | 192 | 56 | +2.45 | −2.96 | −0.37 | 0.33 | −0.01 |
+| S3 + regime guard | −1.10 | −7.93 | 164 | 58 | +2.02 | −2.51 | −0.30 | 0.28 | −0.01 |
+| S4 + reversion lean | −0.65 | −2.64 | 316 | 72 | +2.43 | −3.15 | +0.58 | 0.50 | −0.01 |
+| X1 passive reversion | −0.06 | −8.14 | 10 | 0.5 | +0.02 | −0.05 | −0.02 | 0.01 | 0.00 |
+
+The clip is a tenth of the touch, about 20 USDT, so the amounts are small; the
+sign and the basis points are the point. Every row is negative, and stays
+negative under every cancellation rule, arrival rule and latency from 1 to
+250 ms ([`mm_robustness_H.csv`](experiments/results/mm_robustness_H.csv)).
+
+### Where the money goes
+
+The touch quoter earns its spread and gives back more than twice as much to the
+move in the five seconds after it is filled. The fills that reach a resting
+order through the queue are worth something; the ones a print trades straight
+through are worth −3.8 to −4.6 bp at five seconds, and for the gated quoters
+they are three fills in four. On BICOUSDT every strategy's passive fills, taken
+together, are worth less than being the passive side of the average print (the
+dashed line).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_markouts_dark.png">
+  <img alt="Markouts by fill path against the market-wide passive benchmark" src="docs/images/mm_markouts_light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_decomposition_dark.png">
+  <img alt="The decomposition of each strategy's daily net" src="docs/images/mm_decomposition_light.png">
+</picture>
+
+### Inventory
+
+S1, the quoter every hypothesis is compared against, held a root-mean-square
+position of 56 BICO (about 25 USDT) against a soft limit of six clips, and was
+flattened back to that limit twice in thirteen days.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_inventory_dark.png">
+  <img alt="S1's inventory over the held-out fortnight" src="docs/images/mm_inventory_light.png">
+</picture>
+
+### The three hypotheses
+
+| Hypothesis | Metric | Value | Day t (12 df) | Kill conditions that fired | Status |
+|---|---|---:|---:|---|---|
+| H1 inside the spread | S2 − twin, paired daily, USDT | −0.007 | −0.93 | K1 net ≤ 0, K2 no gain over the twin, K4 the stale placebo gains as much, K-fund | **killed** |
+| H2.1 lean on the state | S4 − S1, paired daily, pooled, USDT | −91.81 | −0.55 | K1 no gain, K3 below the shuffled-state placebos, K-fund | **killed** |
+| H2.2 rest on the signal | X1 − taker, net per attempt, bp | −9.96 | −1.78 | K1, K2 X1 itself loses (−4.92 bp), K3 following the move does as well, K4, K-fund | **killed** |
+| H3 regime guard | S3 − S1, paired daily, USDT | +0.107 | +0.62 | K2 no better than the same flags at random times | **killed** |
+
+None passes Holm's procedure across the four, and none needed to fail it: each
+is killed by a condition stated in advance. The secondary H2.3 reads the
+boundary block as well and waits for it. Every condition with the value it read
+is in [`mm_kill_conditions_H.csv`](experiments/results/mm_kill_conditions_H.csv)
+and in the pre-registration's
+[results section](docs/preregistration/market_making.md#results-on-block-h-read-once-4-october-2026).
+
+H2.2 was the maker case for the reversion result above: a resting order on the
+fading side fills exactly when the move it fades is happening. On the same 376
+triggers the taker version earned +6.38 bp per trade, as §27 found on this
+fortnight, and the passive version lost 4.92 bp per attempt.
+
+### Placebos
+
+The real difference (red) against 50 placebos each: the reversion tape shifted
+by one to twelve days and an hour or more (H2.1, H2.2), and the regime flags
+moved around the fortnight with their count and spacing kept (H3). A hypothesis
+survives only above the dotted 95th percentile; none is.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_placebos_dark.png">
+  <img alt="Each true difference against its placebos" src="docs/images/mm_placebos_light.png">
+</picture>
+
+### What it would take
+
+The advantage ladder adds one advantage at a time to the touch quoter, on all
+four instruments; from rung 2 each reads the future and is an upper bound, not
+a strategy. Being first in the queue fills about twice as often and loses
+more. On BICOUSDT nothing short of perfect foresight of the next second makes
+the touch quoter pay; on the tighter instruments a forecast with an R² of 0.1 to
+0.3 would.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_ladder_dark.png">
+  <img alt="Net bp of turnover by rung of the advantage ladder" src="docs/images/mm_ladder_light.png">
+</picture>
+
+### The fee that would make it pay
+
+The maker fee at which each strategy's net over the fortnight is zero, against
+Bybit's published linear-perpetual schedule, transcribed in October 2026 and
+applied to 2024 (the schedule may have differed then). The best published maker
+fee is 0 bp and the market-maker programme advertises up to a 1 bp rebate; on
+BICOUSDT, S0 would need −3.0 bp. Only S4 on CRVUSDT and XRPUSDT, and S1 there,
+whose profit was carried inventory rather than quoting, cross the line at a
+published tier.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_fee_breakeven_dark.png">
+  <img alt="Break-even maker fee per strategy and instrument" src="docs/images/mm_fee_breakeven_light.png">
+</picture>
+
+### Outside the state
+
+The boundary block (12 March to 7 April, where §27's reversion state is absent)
+is read once, after these results are committed, by the next pull request. It
+decides H2.3 and records H2's boundary predictions; it cannot revive a
+hypothesis killed here.
+
+### What this does not establish
+
+One admitted instrument and thirteen days, so a minimum detectable effect of
+about 0.9 USDT a day against a quoter that loses about 1.2; a 100 ms conflated
+book, with queue dynamics inside it a bracketed rule rather than an
+observation; no own impact; a 2026 fee schedule applied to 2024 data; and a
+fortnight whose reversion signal had been read before by takers, so only the
+execution increment was new information.
+
+**In one paragraph.** Built carefully and tested as registered, market making
+on public Bybit data does not pay here at the base fee: the spread a quoter
+captures is smaller than the move that follows its fills, and none of the three
+ideas registered to change that — stepping inside the spread, leaning on or
+resting on the reversion state, or stepping back after regime breaks — survived
+its own kill conditions on a fortnight that played no part in choosing it.
+Resting on the reversion signal, the one place the earlier negative maker result
+might have reversed, loses where crossing for the same signal wins. What the
+ladder and the fee break-even add is the size of the gap: a rebate three times
+the largest advertised, or a forecast of the next second no public data here
+provides.
 
 ---
 
@@ -606,6 +762,23 @@ one cell away from §27's configuration and loses on the held-out block — whic
 is reported here rather than smoothed over, because it is a fair measure of how
 sharp the effect's edge is: one neighbouring cell, and it is gone.
 
+### Reproducing the market-making study
+
+```bash
+uv run python -m experiments.market_making --workers 8          # block D: screen, search, freeze
+uv run python -m experiments.market_making_heldout --dry-run    # every path, on the last days of D
+uv run python -m experiments.market_making_heldout --block H    # the held-out read, through the ledger
+uv run python -m experiments.market_making_verdicts --block H   # verdicts and tables, no market data
+```
+
+The held-out read refuses to start unless the frozen configuration is committed
+and the tree is clean, and the ledger it writes makes a second read refuse too;
+on this repository H has been read, so the third command reproduces it only
+with `--force`, stamped `second read`. The fourth reads only the run's outputs,
+so the verdicts can be recomputed without touching the block. The read took 83
+minutes on eight workers. Command-line entry points arrive with the execution
+axis.
+
 ### The pipeline on real data
 
 Five stages, each a command, each writing files and a manifest. Download once,
@@ -746,7 +919,8 @@ one:
   from a 100 ms book rather than a message feed, with cancellations attributed
   by rule, own impact ignored, and a crossed snapshot filling nothing without a
   print — each stated with its direction in
-  [`docs/market_making_simulator.md`](docs/market_making_simulator.md).
+  [`docs/market_making_simulator.md`](docs/market_making_simulator.md). Its
+  verdicts rest on one admitted instrument and thirteen held-out days.
 - **Public data is coarser than production data.** Exchange archives are
   aggregated; a real system runs on a live feed with different timing.
 - **Short horizons are the hardest regime for this.** Costs dominate, edges are
@@ -856,11 +1030,10 @@ Next, and in this order, because the first one decides whether the rest matters:
       falls over. Liquidation cascades, funding settlement and session
       boundaries are each testable, and an effect that concentrates in explicable
       windows is worth more than one spread evenly.
-- [ ] **The maker case for this signal specifically.** Adverse selection was
-      measured unconditionally and costs about what the fee saving is worth. But
-      a reversion strategy *wants* to be filled against the move, which is
-      exactly when a resting order fills — so the thing that killed passive
-      execution everywhere else may work in its favour here.
+- [x] **The maker case for this signal specifically — tested, and killed.**
+      Pre-registered as H2.2 and read once: resting on the fading side lost
+      4.92 bp per attempt where crossing for the same triggers earned +6.38
+      ([market making](#market-making-quoting-both-sides-on-public-bybit-data)).
 - [ ] A volume-weighted index rather than an equal-weighted one, and the same
       question asked of order flow rather than price
 - [ ] Refitting at the breaks the whitened monitor flags, against the fixed
@@ -883,9 +1056,14 @@ any block.
       with bracketed cancellation rules, latency, post-only, inventory limits,
       fees, funding and an accounting identity checked at every change, tested
       on known-answer markets ([rules](docs/market_making_simulator.md))
-- [ ] The quoters, the regime flags and the development-period search, with
-      the pre-registration's single amendment
-- [ ] The held-out fortnight, read once
+- [x] The quoters, the regime flags and the development-period search, with
+      the amendment that froze every searched value
+- [x] **The held-out fortnight, read once: all four hypotheses killed**, the
+      advantage ladder and the fee break-even measured
+      ([results](docs/preregistration/market_making.md#results-on-block-h-read-once-4-october-2026))
+- [ ] The boundary block, read once: H2.3 and H2's boundary predictions
+- [ ] Capacity: what a quoter could trade before its own size moves the book it
+      is quoting into, which the simulator does not model
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
 
@@ -925,9 +1103,11 @@ anyway.
 
 What is left to do here:
 
-- [ ] The conditional version of the same measurement for the reversion signal,
-      where being filled against the move may be an advantage rather than the
-      usual tax — see the roadmap item above.
+- [x] The conditional version of the same measurement for the reversion signal,
+      where being filled against the move might have been an advantage rather
+      than the usual tax. Done in the market-making study, with a queue per
+      order, fills only from prints and a taker exit: it loses too (H2.2,
+      [market making](#market-making-quoting-both-sides-on-public-bybit-data)).
 - [ ] Capacity. A fill rate in the teens turns a strategy that took 3,297 trades
       into one that takes a few hundred, which establishes much less.
 

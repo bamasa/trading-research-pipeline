@@ -19,6 +19,10 @@ The modules, in the order an instrument-day passes through them:
 * :mod:`.screen` — instrument admission, computed on the development block;
 * :mod:`.prereg` — the pre-registration's YAML, its blocks, and the ledger
   that guards the held-out reads;
+* :mod:`.verdicts` — the registered statistics: day-level t, Holm, placebo
+  percentiles, fee break-evens, and the status rule;
+* :mod:`.heldout` — the held-out runner: per-day tapes built from the loaded
+  day, fill placement, and the jobs that keep every simulated day's outputs;
 * :mod:`.synthetic` — known-answer markets for the tests.
 
 The rules the simulator follows, each with the direction it biases a result

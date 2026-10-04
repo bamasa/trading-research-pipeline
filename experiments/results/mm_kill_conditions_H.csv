@@ -1,0 +1,29 @@
+hypothesis,name,test,value,reference,fired,outcome,note
+H1,K1,sum of S2's daily net over H <= 0,-15.7496,0,True,killed,
+H1,K2,mean paired daily S2 - twin <= 0,-0.00723105,0,True,killed,
+H1,K3,5 s markout per inside fill not greater than per twin touch fill,-5.52316,-16.798,False,killed,
+H1,K4,the stale-trigger placebo gains at least as much over the twin,-0.000469137,-0.00723105,True,killed,
+H1,K-pess,"positive under proportional, not under pessimistic attribution",-16.1775,0,False,killed,S2 net: -15.75 -> -16.18; S2 - twin: -0.007231 -> +0.0003195
+H1,K-fund,net minus funding <= 0,-15.6108,0,True,killed,S2 net: -15.61; S2 - twin: -0.006712
+H1,K-dir,making <= 0 while net > 0,-10.8632,0,False,killed,"S2 net: making -10.86, net -15.75; S2 - twin: making +0.006049, net -0.007231"
+H2.1,K1,mean paired difference <= 0,-91.8056,0,True,killed,
+H2.1,K2,the flipped placebo does at least as well,-141.818,-91.8056,False,killed,
+H2.1,K3,the true difference does not exceed the 95th percentile of the shuffled-state placebos,-91.8056,8.84491,True,killed,50 placebos
+H2.1,K-pess,"positive under proportional, not under pessimistic attribution",-78.148,0,False,killed,S4 - S1: -91.81 -> -78.15
+H2.1,K-fund,net minus funding <= 0,-93.0063,0,True,killed,S4 - S1: -93.01
+H2.1,K-dir,making <= 0 while net > 0,-45.8381,0,False,killed,"S4 - S1: making -45.84, net -91.81"
+H2.2,K1,mean paired daily X1 - taker <= 0,-9.95591,0,True,killed,
+H2.2,K2,X1's net per attempt <= 0,-4.9153,0,True,killed,
+H2.2,K3,the flipped placebo (following the move) does at least as well per attempt,-4.33029,-4.9153,True,killed,
+H2.2,K4,the true difference does not exceed the 95th percentile of the shuffled-state placebos,-9.95591,21.3168,True,killed,50 placebos
+H2.2,K5,fewer than 100 fills in H,275,100,False,inconclusive,
+H2.2,K-pess,"positive under proportional, not under pessimistic attribution",-10.2391,0,False,killed,X1 - taker: -9.956 -> -10.24; X1 per attempt: -4.915 -> -5.138
+H2.2,K-fund,net minus funding <= 0,-9.95591,0,True,killed,X1 - taker: -9.956; X1 per attempt: -4.915
+H2.2,K-dir,making <= 0 while net > 0,-105.392,0,False,killed,"X1 (USDT): making -105.4, net -113.3"
+H3,K1,mean paired daily difference <= 0,0.107444,0,False,killed,
+H3,K2,the true difference does not exceed the 95th percentile of the shifted-flag placebos,0.107444,0.561519,True,killed,50 placebos
+H3,K3,flag rate on D outside 0.2-24 a day (declared before H),8.88,24,False,untestable,
+H3,K4,fewer than 5 flags in H,173,5,False,inconclusive,
+H3,K-pess,"positive under proportional, not under pessimistic attribution",0.0922657,0,False,killed,S3 - S1: +0.1074 -> +0.09227
+H3,K-fund,net minus funding <= 0,0.107616,0,False,killed,S3 - S1: +0.1076
+H3,K-dir,making <= 0 while net > 0,0.0589813,0,False,killed,"S3 - S1: making +0.05898, net +0.1074"

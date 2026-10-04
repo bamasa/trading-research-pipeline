@@ -1,0 +1,10 @@
+stage,seconds
+reversion,27.2
+flags,53.4
+simulation,4877.2
+total,4958.3
+peak_rss_mb_worker,2320
+peak_rss_mb_any_child,2320
+peak_rss_mb_driver,2748
+workers,8
+jobs,1872

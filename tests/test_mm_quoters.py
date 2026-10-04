@@ -22,10 +22,13 @@ from trading_research.market_making.events import NS_PER_S, day_start_ns
 from trading_research.market_making.quoters import (
     DIRECTION_SIGNAL,
     FLAG_SIGNAL,
+    FORECAST_SIGNAL,
     INDEX_SIGNAL,
     LEAN_TRIGGER_SIGNAL,
     NO_QUOTE,
+    STALE_SPREAD_SIGNAL,
     TRIGGER_SIGNAL,
+    ForecastTouchQuoter,
     InsideQuoter,
     MarketView,
     Quote,
@@ -34,9 +37,10 @@ from trading_research.market_making.quoters import (
     ReversionLean,
     SignalExecutor,
     SkewQuoter,
+    StaleInsideQuoter,
 )
 from trading_research.market_making.signals import SignalTape
-from trading_research.market_making.simulator import SimConfig, simulate_day
+from trading_research.market_making.simulator import OracleRefused, SimConfig, simulate_day
 from trading_research.market_making.synthetic import (
     SYNTHETIC_DAY,
     hand_built_market,
@@ -413,3 +417,64 @@ def test_attempt_table_assigns_fills_to_the_attempt_that_owns_them() -> None:
     assert table["net"].tolist() == pytest.approx([0.02, 2.0])
     assert table["net_bp"].tolist() == pytest.approx([100.0, 1e4])
     assert table["filled"].tolist() == [True, True]
+
+
+# -- H1's stale-trigger placebo and the ladder's oracle rungs ------------------
+
+
+def test_the_stale_placebo_decides_on_the_lagged_spread_and_prices_on_the_current_touch() -> None:
+    quoter = StaleInsideQuoter(s2())
+    wide_now = view(bid=10_000, ask=10_006)
+    # A minute ago the spread was one tick: no improvement, though it is wide now.
+    calm = wide_now._replace(signals=MappingProxyType({STALE_SPREAD_SIGNAL: 1.0}))
+    assert quoter.quotes(calm, 0.0) == s2(inside=False).quotes(wide_now, 0.0)
+    # A minute ago it was wide: one tick inside the current touch.
+    stale_wide = wide_now._replace(signals=MappingProxyType({STALE_SPREAD_SIGNAL: 6.0}))
+    out = quoter.quotes(stale_wide, 0.0)
+    assert (out.bid.price, out.ask.price) == (10_001, 10_005)
+    # With no lagged spread at all the inside rule stays off.
+    assert quoter.quotes(wide_now, 0.0) == s2(inside=False).quotes(wide_now, 0.0)
+    assert not quoter.uses_future
+
+
+def test_the_stale_placebo_matches_s2_when_the_spread_did_not_change() -> None:
+    rng = np.random.default_rng(11)
+    quoter = s2(m_ticks=3, maker_bp=0.0)
+    stale = StaleInsideQuoter(quoter)
+    for _ in range(200):
+        bid = 10_000 + int(rng.integers(-20, 20))
+        spread = int(rng.integers(1, 9))
+        here = view(bid=bid, ask=bid + spread, vol=float(rng.uniform(0.5, 8)))
+        lagged = here._replace(signals=MappingProxyType({STALE_SPREAD_SIGNAL: float(spread)}))
+        position = float(rng.uniform(-5, 5))
+        assert stale.quotes(lagged, position) == quoter.quotes(here, position)
+
+
+def test_the_forecast_quoter_quotes_a_side_only_if_it_clears_the_fee() -> None:
+    here = view(bid=10_000, ask=10_004)  # mid 1.0002, touches 2 bp either side
+    up = here._replace(signals=MappingProxyType({FORECAST_SIGNAL: 0.0003}))
+    out = ForecastTouchQuoter(maker_bp=2.0).quotes(up, 0.0)
+    assert out.bid.price == 10_000 and out.ask.price is None  # fair 1.0005: sell is a loss
+    down = here._replace(signals=MappingProxyType({FORECAST_SIGNAL: -0.0003}))
+    out = ForecastTouchQuoter(maker_bp=2.0).quotes(down, 0.0)
+    assert out.bid.price is None and out.ask.price == 10_004
+    flat = here._replace(signals=MappingProxyType({FORECAST_SIGNAL: 0.0}))
+    # Each touch is 2 bp of the mid away, a little less of its own price.
+    assert ForecastTouchQuoter(maker_bp=1.99).quotes(flat, 0.0) == Quotes(
+        Quote(10_000, 1.0), Quote(10_004, 1.0)
+    )
+    # A fee above the half-spread keeps both sides out; no forecast, no quote.
+    assert ForecastTouchQuoter(maker_bp=2.5).quotes(flat, 0.0) == Quotes(NO_QUOTE, NO_QUOTE)
+    assert ForecastTouchQuoter(maker_bp=0.0).quotes(here, 0.0) == Quotes(NO_QUOTE, NO_QUOTE)
+
+
+def test_the_forecast_quoter_is_refused_outside_the_ladder() -> None:
+    quoter = ForecastTouchQuoter(maker_bp=2.0)
+    assert quoter.uses_future
+    market = random_market(3, n_snapshots=100)
+    with pytest.raises(OracleRefused):
+        simulate_day(market, quoter, SimConfig(clip_notional=1e6, warmup_s=0.0))
+    result = simulate_day(
+        market, quoter, SimConfig(clip_notional=1e6, warmup_s=0.0), allow_oracle=True
+    )
+    assert result.oracle
