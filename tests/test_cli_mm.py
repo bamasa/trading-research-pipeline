@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from trading_research.cli import app
 from trading_research.market_making.synthetic import SYNTHETIC_DAY, random_market
@@ -43,7 +43,7 @@ def _roots(root: Path) -> list[str]:
     ]
 
 
-def _output(result) -> str:  # type: ignore[no-untyped-def]
+def _output(result: Result) -> str:
     return result.output + (getattr(result, "stderr", "") or "")
 
 
@@ -93,3 +93,9 @@ def test_with_the_flag_the_ledger_still_decides(
     assert result.exit_code == 2
     assert "no pre-registration document" in _output(result)
     assert not (tmp_path / "experiments").exists()  # nothing recorded, nothing read
+
+
+def test_reproduce_names_its_execution_modes() -> None:
+    result = runner.invoke(app, ["reproduce", "--execution", "sometimes", "--no-fetch"])
+    assert result.exit_code == 2
+    assert "taker, maker, both" in _output(result)

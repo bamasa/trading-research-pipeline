@@ -40,7 +40,7 @@ progress and a test can assert the sequence without capturing stdout.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -129,12 +129,18 @@ RATES = (20.0, 60.0)
 #: fortnight, whatever it earns. Enforced on the search block.
 MIN_TRADES_PER_DAY = 8.0
 
+#: What ``reproduce --execution`` accepts.
+EXECUTIONS: tuple[str, ...] = ("taker", "maker", "both")
+
 
 def _load_panel(
-    root: Path, symbols: Sequence[str], *, min_days: int = 30
+    root: Path, symbols: Sequence[str], *, min_days: int = 30, sizes: bool = False
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     from trading_research.data.grid import to_grid
 
+    columns = ["timestamp", "bid_price_0", "ask_price_0"]
+    if sizes:  # passive entry queues behind the touch, so it needs the sizes too
+        columns += ["bid_size_0", "ask_size_0"]
     prices, books = {}, {}
     for symbol in symbols:
         files = sorted((root / symbol).glob("*.parquet"))
@@ -142,10 +148,7 @@ def _load_panel(
             continue
         frame = to_grid(
             pd.concat(
-                [
-                    pd.read_parquet(f, columns=["timestamp", "bid_price_0", "ask_price_0"])
-                    for f in files
-                ],
+                [pd.read_parquet(f, columns=columns) for f in files],
                 ignore_index=True,
             )
         )
@@ -205,8 +208,19 @@ def run(
     span: tuple[date, date] = SPAN,
     fetch: bool = True,
     report: Reporter | None = None,
+    execution: str = "taker",
+    trades_root: Path = Path("data/trades"),
 ) -> Discovery:
-    """Run every stage in order and return what each one decided."""
+    """Run every stage in order and return what each one decided.
+
+    ``execution`` is ``taker`` (every stage as it always ran), ``both`` (an
+    execution stage after the held-out read: taker against passive entry on
+    the instruments with prints under ``trades_root``, the mode chosen on the
+    search block, both reported held out) or ``maker`` (the same stage with
+    passive entry taken rather than chosen).
+    """
+    if execution not in EXECUTIONS:
+        raise ValueError(f"execution must be one of {EXECUTIONS}, got {execution!r}")
     from trading_research.backtest.costs import TakerCosts
     from trading_research.evaluation.significance import assess
 
@@ -224,7 +238,7 @@ def run(
             report,
         )
 
-    panel, books = _load_panel(book_root, symbols)
+    panel, books = _load_panel(book_root, symbols, sizes=execution != "taker")
     cut = int(len(panel) * SEARCH_SHARE)
     out.add(
         Stage(
@@ -360,6 +374,16 @@ def run(
         report,
     )
 
+    # --- 4b. how the chosen signal meets the market ---------------------------
+    if execution != "taker":
+        out.add(
+            execution_stage(
+                panel, books, values, costs, (lookback, hold, rate), cut, thresholds,
+                trades_root, take_passive=execution == "maker",
+            ),
+            report,
+        )  # fmt: skip
+
     # --- 5. the state the result depends on ---------------------------------
     out.regime = _regime(values.mean(axis=1), hold, slice(0, cut), slice(cut, len(panel)))
     out.add(
@@ -419,19 +443,29 @@ def _trade_all(
     *,
     detailed: bool = False,
     thresholds: dict[str, float] | None = None,
+    flows: Mapping[str, Any] | None = None,
+    passive: bool = False,
 ) -> Any:
     """Trade every instrument over one block with one configuration.
 
     ``thresholds`` are supplied when trading a block that must not inform them.
     When ``None`` they are fitted here and returned, which is only correct on
     the block the search is allowed to see.
+
+    ``flows`` (symbol to :class:`~trading_research.pipeline.execution.GridMarket`
+    with prints) restricts the run to the instruments that have them, and
+    ``passive`` posts each entry at the touch instead of crossing
+    (:func:`~trading_research.pipeline.execution.run_passive`); misses are rows
+    that earned nothing. Without either, this is the taker run it always was.
     """
     from trading_research.backtest.execution import ThinningRules, thin
+    from trading_research.backtest.maker import MakerCosts, PostingRules
+    from trading_research.pipeline.execution import run_passive
 
     net_all, rows = [], []
     fitted: dict[str, float] = {}
     for i, symbol in enumerate(panel.columns):
-        if symbol not in books:
+        if symbol not in books or (flows is not None and symbol not in flows):
             continue
         book = books[symbol].reindex(panel.index).ffill()
         mid = ((book["bid_price_0"] + book["ask_price_0"]) / 2).to_numpy()
@@ -466,6 +500,22 @@ def _trade_all(
         decision[strong] = -np.sign(window[strong]).astype(int)
         block_forward = forward[block]
         decision[~np.isfinite(block_forward)] = 0
+
+        if passive and flows is not None:
+            posted = run_passive(
+                decision,
+                flows[symbol].window(block.start, block.stop),
+                PostingRules(timeout_rows=hold, hold_rows=hold),
+                MakerCosts(fee_bp_per_side=2.0, taker_fee_bp_per_side=costs.fee_bp_per_side),
+            )
+            if posted.empty:
+                continue
+            net_all.extend(posted["net_bp"].tolist())
+            if detailed:
+                posted.insert(0, "symbol", symbol)
+                posted["day"] = (block.start + posted["entry_index"]) // ROWS_PER_DAY
+                rows.append(posted[["symbol", "day", "gross_bp", "net_bp", "filled"]])
+            continue
 
         taken = thin(
             decision,
@@ -508,3 +558,114 @@ def _regime(level: np.ndarray, lag: int, search: slice, held_out: slice) -> dict
         ok = np.isfinite(a) & np.isfinite(b)
         out[name] = float(np.corrcoef(a[ok], b[ok])[0, 1]) if ok.sum() > 1_000 else float("nan")
     return out
+
+
+def flows_on_panel(
+    panel: pd.DataFrame, books: dict[str, pd.DataFrame], trades_root: Path
+) -> dict[str, Any]:
+    """Each instrument's book and prints on the panel's grid, for those with prints.
+
+    Prints are read one day at a time and assigned to the row whose interval
+    holds them (:func:`~trading_research.pipeline.execution.aggressive_flow`),
+    so memory is one day of prints however long the span.
+    """
+    from trading_research.data import bybit_trades
+    from trading_research.market_making.events import to_ns
+    from trading_research.pipeline.execution import GridMarket, aggressive_flow
+
+    edges = pd.Series(to_ns(pd.DatetimeIndex(panel.index)))
+    out: dict[str, Any] = {}
+    for symbol in panel.columns:
+        if symbol not in books or "bid_size_0" not in books[symbol]:
+            continue
+        book = books[symbol].reindex(panel.index).ffill()
+        bid, ask = book["bid_price_0"].to_numpy(), book["ask_price_0"].to_numpy()
+        sell, buy = np.zeros(len(panel)), np.zeros(len(panel))
+        seen = 0
+        for day in sorted(set(pd.DatetimeIndex(panel.index).date)):
+            path = bybit_trades.day_path(symbol, day, trades_root)
+            if not path.exists() or path.stat().st_size == 0:
+                continue
+            prints = pd.read_parquet(path, columns=["timestamp", "price", "size", "aggressor"])
+            prints["timestamp"] = to_ns(prints["timestamp"])
+            day_sell, day_buy = aggressive_flow(prints, edges, bid, ask)
+            sell += day_sell
+            buy += day_buy
+            seen += 1
+        if not seen:
+            continue
+        steps = np.diff(np.unique(bid[np.isfinite(bid)]))
+        out[symbol] = GridMarket(
+            symbol,
+            edges.to_numpy(),
+            bid,
+            ask,
+            book["bid_size_0"].to_numpy(),
+            book["ask_size_0"].to_numpy(),
+            sell_at_bid=sell,
+            buy_at_ask=buy,
+            tick=float(steps[steps > 0].min()) if (steps > 0).any() else 0.0,
+        )
+    return out
+
+
+def execution_stage(
+    panel: pd.DataFrame,
+    books: dict[str, pd.DataFrame],
+    values: np.ndarray,
+    costs: Any,
+    configuration: tuple[int, int, float],
+    cut: int,
+    thresholds: dict[str, float],
+    trades_root: Path,
+    *,
+    take_passive: bool = False,
+) -> Stage:
+    """Taker against passive entry for the chosen configuration, where there are prints.
+
+    Both run the same decisions on the same instruments; the mode is chosen on
+    the search block by net per attempt (or taken as passive when asked), and
+    both are reported on the held-out block, which chooses nothing.
+    """
+    from trading_research.evaluation.significance import SignificanceError, assess
+
+    flows = flows_on_panel(panel, books, trades_root)
+    total = panel.shape[1]
+    if not flows:
+        return Stage("execution", f"taker only: none of {total} instruments has prints")
+    lookback, hold, rate = configuration
+    rows = []
+    for mode in ("taker", "passive_entry"):
+        for name, block in (("search", slice(0, cut)), ("held out", slice(cut, len(panel)))):
+            trades, _ = _trade_all(
+                panel, books, values, costs, lookback, hold, rate, block, detailed=True,
+                thresholds=thresholds, flows=flows, passive=mode == "passive_entry",
+            )  # fmt: skip
+            row: dict[str, Any] = {"mode": mode, "block": name, "attempts": len(trades)}
+            if len(trades):
+                row["instruments"] = trades["symbol"].nunique()
+                row["fill_rate"] = float(trades.get("filled", pd.Series(True)).mean())
+                row["gross_per_attempt_bp"] = float(trades["gross_bp"].mean())
+                row["net_per_attempt_bp"] = float(trades["net_bp"].mean())
+                try:
+                    row["day_t"] = assess(trades, value="net_bp", cluster="day").cluster_t
+                except SignificanceError:
+                    row["day_t"] = float("nan")
+            rows.append(row)
+    table = pd.DataFrame(rows)
+    on = table.set_index(["block", "mode"])
+    search = on.loc["search"]["net_per_attempt_bp"].fillna(-np.inf)
+    chosen = "passive_entry" if take_passive else str(search.idxmax())
+    held = on.loc["held out"]
+    net: dict[Any, Any] = held["net_per_attempt_bp"].to_dict()
+    fills: dict[Any, Any] = held["fill_rate"].to_dict()
+    taker_bp, passive_bp = float(net["taker"]), float(net["passive_entry"])
+    fill_rate = float(fills["passive_entry"])
+    how = "taken as asked" if take_passive else "chosen on the search block"
+    return Stage(
+        "execution",
+        f"{chosen} ({how}) on {len(flows)} of {total} instruments with prints",
+        f"held out, net per attempt: taker {taker_bp:+.2f} bp, passive {passive_bp:+.2f} bp "
+        f"at a fill rate of {fill_rate:.0%}",
+        table,
+    )

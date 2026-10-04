@@ -206,6 +206,25 @@ class GridMarket:
     def __len__(self) -> int:
         return len(self.labels_ns)
 
+    def window(self, start: int, stop: int) -> GridMarket:
+        """Rows ``[start, stop)``, every array cut the same way."""
+        cut = slice(start, stop)
+
+        def part(array: np.ndarray | None) -> np.ndarray | None:
+            return None if array is None else np.asarray(array)[cut]
+
+        return GridMarket(
+            self.symbol,
+            np.asarray(self.labels_ns)[cut],
+            np.asarray(self.bid)[cut],
+            np.asarray(self.ask)[cut],
+            np.asarray(self.bid_size)[cut],
+            np.asarray(self.ask_size)[cut],
+            sell_at_bid=part(self.sell_at_bid),
+            buy_at_ask=part(self.buy_at_ask),
+            tick=self.tick,
+        )
+
     @property
     def mid(self) -> np.ndarray:
         return (np.asarray(self.bid) + np.asarray(self.ask)) / 2.0

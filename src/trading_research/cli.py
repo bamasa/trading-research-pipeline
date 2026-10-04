@@ -1410,6 +1410,17 @@ def reproduce_cmd(
     fetch: Annotated[
         bool, typer.Option("--fetch/--no-fetch", help="Download what is missing.")
     ] = True,
+    execution: Annotated[
+        str,
+        typer.Option(
+            "--execution",
+            help="taker (as published), both (taker against passive entry, chosen on the "
+            "search block) or maker (passive entry, as asked).",
+        ),
+    ] = "taker",
+    trades: Annotated[Path, typer.Option("--trades", help="Prints, for passive entry.")] = Path(
+        "data/trades"
+    ),
 ) -> None:
     """Run the whole pipeline on a clean checkout and report what it finds.
 
@@ -1431,7 +1442,18 @@ def reproduce_cmd(
     from trading_research.pipeline.discovery import run
 
     console.print(f"[bold]Running the pipeline end to end[/bold] (data under {book})\n")
-    result = run(book_root=book, fetch=fetch, report=lambda line: console.print(f"  {line}"))
+    from trading_research.pipeline.discovery import EXECUTIONS
+
+    if execution not in EXECUTIONS:
+        err_console.print(f"[red]--execution must be one of {', '.join(EXECUTIONS)}[/red]")
+        raise typer.Exit(code=2)
+    result = run(
+        book_root=book,
+        fetch=fetch,
+        report=lambda line: console.print(f"  {line}"),
+        execution=execution,
+        trades_root=trades,
+    )
 
     if not result.held_out:
         console.print("\n[yellow]The run stopped before a result.[/yellow]")
@@ -1461,6 +1483,18 @@ def reproduce_cmd(
         f"block, {result.regime['held_out']:+.4f} held out — the condition the result "
         f"carries[/dim]"
     )
+
+    executed = next((s for s in result.stages if s.name == "execution"), None)
+    if executed is not None and executed.table is not None:
+        modes = Table(title="Execution, on the instruments with prints", show_edge=False)
+        for column in executed.table.columns:
+            modes.add_column(column, justify="left" if column in ("mode", "block") else "right")
+        for _, row in executed.table.iterrows():
+            modes.add_row(
+                *[f"{v:+,.3g}" if isinstance(v, float) else str(v) for v in row.to_numpy()]
+            )
+        console.print()
+        console.print(modes)
 
     output.mkdir(parents=True, exist_ok=True)
     result.summary().to_csv(output / "stages.csv", index=False)

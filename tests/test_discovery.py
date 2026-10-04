@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -114,3 +116,94 @@ def test_rates_are_not_mixed_across_neighbourhoods() -> None:
     scored = _with_neighbourhood(surface)
     slow = scored[scored.rate == 20.0]
     assert (slow["neighbourhood_bp"] == 5.0).all(), "the losing rate must not bleed in"
+
+
+# ---------------------------------------------------------------------------
+# The execution stage: taker against passive entry where there are prints
+# ---------------------------------------------------------------------------
+
+
+def _panel(
+    tmp_path: Path, with_prints: tuple[str, ...] = ("S0", "S1")
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], np.ndarray, int]:
+    """Six instruments, three days on the 5 s grid, prints on disk for some."""
+    from trading_research.pipeline.discovery import ROWS_PER_DAY
+
+    rng = np.random.default_rng(11)
+    n = 3 * ROWS_PER_DAY
+    index = pd.date_range("2020-01-06", periods=n, freq="5s", tz="UTC")
+    common = np.cumsum(rng.normal(0, 2e-4, n))
+    panel, books = {}, {}
+    for k in range(6):
+        symbol = f"S{k}"
+        mid = 100.0 * np.exp(common + np.cumsum(rng.normal(0, 3e-4, n)))
+        tick = 0.01
+        bid = np.floor(mid / tick) * tick
+        ask = bid + tick * rng.integers(1, 3, n)
+        panel[symbol] = pd.Series(np.log((bid + ask) / 2), index=index)
+        books[symbol] = pd.DataFrame(
+            {
+                "bid_price_0": bid,
+                "ask_price_0": ask,
+                "bid_size_0": rng.uniform(1, 10, n),
+                "ask_size_0": rng.uniform(1, 10, n),
+            },
+            index=index,
+        )
+        if symbol not in with_prints:
+            continue
+        rows = rng.choice(n, size=n // 2, replace=False)
+        side = rng.choice([-1, 1], len(rows))
+        prints = pd.DataFrame(
+            {
+                "timestamp": index[rows] + pd.to_timedelta(rng.uniform(0, 4.9, len(rows)), "s"),
+                "price": np.where(side < 0, bid[rows], ask[rows]),
+                "size": rng.exponential(4.0, len(rows)),
+                "aggressor": side,
+            }
+        ).sort_values("timestamp")
+        for day, part in prints.groupby(prints["timestamp"].dt.date):
+            target = tmp_path / "trades" / symbol / f"{day.isoformat()}.parquet"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            part.to_parquet(target, index=False)
+    frame = pd.DataFrame(panel)
+    return frame, books, frame.to_numpy(), 2 * ROWS_PER_DAY
+
+
+def test_the_execution_stage_compares_modes_only_where_there_are_prints(tmp_path: Path) -> None:
+    from trading_research.backtest.costs import TakerCosts
+    from trading_research.pipeline.discovery import _trade_all, execution_stage
+
+    panel, books, values, cut = _panel(tmp_path)
+    costs = TakerCosts(fee_bp_per_side=5.5, slippage_bp=0.5)
+    _, thresholds = _trade_all(panel, books, values, costs, 24, 24, 60.0, slice(0, cut))
+    stage = execution_stage(
+        panel, books, values, costs, (24, 24, 60.0), cut, thresholds, tmp_path / "trades"
+    )
+    assert "2 of 6 instruments" in stage.decision and "chosen on the search block" in stage.decision
+    table = stage.table.set_index(["block", "mode"])
+    assert (table["instruments"] == 2).all()
+    assert table.loc[("held out", "taker"), "fill_rate"] == 1.0
+    assert 0.0 < table.loc[("held out", "passive_entry"), "fill_rate"] < 1.0
+    # The held-out block chose nothing: its figures are the same whichever mode won.
+    taken = execution_stage(
+        panel, books, values, costs, (24, 24, 60.0), cut, thresholds, tmp_path / "trades",
+        take_passive=True,
+    )  # fmt: skip
+    assert taken.decision.startswith("passive_entry (taken as asked)")
+    pd.testing.assert_frame_equal(taken.table, stage.table)
+
+
+def test_without_prints_the_stage_says_so(tmp_path: Path) -> None:
+    from trading_research.backtest.costs import TakerCosts
+    from trading_research.pipeline.discovery import execution_stage
+
+    panel, books, values, cut = _panel(tmp_path, with_prints=())
+    stage = execution_stage(
+        panel, books, values, TakerCosts(), (24, 24, 60.0), cut, {}, tmp_path / "trades"
+    )
+    assert stage.decision == "taker only: none of 6 instruments has prints"
+    with pytest.raises(ValueError, match="execution must be one of"):
+        from trading_research.pipeline.discovery import run
+
+        run(execution="sometimes", fetch=False)
