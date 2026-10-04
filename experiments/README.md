@@ -43,6 +43,8 @@ needs the `breaks` extra.
 | `maker_threshold.py` | §11 | Adverse selection of passive fills, measured against what posting saves |
 | `structural_breaks.py` | README, regime monitoring | Where the whitened monitor flags BTCUSDT daily as having changed, with which statistic, and how often the same walk fires on shuffled copies |
 | `market_making.py` | README, market making; the pre-registration's Amendment 2 | The market-making study's development block only: admission screen, reversion tape, regime flags, the two successive-halving searches, S3, S4, X1 and the minimum detectable effects; `--freeze` writes the chosen values into `configs/mm_prereg.yaml`. Reads nothing after 2024-02-25 |
+| `market_making_heldout.py` | §30; README, market making; the pre-registration's results | The held-out read, once, through the ledger: the reversion tapes and triggers, the regime flags, every strategy and its pessimistic bracket, the placebos (stale trigger, flipped, 50 shuffled-state, 50 shifted-flag), the fee grid, the robustness grid and the advantage ladder. Writes only to `artifacts/mm/heldout/`; `--dry-run` runs the same paths on the last days of D |
+| `market_making_verdicts.py` | §30; README, market making; the pre-registration's results | The registered verdicts from the read's outputs, with no market data: every kill condition, the day-level t, Holm, the status, H2.3's half on H, and the tables `mm_*_H.csv` the charts are drawn from |
 
 Two searches are not here, because they run through the CLI rather than a
 script: retraining schedules (§10) as `trading-research retrain-search`, and
