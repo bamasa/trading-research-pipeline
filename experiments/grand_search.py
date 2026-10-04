@@ -587,18 +587,7 @@ class Data:
         """The book and prints on rows ``[start, stop)``, for passive entry."""
         if self.market is None:
             raise ValueError("passive entry needs the book and the prints on the grid (--trades)")
-        m = self.market
-        return GridMarket(
-            m.symbol,
-            m.labels_ns[start:stop],
-            m.bid[start:stop],
-            m.ask[start:stop],
-            m.bid_size[start:stop],
-            m.ask_size[start:stop],
-            sell_at_bid=None if m.sell_at_bid is None else m.sell_at_bid[start:stop],
-            buy_at_ask=None if m.buy_at_ask is None else m.buy_at_ask[start:stop],
-            tick=m.tick,
-        )
+        return self.market.window(start, stop)
 
     def target(self, name: str, horizon: int) -> pd.Series:
         key = (name, horizon)
