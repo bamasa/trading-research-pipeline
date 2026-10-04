@@ -12,6 +12,20 @@ There are three modes, and they answer different questions:
 | Passive entry | [`backtest/maker.py`](../src/trading_research/backtest/maker.py) | the 5 s grid | does posting the entry instead of crossing help a directional signal? |
 | Market maker | [`market_making/`](../src/trading_research/market_making/) | event time | does quoting both sides, with inventory limits, earn more than it pays? |
 
+All three sit behind one interface,
+[`pipeline/execution.py`](../src/trading_research/pipeline/execution.py):
+`execute(signals, mode, ...)` takes a stream of decisions in event time and
+returns the same table of attempts for every mode — symbol, day, time, filled,
+gross, cost and net in bp, and the path — so a mode is never judged by a
+different statistic. A miss is an attempt that earned nothing; the market maker
+contributes one attempt per day, its net over the notional it traded. The grid
+modes act on a decision at the first grid row at or after the time it became
+known, never before. A regime policy (`none`, `guard_pull`, `guard_widen`)
+applies to every mode except that a taker or a single passive entry has no
+spread of its own to widen, so that pairing is refused. The taker and passive
+modes reproduce `thin` with `TakerCosts` and `maker.simulate` exactly, which
+the tests pin.
+
 ## Taker
 
 Every entry and every exit crosses the spread. A round trip costs

@@ -68,6 +68,7 @@ from experiments.grand_search import (
 from trading_research.backtest.evaluate import choose_confidence, decide
 from trading_research.backtest.maker import MakerCosts, PostingRules, score, simulate
 from trading_research.data.bybit_trades import load as load_trades
+from trading_research.pipeline.execution import aggressive_flow
 from trading_research.pipeline.stages import build_model
 from trading_research.validation.changepoint import segment
 
@@ -97,31 +98,6 @@ SIGNAL = Config(
     train_days=10,
     gate="open",
 )
-
-
-def aggressive_flow(
-    trades: pd.DataFrame, timestamps: pd.Series, bid: np.ndarray, ask: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
-    """Per row, the volume that would consume a resting bid and a resting ask.
-
-    A print is assigned to the row whose interval contains it, and counted only
-    if it happened at a price a resting order would have been standing at. A
-    sell that traded *below* the best bid swept through it, so it counts too;
-    one that traded above it never touched the queue.
-    """
-    edges = timestamps.to_numpy()
-    slot = np.searchsorted(edges, trades["timestamp"].to_numpy(), side="right") - 1
-    inside = (slot >= 0) & (slot < len(edges))
-    slot, aggressor = slot[inside], trades["aggressor"].to_numpy()[inside]
-    price, size = trades["price"].to_numpy()[inside], trades["size"].to_numpy()[inside]
-
-    sell_at_bid = np.zeros(len(edges))
-    buy_at_ask = np.zeros(len(edges))
-    selling = (aggressor == -1) & (price <= bid[slot])
-    buying = (aggressor == 1) & (price >= ask[slot])
-    np.add.at(sell_at_bid, slot[selling], size[selling])
-    np.add.at(buy_at_ask, slot[buying], size[buying])
-    return sell_at_bid, buy_at_ask
 
 
 def signals(data: Data, config: Config, start: int, stop: int) -> np.ndarray:

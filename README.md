@@ -52,8 +52,83 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > queue-level maker model, an event-time market-making simulator that fills only
 > from trade prints, two regime-break detectors, an information audit that
 > measures each data source before a model is chosen, successive-halving search
-> over thirteen axes, and the experiment script behind every published table.
-> 1,048 tests, a disclosure audit in CI.
+> over thirteen axes with execution and the regime policy scored at its last
+> rung, and the experiment script behind every published table. 1,071 tests, a
+> disclosure audit in CI.
+
+## The pipeline map
+
+From raw events to a verdict. Every box is a module or a document, and the
+execution step is a choice a run makes rather than an assumption built into it:
+the same signal can cross the spread, rest at the touch, or be quoted on both
+sides in event time, and each is judged by the same statistic.
+
+```mermaid
+flowchart TD
+    data["<b>1 Data</b><br/>Binance archives · Bybit book, 10 levels / 100 ms<br/>prints with the aggressor · funding<br/>contracts and validation, fetched when missing"]
+    regimes["<b>2 Regimes</b><br/>changepoint: CUSUM over book blocks<br/>whitened Shiryaev-Roberts on returns<br/>reversion state: index autocorrelation"]
+    screen["<b>3 Instruments</b><br/>edge over cost, for a taker<br/>spread of two maker fees or more, for a maker"]
+    signal["<b>4 Signal</b><br/>features with a declared look-back · labels<br/>purged walk-forward · rules and 16 models"]
+    search["<b>5 Search</b><br/>successive halving · neighbourhood choice<br/>held-out block read once"]
+    subgraph execution["6 Execution, a searched axis"]
+        taker["taker"]
+        passive["passive entry"]
+        maker["market maker S0-S3<br/>+ regime guard"]
+    end
+    grid["<b>7 Grid</b><br/>thin + taker costs · queue behind the touch"]
+    event["<b>7 Event time</b><br/>a queue per order · latency<br/>fills only from prints · fees · funding"]
+    verdict["<b>8 Verdict</b><br/>clustered t · kill conditions written first<br/>placebos · ladder · fee break-even · register"]
+    deploy["9 Deploy: not built"]
+
+    data --> regimes --> screen --> signal --> search --> execution
+    regimes -. flags and state .-> maker
+    taker --> grid
+    passive --> grid
+    maker --> event
+    grid --> verdict
+    event --> verdict
+    verdict -.-> deploy
+
+    click data "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/data_contract.md"
+    click regimes "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/validation/structural_breaks.py"
+    click screen "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/data/screen.py"
+    click signal "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/features/registry.py"
+    click search "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/validation/search.py"
+    click taker "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/pipeline/execution.py"
+    click passive "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/backtest/maker.py"
+    click maker "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/pipeline/market_making.py"
+    click grid "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/backtest/execution.py"
+    click event "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/market_making_simulator.md"
+    click verdict "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/findings.md"
+```
+
+| Step | Where it lives |
+|---|---|
+| 1 Data | [`data/`](src/trading_research/data/) · [`docs/data_contract.md`](docs/data_contract.md) |
+| 2 Regimes | [`validation/changepoint.py`](src/trading_research/validation/changepoint.py) · [`validation/structural_breaks.py`](src/trading_research/validation/structural_breaks.py) · [`market_making/flags.py`](src/trading_research/market_making/flags.py) · [`strategies/reversion.py`](src/trading_research/strategies/reversion.py) |
+| 3 Instruments | [`data/screen.py`](src/trading_research/data/screen.py) · [`market_making/screen.py`](src/trading_research/market_making/screen.py) |
+| 4 Signal | [`features/`](src/trading_research/features/) · [`labels/`](src/trading_research/labels/) · [`validation/splits.py`](src/trading_research/validation/splits.py) · [`models/`](src/trading_research/models/) |
+| 5 Search | [`validation/search.py`](src/trading_research/validation/search.py) · [`pipeline/discovery.py`](src/trading_research/pipeline/discovery.py) · [`experiments/grand_search.py`](experiments/grand_search.py) |
+| 6 Execution | [`pipeline/execution.py`](src/trading_research/pipeline/execution.py) · [`pipeline/market_making.py`](src/trading_research/pipeline/market_making.py) |
+| 7 Simulation and costs | [`backtest/`](src/trading_research/backtest/) · [`market_making/simulator.py`](src/trading_research/market_making/simulator.py) · [`docs/execution_assumptions.md`](docs/execution_assumptions.md) · [`docs/market_making_simulator.md`](docs/market_making_simulator.md) |
+| 8 Verdict | [`evaluation/significance.py`](src/trading_research/evaluation/significance.py) · [`market_making/verdicts.py`](src/trading_research/market_making/verdicts.py) · [`docs/findings.md`](docs/findings.md) · [`docs/results.md`](docs/results.md) |
+
+### Run it
+
+```bash
+uv sync --all-extras
+uv run pytest                                          # every test, synthetic data, no network
+uv run trading-research reproduce                      # §27 end to end, taker execution
+uv run trading-research reproduce --execution both     # taker against passive entry, where there are prints
+uv run trading-research mm-backtest --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25 \
+    --strategy s1 --frozen                             # the market maker on the development block
+uv run python -m experiments.grand_search --symbol BTCUSDT --execution-axis
+```
+
+`reproduce` fetches what it needs. `mm-backtest` reads the book, prints and
+funding the market-making study fetched (`data/book`, `data/trades`,
+`data/funding`) and refuses the held-out fortnight unless `--allow-heldout` is
+given, and then opens it only through the ledger.
 
 ---
 
@@ -528,29 +603,9 @@ nothing fetched.**
 ## The pipeline, step by step
 
 Twelve steps from "which market" to "running in production". Eleven are built;
-the last is marked and is not.
-
-```
- ┌── 0 ──────────┐   ┌── 1 ──────────┐   ┌── 2 ──────────┐   ┌── 3 ──────────┐
- │ screen        │   │ get the data  │   │ build         │   │ label what    │
- │ instruments   │──▶│ + contracts   │──▶│ features      │──▶│ counts as a   │
- │ by headroom   │   │ + validation  │   │ (declared     │   │ move worth    │
- │               │   │               │   │  lookback)    │   │ trading       │
- └───────────────┘   └───────────────┘   └───────────────┘   └───────────────┘
-                                                                     │
- ┌── 7 ──────────┐   ┌── 6 ──────────┐   ┌── 5 ──────────┐   ┌── 4 ──▼───────┐
- │ decide how to │   │ decide when   │   │ fit + choose  │   │ split in time │
- │ leave         │◀──│ to enter      │◀──│ the model     │◀──│ purge+embargo │
- │               │   │ (threshold)   │   │               │   │               │
- └───────────────┘   └───────────────┘   └───────────────┘   └───────────────┘
-         │
- ┌── 8 ──▼───────┐   ┌── 9 ──────────┐   ┌── 10 ─────────┐   ┌── 11 ─────────┐
- │ charge the    │   │ search the    │   │ review it     │   │ deploy + run  │
- │ costs         │──▶│ configuration │──▶│ against a     │──▶│   ⚠ not built │
- │               │   │ (smart, not   │   │ strict rubric │   │               │
- └───────────────┘   │  exhaustive)  │   └───────────────┘   └───────────────┘
-                     └───────────────┘
-```
+the last is marked and is not. The [pipeline map](#the-pipeline-map) draws the
+same path with execution as the branch it now is; the steps below keep the
+numbering they were built in.
 
 **0. Choose the instrument.** `trading-research discover` enumerates what the
 venue lists; `trading-research screen` ranks it on both halves of the edge
@@ -663,12 +718,20 @@ confidence decays, or when its prediction flips. Plus a market gate that
 declines to trade at all when volatility cannot support the cost.
 
 **8. Charge the costs.** The same cost model at labelling, at the decision, and
-in the profit and loss. Taker on both legs: fee, spread, slippage.
+in the profit and loss. Taker on both legs by default: fee, spread, slippage.
+Execution is a mode a run chooses
+([`pipeline/execution.py`](src/trading_research/pipeline/execution.py)): the same
+decisions can instead rest at the touch and fill only through the queue, or be
+quoted on both sides by the event-time market maker, and every mode returns the
+same table of attempts, misses included, for the same statistic to judge.
 
 **9. Search the configuration.** Successive halving over sampled configurations
 rather than a nested product — cheap candidates are killed after a few windows
 and only survivors are measured on the full span. Everything is chosen on
-validation and the test span is scored once.
+validation and the test span is scored once. Execution and the regime policy
+are axes as well, scored only at the last rung (`grand_search.py
+--execution-axis`): they are never drawn, so the configurations a search samples,
+and every result it produced before, are unchanged.
 
 **10. Review it.** `trading-research review` assembles the arithmetic half of
 [`docs/evaluation/rubric.md`](docs/evaluation/rubric.md) — result, dispersion,
@@ -772,6 +835,13 @@ the peak it declined reported beside the choice — reads the held-out block onc
 with thresholds carried over, and prints the result with both statistics and the
 market state it depends on.
 
+With `--execution both` the run adds one stage after the held-out read: the
+chosen configuration's decisions executed both ways, crossing and resting at the
+touch, on the instruments that have prints on disk, the mode chosen on the search
+block and both reported on the held-out block with the fill rate. `--execution
+maker` takes passive entry instead of choosing it. The default, `taker`, is the
+run described here.
+
 Two honesty properties are worth knowing before reading its output. The held-out
 block is read once; if the numbers disappoint, that is the answer, and the run
 does not go back. And the printed verdict comes from the clustered statistic,
@@ -797,8 +867,23 @@ and the tree is clean, and the ledger it writes makes a second read refuse too;
 on this repository H has been read, so the third command reproduces it only
 with `--force`, stamped `second read`. The fourth reads only the run's outputs,
 so the verdicts can be recomputed without touching the block. The read took 83
-minutes on eight workers. Command-line entry points arrive with the execution
-axis.
+minutes on eight workers.
+
+One strategy on one span, from the command line:
+
+```bash
+uv run trading-research mm-backtest --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25 \
+    --strategy s2 --frozen --fee-tier base --latency-ms 10 --cancel-model pessimistic \
+    --workers 8 --output artifacts/mm
+```
+
+It prints the day-by-day table and the decomposition (spread, adverse selection,
+inventory, fees, funding) and writes both with a manifest. Parameters come from
+the frozen registration with `--frozen`, or by hand (`--skew-bp`, `--k`,
+`--min-edge-bp`, `--m-ticks`, `--clip-notional`, `--sigma-ref`). A day of the
+held-out or boundary block is refused unless `--allow-heldout` is given; then it
+is read only with the frozen values and only through the ledger, so on this
+repository a second read of H also needs `--second-read` and is recorded as one.
 
 ### The pipeline on real data
 
@@ -1040,6 +1125,11 @@ Done:
 - [x] Data that fetches itself when it is missing, so a clean checkout runs
 - [x] A findings register with each candidate's status and the conditions that
       would kill it, written before the test rather than after
+- [x] **Execution as a searched axis**: taker, passive entry and the event-time
+      market maker behind one interface
+      ([`pipeline/execution.py`](src/trading_research/pipeline/execution.py)),
+      in the grand search at its last rung, in `reproduce --execution`, and in
+      `trading-research mm-backtest`
 
 Next, and in this order, because the first one decides whether the rest matters:
 

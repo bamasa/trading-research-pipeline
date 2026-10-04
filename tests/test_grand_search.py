@@ -222,3 +222,143 @@ def test_unscaled_clock_exit_still_scores_the_fixed_horizon() -> None:
 
     trades = thin(decision, forward, np.ones(n), rules, mid=mid)
     assert trades[0].move_bp == pytest.approx(20.0)
+
+
+# ---------------------------------------------------------------------------
+# Execution as an axis: the default is the taker every result was measured with
+# ---------------------------------------------------------------------------
+
+
+def _execution_data(with_market: bool = False):
+    """Four days of a persistent random walk on the grid, with the micro plane."""
+    from experiments.grand_search import ROWS_PER_DAY, Data
+    from trading_research.pipeline.execution import GridMarket
+
+    n, rng = int(ROWS_PER_DAY * 4), np.random.default_rng(7)
+    steps = rng.normal(0, 1.5e-4, n)
+    for i in range(1, n):
+        steps[i] += 0.15 * steps[i - 1]
+    mid = 100.0 * np.exp(np.cumsum(steps))
+    spread_bp = 1.0 + rng.gamma(2.0, 0.5, n)
+    log_mid = pd.Series(np.log(mid))
+    frame = pd.DataFrame({"mid": mid})
+    frame["spread_bp"] = spread_bp
+    frame["queue_imbalance"] = np.tanh(rng.normal(0, 0.5, n) + 2000 * np.r_[steps[1:], 0.0])
+    for span in (20, 50):
+        frame[f"log_mid_ret{span}"] = (log_mid.diff(span) * 1e4).to_numpy()
+    frame["log_mid_vol50"] = (log_mid.diff().rolling(50).std() * 1e4).to_numpy()
+    frame["imbalance_change_10"] = frame["queue_imbalance"].diff(10)
+    frame["mid_reversal_10"] = ((log_mid.diff(10) - log_mid.diff(20) / 2) * 1e4).to_numpy()
+    frame["size_shock_10"] = rng.normal(0, 0.1, n)
+    market = None
+    if with_market:
+        half = mid * spread_bp / 2e4
+        market = GridMarket(
+            "SYNTH",
+            np.arange(n, dtype=np.int64) * GRID_SECONDS * 10**9,
+            mid - half,
+            mid + half,
+            rng.uniform(1, 20, n),
+            rng.uniform(1, 20, n),
+            sell_at_bid=rng.exponential(5.0, n),
+            buy_at_ask=rng.exponential(5.0, n),
+        )
+    return Data({4000: frame}, spread_bp, mid, market=market)
+
+
+def test_execution_is_not_a_drawn_axis_so_draws_are_unchanged() -> None:
+    """Labels of the first draws, recorded before execution became an axis."""
+    from experiments.grand_search import EXECUTION_SPACE, SPACE
+
+    assert not set(EXECUTION_SPACE) & set(SPACE)
+    labels = [c.label() for c in draw(4, 20240819)]
+    assert labels == [
+        "bound_mixed/touch/net_pnl/h60/hold60/cd120/flip3/net_per_trade_bp/5d/tr20/tight_only/top40/nw4000/[default]",
+        "ensemble/depth/direction/h12/hold240/cd240/take_profit_stop3/net_bp/2d/tr20/quiet_out/top16/nw16000/[default]",
+        "momentum/micro/direction/h120/hold240/cd480/confidence25/net_per_trade_bp/1d/tr20/tight_only/all/nw4000/[default]",
+        "xgboost_regressor/micro/forward_smoothed/h60/hold120/cd0/trailing12/net_bp/1d/tr20/tight_only/top40/nw16000/[default]",
+    ]
+    assert all(c.execution_variant == ("taker", "none") for c in draw(50, 3))
+
+
+#: (model, exit, hold, gate, objective) -> (trades, net bp summed), recorded on
+#: this fixture before the taker path was routed through pipeline.execution.
+PINNED = [
+    (("momentum", "clock", 24, "open", "net_bp"), (78, -988.6205514340611)),
+    (("order_flow", "clock", 24, "open", "net_bp"), (225, -2385.55053425401)),
+    (("order_flow", "take_profit_stop", 60, "open", "net_per_trade_bp"), (191, -2225.407826662346)),
+    (("order_flow", "trailing", 60, "quiet_out", "net_per_trade_bp"), (266, -2922.7627150229036)),
+]
+
+
+@pytest.mark.parametrize(("spec", "expected"), PINNED)
+def test_the_default_execution_reproduces_the_taker_results(spec, expected) -> None:
+    from experiments.grand_search import run_block
+
+    model, exit_, hold, gate, objective = spec
+    config = _config(
+        model=model, exit=exit_, hold=hold, cooldown=hold, gate=gate, objective=objective,
+        train_days=2, exit_level=6.0,
+    )  # fmt: skip
+    data = _execution_data()
+    trades = run_block(config, data, [(0, len(data.mid))], [])
+    assert len(trades) == expected[0]
+    assert float(trades["net_bp"].sum()) == pytest.approx(expected[1], rel=1e-12)
+    assert "filled" not in trades.columns
+
+
+def test_each_configuration_has_seven_execution_variants_taker_first() -> None:
+    from experiments.grand_search import execution_variants
+
+    config = _config()
+    variants = execution_variants(config)
+    assert len(variants) == 7 and variants[0] == config
+    assert len({v.label() for v in variants}) == 7
+    assert variants[0].label() == config.label() and "/" + "taker" not in config.label()
+
+
+def test_passive_and_guarded_variants_run_on_the_grid() -> None:
+    from experiments.grand_search import run_block
+
+    data = _execution_data(with_market=True)
+    span = [(0, len(data.mid))]
+    base = _config(model="order_flow", train_days=2, cooldown=24)
+    passive = run_block(
+        _config(model="order_flow", train_days=2, cooldown=24, execution="passive_entry"),
+        data, span, [],
+    )  # fmt: skip
+    assert passive["filled"].any() and not passive["filled"].all()
+    assert (passive.loc[~passive["filled"], "net_bp"] == 0.0).all()
+    breaks = list(range(40_000, len(data.mid), 2_000))
+    plain = run_block(base, data, span, breaks)
+    pulled = run_block(
+        _config(model="order_flow", train_days=2, cooldown=24, regime_policy="guard_pull"),
+        data, span, breaks,
+    )  # fmt: skip
+    assert 0 < len(pulled) < len(plain)
+    with pytest.raises(ValueError, match="event-time data"):
+        run_block(
+            _config(model="order_flow", train_days=2, execution="market_maker"), data, span, []
+        )
+
+
+def test_the_last_rung_is_expanded_and_a_failing_variant_is_recorded() -> None:
+    from types import SimpleNamespace
+
+    from experiments.grand_search import expand_last_rung
+
+    config = _config()
+
+    def score(variant, budget):
+        if variant.execution == "market_maker":
+            raise ValueError("no prints")
+        bonus = 1.0 if variant.execution_variant == ("passive_entry", "guard_pull") else 0.0
+        return {"trades": 40.0, "net_per_trade_bp": -2.0 + bonus}
+
+    outcome = SimpleNamespace(
+        rungs=[SimpleNamespace(budget=24, results=[(config, score(config, 24))])]
+    )
+    best, metrics, table = expand_last_rung(outcome, score)
+    assert best.execution_variant == ("passive_entry", "guard_pull")
+    assert metrics["net_per_trade_bp"] == -1.0
+    assert table["skipped"].notna().sum() == 3

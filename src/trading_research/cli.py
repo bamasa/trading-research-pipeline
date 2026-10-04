@@ -20,6 +20,7 @@ absent, because it implies a capability the project does not have yet.
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -1409,6 +1410,17 @@ def reproduce_cmd(
     fetch: Annotated[
         bool, typer.Option("--fetch/--no-fetch", help="Download what is missing.")
     ] = True,
+    execution: Annotated[
+        str,
+        typer.Option(
+            "--execution",
+            help="taker (as published), both (taker against passive entry, chosen on the "
+            "search block) or maker (passive entry, as asked).",
+        ),
+    ] = "taker",
+    trades: Annotated[Path, typer.Option("--trades", help="Prints, for passive entry.")] = Path(
+        "data/trades"
+    ),
 ) -> None:
     """Run the whole pipeline on a clean checkout and report what it finds.
 
@@ -1430,7 +1442,18 @@ def reproduce_cmd(
     from trading_research.pipeline.discovery import run
 
     console.print(f"[bold]Running the pipeline end to end[/bold] (data under {book})\n")
-    result = run(book_root=book, fetch=fetch, report=lambda line: console.print(f"  {line}"))
+    from trading_research.pipeline.discovery import EXECUTIONS
+
+    if execution not in EXECUTIONS:
+        err_console.print(f"[red]--execution must be one of {', '.join(EXECUTIONS)}[/red]")
+        raise typer.Exit(code=2)
+    result = run(
+        book_root=book,
+        fetch=fetch,
+        report=lambda line: console.print(f"  {line}"),
+        execution=execution,
+        trades_root=trades,
+    )
 
     if not result.held_out:
         console.print("\n[yellow]The run stopped before a result.[/yellow]")
@@ -1461,6 +1484,18 @@ def reproduce_cmd(
         f"carries[/dim]"
     )
 
+    executed = next((s for s in result.stages if s.name == "execution"), None)
+    if executed is not None and executed.table is not None:
+        modes = Table(title="Execution, on the instruments with prints", show_edge=False)
+        for column in executed.table.columns:
+            modes.add_column(column, justify="left" if column in ("mode", "block") else "right")
+        for _, row in executed.table.iterrows():
+            modes.add_row(
+                *[f"{v:+,.3g}" if isinstance(v, float) else str(v) for v in row.to_numpy()]
+            )
+        console.print()
+        console.print(modes)
+
     output.mkdir(parents=True, exist_ok=True)
     result.summary().to_csv(output / "stages.csv", index=False)
     pd.DataFrame([{**held, **{f"regime_{k}": v for k, v in result.regime.items()}}]).to_csv(
@@ -1470,3 +1505,216 @@ def reproduce_cmd(
         if stage.table is not None:
             stage.table.to_csv(output / f"{stage.name.replace(' ', '_')}.csv", index=False)
     console.print(f"\n[dim]-> {output}[/dim]")
+
+
+@app.command("mm-backtest")
+def mm_backtest_cmd(
+    start: Annotated[str, typer.Option("--start", help="First day, YYYY-MM-DD.")],
+    end: Annotated[str, typer.Option("--end", help="Last day, inclusive, YYYY-MM-DD.")],
+    symbol: Annotated[str, typer.Option("--symbol", "-s", help="Instrument.")] = "BICOUSDT",
+    strategy: Annotated[str, typer.Option("--strategy", help="s0, s1, s2 or s3.")] = "s1",
+    frozen: Annotated[
+        bool, typer.Option("--frozen", help="Read every parameter from the frozen registration.")
+    ] = False,
+    params: Annotated[
+        Path, typer.Option("--params", help="The registration --frozen reads.")
+    ] = Path("configs/mm_prereg.yaml"),
+    clip_notional: Annotated[float | None, typer.Option("--clip-notional")] = None,
+    sigma_ref: Annotated[
+        float | None, typer.Option("--sigma-ref", help="S1-S3, bp a minute.")
+    ] = None,
+    skew_bp: Annotated[float, typer.Option("--skew-bp")] = 2.0,
+    k: Annotated[float, typer.Option("--k")] = 0.5,
+    min_edge_bp: Annotated[float, typer.Option("--min-edge-bp")] = 4.0,
+    m_ticks: Annotated[int, typer.Option("--m-ticks", help="S2.")] = 3,
+    soft_limit_clips: Annotated[float, typer.Option("--soft-limit-clips")] = 6.0,
+    guards: Annotated[str, typer.Option("--guards", help="S3: S1 or S2.")] = "S1",
+    action: Annotated[str, typer.Option("--action", help="S3: pull or widen.")] = "widen",
+    guard_window_min: Annotated[float, typer.Option("--guard-window-min")] = 15.0,
+    regime_policy: Annotated[
+        str, typer.Option("--regime-policy", help="none, guard_pull or guard_widen (S0-S2).")
+    ] = "none",
+    fee_tier: Annotated[str, typer.Option("--fee-tier", help="A transcribed Bybit tier.")] = "base",
+    latency_ms: Annotated[float, typer.Option("--latency-ms", min=0.0)] = 10.0,
+    clip_touch_share: Annotated[
+        float, typer.Option("--clip-touch-share", help="Clip cap as a share of the touch.")
+    ] = 0.10,
+    cancel_model: Annotated[
+        str, typer.Option("--cancel-model", help="pessimistic, proportional or optimistic.")
+    ] = "proportional",
+    workers: Annotated[int, typer.Option("--workers", min=1)] = 1,
+    book: Annotated[list[Path] | None, typer.Option("--book", help="Book roots, in order.")] = None,
+    trades: Annotated[Path, typer.Option("--trades")] = Path("data/trades"),
+    funding: Annotated[Path | None, typer.Option("--funding")] = Path("data/funding"),
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path("artifacts/mm"),
+    allow_heldout: Annotated[
+        bool, typer.Option("--allow-heldout", help="Open held-out days through the ledger.")
+    ] = False,
+    second_read: Annotated[
+        bool, typer.Option("--second-read", help="With --allow-heldout: a recorded second read.")
+    ] = False,
+) -> None:
+    """Quote both sides of one instrument in event time, day by day.
+
+    The market maker of the pre-registered study, S0 to S3, on the event-time
+    simulator: fills only from prints, a queue per order, latency, inventory
+    limits, fees and funding. Prints the daily table and the decomposition of
+    the net, and writes both with a manifest.
+
+    Days of the held-out and boundary blocks are refused unless
+    ``--allow-heldout`` is given, and then they are read only with the frozen
+    values and only through the ledger, which checks the committed frozen
+    configuration and records the read. Days outside every registered block —
+    synthetic ones included — are read freely.
+    """
+    from dataclasses import asdict, replace
+    from datetime import timedelta
+
+    from trading_research.backtest.costs import fee_tier as tier_named
+    from trading_research.market_making import prereg
+    from trading_research.market_making.queue import CancelAttribution
+    from trading_research.market_making.simulator import SimConfig
+    from trading_research.pipeline import market_making as mm
+    from trading_research.pipeline.execution import execute
+
+    first, last = _as_date(start, "start"), _as_date(end, "end")
+    days = [first + timedelta(days=i) for i in range((last - first).days + 1)]
+    name = strategy.upper()
+    try:
+        if not days:
+            raise ValueError("--end is before --start")
+        held = {prereg.block_of(d) for d in days} - {None, "D"}
+        if held and allow_heldout and not frozen:
+            raise prereg.HeldOutLocked("a held-out block is read with the frozen values: --frozen")
+        changes = {
+            "fees": tier_named(fee_tier),
+            "order_latency_ns": int(latency_ms * 1e6),
+            "cancel_latency_ns": int(latency_ms * 1e6),
+            "cancel_attribution": CancelAttribution(cancel_model),
+            "clip_touch_share": clip_touch_share,
+        }
+        if frozen:
+            plan = mm.frozen_plan(name, symbol, path=params, **changes)
+        else:
+            if clip_notional is None or (name != "S0" and sigma_ref is None):
+                raise ValueError(
+                    "without --frozen, give --clip-notional (and --sigma-ref for S1-S3)"
+                )
+            values: dict[str, object] = {
+                "skew_bp": skew_bp,
+                "k": k,
+                "min_edge_bp": min_edge_bp,
+                "m_ticks": m_ticks,
+            }
+            values |= {
+                "guards": guards.upper(),
+                "action": action,
+                "guard_window_min": guard_window_min,
+            }
+            config = SimConfig(clip_notional=clip_notional, soft_limit_clips=soft_limit_clips)
+            chosen = {p: values[p] for p in mm.PARAMETERS.get(name, ())}
+            plan = mm.MakerPlan(name, config.with_(**changes), chosen, sigma_ref or 1.0)
+        if regime_policy != "none":
+            plan = replace(plan, regime_policy=regime_policy, guard_window_min=guard_window_min)
+        access = mm.access_for(days, allow_heldout=allow_heldout, second_read=second_read)
+    except (prereg.HeldOutLocked, prereg.PreRegistrationError, ValueError, KeyError) as exc:
+        err_console.print(f"[red]refused:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    roots = tuple(book) if book else (Path("data/book"), Path("data/book_fresh"))
+    sources = mm.MakerSources(roots, trades, funding)
+    console.print(
+        f"[bold]{plan.label}[/bold] on {symbol}, {first} to {last} ({access.stamp}), "
+        f"{plan.config.fees.name} fees, {latency_ms:g} ms, {cancel_model} cancels"
+    )
+    result = execute(
+        None, "market_maker", symbol=symbol, days=days, plan=plan, sources=sources,
+        access=access, workers=workers,
+    )  # fmt: skip
+    assert result.days is not None
+    _print_mm_days(result.days)
+    _print_mm_decomposition(result.summary)
+
+    out = output / f"{symbol}_{plan.label}_{first}_{last}"
+    out.mkdir(parents=True, exist_ok=True)
+    result.days.to_csv(out / "days.csv", index=False)
+    result.attempts.to_csv(out / "attempts.csv", index=False)
+    manifest = {
+        "symbol": symbol,
+        "days": [d.isoformat() for d in days],
+        "plan": plan.label,
+        "params": dict(plan.params),
+        "sigma_ref": plan.sigma_ref,
+        "config": asdict(plan.config),
+        "access": access.stamp,
+        "frozen_from": str(params) if frozen else None,
+        "summary": result.summary,
+        "version": __version__,
+    }
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str) + "\n")
+    console.print(f"\n[dim]-> {out}[/dim]")
+
+
+#: The daily table's columns: the decomposition, then what the day did.
+_MM_DAY_COLUMNS = (
+    "day",
+    "status",
+    "net",
+    "spread",
+    "adverse",
+    "inventory",
+    "fees",
+    "funding",
+    "fills",
+    "flattens",
+    "max_abs_position",
+    "flags",
+)
+
+
+def _print_mm_days(days: pd.DataFrame) -> None:
+    table = Table(title="Day by day (quote currency)", show_edge=False)
+    for column in _MM_DAY_COLUMNS:
+        left = column in ("day", "status", "flags")
+        table.add_column(column, justify="left" if left else "right", no_wrap=column == "day")
+    for _, row in days.iterrows():
+        cells = []
+        for column in _MM_DAY_COLUMNS:
+            value = row.get(column)
+            if isinstance(value, float):
+                cells.append("—" if pd.isna(value) else f"{value:,.4g}")
+            else:
+                cells.append("" if value is None else str(value))
+        table.add_row(*cells)
+    console.print(table)
+
+
+def _print_mm_decomposition(summary: dict[str, float]) -> None:
+    """Where the net came from: the daily mean of each term, and the net per turnover."""
+    if not summary.get("days"):
+        console.print("[yellow]No day could enter the result.[/yellow]")
+        return
+    table = Table(title="Decomposition, mean per usable day", show_edge=False)
+    table.add_column("term")
+    table.add_column("value", justify="right")
+    rows = [
+        ("spread captured", "spread"),
+        ("adverse selection (5 s)", "adverse"),
+        ("inventory", "inventory"),
+        ("fees (paid)", "fees"),
+        ("funding", "funding"),
+        ("net", "net_per_day"),
+        ("net, bp of turnover", "net_bp_of_turnover"),
+        ("fills a day", "fills_per_day"),
+        ("days used / excluded", None),
+    ]
+    for label, key in rows:
+        if key is None:
+            value = f"{summary['days']:.0f} / {summary.get('excluded_days', 0.0):.0f}"
+        elif key == "fills_per_day":
+            value = f"{summary[key]:,.1f}"
+        else:
+            value = f"{summary.get(key, float('nan')):+,.4f}"
+        table.add_row(label, value)
+    console.print(table)
+    console.print("  [dim]net = spread + adverse + inventory - fees + funding[/dim]")

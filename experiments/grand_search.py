@@ -56,6 +56,20 @@ works" a weaker claim than it sounds. So four more axes were added:
   the scale of a feature moves, and 4,000 rows was an assumption. Three
   windows are pre-computed and a configuration chooses among them.
 
+Execution, scored at the last rung
+----------------------------------
+How a signal meets the market is an axis too (:mod:`trading_research.pipeline.execution`):
+``taker`` (the default, and every number above), ``passive_entry`` and
+``market_maker``, each with a regime policy -- ``none``, ``guard_pull`` after a
+detected break, or, for the market maker, ``guard_widen``. They are not in
+:data:`SPACE`: drawing them there would change the sampled configurations and
+with them every earlier result. Event-time execution also costs seconds per
+instrument-day against milliseconds for the grid, so the rungs rank signal
+configurations by taker execution as before, and only the configurations alive
+at the last rung are expanded into their seven execution variants
+(``--execution-axis``) and scored on the search block. The final block is still
+read once, with whichever variant won.
+
 What is not searched, and why
 -----------------------------
 Costs. The taker fee, the spread treatment and the slippage assumption are held
@@ -71,7 +85,7 @@ import json
 import time
 import warnings
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -81,14 +95,24 @@ import pandas as pd
 from experiments._common import RESULTS, emit
 from trading_research.backtest.costs import TakerCosts
 from trading_research.backtest.evaluate import choose_confidence, decide
-from trading_research.backtest.execution import ThinningRules, thin
+from trading_research.backtest.execution import ThinningRules
 from trading_research.backtest.gating import MarketGate
+from trading_research.backtest.maker import MakerCosts, PostingRules
 from trading_research.data.grid import to_grid
 from trading_research.features.depth import build_depth_features
 from trading_research.features.normalise import RollingNormaliser
 from trading_research.features.selection import FeatureSelector
 from trading_research.labels.targets import build_target
 from trading_research.models.base import CLASSES
+from trading_research.pipeline import market_making as mm
+from trading_research.pipeline.execution import (
+    GridMarket,
+    SignalStream,
+    execute,
+    guarded_rows,
+    run_passive,
+    run_taker,
+)
 from trading_research.pipeline.stages import REGRESSION_MODELS, build_model
 from trading_research.validation.changepoint import segment
 from trading_research.validation.search import successive_halving
@@ -353,6 +377,14 @@ SPACE: dict[str, Sequence[Any]] = {
 }
 
 
+#: Execution and regime policy: scored only at the last rung, never drawn, so a
+#: search without ``--execution-axis`` samples exactly what it sampled before.
+EXECUTION_SPACE: dict[str, Sequence[str]] = {
+    "execution": ("taker", "passive_entry", "market_maker"),
+    "regime_policy": ("none", "guard_pull", "guard_widen"),
+}
+
+
 @dataclass(frozen=True)
 class Config:
     """One point in the space, hashable so the search can carry it around."""
@@ -374,6 +406,9 @@ class Config:
     select: str = "all"
     exit_level: float = 8.0
     norm_window: int = 4000
+    #: Defaults are what every configuration before the execution axis ran.
+    execution: str = "taker"
+    regime_policy: str = "none"
 
     def kwargs(self) -> dict[str, Any]:
         return dict(self.params)
@@ -385,7 +420,25 @@ class Config:
             f"/hold{self.hold}/cd{self.cooldown}/{self.exit}{self.exit_level:g}"
             f"/{self.objective}/{self.refit}/tr{self.train_days}/{self.gate}"
             f"/{self.select}/nw{self.norm_window}/[{params}]"
+            # Only a variant says how it executes, so labels in the committed
+            # tables of earlier runs are still the labels this produces.
+            + (
+                ""
+                if self.execution_variant == ("taker", "none")
+                else f"/{self.execution}/{self.regime_policy}"
+            )
         )
+
+    @property
+    def execution_variant(self) -> tuple[str, str]:
+        return self.execution, self.regime_policy
+
+
+def execution_variants(config: Config) -> list[Config]:
+    """``config`` under each execution and regime policy that exists, taker first."""
+    from trading_research.pipeline.execution import VALID_PAIRS
+
+    return [replace(config, execution=mode, regime_policy=policy) for mode, policy in VALID_PAIRS]
 
 
 def draw(n: int, seed: int) -> list[Config]:
@@ -454,6 +507,35 @@ def rules_for(config: Config) -> ThinningRules:
     return ThinningRules(**common)
 
 
+#: Bybit maker and taker fees for the passive variant; like COSTS, not searched.
+MAKER_COSTS = MakerCosts(fee_bp_per_side=2.0, taker_fee_bp_per_side=5.5, slippage_bp=0.5)
+
+#: Rows inside the window after a detected break, under ``guard_pull``: the
+#: fifteen minutes the market-making study froze for its guard.
+GUARD_MINUTES = 15.0
+GUARD_ROWS = int(GUARD_MINUTES * 60 / GRID_SECONDS)
+
+
+def posting_for(config: Config) -> PostingRules:
+    """Passive entry for a configuration: rest for one holding period, then hold it."""
+    return PostingRules(timeout_rows=config.hold, hold_rows=config.hold)
+
+
+@dataclass(frozen=True)
+class MakerContext:
+    """What the market-maker variant quotes with, and where its days live.
+
+    The plan is S1 as the market-making study froze it for the instrument,
+    leaning on the configuration's signal; the signal's strength is the move
+    its labels were defined by (:attr:`Data.label_cost_bp`), so a lean of one
+    moves the reservation price by the move the model was trained to see.
+    """
+
+    symbol: str
+    plan: mm.MakerPlan
+    sources: mm.MakerSources
+
+
 def gate_for(config: Config) -> MarketGate | None:
     if config.gate == "quiet_out":
         return MarketGate(min_volatility_quantile=0.3)
@@ -477,10 +559,16 @@ class Data:
         mid: np.ndarray,
         *,
         search_end: int | None = None,
+        market: GridMarket | None = None,
+        maker: MakerContext | None = None,
     ) -> None:
         self.frames = frames
         self.spread_bp = spread_bp
         self.mid = mid
+        # The book and the prints on the grid, and the event-time sources:
+        # needed only by the passive and market-maker execution variants.
+        self.market = market
+        self.maker = maker
         # The cost baked into cost-aware labels comes from the search block
         # alone. The median over the whole span includes the held-out days,
         # which is a small look-ahead in exactly the place that claims there
@@ -489,6 +577,17 @@ class Data:
         self.plane = planes(next(iter(frames.values())))
         self._targets: dict[tuple[str, int], pd.Series] = {}
         self._forward: dict[int, np.ndarray] = {}
+
+    @property
+    def label_cost_bp(self) -> float:
+        """The round trip cost-aware labels are built against, from the search block."""
+        return float(COSTS.round_trip_bp(float(np.median(self.spread_bp[: self.search_end]))))
+
+    def grid(self, start: int, stop: int) -> GridMarket:
+        """The book and prints on rows ``[start, stop)``, for passive entry."""
+        if self.market is None:
+            raise ValueError("passive entry needs the book and the prints on the grid (--trades)")
+        return self.market.window(start, stop)
 
     def target(self, name: str, horizon: int) -> pd.Series:
         key = (name, horizon)
@@ -593,6 +692,7 @@ def run_block(
     tradeable = usable & np.isfinite(forward)
 
     rows: list[dict[str, Any]] = []
+    quoted = np.zeros(len(features), dtype=int)
     for window_start, window_end in bounds:
         for refit in refit_points(config, window_start, window_end, breaks):
             point = refit.at
@@ -717,30 +817,47 @@ def run_block(
             decision = np.zeros(length, dtype=int)
             decision[usable_here] = decide(proba_usable, min_confidence=confidence)
 
-            trades = thin(
-                decision,
-                forward[block],
-                data.spread_bp[block],
-                rules,
-                mid=data.mid[block] if rules.needs_price_path else None,
-                p_buy=proba[:, CLASSES.index(1)] if rules.needs_probabilities else None,
-                p_sell=proba[:, CLASSES.index(-1)] if rules.needs_probabilities else None,
-            )
-            days = length / ROWS_PER_DAY
-            for trade in trades:
-                cost = float(COSTS.round_trip_bp(trade.entry_spread_bp))
-                rows.append(
-                    {
-                        "at": point + int(trade.entry_index),
-                        "gross_bp": trade.direction * trade.move_bp,
-                        "cost_bp": cost,
-                        "exit_reason": trade.exit_reason,
-                        "net_bp": trade.direction * trade.move_bp - cost,
-                        "days": days,
-                        "refit_at": point,
-                        "features_used": len(chosen),
-                    }
+            if config.regime_policy == "guard_pull" and config.execution != "market_maker":
+                # No new entry inside the window after a detected break.
+                decision[
+                    guarded_rows(np.arange(point, apply_to), np.asarray(breaks), GUARD_ROWS)
+                ] = 0
+            if config.execution == "market_maker":
+                # Quoted once per window below: event time works in whole days.
+                quoted[point:apply_to] = decision
+                continue
+            if config.execution == "passive_entry":
+                taken = run_passive(
+                    decision, data.grid(point, apply_to), posting_for(config), MAKER_COSTS
                 )
+            else:
+                taken = run_taker(
+                    decision,
+                    forward[block],
+                    data.spread_bp[block],
+                    rules,
+                    COSTS,
+                    mid=data.mid[block] if rules.needs_price_path else None,
+                    p_buy=proba[:, CLASSES.index(1)] if rules.needs_probabilities else None,
+                    p_sell=proba[:, CLASSES.index(-1)] if rules.needs_probabilities else None,
+                )
+            days = length / ROWS_PER_DAY
+            for trade in taken.itertuples(index=False):
+                row = {
+                    "at": point + int(trade.entry_index),
+                    "gross_bp": trade.gross_bp,
+                    "cost_bp": trade.cost_bp,
+                    "exit_reason": trade.path,
+                    "net_bp": trade.net_bp,
+                    "days": days,
+                    "refit_at": point,
+                    "features_used": len(chosen),
+                }
+                if config.execution != "taker":
+                    row["filled"] = bool(trade.filled)
+                rows.append(row)
+        if config.execution == "market_maker":
+            rows.extend(quote_window(config, data, quoted, window_start, window_end, breaks))
     return pd.DataFrame(rows)
 
 
@@ -776,12 +893,164 @@ def summarise(trades: pd.DataFrame, days: float) -> dict[str, float]:
     }
 
 
+def quote_window(
+    config: Config,
+    data: Data,
+    quoted: np.ndarray,
+    start: int,
+    stop: int,
+    breaks: Sequence[int],
+) -> list[dict[str, Any]]:
+    """The market-maker variant over one window: one row per day it quoted.
+
+    S1 leans on the configuration's decisions in event time, under the same
+    permission rules as the market-making study: a day of its held-out blocks
+    is refused, and the variant with it, rather than read here.
+    """
+    if data.maker is None or data.market is None:
+        raise ValueError("the market-maker variant needs event-time data (--trades, --funding)")
+    labels = data.market.labels_ns[start:stop]
+    stream = SignalStream.from_grid(
+        data.maker.symbol,
+        labels,
+        quoted[start:stop],
+        hold_rows=config.hold,
+        strength=np.full(stop - start, data.label_cost_bp),
+        grid_seconds=GRID_SECONDS,
+    )
+    days = sorted(set(pd.to_datetime(labels).date))
+    inside = np.asarray([b for b in breaks if start <= b < stop], dtype=np.int64)
+    result = execute(
+        stream,
+        "market_maker",
+        days=days,
+        regime_policy=config.regime_policy,
+        flags_ns=data.market.labels_ns[inside],
+        guard_window_min=GUARD_MINUTES,
+        plan=data.maker.plan,
+        sources=data.maker.sources,
+    )
+    at = start + np.searchsorted(labels, result.attempts["ts"].to_numpy(dtype=np.int64))
+    return [
+        {
+            "at": int(row_at),
+            "gross_bp": attempt.gross_bp,
+            "cost_bp": attempt.cost_bp,
+            "exit_reason": "market_maker",
+            "net_bp": attempt.net_bp,
+            "days": 1.0,
+            "refit_at": start,
+            "features_used": 0,
+            "filled": bool(attempt.filled),
+        }
+        for row_at, attempt in zip(at, result.attempts.itertuples(index=False), strict=True)
+    ]
+
+
+def expand_last_rung(
+    outcome: Any,
+    score: Any,
+    *,
+    objective: str = "net_per_trade_bp",
+    minimum_trades: float = 30.0,
+) -> tuple[Config, dict[str, float], pd.DataFrame]:
+    """Score every last-rung configuration under its execution variants; keep the best.
+
+    The configurations alive at the last rung were measured there with taker
+    execution. Each is scored again, at the same budget, under the six other
+    pairs of execution and regime policy, and the best of all of them by the
+    search's own objective and trade minimum is the one the final block reads.
+    A variant that cannot run (no prints, a day the protocol keeps closed) is
+    recorded as skipped with its reason, as the halving records a candidate.
+    For the market maker a "trade" is a quoted day and its net is in basis
+    points of that day's turnover.
+    """
+    last = outcome.rungs[-1]
+    scored: list[tuple[Config, dict[str, float]]] = []
+    rows: list[dict[str, Any]] = []
+    for config, metrics in last.results:
+        scored.append((config, metrics))
+        for variant in execution_variants(config)[1:]:
+            try:
+                scored.append((variant, score(variant, last.budget)))
+            except Exception as exc:  # a variant that cannot run must not end the search
+                rows.append(
+                    {"candidate": variant.label(), "skipped": f"{type(exc).__name__}: {exc}"}
+                )
+    for config, metrics in scored:
+        rows.append(
+            {
+                "candidate": config.label(),
+                "execution": config.execution,
+                "regime_policy": config.regime_policy,
+                **metrics,
+            }
+        )
+    eligible = [
+        (config, metrics)
+        for config, metrics in scored
+        if not pd.isna(metrics.get(objective, np.nan))
+        and metrics.get("trades", 0.0) >= minimum_trades
+    ]
+    if not eligible:
+        raise RuntimeError("no execution variant reached the trade minimum")
+    best, best_metrics = max(eligible, key=lambda pair: pair[1][objective])
+    return best, best_metrics, pd.DataFrame(rows)
+
+
+def execution_inputs(
+    symbol: str, book: pd.DataFrame, book_root: Path, trades_root: Path, funding_root: Path
+) -> tuple[GridMarket, MakerContext | None]:
+    """The book and prints on the grid, and the market maker's plan and sources.
+
+    The grid's labels here are bin *ends*: a row's decision is known when its
+    bin closes, and that is the moment the market maker can act on it in event
+    time. The prints are assigned to rows by the bins' starts, as passive entry
+    always assigned them. The market maker quotes with S1 as the study froze it
+    for the instrument; an instrument the registration does not cover has no
+    market-maker variant, and its variants are recorded as skipped.
+    """
+    from trading_research.data.bybit_trades import load as load_trades
+    from trading_research.pipeline.execution import aggressive_flow
+
+    bid, ask = book["bid_price_0"].to_numpy(), book["ask_price_0"].to_numpy()
+    prints = load_trades(symbol, trades_root)
+    sell_at_bid, buy_at_ask = aggressive_flow(prints, book["timestamp"], bid, ask)
+    steps = np.diff(np.unique(bid))
+    starts = pd.DatetimeIndex(book["timestamp"]).as_unit("ns").asi8
+    market = GridMarket(
+        symbol,
+        starts + GRID_SECONDS * 1_000_000_000,
+        bid,
+        ask,
+        book["bid_size_0"].to_numpy(),
+        book["ask_size_0"].to_numpy(),
+        sell_at_bid=sell_at_bid,
+        buy_at_ask=buy_at_ask,
+        tick=float(np.min(steps[steps > 0])),
+    )
+    try:
+        plan = replace(mm.frozen_plan("S1", symbol), lean=1.0)
+    except ValueError as exc:
+        print(f"  no market-maker variant: {exc}")
+        return market, None
+    sources = mm.MakerSources((book_root,), trades_root, funding_root)
+    return market, MakerContext(symbol, plan, sources)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", default="BTCUSDT")
     parser.add_argument("--candidates", type=int, default=240)
     parser.add_argument("--seed", type=int, default=20240819)
     parser.add_argument("--book", type=Path, default=Path("data/book"))
+    parser.add_argument(
+        "--execution-axis",
+        action="store_true",
+        help="score the last rung's configurations under every execution variant",
+    )
+    parser.add_argument("--trades", type=Path, default=Path("data/trades"))
+    parser.add_argument("--funding", type=Path, default=Path("data/funding"))
     args = parser.parse_args()
     warnings.filterwarnings("ignore")
 
@@ -806,7 +1075,12 @@ def main() -> None:
         print(f"  normalised at {window}: {frame.notna().all(axis=1).mean():.1%} complete rows")
     del raw
     cut = int(len(book) * SEARCH_SHARE)
-    data = Data(frames, spread_bp, mid, search_end=cut)
+    market, maker = (
+        execution_inputs(args.symbol, book, args.book, args.trades, args.funding)
+        if args.execution_axis
+        else (None, None)
+    )
+    data = Data(frames, spread_bp, mid, search_end=cut, market=market, maker=maker)
     final_bounds = [(cut, len(book))]
     search_days = cut / ROWS_PER_DAY
     final_days = (len(book) - cut) / ROWS_PER_DAY
@@ -851,21 +1125,24 @@ def main() -> None:
         label=lambda c: c.label(),
     )
     print(f"\n{outcome.summary()}")
-    print(f"winner: {outcome.best.label()}")
-    print(f"on the search block: {outcome.best_metrics}")
-
     RESULTS.mkdir(parents=True, exist_ok=True)
     stem = f"grand_search_{args.symbol}"
     outcome.table.to_csv(RESULTS / f"{stem}_rungs.csv", index=False)
+    best, best_metrics = outcome.best, outcome.best_metrics
+    if args.execution_axis:
+        best, best_metrics, variants = expand_last_rung(outcome, score)
+        variants.to_csv(RESULTS / f"{stem}_execution.csv", index=False)
+    print(f"winner: {best.label()}")
+    print(f"on the search block: {best_metrics}")
 
     # The one reading of the final block.
     final_cuts = segment(mid[cut:], spread_bp[cut:], minimum_rows=40_000)
     final_breaks = [cut + b.index for b in final_cuts.breaks]
-    final_trades = run_block(outcome.best, data, final_bounds, final_breaks)
+    final_trades = run_block(best, data, final_bounds, final_breaks)
     final = summarise(final_trades, final_days)
 
     rows = [
-        {"block": "search (chose the winner)", "days": round(search_days), **outcome.best_metrics},
+        {"block": "search (chose the winner)", "days": round(search_days), **best_metrics},
         {"block": "final (never searched)", "days": round(final_days), **final},
     ]
     table = pd.DataFrame(rows)
@@ -875,7 +1152,7 @@ def main() -> None:
     emit(table, stem)
 
     (RESULTS / f"{stem}_winner.json").write_text(
-        json.dumps({"config": outcome.best.__dict__, "final": final}, indent=2, default=str)
+        json.dumps({"config": best.__dict__, "final": final}, indent=2, default=str)
     )
 
 
