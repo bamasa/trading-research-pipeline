@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import resource
 import sys
 import time
@@ -75,7 +76,7 @@ from trading_research.backtest.costs import (
 )
 from trading_research.market_making import flags as flag_module
 from trading_research.market_making import heldout, prereg, signals, verdicts
-from trading_research.market_making.events import NS_PER_S, day_start_ns
+from trading_research.market_making.events import NS_PER_S, day_start_ns, to_ns
 from trading_research.market_making.queue import (
     ArrivalGrowth,
     CancelAttribution,
@@ -311,6 +312,10 @@ def reversion_stage(
     panel = signals.load_universe_panel(UNIVERSE, days, access=access, root=UNIVERSE_ROOT)
     report(f"  universe panel: {panel.log_mid.shape[1]} instruments, {len(panel.log_mid):,} rows")
     grid = block_grid(block[0], len(block))
+    # A rolled value lands only on labels the panel has, so its triggers can be
+    # scored by the taker twin, which reads the panel at each trigger.
+    on_panel = np.isin(grid, to_ns(pd.DatetimeIndex(panel.log_mid.index)))
+    report(f"  block grid: {len(grid):,} labels, {int(on_panel.sum()):,} on the panel")
     out: dict[str, Reversion] = {}
     twins, trigger_rows = [], []
     shifts = {
@@ -332,7 +337,8 @@ def reversion_stage(
         shuffled_lean, shuffled_triggers = {}, {}
         variants = [("real", real), ("flipped", flipped)]
         for seed, shift in shifts.items():
-            rolled = tape_from_grid("index_return_bp", grid, verdicts.roll_values(values, shift))
+            moved = np.where(on_panel, verdicts.roll_values(values, shift), np.nan)
+            rolled = tape_from_grid("index_return_bp", grid, moved)
             shuffled_lean[seed] = {
                 "index_return_bp": rolled,
                 "lean_trigger_s": signals.lean_trigger_tape(rolled, theta),
@@ -373,12 +379,14 @@ def reversion_state(
     """The index's ten-minute autocorrelation over the block, and H2.3's gate
     (the trailing one-day autocorrelation known at each block day's open)."""
     labels = pd.DatetimeIndex(panel.log_mid.index)
-    if len(labels) != ROWS_PER_DAY * len(days):
-        raise SystemExit(f"the panel has {len(labels)} rows, not {ROWS_PER_DAY} a day")
+    complete = len(labels) == ROWS_PER_DAY * len(days)
+    if not complete:
+        # The gate's daily blocks assume a complete grid; without one it is
+        # reported as missing rather than computed on misaligned days.
+        report(f"  the panel has {len(labels)} rows, not {ROWS_PER_DAY} a day: no H2.3 gate")
     level = index_level(panel.log_mid.to_numpy(dtype=np.float64))
     lag = config.hold
-    first = days.index(block[0]) * ROWS_PER_DAY
-    inside = level[first:]
+    inside = level[np.asarray(labels > pd.Timestamp(block[0], tz="UTC"))]
     past = np.full(len(inside), np.nan)
     past[lag:] = (inside[lag:] - inside[:-lag]) * 1e4
     forward = np.full(len(inside), np.nan)
@@ -388,7 +396,9 @@ def reversion_state(
     per_day = gate[::ROWS_PER_DAY]
     return {
         "index_autocorrelation_block": float(np.corrcoef(past[ok], forward[ok])[0, 1]),
-        "h2_3_gate": {d.isoformat(): float(per_day[days.index(d)]) for d in block},
+        "h2_3_gate": {
+            d.isoformat(): float(per_day[days.index(d)]) if complete else math.nan for d in block
+        },
     }
 
 

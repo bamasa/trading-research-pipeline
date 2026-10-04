@@ -128,7 +128,7 @@ def decomposition(table: pd.DataFrame, path: Path | str, *, symbol: str, title: 
     ax.axhline(0.0, color=COLOURS["neutral"], linewidth=0.8)
     ax.set_xticks(x, names)
     ax.set_ylabel("USDT a day")
-    ax.legend(frameon=False, fontsize=8, ncols=3, loc="lower left")
+    ax.legend(frameon=False, fontsize=8, ncols=3, loc="upper right")
     return _finish(
         fig, ax, title or f"Where the money goes, {symbol}: the decomposition", Path(path)
     )

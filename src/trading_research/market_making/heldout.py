@@ -317,7 +317,15 @@ def run_job(job: Job) -> list[dict[str, Any]]:
         if job.market_horizons_s:
             rows.append(_market_row(job, events))
         for spec in job.specs:
-            rows.append(_simulate(spec, job, events))
+            try:
+                rows.append(_simulate(spec, job, events))
+            except Exception as exc:
+                # One configuration failing must not lose the read of every
+                # other: the day is recorded with the error and kept out of
+                # every verdict, and the report says so.
+                row = _unavailable_row(job.symbol, job.day, spec.label, f"error: {exc!r}")
+                row.update({"label": spec.label, "group": spec.group, "oracle": spec.oracle})
+                rows.append(row)
             gc.collect()
     for row in rows:
         row["worker_peak_rss_mb"] = _peak_rss_mb()

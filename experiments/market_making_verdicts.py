@@ -259,9 +259,15 @@ class Verdict:
             KillCheck(self.name, name, test, fmt(value), fmt(reference), bool(fired), outcome, note)
         )
 
-    def common(self, claims: dict[str, tuple[float, float, float, float]]) -> None:
+    def common(
+        self,
+        claims: dict[str, tuple[float, float, float, float]],
+        direction: dict[str, tuple[float, float]] | None = None,
+    ) -> None:
         """K-pess, K-fund and K-dir over the sign claims, each given as
-        (net, net under pessimistic attribution, net minus funding, making)."""
+        (net, net under pessimistic attribution, net minus funding, making).
+        ``direction`` replaces the claims for K-dir with (net, making) pairs,
+        for a claim whose comparator has no making part."""
         names = list(claims)
         proportional = [claims[c][0] > 0 for c in names]
         pessimistic = [claims[c][1] > 0 for c in names]
@@ -283,16 +289,15 @@ class Verdict:
             ex_funding <= 0,
             note="; ".join(f"{c}: {claims[c][2]:+.4g}" for c in names),
         )
-        fired = [c for c in names if k_dir(claims[c][3], claims[c][0])]
+        pairs = direction or {c: (claims[c][0], claims[c][3]) for c in names}
+        fired = [c for c, (net, making) in pairs.items() if k_dir(making, net)]
         self.check(
             "K-dir",
             "making <= 0 while net > 0",
-            min(claims[c][3] for c in names),
+            min(making for _, making in pairs.values()),
             0.0,
             bool(fired),
-            note="; ".join(
-                f"{c}: making {claims[c][3]:+.4g}, net {claims[c][0]:+.4g}" for c in names
-            ),
+            note="; ".join(f"{c}: making {m:+.4g}, net {n:+.4g}" for c, (n, m) in pairs.items()),
         )
 
 
@@ -540,16 +545,14 @@ def h2_2(run: Run, h2: Sequence[str]) -> tuple[Verdict, dict[int, float]]:
             "X1 - taker": (
                 diff.mean(),
                 mean_or_nan(pess["minus_taker_bp"].dropna()),
-                diff.mean(),  # the attempt net is cash from fills: it holds no funding
+                # The attempt net is the cash of its fills: it holds no funding.
+                diff.mean(),
                 day["making"].sum(),
             ),
-            "X1 per attempt": (
-                x1_bp,
-                per_attempt(pess),
-                float((day["net"] - day["funding"]).sum()),
-                day["making"].sum(),
-            ),
-        }
+            "X1 per attempt": (x1_bp, per_attempt(pess), x1_bp, day["making"].sum()),
+        },
+        # The taker twin has no making part: K-dir reads X1's own day totals.
+        direction={"X1 (USDT)": (float(day["net"].sum()), float(day["making"].sum()))},
     )
     t_diff, t_x1 = day_t(diff), day_t(day["per_attempt_bp"])
     verdict.value, verdict.daily = float(diff.mean()), diff

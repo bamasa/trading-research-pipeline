@@ -132,3 +132,28 @@ def test_a_finished_job_is_read_back_without_loading_the_day(tmp_path: Path) -> 
     target.parent.mkdir(parents=True)
     target.write_text(json.dumps([{"label": "done", "net": 1.5}]), encoding="utf-8")
     assert run_job(job) == [{"label": "done", "net": 1.5}]
+
+
+def loaded(market: object, *args: object, **kwargs: object) -> object:
+    return market
+
+
+def test_a_failing_spec_is_recorded_and_excluded_not_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Broken:
+        name = "broken"
+        uses_future = False
+
+        def quotes(self, view: object, position: float) -> object:
+            raise RuntimeError("no quote")
+
+    market = random_market(2, n_snapshots=300)
+    spec = Spec("broken", partial(same, Broken()), CONFIG)
+    job = job_for(tmp_path, (spec,))
+    from trading_research.market_making import heldout
+
+    monkeypatch.setattr(heldout, "load_day", partial(loaded, market))
+    (row,) = run_job(job)
+    assert row["status"].startswith("error") and row["excluded"]
+    assert row["label"] == "broken"
