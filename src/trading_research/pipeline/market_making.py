@@ -38,10 +38,10 @@ from trading_research.market_making.quoters import (
     NO_QUOTES,
     InsideQuoter,
     MarketView,
+    Quote,
     Quoter,
     Quotes,
     RegimeGuard,
-    ReversionLean,
     SkewQuoter,
     TouchQuoter,
 )
@@ -99,8 +99,8 @@ class MakerPlan:
             raise ValueError("S3 is the regime guard; set its action in its parameters")
         if self.strategy == "S0" and self.regime_policy == "guard_widen":
             raise ValueError("the touch quoter has no half-spread to widen; use guard_pull")
-        if self.lean and (self.strategy != "S1" or self.regime_policy != "none"):
-            raise ValueError("the signal lean is built on S1, without a regime policy")
+        if self.lean and self.strategy != "S1":
+            raise ValueError("the signal lean is built on S1")
         missing = [p for p in PARAMETERS[self.strategy] if p not in self.params]
         if missing:
             raise ValueError(f"{self.strategy} needs {missing}")
@@ -152,10 +152,7 @@ def make_quoter(plan: MakerPlan) -> Any:
             guarded, str(plan.params["action"]), float(plan.params["guard_window_min"])
         )
     if plan.lean:
-        # S4's mechanics with the signal in place of the index: the reservation
-        # price moves by lean times the signal's strength (bp), in its direction,
-        # for the signal's hold.
-        return ReversionLean(base, 1.0, plan.lean, False, plan.lean_window_s, name="S1+lean")
+        base = SignalLean(base, plan.lean, plan.lean_window_s)
     if plan.regime_policy != "none":
         action = plan.regime_policy.removeprefix("guard_")
         name = f"{plan.strategy}+{plan.regime_policy}"
@@ -163,6 +160,43 @@ def make_quoter(plan: MakerPlan) -> Any:
             return TouchGuard(plan.guard_window_min, name=name)
         return RegimeGuard(base, action, plan.guard_window_min, name=name)
     return base
+
+
+@dataclass(frozen=True)
+class SignalLean:
+    """S1 leaning on an external signal: S4's mechanics, the signal in place of the index.
+
+    For ``window_s`` after each signal (``lean_trigger_s``) the reservation
+    price becomes ``r * (1 + lam * s * 1e-4)``, with ``s`` the signal's signed
+    strength in bp (``index_return_bp``) read live, so a lean of one moves the
+    quotes by the move the signal expects. Like S1 it exposes its prices, so
+    the regime guard can pull or widen it.
+    """
+
+    base: SkewQuoter
+    lam: float
+    window_s: float
+    name: str = "S1+lean"
+    uses_future: bool = False
+
+    def quote_prices(
+        self, view: MarketView, position: float, *, delta_scale: float = 1.0
+    ) -> tuple[int, int] | None:
+        base = self.base
+        if not base.usable(view):
+            return None
+        r = base.reservation(view, position)
+        trigger = view.signals.get(LEAN_TRIGGER_SIGNAL, math.nan)
+        s = view.signals.get(INDEX_SIGNAL, math.nan)
+        if trigger == trigger and s == s and view.ts / 1e9 - trigger <= self.window_s:
+            r *= 1.0 + self.lam * s * 1e-4
+        return base.prices(view, r, base.half_spread_bp(view) * delta_scale)
+
+    def quotes(self, view: MarketView, position: float) -> Quotes:
+        prices = self.quote_prices(view, position)
+        if prices is None:
+            return NO_QUOTES
+        return Quotes(Quote(prices[0], view.clip), Quote(prices[1], view.clip))
 
 
 @dataclass(frozen=True)
