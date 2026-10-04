@@ -1641,9 +1641,8 @@ _MM_DAY_COLUMNS = (
 def _print_mm_days(days: pd.DataFrame) -> None:
     table = Table(title="Day by day (quote currency)", show_edge=False)
     for column in _MM_DAY_COLUMNS:
-        table.add_column(
-            column, justify="left" if column in ("day", "status", "flags") else "right"
-        )
+        left = column in ("day", "status", "flags")
+        table.add_column(column, justify="left" if left else "right", no_wrap=column == "day")
     for _, row in days.iterrows():
         cells = []
         for column in _MM_DAY_COLUMNS:
@@ -1678,6 +1677,8 @@ def _print_mm_decomposition(summary: dict[str, float]) -> None:
     for label, key in rows:
         if key is None:
             value = f"{summary['days']:.0f} / {summary.get('excluded_days', 0.0):.0f}"
+        elif key == "fills_per_day":
+            value = f"{summary[key]:,.1f}"
         else:
             value = f"{summary.get(key, float('nan')):+,.4f}"
         table.add_row(label, value)
