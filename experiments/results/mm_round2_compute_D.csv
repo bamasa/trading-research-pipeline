@@ -1,0 +1,21 @@
+stage,value,unit
+screen,15.6,s
+prints,14.9,s
+s1_b5,1677.1,s
+s1_b12,1298.7,s
+s1_b25,902.6,s
+gate,1558.7,s
+b3_pro1_altcoin,107.8,s
+b3_programme,116.3,s
+b4,189.3,s
+total,5948.2,s
+"peak RSS, largest worker, ALGOUSDT",961.0,MB
+"peak RSS, largest worker, ALICEUSDT",725.0,MB
+"peak RSS, largest worker, BICOUSDT",746.0,MB
+"peak RSS, largest worker, CAKEUSDT",1071.0,MB
+"peak RSS, largest worker, GALAUSDT",1373.0,MB
+"peak RSS, largest worker, JTOUSDT",1190.0,MB
+"peak RSS, largest worker, ZECUSDT",1077.0,MB
+"peak RSS, any worker process",1563.0,MB
+"peak RSS, driver",936.0,MB
+workers,8.0,

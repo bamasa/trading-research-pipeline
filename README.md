@@ -595,9 +595,12 @@ pays, and beats quoting throughout, against a time-shifted gate; **B3a, B3b**,
 the same at the 0 bp professional tier and at the 1 bp programme rebate, a
 conditional result about fees rather than a retail one; **B4**, the gate on
 BICOUSDT over the pristine block. The sentence that will report a survivor, and
-what cannot count as one, are fixed in advance. **Status: pre-registered;
-the room gate, the round's own loader, access and ledger are in code and
-tested; nothing fetched.**
+what cannot count as one, are fixed in advance. **Status: values frozen on
+the development block** ([amendment](docs/preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period)):
+six instruments admitted (ALICE, ALGO, JTO, ZEC and GALA by the tick rule,
+CAKE by round one's), each with its own S1; the basket's gate is open under
+1% of the time on D, so B2 is likely to end inconclusive; no held-out day
+has been read.
 
 ---
 
