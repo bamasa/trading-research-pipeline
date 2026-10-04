@@ -502,6 +502,27 @@ ladder and the fee break-even add is the size of the gap: a rebate three times
 the largest advertised, or a forecast of the next second no public data here
 provides.
 
+### A second round, registered before its data is fetched
+
+Is there any condition under which this market maker earns money? A second
+round asks it on data no market-making code has read, and is registered before
+a single file of it is fetched:
+[`docs/preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md)
+with [`configs/mm_prereg_round2.yaml`](configs/mm_prereg_round2.yaml). Eight
+wide-spread instruments (ALICE, ALGO, JTO, ZEC, GALA, GMT, CAKE, IOTA) are
+admitted by round one's rule or by a tick of at least 4 bp, on the same 25-day
+development block; the held-out fortnight is theirs, read once, and four
+pristine weeks from 8 April 2024 confirm any survivor. Five hypotheses, Holm
+across them: **B1**, the quoter re-searched per instrument pays at the base
+fee; **B2**, quoting only while the trailing room (the half-spread a passive
+fill captured, less the move that followed it, less the fee) clears a margin
+pays, and beats quoting throughout, against a time-shifted gate; **B3a, B3b**,
+the same at the 0 bp professional tier and at the 1 bp programme rebate, a
+conditional result about fees rather than a retail one; **B4**, the gate on
+BICOUSDT over the pristine block. The sentence that will report a survivor, and
+what cannot count as one, are fixed in advance. **Status: pre-registered;
+nothing fetched.**
+
 ---
 
 ## The pipeline, step by step
@@ -900,6 +921,7 @@ Documented in [`docs/`](docs/) as it lands:
 | `limitations.md` | What this does not establish |
 | `disclosure_policy.md` | What is public here and why, and what is not |
 | `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
+| [`preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md) | The second market-making round, on eight wide-spread instruments, registered before any of their data is fetched |
 
 ---
 
@@ -1062,6 +1084,9 @@ any block.
       advantage ladder and the fee break-even measured
       ([results](docs/preregistration/market_making.md#results-on-block-h-read-once-4-october-2026))
 - [ ] The boundary block, read once: H2.3 and H2's boundary predictions
+- [ ] **A second round on wide-spread instruments**, registered before any
+      fetch: the basket, a causal room gate and the professional fee tiers
+      ([pre-registration](docs/preregistration/market_making_round2.md))
 - [ ] Capacity: what a quoter could trade before its own size moves the book it
       is quoting into, which the simulator does not model
 

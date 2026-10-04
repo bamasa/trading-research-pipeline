@@ -1,0 +1,499 @@
+# Market-making study, second round: the machine-readable half of the
+# pre-registration.
+#
+# docs/preregistration/market_making_round2.md is the other half: it says what
+# each value means and why it was chosen. The two were committed together on
+# 4 October 2026, after round one's held-out results and before any book, print
+# or funding file of a basket instrument was fetched. They must agree.
+#
+# Every value here is fixed now, except those set to null with the comment
+# "frozen by the D amendment". Those are chosen on block D by the
+# development-period runs and written into this file by the single dated
+# amendment, before the first held-out read. The amendment records the sha256
+# of this file as it stands after that write; the round-two ledger refuses to
+# open a held-out block unless the file on disk matches that hash and is
+# committed and clean. Nothing else in this file changes, except under the
+# amendment protocol in the document.
+#
+# Round one's conventions hold: units in the key's suffix (_bp basis points,
+# _ms milliseconds, _s seconds, _min minutes, _h hours, _usdt notional), UTC
+# dates inclusive, seed ranges inclusive, prices inside the simulator in
+# integer ticks. Every simulator setting not listed here is round one's
+# (configs/mm_prereg.yaml, section simulator, and its Amendment 1).
+#
+# No code reads this file yet. The loader arrives with the gate and the
+# round-two ledger; until then it is a record, not an input.
+
+name: market_making_round2_preregistration
+registered: 2026-10-04
+registered_against: "3071de7"  # main when this was written
+document: docs/preregistration/market_making_round2.md
+venue: bybit
+product: linear_perpetual
+computed_before_registration: none  # no quote, fill, markout or profit on any basket instrument; no basket book, print or funding fetched
+
+round_one:
+  document: docs/preregistration/market_making.md
+  config: configs/mm_prereg.yaml
+  config_sha256_frozen: ed79d5ff520f5e93e9a8ea142058305117b530041534b1dc115b9e3507379c9d
+  ledger: experiments/results/mm_heldout_ledger.json
+  outcome_on_h: all four primaries killed
+  reused: [simulator, metric definitions, S1 grid, search procedure, BICOUSDT frozen values]
+
+prior_information:
+  - round one's results on BICOUSDT, CRVUSDT, XRPUSDT and BTCUSDT over D and H
+  - experiments/results/screen_bybit_ranked.csv  # Bybit touch, 2024-02-05..07 and 2024-03-25..27
+  - GALAUSDT and ALGOUSDT touch over 2024-02-01..03-10 and 2024-03-12..04-20 (section 27; round one's reversion tape on D and H, mids only)
+  - Binance best bid and offer for ALICEUSDT, CAKEUSDT, GALAUSDT, ZECUSDT (2024-02-01..03-09) and ALICEUSDT, CAKEUSDT (2024-03-26..29)
+  - BICOUSDT touch over 2024-03-12..04-20 (section 27)
+  - HTTP HEAD of every archive of the basket on D, H and P, and of BICOUSDT on P and Q; existence and size only
+
+blocks:
+  D:
+    role: development
+    start: 2024-02-01
+    end: 2024-02-25
+    days: 25
+    instruments: basket candidates, and BICOUSDT for B4
+    sets: [admission, clip caps, sigma_ref, S1 cells, gate cell, hour masks,
+           B3 strategy per tier, B4 base and gate cell, sigma of daily results,
+           minimum detectable effects]
+  H:
+    role: held_out
+    start: 2024-02-26
+    end: 2024-03-09
+    days: 13
+    instruments: admitted basket
+    hypotheses: [B1, B2, B3a, B3b]
+    reads: 1
+    read_with: P for BICOUSDT, as one first read
+    read_after: the D amendment is committed
+  P:
+    role: pristine
+    start: 2024-04-08
+    end: 2024-05-05
+    days: 28
+    bicousdt:
+      hypotheses: [B4]
+      read_with: H for the basket, as one first read
+      fetched: stage 1
+    basket:
+      role: second held-out block for B1, B2, B3a, B3b
+      condition: a hypothesis is taken to P (candidate, or inconclusive with every claim positive, on H)
+      instruments: every admitted basket instrument
+      read_after: H's results are committed
+      fetched: stage 2, only if the condition holds
+    reads: 1  # per instrument
+  Q:
+    role: confirmation
+    optional: true
+    start: 2024-05-06
+    end: 2024-06-02
+    days: 28
+    condition: a hypothesis is candidate after P
+    read_after: P's results are committed
+    fetched: stage 3, only if the condition holds
+    reads: 1
+  F:
+    role: unused
+    start: 2024-03-12
+    end: 2024-04-07
+    fetched_for_basket: false
+  days_independent: true  # every day starts and ends flat; no reader crosses midnight
+
+instruments:
+  basket_candidates: [ALICEUSDT, ALGOUSDT, JTOUSDT, ZECUSDT, GALAUSDT, GMTUSDT,
+                      CAKEUSDT, IOTAUSDT]
+  source_table: experiments/results/screen_bybit_ranked.csv
+  implied_spread_bp: {ALICEUSDT: 9.1, ALGOUSDT: 6.2, JTOUSDT: 5.6, ZECUSDT: 4.8, GALAUSDT: 4.6, GMTUSDT: 4.2, CAKEUSDT: 4.1, IOTAUSDT: 4.1}  # February round trip less 12 bp
+  added_later: none
+  b4_instrument: BICOUSDT
+  index_members_read_by_round_one: [GALAUSDT, ALGOUSDT]  # mids only, in the reversion tape on D and H
+
+fetch:
+  book_archive: https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob500.data.zip
+  print_archive: https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz
+  funding: bybit public REST, no credentials
+  via: data/ensure.py  # only missing days; archives not kept after the replay
+  book: {levels: 10, grid_ms: 100}
+  stage_1:
+    when: after this registration is merged
+    what: [D and H for the eight candidates, P for BICOUSDT, funding for both]
+    archives_mb: {book: 6537, prints: 1396}  # basket D+H 5,753 and 1,316; BICOUSDT P 784 and 80
+    all_days_present: true
+  stage_2:
+    when: only if a hypothesis is taken to P, after H's results are committed
+    what: P for every admitted basket instrument
+    archives_mb: {book: 6357, prints: 823}  # all eight candidates
+    all_days_present: true
+  stage_3:
+    when: only if a hypothesis is candidate after P, after P's results are committed
+    what: Q for the instruments it covers
+    archives_mb_bicousdt: {book: 532, prints: 47}
+    all_days_present_bicousdt: true
+    basket_checked: false  # checked before any stage-3 fetch
+  h_presence_check: file system only  # no H file opened before the ledger permits it
+
+admission:
+  computed_on: D
+  committed_before: H
+  code: market_making/screen.py  # unchanged from round one
+  statistics: [tick_bp, spread_bp_time_weighted, share_at_two_ticks_or_more,
+               median_touch_over_median_print, prints_per_day,
+               market_wide_passive_markout_bp_1s, market_wide_passive_markout_bp_5s,
+               market_wide_passive_markout_bp_30s, coverage_D, coverage_H]
+  rule: A1 or A2
+  A1:
+    name: round one's rule
+    spread_bp_min: 4.0  # twice the base maker fee
+    share_at_two_ticks_or_more_min: 0.25
+    prints_per_day_min: 5000
+    coverage_min: 0.90  # of D days and of H days, book and prints both present
+  A2:
+    name: tick-constrained
+    tick_bp_min: 4.0  # the spread is then at least 4 bp
+    prints_per_day_min: 5000
+    coverage_min: 0.90
+  if_one_admitted: B1, B2, B3a and B3b run on it alone
+  if_none_admitted: the round ends at the amendment; H is not read for the basket; B4 goes on
+  if_unexpected: the committed D table wins
+  day_exclusions: round one's Amendment 1, items 7 to 10
+  max_sequence_gaps: 0  # unless the amendment sets another value from D's counts
+  table: null  # frozen by the D amendment
+
+fees:
+  base: {maker_bp: 2.0, taker_bp: 5.5}
+  pro1_altcoin: {maker_bp: 0.0, taker_bp: 2.8}  # backtest/costs.py BYBIT_LINEAR_TIERS
+  programme: {maker_bp: -1.0, taker_bp: 2.8}  # BYBIT_MM_PROGRAMME_MAKER_BP; taker assumed equal to pro1_altcoin
+  caveat: backtest/costs.py BYBIT_FEE_CAVEAT  # the 2026 schedule applied to 2024
+  b3_also_reported_with_taker_bp: 5.5
+
+simulator:
+  same_as: round one  # configs/mm_prereg.yaml section simulator, with Amendment 1
+  code_at: "3071de7"
+  changes: only by a dated amendment
+  cache_key_includes_source_hash: true
+  clip:
+    rule: min(notional_usdt, touch_share x trailing one-hour median touch), rounded down to the lot
+    notional_share_of_d_median_touch: 0.10
+    touch_share: 0.10
+    notional_usdt: null  # per admitted instrument; frozen by the D amendment
+    notional_usdt_bicousdt: 20.0434  # round one's frozen value
+  volatility:
+    sigma_ref: null  # D median, per admitted instrument; frozen by the D amendment
+    sigma_ref_bicousdt: 7.92472  # round one's frozen value
+
+strategies:
+  S0:
+    name: touch
+    role: reference, fee break-even
+    soft_limit_clips: 6.0
+  S1:
+    name: skew
+    role: B1, the base of B2, B3
+    search:
+      skew_bp: [2, 5, 10]
+      k: [0, 0.5, 1, 2]
+      min_edge_bp: [0, 1, 2, 4]
+      soft_limit_clips: [3, 6, 12]
+    cells: 144
+    per_instrument: true
+    chosen: null  # {symbol: [skew_bp, k, min_edge_bp, soft_limit_clips]}; frozen by the D amendment
+  S1_touch:
+    name: S1 at its touch cell
+    k: 0
+    min_edge_bp: 0
+    skew_bp: the instrument's chosen S1 value
+    soft_limit_clips: the instrument's chosen S1 value
+    bicousdt: [2, 0, 0, 6]
+
+gate:
+  name: room gate
+  wraps: S1 or S1_touch
+  markout: side x (mid(tau + 5 s) - p) / p x 1e4, every print scored from its resting side  # analysis.market_wide_markouts
+  horizon_s: 5
+  room: volume-weighted mean markout over the day's prints with t - W <= tau and tau + 5 s <= t, less the maker fee paid
+  min_prints_in_window: 20  # fewer, and the gate is closed
+  crosses_midnight: false
+  defined_from: W minutes after 00:00  # the whole window inside the day; closed before
+  hours_mask: per instrument, from D only; hour h in the mask at margin mu if D's volume-weighted markout in h less the maker fee >= mu
+  kinds:
+    trailing: open when room >= mu
+    hours: open when the UTC hour is in the mask at mu
+    both: open when both hold
+  when_closed: cancel both sides except the side that reduces |position|, which stays at the base's price; nothing when flat
+  decision_latency_ms: 10
+  reads_the_fee_it_pays: true
+  search:
+    base: [S1, S1_touch]
+    window_min: [15, 60, 240]  # trailing and both only
+    margin_bp: [0, 1, 2]
+    kind: [trailing, both, hours]
+  cells: 42  # 2 bases x (9 trailing + 9 both + 3 hours)
+  not_registered: [a gate per side, other windows, other horizons, other margins, a gate on any other quantity]
+
+d_search:
+  S1:
+    method: validation.search.successive_halving
+    per_instrument: true
+    budgets_days: [5, 12, 25]
+    day_subsets: seeded and nested
+    day_subset_seed: 0
+    keep_fraction: 0.34
+    objective: the instrument's mean daily net, USDT
+    minimum_fills_per_day: 20  # mean passive fills a day over the days measured, flattens excluded
+    choice: neighbourhood_scores  # median of the cell and every measured cell within one step on each axis
+    choice_over: cells measured at the full budget
+    peak_reported_beside: true
+    neighbourhood: null  # per instrument, the chosen cell and its neighbours with their values; frozen by the D amendment
+  gate:
+    days: all 25 D days
+    instruments: every admitted basket instrument, each on its chosen S1 or S1_touch
+    objective: mean over D of the pooled daily metric
+    minimum_fills_per_day: 5  # mean over admitted instruments of passive fills a day
+    neighbourhood: same base and kind, one step on window_min and margin_bp (margin_bp alone for hours)
+    choice: highest neighbourhood median, ties by the cell's own value
+    one_cell_for_the_basket: true
+    chosen: null  # {base, kind, window_min, margin_bp}; frozen by the D amendment
+    chosen_neighbourhood: null  # cells and values; frozen by the D amendment
+    hours_masks: null  # {symbol: {margin_bp: [hours]}}; frozen by the D amendment
+  b3_choice:
+    candidates: [each instrument's chosen S1, the chosen G(base)]
+    tiers: [pro1_altcoin, programme]
+    rule: higher pooled mean on all D days at the tier, every value frozen
+    re_search_at_tier: false
+    chosen: null  # {pro1_altcoin: S1 or G, programme: S1 or G}, with the D values; frozen by the D amendment
+  b4:
+    instrument: BICOUSDT
+    days: round one's D, all 25
+    bases: {S1: [2, 0.5, 4, 6], S1_touch: [2, 0, 0, 6]}
+    cells: 42
+    rule: as the gate search, on BICOUSDT alone
+    chosen: null  # {base, kind, window_min, margin_bp}; frozen by the D amendment
+    chosen_neighbourhood: null  # frozen by the D amendment
+    hours_masks: null  # BICOUSDT, {margin_bp: [hours]}; frozen by the D amendment
+
+metrics:
+  primary: pooled net per 100 USDT of clip a day
+  definitions:
+    y_it: net_usd_day_it x 100 / clip_i  # clip_i the frozen clip notional cap
+    pooled: mean of y_it over admitted instruments with a usable day t
+    paired: difference per instrument-day where both are usable, then pooled the same way
+    net_usd_day: spread + adverse + inventory - fees + funding, over a day that starts and ends flat
+    making_usd_day: spread + adverse(5 s) - fees
+  reported_beside: [pooled USDT sum, net_usd_day, net_bp_turnover, making_usd_day,
+                    decomposition, markouts 1/5/30 s by fill path against the market-wide benchmark,
+                    fills_per_day, time_quoted, rms_inventory, max_inventory, flattens,
+                    max_drawdown, clip_over_touch, gate_open_share]
+  significance:
+    function: evaluation.significance.assess
+    cluster: day
+    series: symbol
+    deciding_level: day
+  minimum_detectable_effect:
+    formula: 2 x sigma_D(pooled daily metric) / sqrt(n)
+    n: {B1: 13, B2: 13, B3a: 13, B3b: 13, B4: 28}
+    sigma_d: null  # per primary and per claim; frozen by the D amendment
+    value: null  # per primary and per claim; frozen by the D amendment
+
+family:
+  members: [B1, B2, B3a, B3b, B4]
+  test: day-level one-sided t
+  correction: holm
+  alpha: 0.05
+  degrees_of_freedom: {B1: 12, B2: 12, B3a: 12, B3b: 12, B4: 27}
+  two_claims: tested at the larger of the two one-sided p-values  # B2, B4
+
+statuses:
+  first_read:
+    killed: any kill condition fires; needs no significance
+    candidate: no kill condition fires and Holm passes across the five
+    inconclusive: no kill condition fires and Holm fails
+  taken_to_p: candidate on H, or inconclusive on H with every claim positive  # B1, B2, B3a, B3b
+  on_p:
+    rules: every frozen value; every admitted instrument; every kill condition again; Holm across those taken to P; 27 degrees of freedom
+    candidate_then_pass: confirmed
+    candidate_then_fail: candidate, not confirmed
+    inconclusive_then_pass: candidate, taken to Q
+    inconclusive_then_fail: inconclusive
+    any_kill: killed on P
+  on_q:
+    taken: candidate after P (B4 candidate on its P; or B1 to B3b first significant on P)
+    pass: confirmed
+    kill: killed on Q
+    otherwise: candidate
+  conditional: B3a or B3b confirmed while B1 is not confirmed; conditional on the fee tier
+
+common_kill_conditions:
+  K-pess: a positive verdict under proportional cancellation attribution that is not positive under pessimistic attribution
+  K-fund: net minus funding <= 0
+  K-dir: making_usd_day <= 0 while net > 0
+  K-queue: a positive verdict that is not positive under pessimistic cancellation attribution and all_ahead arrival growth together
+  K-nbhd: the primary metric on the held-out block, recomputed with each cell of the chosen cell's D neighbourhood, has a median <= 0
+  applied_to: every sign claim of a hypothesis, on every block it is read on
+
+placebo_percentile: 95
+
+hypotheses:
+  B1:
+    title: a wider spread, at the base fee
+    primary: true
+    instruments: admitted basket
+    block: H
+    fee_tier: base
+    strategy: S1, each instrument's chosen cell
+    statement: S1 earns a positive pooled daily net
+    kill_conditions:
+      K1: {test: pooled mean daily net over H <= 0, outcome: killed}
+      K5: {test: fewer than min_fills passive fills over H, outcome: inconclusive, min_fills: 100}
+    common_kill_conditions: [K-pess, K-queue, K-fund, K-dir, K-nbhd]
+    placebos: none  # an unconditional quoter has no signal; the controls are the common conditions
+    reported_beside: [each instrument with its day t, leave one instrument out, without GALAUSDT and ALGOUSDT, S0 on every instrument]
+
+  B2:
+    title: quoting only where there is room
+    primary: true
+    instruments: admitted basket
+    block: H
+    fee_tier: base
+    strategy: G(base), the chosen gate cell
+    comparator: the same base without the gate
+    statement: G(base) earns a positive pooled daily net, and more than its base on the same days
+    kill_conditions:
+      K1: {test: pooled mean daily net of G(base) <= 0, outcome: killed}
+      K2: {test: mean paired daily difference G(base) - base <= 0, outcome: killed}
+      K3: {test: the true paired difference does not exceed the 95th percentile of the shifted-gate placebos, outcome: killed}
+      K4: {test: the volume-weighted market-wide 5 s markout less the maker fee of prints arriving while the gate is open is not greater than of prints arriving while it is closed, pooled, outside each day's first W minutes, outcome: killed}
+      K5: {test: fewer than min_fills passive fills over H or the gate open less than min_open_share of quoting time, outcome: inconclusive, min_fills: 100, min_open_share: 0.01}
+    common_kill_conditions: [K-pess, K-queue, K-fund, K-dir, K-nbhd]
+    placebos:
+      shifted_gate:
+        description: the open/closed series circularly shifted around the block, the same offset for every instrument in a draw; re-simulated
+        count: 50
+        seed_first: 0
+        seed_last: 49
+        offset_h: [6, block length - 6]  # uniform
+    reported_beside: [G(base) - S1 when the base is S1_touch, each instrument's gated net and open share, realised room inside and outside open periods, leave one instrument out, without GALAUSDT and ALGOUSDT]
+
+  B3a:
+    title: what a professional fee tier changes, 0 bp maker
+    primary: true
+    instruments: admitted basket
+    block: H
+    fee_tier: pro1_altcoin
+    strategy: chosen on D for this tier from each instrument's S1 and the chosen G(base); every value frozen
+    statement: the strategy earns a positive pooled daily net at the tier
+    kill_conditions:
+      K1: {test: pooled mean daily net over H at the tier <= 0, outcome: killed}
+      K5: {test: fewer than min_fills passive fills over H, outcome: inconclusive, min_fills: 100}
+    common_kill_conditions: [K-pess, K-queue, K-fund, K-dir, K-nbhd]  # all at the tier
+    placebos: none  # a fee is not a signal
+    framing: conditional on a professional tier; never reported without the base-fee result beside it
+    reported_beside: [the same strategy at the base fee, the same with the taker fee at 5.5 bp]
+
+  B3b:
+    title: what a professional fee tier changes, the programme rebate
+    primary: true
+    instruments: admitted basket
+    block: H
+    fee_tier: programme
+    strategy: chosen on D for this tier, as B3a
+    statement: the strategy earns a positive pooled daily net at the tier
+    kill_conditions:
+      K1: {test: pooled mean daily net over H at the tier <= 0, outcome: killed}
+      K5: {test: fewer than min_fills passive fills over H, outcome: inconclusive, min_fills: 100}
+    common_kill_conditions: [K-pess, K-queue, K-fund, K-dir, K-nbhd]
+    placebos: none
+    framing: as B3a; the rebate is "up to" 1 bp, on application, and its taker rate is assumed
+    reported_beside: [the same strategy at the base fee, the same with the taker fee at 5.5 bp]
+
+  B4:
+    title: the gate on BICOUSDT, on a block no market maker has read
+    primary: true
+    instruments: [BICOUSDT]
+    block: P
+    fee_tier: base
+    strategy: G(base), base and gate cell chosen on BICOUSDT's D
+    comparator: the same base without the gate
+    statement: G(base) earns a positive daily net, and more than its base on the same days
+    kill_conditions:
+      K1: {test: mean daily net over P <= 0, outcome: killed}
+      K2: {test: mean paired daily difference <= 0, outcome: killed}
+      K3: {test: the true paired difference does not exceed the 95th percentile of the shifted-gate placebos, outcome: killed}
+      K4: {test: the room does not persist on P, as B2's K4, outcome: killed}
+      K5: {test: fewer than min_fills passive fills over P or the gate open less than min_open_share of quoting time, outcome: inconclusive, min_fills: 100, min_open_share: 0.01}
+    common_kill_conditions: [K-pess, K-queue, K-fund, K-dir, K-nbhd]
+    placebos:
+      shifted_gate: as in B2, offset_h [6, 28 days x 24 - 6]
+    confirmation: Q, if candidate on P
+
+measurements:
+  block: H for the basket, P for BICOUSDT
+  enters_a_verdict: false
+  fee_breakeven:
+    strategies: [S0, B1's S1, B2's G(base)]
+    method: S0 analytically from one run; the others re-run over the grid, the gates reading the fee
+    maker_fee_grid_bp: [-1.5, -1.25, -1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5,
+                        0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    taker_bp: 5.5
+  robustness:
+    strategies: [B1's S1, B2's G(base)]
+    design: one axis at a time, the others at the defaults
+    axes:
+      cancel_attribution: [pessimistic, proportional, optimistic]
+      arrival_growth: [none, pro_rata_time, all_ahead]
+      latency_ms: [1, 10, 50, 100, 250]
+      feed_latency_ms: [0, 20, 50]
+  by_hour: [B1's S1 net, market-wide room]  # per instrument
+  by_criterion: [A1, A2]
+
+demonstrative_interval:
+  is: a hypothesis that ends confirmed, or conditional for B3a and B3b
+  reported_with: [every admitted instrument named, strategy and frozen values, fee tier,
+                  H net per 100 USDT of clip a day with USDT and bp of turnover, H day t and Holm p,
+                  P net with day t and Holm p, Q if read, where it fails, size in USDT at the clips used]
+  where_it_fails: [instruments that lost on H or P, the base fee if B3, latency at which net turns non-positive,
+                   pessimistic brackets with values, fee break-even, hours that lost, gate open share]
+  readme_sentence: "On [instruments], [strategy] at [fee tier] earned [x] USDT per 100 USDT of clip a day ([y] USDT a day at the clips used, [z] bp of turnover) over the held-out fortnight (day t [t], Holm-adjusted p [p]), and [x'] over the four pristine weeks (day t [t'], Holm-adjusted p [p']). It loses [where it fails]."
+  cannot_be_one: [a sub-period of H, P or Q, instruments chosen after a held-out read,
+                  a cell, window, margin or hour mask other than the frozen ones, a fee tier not registered,
+                  a bracket other than the default, a measurement without a hypothesis,
+                  inconclusive, candidate not confirmed]
+  if_nothing_survives: one sentence, and the fee break-even per instrument
+
+access:
+  ledger: experiments/results/mm_round2_ledger.json  # separate from round one's
+  granularity: instrument and block
+  development: basket D and BICOUSDT D
+  first_read: H for the basket with P for BICOUSDT
+  second_read: P for the basket, after H's results are committed
+  third_read: Q, after P's results are committed
+  refuses_unless: [the amendment records this file's sha256, the file on disk has it and is committed, the tree is clean, the block was not read before]
+  second_read_of_a_block: stamped second read; cannot change a status
+  round_one_access_used: false
+
+compute:
+  machine: 10 cores, 32 GB
+  workers: 8
+  worker_budget_gb: 2.0
+  fresh_process_per_job: true
+  launch: nohup caffeinate -dimsu uv run python -m experiments.<script> ... > logs/<run>.log 2>&1 &
+  if_a_d_worker_exceeds_budget: the held-out run uses 6 workers  # worker count does not change results
+  estimates:
+    d_configuration_days: 24000
+    d_hours: [2, 5]
+    first_read_configuration_days: 21000
+    first_read_hours: [2, 4]
+    basket_p_hours_max: 8
+  round_one_rates_s_per_configuration_day: {D: 0.22, H: 0.64}
+
+amendment:
+  planned: 1
+  when: after the D runs, before the first held-out read
+  records: [admission table with each criterion, clip caps, sigma_ref, S1 cells with neighbourhoods and peaks,
+            gate cell with neighbourhood, hour masks, B3 strategy per tier with its D values,
+            B4 base and gate cell with neighbourhood and hour masks, sigma of the pooled daily metric
+            and the minimum detectable effect per primary, compute record, sha256 of this file]
+  corrections_before_the_read: a further dated amendment; D re-run in full if a development number could change
+  date: null  # frozen by the D amendment
+  config_sha256: recorded in the amendment, not in this file

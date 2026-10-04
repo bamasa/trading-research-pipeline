@@ -22,9 +22,10 @@ statement about how a market behaves. It is not a position.
 
 **Tally: one conditional result, eight killed (four of them the market-making
 study's pre-registered primaries, on its held-out fortnight), two artefacts; one
-secondary hypothesis waiting for its boundary block.** Every tested candidate met
-the test it named in advance. One survived as a statement about a market state rather than
-as a strategy; the rest did not survive at all.
+secondary hypothesis waiting for its boundary block, and five hypotheses of a
+second market-making round registered before their data is fetched.** Every
+tested candidate met the test it named in advance. One survived as a statement
+about a market state rather than as a strategy; the rest did not survive at all.
 
 | Status | Meaning |
 |---|---|
@@ -194,3 +195,28 @@ held-out fortnight alone the gate admitted 10 days at +0.575 USDT a day against
 read once, after these results are committed. The four primaries of the same
 study are under Killed above, and none of them can become conditional on that
 block, since conditional requires a candidate on the held-out fortnight.
+
+### Market making, second round: wide-spread instruments (B1–B4)
+
+**Status: pre-registered, nothing fetched**
+([pre-registration](preregistration/market_making_round2.md),
+[config](../configs/mm_prereg_round2.yaml)). Whether any stated condition makes
+the market maker pay, on data no market-making code has read: eight wide-spread
+instruments admitted on the 25-day development block, their held-out fortnight
+read once, four pristine weeks from 8 April 2024 for any survivor. Holm across
+five primaries, each with round one's K-pess, K-fund and K-dir, a joint
+pessimistic-queue condition and a neighbourhood condition:
+
+- **B1**: the quoter, re-searched per instrument, pays at the base fee. Killed
+  if the pooled net is not positive.
+- **B2**: quoting only while the trailing room (passive markout less the fee)
+  clears a margin pays, and beats quoting throughout. Killed if either is not
+  positive, if 50 time-shifted gates do as well, or if the room does not persist.
+- **B3a, B3b**: the B1 or B2 quoter at the 0 bp professional tier, and at the
+  1 bp programme rebate. A conditional result about fees, not a retail one.
+- **B4**: the gate on BICOUSDT over the pristine block, which no market maker
+  has read.
+
+A survivor counts only if it is confirmed on a further block (the pristine
+weeks; for B4, the four weeks after them); the sentence that will report it,
+with where it fails, is fixed in the registration.
