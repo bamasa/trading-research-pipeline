@@ -731,9 +731,36 @@ in a throwaway git repository): each refusal path, the first read's record, the
 forced second read, F after H, and the schema's refusal of any change outside
 the placeholders.
 
+## The held-out runner, the placebos and the ladder
+
+`market_making/heldout.py` runs the same simulator for the held-out block, one
+loaded instrument-day per job, and keeps what the verdicts need beyond a day's
+summary: every fill's placement against the touch its order arrived on
+(`inside`, `touch`, `behind`, or `taker` for flattens and exits), the orders
+(fill ratios) and the minute equity (inventory, drawdown). A job writes its rows
+as it finishes, so a stopped run resumes without simulating a finished day
+again, and a configuration that raises is recorded with its error and kept out
+of every verdict instead of ending the read.
+
+Two quoters exist only to test the others:
+
+- **`StaleInsideQuoter`**, H1's stale-trigger placebo: S2 deciding whether to
+  step inside on the spread of 60 seconds earlier, read from a tape built from
+  the loaded day (`stale_spread_tape`), and pricing on the current touch, so
+  the simulator still rejects a price that is not post-only on arrival.
+- **`ForecastTouchQuoter`**, the advantage ladder's forecast rungs: S0 quoting
+  a touch only if it clears the maker fee against `mid + forecast`, where the
+  forecast is `R² × (realised change over the next second + noise)` with the
+  noise scaled so that its R² is the rung's (`forecast_tape`). It reads the
+  future: R20 refuses it outside the ladder, and its rows are stamped as upper
+  bounds.
+
+`market_making/verdicts.py` holds the registered statistics: the day-level
+one-sided t (closed-form for integer degrees of freedom), Holm's procedure, the
+placebo percentile, the shuffled-state shift, the fee break-even on a grid, and
+the status rule.
+
 ## Not in this simulator yet
 
-The advantage ladder and its forecast rungs, the fee-grid break-even, the
-placebos' runs (stale trigger, flipped, shuffled state, shifted flags), the
-robustness sweeps, the pipeline stage and the command-line entry points arrive
-in later pull requests, in the order the pre-registration sets.
+The pipeline stage, the execution axis of the grand search and the
+command-line entry points arrive in a later pull request.
