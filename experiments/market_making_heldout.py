@@ -115,7 +115,7 @@ MARKOUT_HORIZONS_S = (1.0, 5.0, 30.0, 60.0, 300.0, 600.0)
 
 #: Specs per job: one loaded day each, fewer on the busiest instruments so a
 #: worker's peak stays near the development run's.
-SPECS_PER_JOB = {"BICOUSDT": 10, "CRVUSDT": 8, "XRPUSDT": 4, "BTCUSDT": 2}
+SPECS_PER_JOB = {"BICOUSDT": 10, "CRVUSDT": 4, "XRPUSDT": 2, "BTCUSDT": 1}
 
 #: Busiest instrument-days first.
 JOB_ORDER = ("BTCUSDT", "XRPUSDT", "CRVUSDT", "BICOUSDT")
