@@ -1,0 +1,5 @@
+symbol,days,tick_bp,spread_bp_time_weighted,share_at_two_ticks_or_more,prints_per_day,sequence_gap_days,market_wide_passive_markout_bp_1s,market_wide_passive_markout_bp_5s,market_wide_passive_markout_bp_30s,market_wide_passive_markout_bp_60s,market_wide_passive_markout_bp_300s,market_wide_passive_markout_bp_600s
+BICOUSDT,13,2.11712,5.27981,0.743766,77747.2,0,-0.903203,-1.36112,-1.7138,-2.19805,1.78722,-0.284
+BTCUSDT,13,0.0160033,0.0197542,0.0093068,2.22377e+06,0,-0.601924,-0.647438,-0.53634,-0.584949,0.181451,0.594252
+CRVUSDT,13,1.4721,2.30794,0.385377,189875,0,-0.209396,-0.478125,-1.26207,-1.49812,0.375097,1.69368
+XRPUSDT,13,1.65219,1.65674,0.00177811,958787,0,-0.12829,-0.468128,-1.18816,-1.83317,-0.0970646,-0.0965261

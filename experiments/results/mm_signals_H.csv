@@ -1,0 +1,4 @@
+symbol,theta_bp,beta,triggers,x1_attempts,x1_attempts_filled,x1_net_bp_per_attempt,taker_twin_trades,taker_twin_net_bp_per_trade,index_autocorrelation_block
+BICOUSDT,98.3829,-0.254135,125,58,58,-5.71552,125,12.9023,-0.135056
+CRVUSDT,97.7647,-0.146584,129,95,95,-4.86072,129,3.22639,-0.135056
+XRPUSDT,99.7363,-0.134149,122,122,122,-4.15313,122,3.01698,-0.135056
