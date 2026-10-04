@@ -20,9 +20,10 @@ statement about how a market behaves. It is not a position.
 
 ## Status meanings
 
-**Tally: one conditional result, four killed, two artefacts; three hypotheses
-pre-registered and not yet tested.** Every tested candidate met the test it
-named in advance. One survived as a statement about a market state rather than
+**Tally: one conditional result, eight killed (four of them the market-making
+study's pre-registered primaries, on its held-out fortnight), two artefacts; one
+secondary hypothesis waiting for its boundary block.** Every tested candidate met
+the test it named in advance. One survived as a statement about a market state rather than
 as a strategy; the rest did not survive at all.
 
 | Status | Meaning |
@@ -112,7 +113,37 @@ candidate by more than about 0.7 bp against a 12–16 bp cost.
 **Status: killed.** Costs fall as promised, from 14–16 bp to 5.9–7.1. The gross
 edge inverts: the same signal at the same moments is worth +3 to +8 bp crossing
 and −0.5 to −4.2 bp resting. Adverse selection is 5–11 bp, the same size as the
-fee saving. Zero of 48 configurations positive.
+fee saving. Zero of 48 configurations positive. The conditional version for the
+reversion signal, where being filled against the move might have helped, was
+pre-registered as H2.2 and is killed too (above).
+
+### Market making on public Bybit data
+
+**Status: killed, all four primaries** (H1, H2.1, H2.2, H3), on the held-out
+fortnight read once
+([results](preregistration/market_making.md#results-on-block-h-read-once-4-october-2026),
+[§30](results.md#30-market-making-on-the-held-out-fortnight-read-once)). Each
+hypothesis, its metric and its kill conditions were committed before any
+market-making code existed, and every value was frozen on the development block
+before the held-out block was opened.
+
+- **H1, inside the spread: killed** (K1, K2, K4, K-fund). At the frozen gate the
+  inside rule was filled six times in thirteen days; S2 lost 1.21 USDT a day on
+  BICOUSDT and its twin 1.20.
+- **H2.1, leaning against the index: killed** (K1, K3, K-fund). S4 − S1 pooled
+  over three instruments was −91.8 USDT a day, below the 95th percentile of its
+  50 shuffled-state placebos.
+- **H2.2, passive execution of the reversion signal: killed** (K1–K4, K-fund).
+  −4.92 bp per attempt resting against +6.38 bp per trade crossing, on the same
+  376 triggers; following the move instead did slightly better. This was the
+  maker case for the conditional result above, and it fails.
+- **H3, the regime guard: killed** (K2). The guard earned +0.107 USDT a day over
+  the quoter it guards, but the same flags moved to random times earned as much.
+
+None of the four passed Holm's procedure either. The measurements beside them:
+on the one instrument admitted for market making, no rung of the advantage
+ladder short of perfect foresight of the next second makes the touch quoter
+pay, and no strategy breaks even at any maker fee Bybit publishes.
 
 ### Ensembles over the book features
 
@@ -151,26 +182,15 @@ as correct behaviour. Both fixed.
 
 ## Pre-registered
 
-### Market making on public Bybit data
+### Market making: the causal state gate (H2.3)
 
-**Status: pre-registered.** Registered in
-[`preregistration/market_making.md`](preregistration/market_making.md), with the
-values the code will read in [`configs/mm_prereg.yaml`](../configs/mm_prereg.yaml),
-before any market-making code existed and before any market-making number was
-computed on any block. A two-sided quoter with inventory limits, simulated in
-event time with fills only from trade prints. Three hypotheses, four tests in one
-Holm family, each with its kill conditions written there:
-
-- **H1, inside the spread.** Quoting one tick inside a wide spread earns a
-  positive daily net on the held-out fortnight, and more than the same quoter
-  without the inside rule.
-- **H2, the reversion state.** Leaning quotes against the index's ten-minute
-  move earns more than not leaning (H2.1), and passive execution of the frozen
-  reversion signal beats taker execution on the same triggers (H2.2) — the maker
-  case for the conditional result above. Both are predicted to fail where the
-  state is absent.
-- **H3, the regime guard.** Pulling or widening quotes after a regime-break flag
-  earns more than the quoter it guards.
-
-Every verdict must also hold under pessimistic cancellation attribution, must
-not be a funding result, and must not be inventory drift.
+**Status: pre-registered, half read.** The secondary hypothesis of the
+market-making study, outside its Holm family and with a negative prior: days
+whose trailing one-day index autocorrelation, known at the open, is at or below
+D's median (−0.0541) give S4 a larger advantage over S1 on BICOUSDT than days the
+gate rejects, over the held-out fortnight and the boundary block together. On the
+held-out fortnight alone the gate admitted 10 days at +0.575 USDT a day against
++0.488 on the 3 it rejected; the verdict waits for the boundary block, which is
+read once, after these results are committed. The four primaries of the same
+study are under Killed above, and none of them can become conditional on that
+block, since conditional requires a candidate on the held-out fortnight.
