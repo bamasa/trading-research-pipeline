@@ -521,7 +521,8 @@ the same at the 0 bp professional tier and at the 1 bp programme rebate, a
 conditional result about fees rather than a retail one; **B4**, the gate on
 BICOUSDT over the pristine block. The sentence that will report a survivor, and
 what cannot count as one, are fixed in advance. **Status: pre-registered;
-nothing fetched.**
+the room gate, the round's own loader, access and ledger are in code and
+tested; nothing fetched.**
 
 ---
 
