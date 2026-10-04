@@ -3,6 +3,15 @@
 **A leakage-aware research pipeline for systematic trading — and what it found
 when pointed at crypto perpetuals.**
 
+*Solo project · 2026 · Python, pandas, NumPy, LightGBM, PyTorch · market microstructure, limit order books, walk-forward validation, event-time market-making simulation, regime detection · MIT licence*
+
+| | |
+|---|---|
+| **Found** | a conditional edge: short-horizon cross-sectional reversion pays on a held-out fortnight (+6.99 bp a trade net, 22 of 26 instruments) in a measurable market state, and loses everywhere once the state is gone |
+| **Killed** | directional prediction from one instrument's book; passive execution of the signal; market making in two pre-registered rounds — nine hypotheses on data no code had read, every one refuted, including an apparent +2.2 a day that a pre-registered check showed was inventory carried through a rising market |
+| **Built** | data contracts and downloaders for two venues, a feature registry with mechanical look-ahead checks, purged walk-forward splits, sixteen models, cost-aware backtests for taker, passive and market-making execution, an event-time simulator that fills only from trade prints, two regime-break detectors (one from [adia-structural-break](https://github.com/bamasa/adia-structural-break)), and a search over instrument × model × execution × regime policy |
+| **How** | every candidate is registered with the condition that would refute it before the test runs; held-out blocks are opened once through a ledger that refuses them unless the frozen configuration is committed |
+
 **The result.** Short-horizon cross-sectional reversion in crypto perpetuals
 pays — under a market state that can be measured but, on the evidence here, not
 forecast. On a held-out fortnight in the state that supports it, a
@@ -20,11 +29,13 @@ Everything else here is negative and was established the same way. Directional
 prediction from one instrument's own order book does not clear a taker round
 trip: forty-four instruments screened, the three best searched over thirteen
 axes, no winner profitable on a block that chose nothing.
-Market making was tested the same way, pre-registered and read once on a
-held-out fortnight: all four hypotheses are killed, because on the one
-instrument whose spread admits a market maker the spread captured is smaller
-than the move that follows the fills
-([below](#market-making-quoting-both-sides-on-public-bybit-data)).
+Market making was tested the same way, in two pre-registered rounds, each read
+once on a held-out fortnight: all nine hypotheses are killed. The spread a
+public-data market maker captures is smaller than the move that follows its
+fills, on BICO and on six wide-tick altcoins alike; the one result that looked
+like profit (+2.2 USDT per 100 of clip a day at the market-maker rebate) was
+inventory carried through a rising market, which a check written down before the
+read caught ([below](#market-making-quoting-both-sides-on-public-bybit-data)).
 [`docs/findings.md`](docs/findings.md) is the register — every candidate, its
 status, and the condition written down before the test that would refute it.
 
@@ -53,7 +64,7 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > from trade prints, two regime-break detectors, an information audit that
 > measures each data source before a model is chosen, successive-halving search
 > over thirteen axes with execution and the regime policy scored at its last
-> rung, and the experiment script behind every published table. 1,071 tests, a
+> rung, and the experiment script behind every published table. 1,130 tests, a
 > disclosure audit in CI.
 
 ## The pipeline map
