@@ -1810,6 +1810,68 @@ volume tier could plausibly push across.
 
 ---
 
+## 30. Market making on the held-out fortnight, read once
+
+A two-sided quoter on Bybit perpetuals, simulated in event time with a queue per
+order and fills only from trade prints, tested against hypotheses, kill
+conditions and placebos committed before any of its code existed
+([pre-registration](preregistration/market_making.md)), with every searched
+value frozen on the development block (Amendment 2) before the held-out
+fortnight, 26 February to 9 March 2024, was opened. That fortnight was read
+once, recorded in
+[`mm_heldout_ledger.json`](../experiments/results/mm_heldout_ledger.json)
+(commit `2a7daaa`, 2026-10-04T12:34:52Z). The full tables, every kill condition
+with the value it read, and the choices the registration left open are in the
+pre-registration's
+[results section](preregistration/market_making.md#results-on-block-h-read-once-4-october-2026).
+
+**All four primary hypotheses are killed.**
+
+| Hypothesis | What it claimed | On the held-out fortnight | Status |
+|---|---|---|---|
+| H1 | One tick inside a wide spread earns a positive net, and more than the same quoter without the rule | S2 −1.21 USDT a day on BICOUSDT; S2 − twin −0.007 a day; six inside fills in 13 days | killed (K1, K2, K4, K-fund) |
+| H2.1 | Leaning quotes against the index's ten-minute move earns more than not leaning | −91.8 USDT a day pooled over BICO, CRV, XRP; below the 95th percentile of 50 shuffled-state placebos | killed (K1, K3, K-fund) |
+| H2.2 | Resting on the fading side of the frozen reversion signal beats crossing for it | −4.92 bp per attempt resting, +6.38 bp per trade crossing, on the same 376 triggers | killed (K1, K2, K3, K4, K-fund) |
+| H3 | Widening quotes for 15 minutes after a regime flag earns more than quoting through | +0.107 USDT a day, but no more than the same flags moved to random times | killed (K2) |
+
+None passes Holm's procedure across the four (one-sided p of 0.92, 0.71, 1.00
+and 0.27, twelve degrees of freedom). The secondary H2.3 is registered over
+this fortnight and the boundary block together and waits for the latter.
+
+**Why, in the numbers.** On BICOUSDT, the one instrument whose spread admits a
+market maker at the base fee, the touch quoter S0 earns +21.5 USDT a day of
+spread and loses 47.3 to the move in the five seconds after its fills, before
+17.4 of fees: −43.4 a day, −5.0 bp of what it trades. The gated quoter S1 loses
+1.20 a day and quotes far enough from the mid that 191 of its 192 daily fills
+come from behind the touch; its fills from the queue are worth +4.3 bp at five
+seconds, and the ones a print trades through cost −4.6. Every strategy's
+passive fills are worth less than the market-wide passive benchmark (−1.36 bp
+at five seconds on BICOUSDT).
+
+**What it would take.** Up the advantage ladder, S0 on BICOUSDT goes from −5.00
+bp of turnover at the tail of the queue to −4.00 at its front, −1.91 with a
+forecast of the next second at R² 0.1, −0.20 at R² 0.3, −0.04 at 1 ms of
+latency, and +5.66 only with perfect foresight of the next second. The fee that
+would make S0 break even on BICOUSDT is −3.01 bp, a rebate three times the
+largest Bybit advertises; no strategy on BICOUSDT breaks even at any published
+fee.
+
+**The reversion case, again.** H2.2 was the maker version of §27's conditional
+result: a resting order on the fading side fills exactly when the move it fades
+is happening, so the adverse selection that made the directional maker study
+lose ([`maker_bybit.py`](../experiments/maker_bybit.py)) might have worked for it.
+It does not. The taker twin earned +6.38 bp per trade on the
+same triggers, consistent with §27's held-out block; the passive version lost
+4.92 bp per attempt, its fills were marked out below the market-wide passive
+benchmark, and posting the other side did slightly better.
+
+What this does not establish: one admitted instrument and thirteen days; a
+100 ms conflated book, with queue dynamics inside it a bracketed rule; no own
+impact; a fee schedule transcribed in 2026 applied to 2024. The ladder's upper
+rungs read the future and bound what an advantage is worth.
+
+---
+
 ## Reading this
 
 No result here is evidence that any strategy is or was profitable. These are
