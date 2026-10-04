@@ -1872,6 +1872,58 @@ rungs read the future and bound what an advantage is worth.
 
 ---
 
+## 31. Market making, second round, on the held-out fortnight, read once
+
+Is there any stated condition under which the market maker of §30 earns money?
+A second round, registered before any of its data was fetched
+([pre-registration](preregistration/market_making_round2.md)), asked it of
+wider spreads, of quoting only while the recent market leaves room for a
+passive fill, and of professional fee tiers. Six of eight wide-spread
+candidates were admitted on the development block (ALICE, ALGO, JTO, ZEC and
+GALA by a tick of at least 4 bp, CAKE by round one's rule), every searched
+value was frozen
+([Amendment 1](preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period)),
+and the held-out fortnight, 26 February to 9 March 2024, was read once for them
+together with BICOUSDT's pristine weeks, 8 April to 5 May 2024, for B4,
+recorded in [`mm_round2_ledger.json`](../experiments/results/mm_round2_ledger.json)
+(commit `eefb332`, 2026-10-04T19:38:39Z). Every kill condition with the value
+it read is in the pre-registration's
+[results section](preregistration/market_making_round2.md#results-of-the-first-held-out-read-read-once-4-october-2026).
+The metric is the net per 100 USDT of each instrument's clip a day, pooled with
+equal weight per instrument.
+
+**All five primary hypotheses are killed.**
+
+| Hypothesis | What it claimed | On the held-out block | Status |
+|---|---|---|---|
+| B1 | S1, re-searched per instrument, pays at the base fee | −0.067 pooled | killed (K1, K-nbhd) |
+| B2 | Quoting only while the trailing room clears the fee pays, and beats quoting throughout | +0.026, and +0.092 over S1; no more than 50 time-shifted gates; −0.024 over S1 under the joint pessimistic queue; making part −0.025 | killed (K3, K-queue, K-dir) |
+| B3a | S1 pays at the 0 bp maker tier | +0.845, making part −1.32 | killed (K-dir) |
+| B3b | S1 pays at the programme's −1 bp rebate | +2.217, making part −0.78 | killed (K-dir) |
+| B4 | The room gate pays on BICOUSDT's pristine weeks, and beats S1 | −0.347, and −1.83 under S1 | killed (K1, K2, K3, K-fund, K-nbhd) |
+
+Holm's procedure across the five passes none (one-sided p 0.52, 0.47, 0.25,
+0.043, 0.83). No hypothesis is `candidate` or positive-and-inconclusive, so no
+second held-out block is read.
+
+**Why, in the numbers.** The quoter's making part (spread captured, less the
+move in the five seconds after its fills, less fees) is negative at the base
+fee on all six instruments and on BICOUSDT. Where its net is positive, the
+inventory it carried through a fortnight of broad rises paid for it: on
+JTOUSDT, +13.1 USDT a day of net is −7.7 of making and +21.4 of inventory. The
+professional tiers raise the making part but leave it negative pooled, which
+is what K-dir, written for this fortnight, kills. The room gate found
+something real but small: prints that arrived while it was open were worth
+more than those while it was closed, on every instrument where it opened, yet
+still less than the fee, and its timing did no better than the same gate
+shifted around the block. On the basket it opened 0.49% of quoting time, as the
+development block had indicated.
+
+**How far from paying.** The touch quoter would have broken even at a maker fee
+of −1.7 to −3.1 bp on every instrument (−2.67 on BICOUSDT's pristine weeks),
+beyond the programme's rebate of up to 1 bp
+([`mm_round2_fee_breakeven_H.csv`](../experiments/results/mm_round2_fee_breakeven_H.csv)).
+
 ## Reading this
 
 No result here is evidence that any strategy is or was profitable. These are

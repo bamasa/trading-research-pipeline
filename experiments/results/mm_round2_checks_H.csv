@@ -1,0 +1,42 @@
+hypothesis,name,test,value,reference,fired,outcome,note
+B1,K1,pooled mean daily net <= 0,-0.06650252707350596,0.0,True,killed,
+B1,K-pess,"positive under proportional attribution, not under pessimistic",0.022052851205468942,0.0,False,killed,net: -0.0665 -> +0.02205
+B1,K-queue,"positive by default, not under the joint pessimistic queue",0.04816327319815569,0.0,False,killed,net: -0.0665 -> +0.04816
+B1,K-fund,net minus funding <= 0,0.01355657945361998,0.0,False,killed,net: +0.01356
+B1,K-dir,making <= 0 while net > 0,-1.8615526558309041,0.0,False,killed,"net: making -1.862, net -0.0665"
+B1,K-nbhd,median over the D neighbourhood <= 0,-0.37380733684604345,0.0,True,killed,net: -0.3738
+B1,K5,"fewer than 100 passive fills, or open under 1%",12240.0,100.0,False,inconclusive,12240 passive fills
+B2,K1,pooled mean daily net of G(base) <= 0,0.02583495956604241,0.0,False,killed,
+B2,K2,mean paired daily G(base) - base <= 0,0.0923374866395482,0.0,False,killed,
+B2,K3,paired difference not above the placebos' 95th percentile,0.0923374866395482,0.1659525233623146,True,killed,50 shifted-gate placebos
+B2,K4,room while open not greater than while closed,0.6972419334314087,-0.4400743016471618,False,killed,markout before the fee; the fee cancels
+B2,K-pess,"positive under proportional attribution, not under pessimistic",0.0048879584009436155,0.0,False,killed,net: +0.02583 -> +0.02694; minus_base: +0.09234 -> +0.004888
+B2,K-queue,"positive by default, not under the joint pessimistic queue",-0.024049059789699963,0.0,True,killed,net: +0.02583 -> +0.02411; minus_base: +0.09234 -> -0.02405
+B2,K-fund,net minus funding <= 0,0.01288954072399667,0.0,False,killed,net: +0.02645; minus_base: +0.01289
+B2,K-dir,making <= 0 while net > 0,-0.025016033398373293,0.0,True,killed,"net: making -0.02502, net +0.02583; minus_base: making +1.837, net +0.09234"
+B2,K-nbhd,median over the D neighbourhood <= 0,0.02583495956604241,0.0,False,killed,net: +0.02583; minus_base: +0.09234
+B2,K5,"fewer than 100 passive fills, or open under 1%",643.0,100.0,True,inconclusive,643 passive fills; open 0.0049 of quoting time
+B3a,K1,pooled mean daily net at pro1_altcoin <= 0,0.8445588440861035,0.0,False,killed,
+B3a,K-pess,"positive under proportional attribution, not under pessimistic",0.9001943450307416,0.0,False,killed,net: +0.8446 -> +0.9002
+B3a,K-queue,"positive by default, not under the joint pessimistic queue",0.612078055420593,0.0,False,killed,net: +0.8446 -> +0.6121
+B3a,K-fund,net minus funding <= 0,0.9232119568523678,0.0,False,killed,net: +0.9232
+B3a,K-dir,making <= 0 while net > 0,-1.3220463304887304,0.0,True,killed,"net: making -1.322, net +0.8446"
+B3a,K-nbhd,median over the D neighbourhood <= 0,0.17991958333423716,0.0,False,killed,net: +0.1799
+B3a,K5,"fewer than 100 passive fills, or open under 1%",20099.0,100.0,False,inconclusive,20099 passive fills
+B3b,K1,pooled mean daily net at programme <= 0,2.217282492872359,0.0,False,killed,
+B3b,K-pess,"positive under proportional attribution, not under pessimistic",1.4185697602608798,0.0,False,killed,net: +2.217 -> +1.419
+B3b,K-queue,"positive by default, not under the joint pessimistic queue",1.0834407454453607,0.0,False,killed,net: +2.217 -> +1.083
+B3b,K-fund,net minus funding <= 0,2.305946686479425,0.0,False,killed,net: +2.306
+B3b,K-dir,making <= 0 while net > 0,-0.7786493724351936,0.0,True,killed,"net: making -0.7786, net +2.217"
+B3b,K-nbhd,median over the D neighbourhood <= 0,1.0365209590720885,0.0,False,killed,net: +1.037
+B3b,K5,"fewer than 100 passive fills, or open under 1%",26230.0,100.0,False,inconclusive,26230 passive fills
+B4,K1,pooled mean daily net of G(base) <= 0,-0.34748911170402375,0.0,True,killed,
+B4,K2,mean paired daily G(base) - base <= 0,-1.8256227226400372,0.0,True,killed,
+B4,K3,paired difference not above the placebos' 95th percentile,-1.8256227226400372,-0.2610229359644614,True,killed,50 shifted-gate placebos
+B4,K4,room while open not greater than while closed,1.2071749640839986,-1.6353623044707524,False,killed,markout before the fee; the fee cancels
+B4,K-pess,"positive under proportional attribution, not under pessimistic",-1.822133184650569,0.0,False,killed,net: -0.3475 -> +0.04092; minus_base: -1.826 -> -1.822
+B4,K-queue,"positive by default, not under the joint pessimistic queue",-2.0041962171186767,0.0,False,killed,net: -0.3475 -> +0.1401; minus_base: -1.826 -> -2.004
+B4,K-fund,net minus funding <= 0,-1.8376880432357001,0.0,True,killed,net: -0.3468; minus_base: -1.838
+B4,K-dir,making <= 0 while net > 0,-0.2764990165969451,0.0,False,killed,"net: making -0.2765, net -0.3475; minus_base: making +1.27, net -1.826"
+B4,K-nbhd,median over the D neighbourhood <= 0,-1.1694799099216797,0.0,True,killed,net: +0.3087; minus_base: -1.169
+B4,K5,"fewer than 100 passive fills, or open under 1%",500.0,100.0,False,inconclusive,500 passive fills; open 0.0735 of quoting time

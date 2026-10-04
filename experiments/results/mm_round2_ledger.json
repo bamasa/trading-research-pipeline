@@ -1,0 +1,40 @@
+{
+  "first": [
+    {
+      "commit": "eefb332a1fb7c645b3333dcd891fe4d68a1c638a",
+      "config_sha256": "fd0768a14d994bb1b41903ca5fbdf6b6c7e82def4fff7014c0130c1bad3053e5",
+      "grants": [
+        [
+          "ALGOUSDT",
+          "H"
+        ],
+        [
+          "ALICEUSDT",
+          "H"
+        ],
+        [
+          "BICOUSDT",
+          "P"
+        ],
+        [
+          "CAKEUSDT",
+          "H"
+        ],
+        [
+          "GALAUSDT",
+          "H"
+        ],
+        [
+          "JTOUSDT",
+          "H"
+        ],
+        [
+          "ZECUSDT",
+          "H"
+        ]
+      ],
+      "read": "first read",
+      "utc": "2026-10-04T19:38:39Z"
+    }
+  ]
+}

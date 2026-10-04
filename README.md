@@ -577,30 +577,51 @@ ladder and the fee break-even add is the size of the gap: a rebate three times
 the largest advertised, or a forecast of the next second no public data here
 provides.
 
-### A second round, registered before its data is fetched
+### A second round, on wide-spread instruments: all five hypotheses killed
 
 Is there any condition under which this market maker earns money? A second
-round asks it on data no market-making code has read, and is registered before
-a single file of it is fetched:
-[`docs/preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md)
-with [`configs/mm_prereg_round2.yaml`](configs/mm_prereg_round2.yaml). Eight
-wide-spread instruments (ALICE, ALGO, JTO, ZEC, GALA, GMT, CAKE, IOTA) are
-admitted by round one's rule or by a tick of at least 4 bp, on the same 25-day
-development block; the held-out fortnight is theirs, read once, and four
-pristine weeks from 8 April 2024 confirm any survivor. Five hypotheses, Holm
-across them: **B1**, the quoter re-searched per instrument pays at the base
-fee; **B2**, quoting only while the trailing room (the half-spread a passive
-fill captured, less the move that followed it, less the fee) clears a margin
-pays, and beats quoting throughout, against a time-shifted gate; **B3a, B3b**,
-the same at the 0 bp professional tier and at the 1 bp programme rebate, a
-conditional result about fees rather than a retail one; **B4**, the gate on
-BICOUSDT over the pristine block. The sentence that will report a survivor, and
-what cannot count as one, are fixed in advance. **Status: values frozen on
-the development block** ([amendment](docs/preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period)):
-six instruments admitted (ALICE, ALGO, JTO, ZEC and GALA by the tick rule,
-CAKE by round one's), each with its own S1; the basket's gate is open under
-1% of the time on D, so B2 is likely to end inconclusive; no held-out day
-has been read.
+round asked it on data no market-making code had read, registered before a
+single file of it was fetched
+([pre-registration](docs/preregistration/market_making_round2.md), with
+[`configs/mm_prereg_round2.yaml`](configs/mm_prereg_round2.yaml)). Of eight
+wide-spread candidates, six were admitted on the 25-day development block
+(ALICE, ALGO, JTO, ZEC and GALA by a tick of at least 4 bp, CAKE by round
+one's rule), every searched value was frozen
+([amendment](docs/preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period)),
+and the held-out fortnight was read once, with BICOUSDT's four pristine weeks
+from 8 April 2024 for B4
+([results](docs/preregistration/market_making_round2.md#results-of-the-first-held-out-read-read-once-4-october-2026)).
+
+**Nothing survives: on the held-out data neither the wider spreads, nor
+quoting only while the recent market left room, nor a professional fee tier
+made this market maker pay from making markets.**
+
+| Hypothesis | Held-out net, USDT per 100 USDT of clip a day | Killed by |
+|---|---:|---|
+| B1: the quoter, re-searched per instrument, at the base fee | −0.067 | K1, K-nbhd |
+| B2: quoting only while the trailing room clears the fee, against quoting throughout | +0.026 (+0.092 over it) | K3 (no better than a time-shifted gate), K-queue, K-dir |
+| B3a: the same quoter at the 0 bp maker tier | +0.845 | K-dir: the making part −1.32, the rest inventory |
+| B3b: at the programme's −1 bp rebate | +2.217 | K-dir: the making part −0.78 |
+| B4: the room gate on BICOUSDT's pristine weeks | −0.347 (−1.83 under its base) | K1, K2, K3, K-fund, K-nbhd |
+
+The positive nets at the professional tiers are inventory carried through a
+fortnight of broad rises, which the registration's K-dir was written to catch:
+the quoter's spread less the move after its fills and the fees is negative on
+every instrument at the base fee, and on all but three instrument-tier pairs
+at the professional tiers. No hypothesis is
+`candidate` or positive-and-inconclusive, so the basket's pristine weeks are
+not read. How far each was from paying, the measure the registration fixes for
+this case: the touch quoter would have broken even at a maker fee of −1.7 to
+−3.1 bp, a rebate larger than any published.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mm_round2_fee_breakeven_dark.png">
+  <img alt="Second round: break-even maker fee per strategy and instrument" src="docs/images/mm_round2_fee_breakeven_light.png">
+</picture>
+
+S0's break-even is exact; S1 and G(base) were re-run over maker fees from −1.5
+to +2.0 bp, and an arrow marks one beyond that range. S1's arrows to the right
+are the inventory gains above, not making.
 
 ---
 
@@ -1178,9 +1199,9 @@ any block.
       advantage ladder and the fee break-even measured
       ([results](docs/preregistration/market_making.md#results-on-block-h-read-once-4-october-2026))
 - [ ] The boundary block, read once: H2.3 and H2's boundary predictions
-- [ ] **A second round on wide-spread instruments**, registered before any
-      fetch: the basket, a causal room gate and the professional fee tiers
-      ([pre-registration](docs/preregistration/market_making_round2.md))
+- [x] **A second round on wide-spread instruments, read once: all five
+      hypotheses killed**; the touch quoter would have needed a 1.7 to 3.1 bp
+      rebate ([results](docs/preregistration/market_making_round2.md#results-of-the-first-held-out-read-read-once-4-october-2026))
 - [ ] Capacity: what a quoter could trade before its own size moves the book it
       is quoting into, which the simulator does not model
 

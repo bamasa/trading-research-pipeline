@@ -146,6 +146,35 @@ on the one instrument admitted for market making, no rung of the advantage
 ladder short of perfect foresight of the next second makes the touch quoter
 pay, and no strategy breaks even at any maker fee Bybit publishes.
 
+### Market making, second round: wide-spread instruments (B1–B4)
+
+**Status: killed, all five primaries**, on the held-out fortnight for six
+admitted instruments and on BICOUSDT's four pristine weeks, each read once
+([results](preregistration/market_making_round2.md#results-of-the-first-held-out-read-read-once-4-october-2026),
+[§31](results.md#31-market-making-second-round-on-the-held-out-fortnight-read-once)).
+Registered before any of its data was fetched, every value frozen on the
+development block
+([amendment](preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period)).
+Net in USDT per 100 USDT of clip a day:
+
+- **B1, the quoter re-searched per instrument at the base fee: killed** (K1,
+  K-nbhd). −0.067 pooled over ALICE, ALGO, JTO, ZEC, GALA and CAKE.
+- **B2, quoting only while the trailing room clears the fee: killed** (K3,
+  K-queue, K-dir). +0.026, and +0.092 over quoting throughout, no more than
+  the same gate shifted in time; open 0.49% of quoting time (its K5 fired too).
+- **B3a, the same quoter at the 0 bp maker tier: killed** (K-dir). +0.845, all
+  of it inventory: the making part was −1.32.
+- **B3b, at the programme's −1 bp rebate: killed** (K-dir). +2.217 with a
+  making part of −0.78; one-sided p 0.043, which Holm would not have passed.
+- **B4, the room gate on BICOUSDT's pristine weeks: killed** (K1, K2, K3,
+  K-fund, K-nbhd). −0.347, and −1.83 under the same quoter without the gate.
+
+No hypothesis was `candidate` or positive-and-inconclusive, so the basket's
+pristine weeks are not read and nothing is confirmed. The measure the
+registration fixes for this case: the touch quoter would have broken even at a
+maker fee of −1.7 to −3.1 bp on every instrument, a rebate larger than the
+largest Bybit publishes.
+
 ### Ensembles over the book features
 
 **Status: killed.** Variance is negligible for all eight candidates, so there is
@@ -196,28 +225,3 @@ read once, after these results are committed. The four primaries of the same
 study are under Killed above, and none of them can become conditional on that
 block, since conditional requires a candidate on the held-out fortnight.
 
-### Market making, second round: wide-spread instruments (B1–B4)
-
-**Status: values frozen on D; no held-out day read**
-([pre-registration](preregistration/market_making_round2.md) and its
-[amendment](preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period),
-[config](../configs/mm_prereg_round2.yaml)). Whether any stated condition makes
-the market maker pay, on data no market-making code has read: eight wide-spread
-instruments admitted on the 25-day development block, their held-out fortnight
-read once, four pristine weeks from 8 April 2024 for any survivor. Holm across
-five primaries, each with round one's K-pess, K-fund and K-dir, a joint
-pessimistic-queue condition and a neighbourhood condition:
-
-- **B1**: the quoter, re-searched per instrument, pays at the base fee. Killed
-  if the pooled net is not positive.
-- **B2**: quoting only while the trailing room (passive markout less the fee)
-  clears a margin pays, and beats quoting throughout. Killed if either is not
-  positive, if 50 time-shifted gates do as well, or if the room does not persist.
-- **B3a, B3b**: the B1 or B2 quoter at the 0 bp professional tier, and at the
-  1 bp programme rebate. A conditional result about fees, not a retail one.
-- **B4**: the gate on BICOUSDT over the pristine block, which no market maker
-  has read.
-
-A survivor counts only if it is confirmed on a further block (the pristine
-weeks; for B4, the four weeks after them); the sentence that will report it,
-with where it fails, is fixed in the registration.

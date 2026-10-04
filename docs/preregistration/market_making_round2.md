@@ -1019,3 +1019,125 @@ the development access (`--dry-run`: 201 jobs, 7.6 minutes, largest worker
 read has been exercised on D.
 
 Frozen configuration sha256: `fd0768a14d994bb1b41903ca5fbdf6b6c7e82def4fff7014c0130c1bad3053e5`
+
+---
+
+## Results of the first held-out read (read once, 4 October 2026)
+
+The first read was opened through the round-two ledger
+([`mm_round2_ledger.json`](../../experiments/results/mm_round2_ledger.json)) at
+commit `eefb332`, with the configuration at its frozen sha256 `fd0768a1…53e5`,
+at 2026-10-04T19:38:39Z: H (26 February to 9 March 2024) for the six admitted
+instruments and P (8 April to 5 May 2024) for BICOUSDT, nothing else. It was
+run by [`experiments/market_making_round2_heldout.py`](../../experiments/market_making_round2_heldout.py)
+`--read first` and scored by
+[`experiments/market_making_round2_verdicts.py`](../../experiments/market_making_round2_verdicts.py),
+both as merged before the read; the tables are
+`experiments/results/mm_round2_*_H.csv`, in which BICOUSDT's rows are from P.
+12,688 configuration-days were simulated, every one usable (no exclusion, no
+day missing). Nothing was chosen, changed or re-run after the read.
+
+**All five primaries are killed.**
+
+| Hypothesis | What it claimed | On the held-out block (USDT per 100 USDT of clip a day) | Kill conditions that fired | Status |
+|---|---|---|---|---|
+| B1 | S1, each instrument's own cell, pays at the base fee on the basket | −0.067 pooled over H (day t −0.05) | K1; K-nbhd (neighbourhood −0.374) | **killed** |
+| B2 | Quoting only while the room is open (S1, `both`, 15 min, 0 bp) pays, and beats S1 | +0.026, and +0.092 over S1 (day t 0.29 and 0.08) | K3 (+0.092 is below the placebos' 95th percentile, +0.166); K-queue (−0.024 over S1 under the joint bracket); K-dir (making −0.025 while net +0.026) | **killed** |
+| B3a | S1 pays at the 0 bp maker tier | +0.845 (day t 0.70) | K-dir (making −1.322 while net +0.845) | **killed** |
+| B3b | S1 pays at the programme's −1 bp rebate | +2.217 (day t 1.88) | K-dir (making −0.779 while net +2.217) | **killed** |
+| B4 | The room gate (S1, `trailing`, 15 min, 0 bp) pays on BICOUSDT's P, and beats S1 | −0.347, and −1.826 under S1 (day t −0.42 and −0.96) | K1; K2; K3 (95th percentile −0.261); K-fund; K-nbhd (paired neighbourhood −1.169) | **killed** |
+
+Every registered condition was evaluated for every primary
+([`mm_round2_checks_H.csv`](../../experiments/results/mm_round2_checks_H.csv)
+holds each with the value it read):
+
+| Condition | B1 | B2 | B3a | B3b | B4 |
+|---|---|---|---|---|---|
+| K1, pooled net ≤ 0 | **fired** (−0.067) | no (+0.026) | no (+0.845) | no (+2.217) | **fired** (−0.347) |
+| K2, paired difference ≤ 0 | — | no (+0.092) | — | — | **fired** (−1.826) |
+| K3, not above the 50 shifted-gate placebos' 95th percentile | — | **fired** (+0.092 vs +0.166) | — | — | **fired** (−1.826 vs −0.261) |
+| K4, the room does not persist | — | no (open −1.30, closed −2.44 pooled, bp after the fee) | — | — | no (−0.79 vs −3.64) |
+| K-pess | no (not positive by default) | no (+0.027; +0.005) | no (+0.900) | no (+1.419) | no (not positive by default) |
+| K-queue | no (not positive by default) | **fired** (+0.024; −0.024) | no (+0.612) | no (+1.083) | no (not positive by default) |
+| K-fund, net less funding ≤ 0 | no (+0.014) | no (+0.026; +0.013) | no (+0.923) | no (+2.306) | **fired** (−0.347; −1.838) |
+| K-dir, making ≤ 0 while net > 0 | no (net not positive) | **fired** (making −0.025) | **fired** (−1.322) | **fired** (−0.779) | no (net not positive) |
+| K-nbhd, neighbourhood median ≤ 0 | **fired** (−0.374) | no (+0.026; +0.092: the cell alone) | no (+0.180) | no (+1.037) | **fired** (+0.309; −1.169) |
+| K5, too few fills or open under 1% | no (12,240 fills) | **fired** (643 fills; open 0.49%) | no (20,099) | no (26,230) | no (500 fills; open 7.35%) |
+
+Where a hypothesis has two claims the table gives the net, then the paired
+difference. B2's K5 fired as well, but a kill condition decides before an
+inconclusive one. Holm's procedure across the five (one-sided p 0.52, 0.47,
+0.25, 0.043 and 0.83) passes none: the smallest would have needed 0.01.
+
+**No hypothesis is taken further.** P for the basket is read only for a
+hypothesis that is `candidate` on H, or `inconclusive` with every claim
+positive; all four of B1 to B3b are killed, so the basket's P is not fetched
+and not read. B4 is killed on its P, so BICOUSDT's Q is not read either. The
+round's statuses are final, and **nothing here is a demonstrative interval**.
+
+**Why, in the numbers.** S1's making part (the spread its fills captured, the
+move in the five seconds after them, and the fees) is negative on every
+instrument; where its net is positive, the inventory it carried paid for it,
+in a fortnight of broad rises (item 5 of "What was known"). That is what K-dir
+exists to catch, and it is what kills both fee tiers: a lower fee raises the
+making part, but not to zero. At the base fee, in USDT a day at each
+instrument's clip
+([`mm_round2_strategies_H.csv`](../../experiments/results/mm_round2_strategies_H.csv),
+[`mm_round2_markouts_H.csv`](../../experiments/results/mm_round2_markouts_H.csv)):
+
+| Instrument | S1 net per 100 USDT of clip | S1 net | Making | Inventory | S1's passive fills at 5 s (bp) | Market-wide passive at 5 s (bp) |
+|---|---:|---:|---:|---:|---:|---:|
+| ALGOUSDT | +0.43 | +2.67 | −1.65 | +3.69 | +1.67 | −0.10 |
+| ALICEUSDT | −5.02 | −7.83 | −4.68 | −3.09 | −1.43 | −0.96 |
+| CAKEUSDT | +0.74 | +0.76 | −0.96 | +1.89 | −2.08 | −0.52 |
+| GALAUSDT | −0.81 | −9.39 | −3.09 | −6.13 | −0.08 | −0.88 |
+| JTOUSDT | +3.96 | +13.05 | −7.71 | +21.37 | −5.10 | −1.62 |
+| ZECUSDT | +0.30 | +0.30 | −4.36 | +4.84 | −0.62 | −0.30 |
+| BICOUSDT (P) | +1.48 | +0.30 | −0.31 | +0.61 | −1.23 | −1.42 |
+
+At `pro1_altcoin` the same quoter's making part is still negative on five of
+the six instruments, and at the programme rebate on four; pooled it is −1.32
+and −0.78 per 100 USDT of clip a day, against nets of +0.845 and +2.217 that
+the inventory carried (JTOUSDT alone holds +25.2 and +30.7 USDT a day of
+inventory at the two tiers).
+
+**The gate.** The basket's gate was open for 1.32% of ZECUSDT's quoting time on
+H, 1.64% of CAKEUSDT's and never on the other four, 0.49% pooled, as D had
+indicated (Amendment 1). The room did persist: prints that arrived while it
+was open were worth −0.61 bp after the fee on ZECUSDT and −2.00 on CAKEUSDT,
+against −2.32 and −2.56 while it was closed; but it was below the fee even
+while open. On BICOUSDT's P the gate was open 7.35% of quoting time, and the
+room was −0.79 bp after the fee while open against −3.64 while closed:
+persistent, and still negative. On both, the real gate's difference from its
+base did not exceed the 95th percentile of 50 shifted gates (K3).
+
+**How far each was from paying.** Nothing survives, so the registered measure
+of the distance is the fee break-even
+([`mm_round2_fee_breakeven_H.csv`](../../experiments/results/mm_round2_fee_breakeven_H.csv)):
+the maker fee at which each strategy's mean daily net would have been zero, S0
+exactly from one run, S1 and G(base) re-run over the grid from −1.5 to +2.0 bp
+with the gate reading the fee. A measurement, not a verdict:
+
+| Instrument | S0 (bp) | S1 (bp) | G(base) (bp) |
+|---|---:|---:|---:|
+| ALGOUSDT | −1.72 | above +2.0 | +0.50 |
+| ALICEUSDT | −3.09 | −1.11 | +2.00 |
+| CAKEUSDT | −1.98 | above +2.0 | above +2.0 |
+| GALAUSDT | −2.29 | below −1.5 | +0.50 |
+| JTOUSDT | −2.13 | above +2.0 | +1.25 |
+| ZECUSDT | −2.37 | above +2.0 | above +2.0 |
+| BICOUSDT (P) | −2.67 | above +2.0 | +1.44 |
+
+The touch quoter would have needed a rebate of 1.7 to 3.1 bp on every
+instrument, more than the programme's 1 bp. S1's break-evens above the grid
+are the inventory gains above, not making: its making part is negative at the
+base fee on all seven. G(base)'s come from a gate that was open under 2% of the
+time on the basket at the base fee and opens more as the fee falls. Every number at
+a tier other than the base carries `BYBIT_FEE_CAVEAT`: the schedule published
+in 2026, applied to 2024.
+
+**The compute record.** 2,104 jobs on 8 worker processes, 6,217 s (104
+minutes); the largest worker reached 2,012 MB, 0.6% above the 2 GB budget
+(a GALAUSDT day, three specs to a job), the driver 1,209 MB.
+No later read follows, so the budget's six-worker rule does not come into
+play.

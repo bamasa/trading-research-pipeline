@@ -185,6 +185,32 @@ def market_making(results: Path = RESULTS, images: Path = IMAGES, suffix: str = 
     return True
 
 
+def market_making_round2(results: Path = RESULTS, images: Path = IMAGES) -> bool:
+    """The second round's fee break-even, from its first held-out read's table."""
+    from trading_research.backtest.costs import BYBIT_MM_PROGRAMME_MAKER_BP
+    from trading_research.reporting import mm_plots
+
+    source = results / "mm_round2_fee_breakeven_H.csv"
+    if not source.exists():
+        return False
+    wide = pd.read_csv(source)
+    names = {"S0": "S0", "S1": "S1", "G": "G(base)"}
+    long = wide.melt(id_vars="symbol", value_vars=list(names), var_name="strategy",
+                     value_name="breakeven_maker_bp")  # fmt: skip
+    long["strategy"] = long["strategy"].map(names)
+    long["best_published_maker_bp"] = 0.0  # pro1_altcoin, the round's 0 bp tier
+    long["mm_programme_maker_bp"] = BYBIT_MM_PROGRAMME_MAKER_BP
+    plots.both_themes(
+        # S0's break-even is exact and reaches -3.1 bp; S1 and G(base) were
+        # re-run from -1.5 to +2.0 bp, and an arrow marks one beyond that range.
+        lambda p: mm_plots.fee_breakeven(
+            long, p, grid=(-3.5, 2.0), title="Second round: the maker fee that would make each pay"
+        ),
+        images / "mm_round2_fee_breakeven.png",
+    )
+    return True
+
+
 def main() -> None:
     IMAGES.mkdir(parents=True, exist_ok=True)
     reversion_variants()
@@ -209,6 +235,10 @@ def main() -> None:
         print("market making done")
     else:
         print("market making skipped: experiments/results/mm_hypotheses_H.csv is absent")
+    if market_making_round2():
+        print("market making, second round, done")
+    else:
+        print("second round skipped: experiments/results/mm_round2_fee_breakeven_H.csv is absent")
 
 
 if __name__ == "__main__":
