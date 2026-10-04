@@ -778,3 +778,249 @@ fresh process; both are above the 1.5 GB a worker the run was budgeted for, and
 eight such workers stay well inside the machine.
 
 Frozen configuration sha256: `ed79d5ff520f5e93e9a8ea142058305117b530041534b1dc115b9e3507379c9d`
+
+---
+
+## Results on block H (read once, 4 October 2026)
+
+**Block H was read once**, through `HeldOutLedger.open("H")`, from a clean tree
+at commit `2a7daaa` on branch `mm/heldout`, with
+`configs/mm_prereg.yaml` at the frozen hash recorded in Amendment 2. The ledger
+entry ([`mm_heldout_ledger.json`](../../experiments/results/mm_heldout_ledger.json)):
+first read, commit `2a7daaa918b2d9e93b8b630d3a0598e2f4773639`, configuration
+`ed79d5ff…379c9d`, 2026-10-04T12:34:52Z. Every value used is the frozen one; no
+parameter, threshold, seed or rule was changed, and no test was added after the
+read. The scripts that made the read
+([`market_making_heldout.py`](../../experiments/market_making_heldout.py)) and
+turned its outputs into the verdicts
+([`market_making_verdicts.py`](../../experiments/market_making_verdicts.py)) were
+committed at the ledger's commit and ran unchanged. All 13 days of all four
+instruments were simulated; none had a book sequence gap, a stale flatten or a
+missing funding plane, so no day was excluded. Blocks F and P were not touched.
+
+**All four primaries are killed.** None passes Holm's procedure either; the
+kill conditions decide it without significance, as the status rule says.
+
+| Hypothesis | Metric (unit) | Value on H | Day t (12 df) | p, one-sided | Holm | Kill conditions that fired | Status |
+|---|---|---:|---:|---:|:-:|---|---|
+| H1 | S2 − twin, paired daily (USDT/day); and S2's daily net | −0.0072; S2 −1.21 a day, −15.75 over H | −0.93; S2 −1.51 | 0.921 | fail | K1, K2, K4, K-fund | **killed** |
+| H2.1 | S4 − S1, paired daily, pooled over BICO, CRV, XRP (USDT/day) | −91.81 | −0.55 | 0.705 | fail | K1, K3, K-fund | **killed** |
+| H2.2 | X1 − taker twin, net per attempt, paired daily (bp); and X1's net per attempt | −9.96; X1 −4.92 | −1.78; X1 −4.53 | 1.000 | fail | K1, K2, K3, K4, K-fund | **killed** |
+| H3 | S3 − S1, paired daily (USDT/day) | +0.107 | +0.62 | 0.272 | fail | K2 | **killed** |
+| H2.3 (secondary) | S4 − S1 on BICO, admitted against rejected days | H only: +0.575 (10 days) against +0.488 (3 days) | — | — | — | — | **not decided**: registered over H ∪ F; F is read next |
+
+Every kill condition, mechanically, with the value it read and what it was
+compared with ([`mm_kill_conditions_H.csv`](../../experiments/results/mm_kill_conditions_H.csv)):
+
+| | Condition | Value | Against | Fired |
+|---|---|---:|---:|:-:|
+| H1 | K1: sum of S2's daily net over H ≤ 0 | −15.75 | 0 | yes |
+| | K2: mean paired daily S2 − twin ≤ 0 | −0.0072 | 0 | yes |
+| | K3: 5 s markout per inside fill not above the twin's touch fills (bp) | −5.52 (6 fills) | −16.80 (11 fills) | no |
+| | K4: the stale-trigger placebo gains at least as much over the twin | −0.0005 | −0.0072 | yes |
+| | K-pess | S2 −16.18; S2 − twin +0.0003 | | no (the default verdict is not positive) |
+| | K-fund: net minus funding ≤ 0 | S2 −15.61; S2 − twin −0.0067 | 0 | yes |
+| | K-dir | making −10.86 with net −15.75 | | no |
+| H2.1 | K1: mean paired difference ≤ 0 | −91.81 | 0 | yes |
+| | K2: the flipped placebo (λ → −λ) does at least as well | −141.82 | −91.81 | no |
+| | K3: not above the 95th percentile of 50 shuffled-state placebos | −91.81 | +8.84 | yes |
+| | K-pess | −78.15 | | no |
+| | K-fund | −93.01 | 0 | yes |
+| | K-dir | making −45.84 with net −91.81 | | no |
+| H2.2 | K1: mean paired daily X1 − taker ≤ 0 (bp) | −9.96 | 0 | yes |
+| | K2: X1's net per attempt ≤ 0 (bp) | −4.92 | 0 | yes |
+| | K3: the flipped placebo (following the move) does at least as well per attempt | −4.33 | −4.92 | yes |
+| | K4: not above the 95th percentile of 50 shuffled-state placebos | −9.96 | +21.32 | yes |
+| | K5: fewer than 100 fills in H (inconclusive) | 275 filled attempts | 100 | no |
+| | K-pess | −10.24; −5.14 | | no |
+| | K-fund (the attempt net holds no funding) | −9.96; −4.92 | 0 | yes |
+| | K-dir, on X1's own totals (USDT over H) | making −105.4 with net −113.3 | | no |
+| H3 | K1: mean paired daily difference ≤ 0 | +0.107 | 0 | no |
+| | K2: not above the 95th percentile of 50 shifted-flag placebos | +0.107 | +0.562 | yes |
+| | K3: flag rate on D outside 0.2–24 a day (declared before H) | 8.88 | | no: testable |
+| | K4: fewer than 5 flags in H (inconclusive) | 173 | 5 | no |
+| | K-pess | +0.092 | | no |
+| | K-fund | +0.108 | 0 | no |
+| | K-dir | making +0.059 with net +0.107 | | no |
+
+#### What each verdict rests on
+
+- **H1.** The inside rule almost never acts at the frozen gate: S2's orders
+  placed inside the spread were filled 6 times in 13 days (the twin, none), so
+  S2 and its twin differ by less than a cent a day, and both lose about
+  1.2 USDT a day on BICOUSDT. The stale-trigger placebo loses no more than S2
+  over the twin. On D the same arithmetic was stated in advance (Amendment 2):
+  with a gate near 10 bp, one tick inside clears it only when the spread is far
+  wider than four ticks.
+- **H2.1.** S4 − S1 by instrument: BICOUSDT +0.55, CRVUSDT −2.70, XRPUSDT
+  −89.66 USDT a day. The pooled metric is in USDT and, as Amendment 2 stated,
+  weighted by XRPUSDT's clip; BICOUSDT alone is positive but small against its
+  own spread of days, and the pooled difference is below most of its 50
+  shuffled-state placebos (median −79.7, 95th percentile +8.8).
+- **H2.2.** Passive execution of the frozen signal loses where the taker
+  version wins. Over 376 eligible triggers (125 BICOUSDT, 129 CRVUSDT, 122
+  XRPUSDT), X1 posted 275 attempts, every one of which filled, and skipped 101
+  that arrived while an attempt was open: its net is −4.92 bp per attempt
+  (−5.72, −4.86, −4.15 by instrument), against +6.38 bp per trade for the taker
+  twin on the same triggers (+12.90, +3.23, +3.02). The fading side fills, as
+  the mechanism says it would, but at a markout worse than the market-wide
+  passive benchmark, and following the move instead (the flipped placebo) does
+  slightly better. K5 did not fire: H's trigger rate (9.6 a day across the
+  three, against about 5 on D) gave 275 fills.
+- **H3.** The guard does what it was built to do — the unguarded S1 lost
+  0.115 USDT an hour inside the 15-minute guard windows and 0.040 outside — and
+  S3 earned +0.107 USDT a day more than S1. But 50 copies of the same flags
+  moved around the block earn as much on average (+0.146) and more at the 95th
+  percentile (+0.562): the gain is not specific to when the flags fired.
+  173 flags in H, 13.3 a day, against 8.9 on D.
+- **H2.3** reads H and F together and is decided after F. On H's 13 days, the
+  gate (trailing one-day index autocorrelation at or below −0.0541) admitted
+  10, with a mean S4 − S1 on BICOUSDT of +0.575 USDT, against +0.488 on the 3
+  it rejected.
+
+The index's ten-minute autocorrelation was −0.033 on D and −0.135 on H (the
+state is present on both, as §27 measured); on F it is §27's −0.0003, not yet
+read here.
+
+#### The measurements without a hypothesis
+
+**Every strategy on BICOUSDT, the MM-admitted instrument, over H**
+([`mm_strategies_H.csv`](../../experiments/results/mm_strategies_H.csv); USDT a
+day, the decomposition with fees as a cost):
+
+| Strategy | Net | Net, bp of turnover | Passive fills a day | RMS position (BICO) | Spread | Adverse (5 s) | Inventory | Fees | Funding |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| S0 touch | −43.41 | −5.00 | 12,277 | 103 | +21.49 | −47.26 | −0.30 | 17.37 | +0.03 |
+| S1 skew | −1.20 | −7.50 | 192 | 56 | +2.45 | −2.96 | −0.35 | 0.33 | −0.01 |
+| S2 inside | −1.21 | −7.54 | 192 | 56 | +2.45 | −2.96 | −0.37 | 0.33 | −0.01 |
+| S3 guard | −1.10 | −7.93 | 164 | 58 | +2.02 | −2.51 | −0.30 | 0.28 | −0.01 |
+| S4 lean | −0.65 | −2.64 | 316 | 72 | +2.43 | −3.15 | +0.58 | 0.50 | −0.01 |
+| X1 passive reversion | −0.06 | −8.14 | 10 | 0.5 | +0.02 | −0.05 | −0.02 | 0.01 | 0.00 |
+
+Only the 5 s markout (spread plus adverse) is free of the book's 100 ms
+staleness; the split between the two is indicative. Markouts by fill path
+([`mm_markouts_H.csv`](../../experiments/results/mm_markouts_H.csv)): on
+BICOUSDT a fill from the queue was worth +4.3 bp at 5 s to S1 and −2.1 bp to
+S0, a fill by a print trading through the order −4.6 and −3.8 bp; against a
+market-wide passive markout of −1.36 bp. Every strategy's passive fills taken
+together are worse than the market-wide benchmark at 5 s on every instrument
+except CRVUSDT, where S1 (+0.07 bp) and S4 (+0.36 bp) are above its −0.48.
+
+Outside the MM-admitted instrument, S1 ran only as H2.1's comparator. It made
++0.62 USDT a day on CRVUSDT and +70.79 on XRPUSDT, and on both the making part
+was negative (−0.55 and −21.66 a day) and the profit was inventory (+1.21 and
++96.02 a day): thirteen days of carried position, not quoting. No hypothesis
+was registered about it and none is drawn.
+
+**The advantage ladder**, S0 on all four instruments, net in bp of turnover
+([`mm_ladder_H.csv`](../../experiments/results/mm_ladder_H.csv)); rungs 2 to 6
+read the future and are upper bounds, not strategies:
+
+| Rung | BICOUSDT | CRVUSDT | XRPUSDT | BTCUSDT |
+|---|---:|---:|---:|---:|
+| 0 tail of the queue, base fee, 10 ms | −5.00 | −3.89 | −3.49 | −3.14 |
+| 1 front of the queue | −4.00 | −3.35 | −2.78 | −2.63 |
+| 2 forecast of the next second, R² 0.1 | −1.91 | −0.70 | +3.33 | +13.30 |
+| 3 R² 0.3 | −0.20 | +0.91 | +2.00 | +3.83 |
+| 4 latency 1 ms | −0.04 | +1.01 | +2.13 | +3.79 |
+| 5 perfect foresight of the next second | +5.66 | +4.26 | +2.92 | +2.31 |
+| 6 best published maker tier (0 bp) | +2.77 | +2.36 | +2.13 | +0.99 |
+
+Being first in the queue, with no other change, loses more in USDT on every
+instrument (it is filled about twice as often, and the extra fills are the
+adverse ones) while losing less per unit traded. On BICOUSDT no rung short of
+perfect foresight of the next second turns the touch quoter positive.
+
+**The fee break-even**: the maker fee at which each strategy's net over H is
+zero ([`mm_fee_breakeven_H.csv`](../../experiments/results/mm_fee_breakeven_H.csv),
+grid in [`mm_fee_grid_H.csv`](../../experiments/results/mm_fee_grid_H.csv)).
+S0 and X1 decide without reading the fee, so theirs is exact from one run; the
+gated strategies were re-run at every fee of the grid, the gate reading the fee
+it pays, the taker fee held at 5.5 bp. "Below the grid" means the strategy
+loses at every fee down to a 1.5 bp rebate; "above" that it already pays at the
+base fee.
+
+| Strategy | BICOUSDT | CRVUSDT | XRPUSDT | BTCUSDT |
+|---|---:|---:|---:|---:|
+| S0 | −3.01 | −1.89 | −1.49 | −1.14 |
+| S1 | below the grid | above (pays at the base) | above (pays at the base) | |
+| S2 | −1.48 | | | |
+| S3 | below the grid | | | |
+| S4 | −0.52 | +0.62 | +1.70 | |
+| X1 | −6.14 | −2.04 | −1.57 | |
+
+Bybit's published linear-perpetual schedule, transcribed into
+`backtest/costs.py`, has no maker rebate: its best maker fee is 0 bp (Supreme
+VIP, from 500 million USDT of 30-day volume, or the Pro levels, from 100 million
+with more than a fifth of it through the API), and the market-maker programme
+advertises a rebate of up to 1 bp, on application.
+No strategy on BICOUSDT, the instrument the study admitted for market making,
+breaks even at any published fee, nor at the programme's rebate. Of the
+strategies run on the other instruments, only S4 on CRVUSDT (at a 0 bp tier)
+and on XRPUSDT (from VIP 2, 1.6 bp) would have broken even, and S1 there, whose
+profit was inventory (above). The caveat the code carries with every tier: the
+schedule is the one published in 2026 (page last updated 2026-09-02, transcribed
+2026-10-02), applied to data from February and March 2024, when it may have
+differed; and a better tier also lowers the taker fee, which the grid holds at
+the base.
+
+**Robustness on BICOUSDT**, each axis alone
+([`mm_robustness_H.csv`](../../experiments/results/mm_robustness_H.csv)): under
+every cancellation attribution, arrival-growth rule, latency from 1 to 250 ms,
+feed latency up to 50 ms and the `assume_filled` diagnostic, every strategy's
+net stays negative (S0 −39.8 to −57.7 USDT a day, S1 −1.03 to −1.51, S2 −1.03
+to −1.52, S3 −0.99 to −1.22, S4 −0.56 to −1.03, X1 −0.06 to −0.17). Only the
+pessimistic cancellation rule enters a verdict, through K-pess, and it never
+turned a positive verdict negative, because no default verdict was positive.
+
+#### How the registered statistics were read
+
+Each choice below was committed in the scripts at the ledger's commit, before H
+was opened, and none was changed after.
+
+1. **Daily series.** A paired difference is taken per instrument-day where both
+   days are usable, and pooled by summing over instruments each day, as on D.
+2. **Two claims, one test.** H1 ("a positive daily net, and more than its
+   twin") and H2.2 ("exceeds the taker twin, and exceeds zero") make two claims
+   each, and each is tested at the larger of its two one-sided p-values.
+3. **K-pess, K-fund and K-dir** are applied to every sign claim of a
+   hypothesis. K-pess fires only when every claim is positive under
+   proportional attribution and one is not under pessimistic attribution.
+4. **H1's K3** compares the volume-weighted 5 s markout of S2's fills from
+   orders placed inside the spread with that of the twin's fills from orders
+   placed at the touch, each against its side's touch in the snapshot the
+   order arrived on.
+5. **H2.2's net per attempt** is the cash of an attempt's fills over the
+   notional it posted, misses and triggers skipped while busy counting zero,
+   over the eligible triggers (Amendment 2's definition on D). It holds no
+   funding, so K-fund reads the claim itself; K-dir reads X1's own day totals,
+   since the taker twin has no making part. The flipped placebo is compared on
+   net per attempt.
+6. **The shuffled-state placebo** rolls H's part of the index tape on its full
+   five-second grid by the registered shift (seed 0 to 49): S4 reads the rolled
+   tape and its trigger times; X1 the triggers re-derived from it, thinned from
+   the start of the block as the real ones are; the taker twin is scored on
+   those triggers; the statistic is the hypothesis's own.
+7. **The shifted-flag placebo** moves the flags effective inside H around H's
+   circle by an offset uniform in [6 h, 13 days − 6 h] (seeds 0 to 49).
+8. **The ladder's noise** is drawn per instrument-day from the registered seed,
+   so rungs 2 to 4 see the same draws; the forecast is `R² × (realised change +
+   noise)`, whose R² against the realised change is the rung's.
+9. **Robustness** runs S0 to S4 and X1; the twin is S1's cell and was not run
+   twice.
+
+#### What could not be done as registered
+
+- **H2.3** is registered over H and F together, so its status waits for F; only
+  the H half is reported above.
+- **Memory.** The largest simulation workers reached 2,320 MB on a BTCUSDT day
+  and 2,210 MB on an XRPUSDT day, above the 2 GB a worker was budgeted for;
+  BICOUSDT and CRVUSDT stayed under 1.6 GB. Nothing was cut to fit.
+
+#### The compute record
+
+One run, 4,958 seconds of wall time on 8 worker processes of a 10-core, 32 GB
+machine: the reversion tapes 27 s, the flags 53 s, and 1,872 simulation jobs
+(7,566 configuration-days, every day of every cell) 4,877 s. Peak resident
+memory 2,320 MB in the largest worker and 2,748 MB in the driver
+([`mm_compute_H.csv`](../../experiments/results/mm_compute_H.csv)).
