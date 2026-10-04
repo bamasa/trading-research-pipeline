@@ -1,0 +1,6 @@
+hypothesis,block,metric,status,decided_by,value,p_one_sided,days,claims_positive,fired,stamp
+B1,H,"S1, net per 100 USDT of clip a day, pooled",killed,"K1, K-nbhd",-0.06650252707350596,0.5204894609093995,13,False,"K1, K-nbhd",first read
+B2,H,"G(base) S1/both/W=15/mu=0, and G(base) - S1, per 100 USDT of clip",killed,"K3, K-queue, K-dir",0.0923374866395482,0.4705502723788901,13,True,"K3, K-queue, K-dir, K5",first read
+B3a,H,"S1 at pro1_altcoin, net per 100 USDT of clip a day, pooled",killed,K-dir,0.8445588440861035,0.24823234678083522,13,True,K-dir,first read
+B3b,H,"S1 at programme, net per 100 USDT of clip a day, pooled",killed,K-dir,2.217282492872359,0.04257660435968719,13,True,K-dir,first read
+B4,P,"G(base) S1/trailing/W=15/mu=0, and G(base) - S1, per 100 USDT of clip",killed,"K1, K2, K3, K-fund, K-nbhd",-1.8256227226400372,0.8262910064555221,28,False,"K1, K2, K3, K-fund, K-nbhd",first read
