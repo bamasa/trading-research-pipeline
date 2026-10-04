@@ -198,8 +198,9 @@ block, since conditional requires a candidate on the held-out fortnight.
 
 ### Market making, second round: wide-spread instruments (B1–B4)
 
-**Status: pre-registered, nothing fetched**
-([pre-registration](preregistration/market_making_round2.md),
+**Status: values frozen on D; no held-out day read**
+([pre-registration](preregistration/market_making_round2.md) and its
+[amendment](preregistration/market_making_round2.md#amendment-1-2026-10-04-before-any-held-out-read-values-frozen-on-the-development-period),
 [config](../configs/mm_prereg_round2.yaml)). Whether any stated condition makes
 the market maker pay, on data no market-making code has read: eight wide-spread
 instruments admitted on the 25-day development block, their held-out fortnight

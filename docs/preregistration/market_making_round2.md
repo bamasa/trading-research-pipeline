@@ -766,3 +766,256 @@ The configuration as registered, with every placeholder `null`, has sha256
 `98dbec924e13e48ed92680515b36e2cceaa04c7dc98e47ba8c62cec629c07345`.
 The round-two loader will check that putting `null` back into every
 placeholder of the frozen file gives this hash, as round one's does.
+
+---
+
+## Amendments
+
+### Amendment 1 (2026-10-04, before any held-out read): values frozen on the development period
+
+**When this was made, no market-making code had read a held-out day of this
+round.** Every reader of the round checks each instrument-day against
+`round2.Access` before any file is opened, and the development run held only
+`round2.development_access()`: D for the eight candidates and for BICOUSDT.
+Stage 1 of the [fetch plan](#fetch-plan) was carried out after the code was
+merged (pull request #9, `main` at `e09c24e`): D and H for the eight
+candidates and P for BICOUSDT, with their funding. Every file the plan expects
+is on disk: 304 book, 304 print and 304 funding files for the eight candidates
+over D and H (8 × 38 days), and 28 of each for BICOUSDT over P; every day was
+present and no archive was kept. Of the H and P days nothing was seen beyond
+what the downloaders print as they write (each day's row count and
+sequence-gap count, and each instrument's rows over D and H together); the
+admission rule's coverage of H was computed from the file system alone. The
+runs are [`experiments/market_making_round2.py`](../../experiments/market_making_round2.py)
+with `--freeze`, from `e09c24e`; their tables are
+`experiments/results/mm_round2_*_D.csv`. The values below are written into the
+placeholders of [`configs/mm_prereg_round2.yaml`](../../configs/mm_prereg_round2.yaml),
+and nothing else in that file changed (with every placeholder put back to
+`null` it hashes to the registered `98dbec92…7345`, which the loader checks).
+
+#### Admission (computed on D, 2024-02-01 to 2024-02-25)
+
+| Instrument | Tick (bp) | Spread, time-weighted (bp) | Time at ≥ 2 ticks | Touch / median print | Prints a day | Market-wide passive markout 1 / 5 / 30 s (bp) | Coverage D / H | Days with a sequence gap | A1 | A2 | Admitted |
+|---|---:|---:|---:|---:|---:|---|---|---:|:-:|:-:|:-:|
+| ALICEUSDT | 8.13 | 8.58 | 0.059 | 68.0 | 11,828 | −0.04 / −0.09 / +0.25 | 1.00 / 1.00 | 0 | no | yes | **yes** |
+| ALGOUSDT | 5.62 | 5.77 | 0.028 | 481.7 | 41,745 | −0.21 / −0.24 / −0.14 | 1.00 / 1.00 | 0 | no | yes | **yes** |
+| JTOUSDT | 4.92 | 5.25 | 0.068 | 67.7 | 79,413 | −1.05 / −0.91 / −0.55 | 1.00 / 1.00 | 0 | no | yes | **yes** |
+| ZECUSDT | 4.40 | 4.74 | 0.078 | 55.8 | 34,259 | +0.69 / +0.40 / +0.32 | 1.00 / 1.00 | 0 | no | yes | **yes** |
+| GALAUSDT | 4.03 | 4.03 | 0.000 | 465,054.5 | 236,177 | −0.37 / −0.43 / −0.24 | 1.00 / 1.00 | 0 | no | yes | **yes** |
+| GMTUSDT | 3.86 | 3.96 | 0.025 | 146.6 | 49,852 | −0.24 / −0.34 / −0.11 | 1.00 / 1.00 | 0 | no | no | no |
+| CAKEUSDT | 3.78 | 4.79 | 0.266 | 19.3 | 28,480 | +0.74 / +0.96 / +0.78 | 1.00 / 1.00 | 0 | yes | no | **yes** |
+| IOTAUSDT | 3.84 | 4.26 | 0.109 | 64.5 | 47,248 | +0.71 / +0.56 / +1.82 | 1.00 / 1.00 | 0 | no | no | no |
+
+Admitted: **GALAUSDT, JTOUSDT, ALGOUSDT, ZECUSDT, ALICEUSDT** by A2 (a tick of
+at least 4 bp; none of them spends a quarter of its time at two ticks or more,
+so none meets A1) and **CAKEUSDT** by A1. GMTUSDT and IOTAUSDT meet neither:
+ticks of 3.86 and 3.84 bp, and 0.025 and 0.109 of the time at two ticks or
+more. GALAUSDT's tick, 4.03 bp, clears A2's 4.0 bp by less than 1%; its touch
+is almost never wider than one tick, and its touch is very deep against its
+median print. No D day of any candidate has a book sequence gap, so
+`max_sequence_gaps` stays 0, and no D day of an admitted instrument or of
+BICOUSDT was excluded from any run.
+
+Per admitted instrument, the clip's notional cap (a tenth of D's median touch
+notional, sampled every second) and `sigma_ref` (the median over D's quoting
+hours of the one-minute volatility the simulator computes); BICOUSDT keeps
+round one's 20.0434 USDT and 7.92472 bp:
+
+| Instrument | Clip notional cap (USDT) | `sigma_ref` (bp, one minute) |
+|---|---:|---:|
+| GALAUSDT | 1,155.59 | 9.68152 |
+| JTOUSDT | 329.896 | 13.8661 |
+| ALGOUSDT | 616.439 | 9.16192 |
+| ZECUSDT | 100.07 | 8.48928 |
+| CAKEUSDT | 102.52 | 7.42914 |
+| ALICEUSDT | 155.986 | 9.70072 |
+
+#### The room by hour, and the hour masks
+
+Every D print of the six admitted instruments and of BICOUSDT was scored from
+its resting side at five seconds (`gate.print_markouts`, as the market-wide
+benchmark scores it); per UTC hour, the volume-weighted markout over all 25
+days and its value less the base maker fee are in `mm_round2_hours_D.csv`.
+Hour `h` is in the mask at margin `μ` if that value less the fee is at least
+`μ`. At the base fee:
+
+| Instrument | μ = 0 | μ = 1 | μ = 2 |
+|---|---|---|---|
+| GALAUSDT | none | none | none |
+| JTOUSDT | none | none | none |
+| ALGOUSDT | none | none | none |
+| ZECUSDT | 13, 14 | none | none |
+| CAKEUSDT | 17, 23 | none | none |
+| ALICEUSDT | none | none | none |
+| BICOUSDT | none | none | none |
+
+On D no hour of any instrument paid a passive fill 1 bp beyond the base fee,
+and only four instrument-hours paid the fee at all. At a professional tier a
+gate reads the fee it pays, so its mask is recomputed from the same hourly
+table at that fee; the held-out script checks that the table gives exactly
+these masks at the base fee before it runs.
+
+#### S1, per admitted instrument (B1)
+
+Successive halving with the registered budgets of 5, 12 and 25 D days on a
+nested subset drawn with seed 0 (the 5 days: 2024-02-05 2024-02-11 2024-02-12
+2024-02-20 2024-02-25; the 12: 2024-02-03 2024-02-04 2024-02-05 2024-02-07
+2024-02-11 2024-02-12 2024-02-17 2024-02-20 2024-02-22 2024-02-23 2024-02-24
+2024-02-25), keep fraction 0.34 (144 cells, then 48, then 16 on all 25 days),
+objective the instrument's mean daily net in USDT, minimum 20 passive fills a
+day; the choice by `neighbourhood_scores` over the cells measured at the full
+budget, the outright peak beside it. Every value is the instrument's mean
+daily net on D in USDT, at its own clip:
+
+| Instrument | Chosen (`skew_bp` / `k` / `min_edge_bp` / `soft_limit_clips`) | Own | Neighbourhood median | Cells in it | Outright peak |
+|---|---|---:|---:|---:|---|
+| GALAUSDT | 5 / 0.5 / 4 / 12 | +26.14 | +27.64 | 6 | 2 / 0.5 / 1 / 12 at +56.93 |
+| JTOUSDT | 2 / 0.5 / 4 / 12 | +9.311 | +7.904 | 4 | 2 / 0.5 / 2 / 12 at +11.69 |
+| ALGOUSDT | 2 / 0.5 / 4 / 12 | +2.324 | +0.241 | 2 | the chosen cell |
+| ZECUSDT | 2 / 0.5 / 0 / 6 | +0.556 | +0.526 | 6 | 2 / 1 / 2 / 3 at +0.947 |
+| CAKEUSDT | 2 / 1 / 4 / 12 | +2.435 | +1.584 | 9 | the chosen cell |
+| ALICEUSDT | 2 / 0.5 / 2 / 12 | +7.012 | +4.197 | 11 | 2 / 0.5 / 1 / 12 at +8.264 |
+
+Each neighbourhood, cell by cell, is in `d_search.S1.neighbourhood` of the YAML;
+every evaluation is in `mm_round2_search_S1_D.csv`. Pooled as the registered
+metric, S1 earned **+2.148 USDT per 100 USDT of clip a day** on D. These are
+the numbers the search maximised, on the block it searched; they are not a
+result, and round one's chosen S1 also earned money on its D before losing on
+H.
+
+#### The gate (B2)
+
+The 42 cells, each on all 25 D days and all six admitted instruments, on each
+instrument's chosen S1 (base `S1`) or its S1-touch cell (`S1_touch`: the chosen
+`skew_bp` and `soft_limit_clips`, `k` and `min_edge_bp` at 0). 24 cells take
+part (the six instruments average at least 5 passive fills a day under them);
+every cell's value, fills and neighbourhood median are in
+`mm_round2_gate_D.csv`.
+
+**Chosen: base S1, kind `both`, W = 15 min, μ = 0 bp**, at +0.0739 USDT per 100
+USDT of clip a day on D. Its neighbourhood among the cells taking part is the
+cell alone: its neighbours of kind `both` either never open (μ = 1, because no
+mask holds an hour at 1 bp) or average fewer than 5 passive fills a day
+(W = 60 at μ = 0, 4.35), so its neighbourhood median is its own value. The
+outright peak is S1 / `trailing` / W = 15 / μ = 2 at +0.1894, whose
+neighbourhood median is +0.068.
+
+What the choice means, read from D. Under `both` the gate is open only in an
+hour of the mask while the trailing room also clears the fee; at the base fee
+the masks are empty for four of the six instruments and hold two hours each
+for ZECUSDT and CAKEUSDT. On D the chosen gate was open for 1.73% of ZECUSDT's
+quoting time, 1.77% of CAKEUSDT's, and never on the other four: **0.58% of
+quoting time pooled, below the 1% under which B2 is registered as
+inconclusive** (K5). G(base) less S1 on the same days was −2.07 USDT per 100 USDT
+of clip a day on D. The rule chose the cell as registered; this is recorded
+here so that a K5 outcome on H is read as what D already showed, not as a
+surprise.
+
+#### B3's strategy at each tier
+
+Each instrument's chosen S1 and the chosen G(base), every value frozen, on all
+25 D days at each tier, the edge gate and the room gate reading the fee they
+pay; pooled mean on D, USDT per 100 USDT of clip a day:
+
+| Tier (maker / taker, bp) | S1 | G(base) | B3's strategy |
+|---|---:|---:|---|
+| `pro1_altcoin` (0.0 / 2.8) | +2.884 | +0.977 | **S1** (B3a) |
+| programme (−1.0 / 2.8) | +3.213 | +2.039 | **S1** (B3b) |
+
+Both are S1 with each instrument's chosen cell, so B3's neighbourhood
+condition reads the instruments' S1 neighbourhoods at the tier.
+
+#### B4 on BICOUSDT's D
+
+The 42 cells on round one's frozen S1 for BICOUSDT (2 / 0.5 / 4 / 6) and its
+S1-touch cell (2 / 0 / 0 / 6), all 25 days of D, chosen by the same rule on
+BICOUSDT alone; 18 cells take part (`mm_round2_b4_gate_D.csv`).
+
+**Chosen: base S1, kind `trailing`, W = 15 min, μ = 0 bp**, at +1.076 USDT per
+100 USDT of clip a day on D (+0.216 USDT a day at the 20.0434 USDT clip), with
+neighbourhood median +1.043:
+
+| Base | Kind | `W` (min) | `μ` (bp) | Daily net per 100 USDT of clip on D |
+|---|---|---:|---:|---:|
+| S1 | trailing | 15 | 0 | +1.076 |
+| S1 | trailing | 15 | 1 | +1.193 |
+| S1 | trailing | 60 | 0 | +0.497 |
+| S1 | trailing | 60 | 1 | +1.011 |
+
+The outright peak is the neighbour at μ = 1 (+1.193). BICOUSDT's masks are empty
+at every margin, so its `hours` and `both` cells never open. On D the chosen
+gate was open 17.9% of quoting time, and G(base) less S1 on the same days was
++0.589 USDT per 100 USDT of clip a day.
+
+#### Spread of daily results and the minimum detectable effects
+
+`σ_D` is the standard deviation over D's 25 days of each primary's pooled daily
+metric (USDT per 100 USDT of clip a day) with the frozen values, and the
+minimum detectable effect is `2 × σ_D / √n`, n = 13 for B1 to B3b and 28 for
+B4:
+
+| Primary | Claim | Mean on D | σ_D | n | Minimum detectable effect |
+|---|---|---:|---:|---:|---:|
+| B1 | S1, net | +2.148 | 3.300 | 13 | 1.830 |
+| B2 | G(base), net | +0.074 | 0.315 | 13 | 0.175 |
+| B2 | G(base) − S1, paired | −2.074 | 3.230 | 13 | 1.791 |
+| B3a | S1 at `pro1_altcoin`, net | +2.884 | 3.646 | 13 | 2.022 |
+| B3b | S1 at the programme tier, net | +3.213 | 3.214 | 13 | 1.783 |
+| B4 | G(base) on BICOUSDT, net | +1.076 | 3.043 | 28 | 1.150 |
+| B4 | G(base) − S1 on BICOUSDT, paired | +0.589 | 7.138 | 28 | 2.698 |
+
+#### Choices fixed with the code, before the first held-out read
+
+These are in the code merged with pull request #9 and in the held-out and
+verdict scripts' docstrings; none was changed after the development run.
+
+1. **The room's clock.** A print enters the trailing window when its
+   five-second horizon closes and leaves after `W`; the gate's state is handed
+   to the simulator as a tape stamped one nanosecond before each change, so a
+   decision at `t` reads exactly the state at `t`. Every day starts closed.
+2. **G(base) while closed** keeps the base's quote on the side that reduces
+   |position|, at the base's price and size; a fill can therefore take the
+   position through flat by less than one clip, after which the other side is
+   the reducing one.
+3. **The shifted-gate placebo** moves each instrument's whole state tape over
+   the block (its closed first minutes of each day included) by one offset per
+   seed, uniform in [6 h, block − 6 h], the same for every instrument.
+4. **A gate at another fee** (B3's tiers, the fee grid) reads that fee in its
+   trailing room and in its mask.
+5. **The verdicts.** A claim's value is the mean over the block of its pooled
+   daily series. K-nbhd for S1 takes each instrument's median over its own
+   neighbourhood, pooled by the mean over instruments; for the gate, the
+   median over its neighbourhood of each claim. K4 pools by the mean over
+   instruments of each one's volume-weighted markout while open and while
+   closed. The minimum-count conditions read passive fills summed over the
+   block and the mean over instruments of the share of quoting time open.
+   Holm's procedure counts all five primaries.
+
+#### The compute record
+
+The development run took 99 minutes (5,948 s on the monotonic clock) on 8
+worker processes of a 10-core, 32 GB machine, each instrument-day job in a
+fresh process, 18,476 configuration-days in all, none excluded:
+
+| Stage | Wall time (s) |
+|---|---:|
+| screen | 16 |
+| prints scored | 15 |
+| S1, first rung (5 days, every instrument) | 1,677 |
+| S1, second rung (12 days) | 1,299 |
+| S1, third rung (25 days) | 903 |
+| gate, 42 cells and both bases | 1,559 |
+| B3 at `pro1_altcoin` | 108 |
+| B3 at the programme tier | 116 |
+| B4 | 189 |
+| total | 5,948 |
+
+Peak resident memory: 1,373 MB in the largest simulation worker (a GALAUSDT
+day), 1,563 MB in the largest worker of any kind, 936 MB in the driver. No
+worker exceeded the 2 GB budget, so **the held-out run uses 8 workers**. Before
+this amendment the held-out script ran end to end on D's last three days under
+the development access (`--dry-run`: 201 jobs, 7.6 minutes, largest worker
+1,379 MB), and the verdict script on its outputs, so every path of the first
+read has been exercised on D.
+
+Frozen configuration sha256: `fd0768a14d994bb1b41903ca5fbdf6b6c7e82def4fff7014c0130c1bad3053e5`

@@ -159,7 +159,7 @@ admission:
   if_unexpected: the committed D table wins
   day_exclusions: round one's Amendment 1, items 7 to 10
   max_sequence_gaps: 0  # unless the amendment sets another value from D's counts
-  table: null  # frozen by the D amendment
+  table: [{symbol: ALICEUSDT, tick_bp: 8.129, spread_bp: 8.578, share_two_ticks: 0.05868, touch_over_print: 67.99, prints_per_day: 11828, markout_1s_bp: -0.0414, markout_5s_bp: -0.09487, markout_30s_bp: 0.246, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: A2, admitted: true}, {symbol: ALGOUSDT, tick_bp: 5.62, spread_bp: 5.772, share_two_ticks: 0.02793, touch_over_print: 481.7, prints_per_day: 41745, markout_1s_bp: -0.2091, markout_5s_bp: -0.2398, markout_30s_bp: -0.1378, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: A2, admitted: true}, {symbol: JTOUSDT, tick_bp: 4.918, spread_bp: 5.246, share_two_ticks: 0.06844, touch_over_print: 67.67, prints_per_day: 79413, markout_1s_bp: -1.052, markout_5s_bp: -0.9059, markout_30s_bp: -0.5462, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: A2, admitted: true}, {symbol: ZECUSDT, tick_bp: 4.403, spread_bp: 4.739, share_two_ticks: 0.07757, touch_over_print: 55.8, prints_per_day: 34259, markout_1s_bp: 0.6919, markout_5s_bp: 0.3998, markout_30s_bp: 0.3233, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: A2, admitted: true}, {symbol: GALAUSDT, tick_bp: 4.032, spread_bp: 4.034, share_two_ticks: 0.0004976, touch_over_print: 465100.0, prints_per_day: 236177, markout_1s_bp: -0.3651, markout_5s_bp: -0.4282, markout_30s_bp: -0.2433, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: A2, admitted: true}, {symbol: GMTUSDT, tick_bp: 3.862, spread_bp: 3.96, share_two_ticks: 0.02519, touch_over_print: 146.6, prints_per_day: 49852, markout_1s_bp: -0.2405, markout_5s_bp: -0.3391, markout_30s_bp: -0.1145, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: none, admitted: false}, {symbol: CAKEUSDT, tick_bp: 3.781, spread_bp: 4.789, share_two_ticks: 0.2661, touch_over_print: 19.34, prints_per_day: 28480, markout_1s_bp: 0.7412, markout_5s_bp: 0.9569, markout_30s_bp: 0.7777, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: A1, admitted: true}, {symbol: IOTAUSDT, tick_bp: 3.844, spread_bp: 4.262, share_two_ticks: 0.1091, touch_over_print: 64.51, prints_per_day: 47248, markout_1s_bp: 0.7149, markout_5s_bp: 0.5601, markout_30s_bp: 1.821, coverage_D: 1.0, coverage_H: 1.0, sequence_gap_days_D: 0, criterion: none, admitted: false}]  # frozen by the D amendment
 
 fees:
   base: {maker_bp: 2.0, taker_bp: 5.5}
@@ -177,10 +177,10 @@ simulator:
     rule: min(notional_usdt, touch_share x trailing one-hour median touch), rounded down to the lot
     notional_share_of_d_median_touch: 0.10
     touch_share: 0.10
-    notional_usdt: null  # per admitted instrument; frozen by the D amendment
+    notional_usdt: {GALAUSDT: 1155.59, JTOUSDT: 329.896, ALGOUSDT: 616.439, ZECUSDT: 100.07, CAKEUSDT: 102.52, ALICEUSDT: 155.986}  # per admitted instrument; frozen by the D amendment
     notional_usdt_bicousdt: 20.0434  # round one's frozen value
   volatility:
-    sigma_ref: null  # D median, per admitted instrument; frozen by the D amendment
+    sigma_ref: {GALAUSDT: 9.68152, JTOUSDT: 13.8661, ALGOUSDT: 9.16192, ZECUSDT: 8.48928, CAKEUSDT: 7.42914, ALICEUSDT: 9.70072}  # D median, per admitted instrument; frozen by the D amendment
     sigma_ref_bicousdt: 7.92472  # round one's frozen value
 
 strategies:
@@ -198,7 +198,7 @@ strategies:
       soft_limit_clips: [3, 6, 12]
     cells: 144
     per_instrument: true
-    chosen: null  # {symbol: [skew_bp, k, min_edge_bp, soft_limit_clips]}; frozen by the D amendment
+    chosen: {GALAUSDT: [5, 0.5, 4, 12], JTOUSDT: [2, 0.5, 4, 12], ALGOUSDT: [2, 0.5, 4, 12], ZECUSDT: [2, 0.5, 0, 6], CAKEUSDT: [2, 1, 4, 12], ALICEUSDT: [2, 0.5, 2, 12]}  # {symbol: [skew_bp, k, min_edge_bp, soft_limit_clips]}; frozen by the D amendment
   S1_touch:
     name: S1 at its touch cell
     k: 0
@@ -245,7 +245,7 @@ d_search:
     choice: neighbourhood_scores  # median of the cell and every measured cell within one step on each axis
     choice_over: cells measured at the full budget
     peak_reported_beside: true
-    neighbourhood: null  # per instrument, the chosen cell and its neighbours with their values; frozen by the D amendment
+    neighbourhood: {GALAUSDT: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [5, 0.5, 4, 12], median: 27.6409, own: 26.1411, cells: [[2, 0.5, 2, 12, 51.7671], [2, 0.5, 4, 12, 21.7228], [2, 0.5, 2, 6, 30.7672], [5, 0.5, 4, 12, 26.1411], [5, 0.5, 2, 12, 29.1408], [2, 0.5, 4, 6, 23.7057]], peak: [2, 0.5, 1, 12, 56.9315], full_budget_cells: 16}, JTOUSDT: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [2, 0.5, 4, 12], median: 7.90392, own: 9.31069, cells: [[2, 0.5, 2, 6, 6.49714], [2, 0.5, 2, 12, 11.688], [5, 0.5, 2, 12, 4.72874], [2, 0.5, 4, 12, 9.31069]], peak: [2, 0.5, 2, 12, 11.688], full_budget_cells: 16}, ALGOUSDT: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [2, 0.5, 4, 12], median: 0.241167, own: 2.32361, cells: [[5, 1, 2, 6, -1.84127], [2, 0.5, 4, 12, 2.32361]], peak: [2, 0.5, 4, 12, 2.32361], full_budget_cells: 16}, ZECUSDT: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [2, 0.5, 0, 6], median: 0.525924, own: 0.556038, cells: [[2, 1, 0, 3, 0.791333], [5, 0.5, 1, 12, 0.865625], [5, 1, 1, 3, 0.49581], [2, 0.5, 0, 6, 0.556038], [5, 0.5, 1, 6, 0.491254], [5, 0.5, 0, 6, -0.35989]], peak: [2, 1, 2, 3, 0.947171], full_budget_cells: 16}, CAKEUSDT: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [2, 1, 4, 12], median: 1.58423, own: 2.43537, cells: [[2, 1, 4, 12, 2.43537], [2, 1, 4, 6, 1.62213], [5, 1, 4, 12, 1.58423], [2, 1, 2, 12, 2.24839], [2, 0.5, 4, 12, 1.92659], [5, 1, 2, 12, 1.52063], [2, 1, 2, 6, 1.51255], [5, 1, 4, 6, 0.409777], [5, 1, 2, 6, -0.0382451]], peak: [2, 1, 4, 12, 2.43537], full_budget_cells: 16}, ALICEUSDT: {axes: [skew_bp, k, min_edge_bp, soft_limit_clips], chosen: [2, 0.5, 2, 12], median: 4.19695, own: 7.01243, cells: [[2, 1, 2, 12, 5.79528], [2, 1, 1, 12, 5.42591], [2, 0.5, 2, 12, 7.01243], [2, 0.5, 1, 12, 8.26354], [2, 1, 2, 6, 4.19695], [5, 1, 2, 12, 3.93382], [5, 1, 1, 12, 3.20526], [2, 1, 1, 6, 2.99595], [2, 0.5, 4, 12, 5.37422], [2, 0.5, 2, 6, 3.85683], [5, 0.5, 2, 12, 2.89443]], peak: [2, 0.5, 1, 12, 8.26354], full_budget_cells: 16}}  # per instrument, the chosen cell and its neighbours with their values; frozen by the D amendment
   gate:
     days: all 25 D days
     instruments: every admitted basket instrument, each on its chosen S1 or S1_touch
@@ -254,24 +254,24 @@ d_search:
     neighbourhood: same base and kind, one step on window_min and margin_bp (margin_bp alone for hours)
     choice: highest neighbourhood median, ties by the cell's own value
     one_cell_for_the_basket: true
-    chosen: null  # {base, kind, window_min, margin_bp}; frozen by the D amendment
-    chosen_neighbourhood: null  # cells and values; frozen by the D amendment
-    hours_masks: null  # {symbol: {margin_bp: [hours]}}; frozen by the D amendment
+    chosen: {base: S1, kind: both, window_min: 15, margin_bp: 0}  # {base, kind, window_min, margin_bp}; frozen by the D amendment
+    chosen_neighbourhood: {axes: [base, kind, window_min, margin_bp, value], chosen: [S1, both, 15, 0], median: 0.0738591, own: 0.0738591, cells: [[S1, both, 15, 0, 0.0738591]], peak: [S1, trailing, 15, 2, 0.189404], cells_taking_part: 24}  # cells and values; frozen by the D amendment
+    hours_masks: {GALAUSDT: {0: [], 1: [], 2: []}, JTOUSDT: {0: [], 1: [], 2: []}, ALGOUSDT: {0: [], 1: [], 2: []}, ZECUSDT: {0: [13, 14], 1: [], 2: []}, CAKEUSDT: {0: [17, 23], 1: [], 2: []}, ALICEUSDT: {0: [], 1: [], 2: []}}  # {symbol: {margin_bp: [hours]}}; frozen by the D amendment
   b3_choice:
     candidates: [each instrument's chosen S1, the chosen G(base)]
     tiers: [pro1_altcoin, programme]
     rule: higher pooled mean on all D days at the tier, every value frozen
     re_search_at_tier: false
-    chosen: null  # {pro1_altcoin: S1 or G, programme: S1 or G}, with the D values; frozen by the D amendment
+    chosen: {pro1_altcoin: {strategy: S1, S1_per_100_clip_day: 2.88364, G_per_100_clip_day: 0.977157}, programme: {strategy: S1, S1_per_100_clip_day: 3.21264, G_per_100_clip_day: 2.03852}}  # {pro1_altcoin: S1 or G, programme: S1 or G}, with the D values; frozen by the D amendment
   b4:
     instrument: BICOUSDT
     days: round one's D, all 25
     bases: {S1: [2, 0.5, 4, 6], S1_touch: [2, 0, 0, 6]}
     cells: 42
     rule: as the gate search, on BICOUSDT alone
-    chosen: null  # {base, kind, window_min, margin_bp}; frozen by the D amendment
-    chosen_neighbourhood: null  # frozen by the D amendment
-    hours_masks: null  # BICOUSDT, {margin_bp: [hours]}; frozen by the D amendment
+    chosen: {base: S1, kind: trailing, window_min: 15, margin_bp: 0}  # {base, kind, window_min, margin_bp}; frozen by the D amendment
+    chosen_neighbourhood: {axes: [base, kind, window_min, margin_bp, value], chosen: [S1, trailing, 15, 0], median: 1.04325, own: 1.07596, cells: [[S1, trailing, 15, 0, 1.07596], [S1, trailing, 15, 1, 1.1928], [S1, trailing, 60, 0, 0.497365], [S1, trailing, 60, 1, 1.01054]], peak: [S1, trailing, 15, 1, 1.1928], cells_taking_part: 18}  # frozen by the D amendment
+    hours_masks: {0: [], 1: [], 2: []}  # BICOUSDT, {margin_bp: [hours]}; frozen by the D amendment
 
 metrics:
   primary: pooled net per 100 USDT of clip a day
@@ -293,8 +293,8 @@ metrics:
   minimum_detectable_effect:
     formula: 2 x sigma_D(pooled daily metric) / sqrt(n)
     n: {B1: 13, B2: 13, B3a: 13, B3b: 13, B4: 28}
-    sigma_d: null  # per primary and per claim; frozen by the D amendment
-    value: null  # per primary and per claim; frozen by the D amendment
+    sigma_d: {B1: 3.29958, B2: {net: 0.31547, minus_base: 3.22954}, B3a: 3.64583, B3b: 3.21413, B4: {net: 3.04316, minus_base: 7.13847}}  # per primary and per claim; frozen by the D amendment
+    value: {B1: 1.83028, B2: {net: 0.174991, minus_base: 1.79142}, B3a: 2.02234, B3b: 1.78288, B4: {net: 1.15021, minus_base: 2.69809}}  # per primary and per claim; frozen by the D amendment
 
 family:
   members: [B1, B2, B3a, B3b, B4]
@@ -495,5 +495,5 @@ amendment:
             B4 base and gate cell with neighbourhood and hour masks, sigma of the pooled daily metric
             and the minimum detectable effect per primary, compute record, sha256 of this file]
   corrections_before_the_read: a further dated amendment; D re-run in full if a development number could change
-  date: null  # frozen by the D amendment
+  date: 2026-10-04  # frozen by the D amendment
   config_sha256: recorded in the amendment, not in this file
