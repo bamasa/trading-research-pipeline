@@ -1,0 +1,8 @@
+quantity,primary,claim,unit,days,mean_D,sigma_D,n_heldout,mde
+S1 pooled daily net,B1,net,USDT per 100 USDT of clip a day,25,2.148016659523596,3.2995807716760517,13,1.830278101509699
+G(base) pooled daily net,B2,net,USDT per 100 USDT of clip a day,25,0.07385914573895162,0.3154696744162509,13,0.17499109030180351
+"G(base) - S1, paired",B2,minus_base,USDT per 100 USDT of clip a day,25,-2.0741575137846446,3.229536154557897,13,1.7914243386497375
+"S1 at pro1_altcoin, pooled daily net",B3a,net,USDT per 100 USDT of clip a day,25,2.883636760219585,3.645830758908102,13,2.0223430373703
+"S1 at programme, pooled daily net",B3b,net,USDT per 100 USDT of clip a day,25,3.2126394892552015,3.214126761899125,13,1.782876745518205
+B4 G(base) daily net,B4,net,USDT per 100 USDT of clip a day,25,1.0759557200722403,3.0431587887166023,28,1.1502059078606688
+"B4 G(base) - S1, paired",B4,minus_base,USDT per 100 USDT of clip a day,25,0.5890010071966839,7.1384685071529175,28,2.6980874873990173
