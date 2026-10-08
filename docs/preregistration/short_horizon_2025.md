@@ -17,7 +17,7 @@ The market-making rounds are
 [`market_making_round2.md`](market_making_round2.md); their conventions hold here
 unless this document says otherwise. Names that do not exist on `main` at
 `af148b5` — the ten-level book tensor, the walked-book taker label, the
-Gaussian-head network and its lazy window dataset, the hold-first rule, the EV
+time-based forward move and control label, the Gaussian-head network and its lazy window dataset, the hold-first rule, the EV
 gate, the event-time taker executor, the signal-entry quoter and the fixed
 `clip_btc` setting of the simulator, the fill-rule comparison, the Newey–West
 day-level t, the daily-only fetch of hourly bars, this study's fetch, feature
@@ -432,13 +432,19 @@ quietly favour a result.
   clip is the traded clip and the label horizon is the hold, so the label
   declares `h` and the purge is derived from it.
 - **The forward move** for T2: the mid at the exit snapshot over the mid at
-  the entry snapshot, − 1, in bp, both as for the walked label; forward-only,
-  unsmoothed (the time-based form of `labels/targets.py`'s
-  `forward_smoothed_move_bp` at `smoothing=1`).
-- **The control label**: `smoothed_move_bp` with `smoothing=20` rows and a
-  horizon of `h` / 100 ms rows, partly known at decision time, used only to
-  train the control models of K-label, one per hold in {5, 20, 50} s; their
-  IC is reported at T2's chosen hold.
+  the entry snapshot, − 1, in bp (a simple return), both snapshots as for the
+  walked label; forward-only, unsmoothed. It is new code:
+  `labels/targets.py`'s `forward_smoothed_move_bp` at `smoothing=1` gives the
+  log of the mid's ratio from the decision row with its horizon in rows, and
+  is not used.
+- **The control label**: a time-based form (new code) of
+  `labels/targets.py`'s `smoothed_move_bp` at `smoothing=20` rows: the log of
+  the mean mid over the 20 rows ending at the first row stamped at or after
+  `t + h`, over the mean mid over the 20 rows ending at `t`, × 1e4. Its
+  horizon is in time, as every horizon here; only its smoothing is in rows.
+  It is partly known at decision time and is used only to train the control
+  models of K-label, one per hold in {5, 20, 50} s; their IC is reported at
+  T2's chosen hold.
 
 **Features.**
 
@@ -1370,7 +1376,7 @@ value open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`6d35940bc3e4845b30056daaf60887d01dbf2c6e6ddbb361ff8ab3ecd1fec1f5`.
+`2db22a3af48ffc098b4d3798d53c0ef8f9eea804164958a4dc40f10c9b33bcd6`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and

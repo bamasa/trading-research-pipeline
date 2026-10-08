@@ -152,8 +152,8 @@ labels:
     normalised_by: the entry snapshot's mid
     classes: [long, hold, short]  # long if long P&L > 0, short if short P&L > 0, else hold
     fee_bp: {T1: 5.5, A0: 0.0, Z: 0.0}  # charged on both sides
-  forward_move: {definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp, smoothing: 1, form: time-based, used_by: [T2]}
-  control: {function: labels/targets.py smoothed_move_bp, smoothing_rows: 20, horizon_rows: hold / 100 ms, holds_s: [5, 20, 50], reported_at: T2's chosen hold, used_by: [the K-label control models]}
+  forward_move: {definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp (a simple return), smoothing: 1, form: time-based (new code; forward_smoothed_move_bp not used), used_by: [T2]}
+  control: {form: "time-based smoothed_move_bp (new code): log of the mean mid over the 20 rows ending at the first row stamped at or after t + hold, over the mean mid over the 20 rows ending at t, x 1e4", smoothing_rows: 20, horizon: hold, horizon_measured_on: row stamps, holds_s: [5, 20, 50], reported_at: T2's chosen hold, used_by: [the K-label control models]}
 
 features:
   microstructure_set: registry book, depth and flow features over ten levels, plus the 2025 set added by the features pull request
