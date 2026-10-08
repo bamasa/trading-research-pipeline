@@ -379,12 +379,18 @@ quietly favour a result.
   existing `pipeline/execution.run_taker` prices mid to mid and is not used).
   An entry walks the first snapshot at or after decision + 10 ms across the
   ten visible levels, at their volume-weighted price for the clip, with no
-  slippage added on top of the walk. An entry whose clip exceeds the visible
-  depth, or whose snapshot is more than 1 s old, is skipped and counted; **the
-  skip rule applies only at entry**. An exit walks the first snapshot at or
-  after its decision + 10 ms whatever its age; depth beyond the tenth level is
+  slippage added on top of the walk. An entry whose clip exceeds that
+  snapshot's visible depth is skipped and counted; **this skip applies only at
+  entry**, and no entry is skipped for its snapshot's age (a decision is made
+  at a row stamp, so the book it reads is fresh, and the snapshot walked is
+  never older than the order). An exit walks the first snapshot at or after
+  its decision + 10 ms whatever its age; depth beyond the tenth level is
   charged at the tenth level's price and counted, as the simulator's
-  `flatten_beyond_visible_book`. An exit that no snapshot follows before the
+  `flatten_beyond_visible_book`. **An order whose walked snapshot is stamped
+  more than 1 s after the order arrives** (a feed gap) is counted as
+  `entry_late_snapshot` or `exit_late_snapshot` and reported, for every taker
+  order, the passive strategies' taker exits included; it is a measurement
+  and excludes no day. An exit that no snapshot follows before the
   book ends walks the last one, and if that snapshot is more than 5 s
   (`suspend_after_pause_s`) older than the order the day is flagged
   `flatten_stale` and excluded, as in the simulator (R16). Funding (R14) and the accounting identity
@@ -633,7 +639,9 @@ and nothing else may be chosen after the amendment.
   the rest (the move held after it).
 - Beside every verdict: trades a day, share of days positive, median day,
   maximum drawdown, net in USDT a day at the clip used, funding, the result
-  at every published BTCUSDT tier, and the result split by side.
+  at every published BTCUSDT tier, the result split by side, and the counts
+  of skipped entries, `entry_late_snapshot`, `exit_late_snapshot` and
+  `flatten_beyond_visible_book`.
 - **Statistics**: `evaluation/significance.assess` on the daily series; the
   day level decides. Score every calendar day of the block, with no row
   filtered or reweighted by label, outcome or model state. Beside every
@@ -1378,11 +1386,17 @@ value open, or a proposal was not taken, the choice and its reason:
   confirmation on 2026 data needs its own registration, which the
   spent-blocks rule confines to dates after 2025-12-31 and which is committed
   before any 2026 book or print is fetched (the reader-test days excepted).
+- **No entry is skipped for a late snapshot**, and late snapshots are counted
+  at entry and exit instead (final consistency check). The registered "more
+  than 1 s old" entry skip could not apply: decisions are made at row stamps,
+  and the snapshot walked is never older than the order. Reading it as "the
+  next snapshot comes more than 1 s late" would make a trade depend on the
+  feed after the decision, at the feed gaps where a skip would select most.
 
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`d7ebdbdf47f5adbb3a09cc14b2d098702476189485a45dee8932196d998aee76`.
+`f1abba61b2fa1c3ed91c0e13001c2a9a8beb9ee1f4f9b725cd387220c94105be`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and

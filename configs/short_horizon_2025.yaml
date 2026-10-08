@@ -107,8 +107,9 @@ common:
     executor: event-time taker executor (new code); pipeline/execution.run_taker not used
     entry: walk the first snapshot at or after decision + 10 ms across 10 levels, VWAP for the clip
     slippage_bp_on_top_of_walk: 0
-    entry_skip: {clip_exceeds_visible_depth: true, snapshot_older_than_s: 1}  # entry only; skipped and counted
-    exit: walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price, counted (flatten_beyond_visible_book)
+    entry_skip: {clip_exceeds_visible_depth: true}  # entry only; skipped and counted; no skip by snapshot age
+    entry_late_snapshot: an entry whose walked snapshot is stamped more than 1 s after the order arrives is counted and reported; no day excluded
+    exit: "walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price, counted (flatten_beyond_visible_book); a walked snapshot stamped more than 1 s after the order arrives is counted and reported (exit_late_snapshot), every taker exit including the passive strategies', no day excluded"
     exit_after_book_end: walk the last snapshot; if it is more than 5 s older than the order, the day is flagged flatten_stale and excluded (R16)
     funding: R14
     accounting_identity: R15, turnover equal to the sum of fill notionals
@@ -259,7 +260,8 @@ metrics:
   computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
   ic: rank correlation of the score with the mid move from the entry snapshot to the first snapshot at or after it + hold, per day, mean over days
   beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10_30s_by_path, spread_plus_adverse_5s, trades_per_day,
-           share_days_positive, median_day, max_drawdown, net_usdt_day, funding, every_published_tier, by_side, newey_west_t]
+           share_days_positive, median_day, max_drawdown, net_usdt_day, funding, every_published_tier, by_side, newey_west_t,
+           entries_skipped, entry_late_snapshot, exit_late_snapshot, flatten_beyond_visible_book]
   significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level}  # series=None, one series
   degrees_of_freedom: days in the daily series minus one, per hypothesis and per block
   newey_west: {kernel: bartlett, lag_days: 5}
