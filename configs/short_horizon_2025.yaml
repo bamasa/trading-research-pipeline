@@ -96,7 +96,7 @@ blocks:
   moved_by_head_check: {H_end: {planned: 2025-09-21, registered: 2025-08-20}, F_start: {planned: 2025-09-22, registered: 2025-08-21}}
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
-  cold_start_unscored: the first N minutes of each cold-start day, N being features.longest_lookback_minutes
+  cold_start_unscored: the first N minutes from each cold-start day's midnight, whatever days they span, N being features.longest_lookback_minutes
   spent: H, F and P are spent for these recipe families on BTCUSDT; successors use blocks after 2025-12-31
 
 common:
@@ -179,8 +179,8 @@ models:
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch (new code)", inference: batched}
   training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
   frozen: {per_hold_s: [5, 20, 50], models: [T1, Z, T2, control], train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30}
-  weights_sha256: null  # {model: {hold_s: sha256}} for T1, Z, T2 and control; frozen by the D amendment
-  checkpoint_epoch: null  # {T2: {hold_s: epoch}, control: {hold_s: epoch}}; frozen by the D amendment
+  weights_sha256: null  # {model: {hold_s: sha256}} for T1, Z, T2 and control; the only place they are written; frozen by the D amendment
+  checkpoint_epoch: null  # {T2: {hold_s: epoch}, control: {hold_s: epoch}}; the only place they are written; frozen by the D amendment
 
 d_procedure:
   walk_forward:
@@ -211,11 +211,11 @@ strategies:
     axes: {hold_s: [5, 20, 50], trades_per_day: [50, 100, 240]}  # 9 cells
     objective: mean of the daily net_bp_trade series over the walk-forward test days
     chosen: null  # {hold_s, trades_per_day}; frozen by the D amendment
-    neighbourhood: null  # every cell with its value, frozen model, thresholds and sha256, and the outright peak; frozen by the D amendment
+    neighbourhood: null  # every cell with its D value, and the outright peak; models and thresholds by cell, recorded once elsewhere; frozen by the D amendment
     thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
   T2:
     signal: gaussian_network on the tensor and the selected set
-    gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + b, mirrored for shorts"
+    gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + buffer_bp, mirrored for shorts"  # the buffer is beta in the document, not the break date b
     one_entry_per_event: true
     sizing: one full clip a trade; no Kelly sizing (strategies/sizing.py FractionalKelly not used)
     execution: taker in, taker out after hold
@@ -223,8 +223,7 @@ strategies:
     axes: {hold_s: [5, 20, 50], k: [0, 0.5, 1], buffer_bp: [0, 1, 2]}  # 27 cells
     objective: mean of the daily net_bp_trade series over the walk-forward test days
     chosen: null  # {hold_s, k, buffer_bp}; frozen by the D amendment
-    neighbourhood: null  # every cell with its value, frozen model and sha256, and the outright peak; frozen by the D amendment
-    checkpoint_epoch: null  # {hold_s: epoch}; frozen by the D amendment
+    neighbourhood: null  # every cell with its D value, and the outright peak; models and checkpoints by cell, recorded once elsewhere; frozen by the D amendment
   M1:
     signal_rule: T1 or T2, whichever has the higher D mean daily net at its chosen cell; T1 on a tie; the one with a chosen cell if only one has
     execution: one full clip posted at the touch on the signal's side, kept at its first price, waits at most hold; taker out hold after the fill
@@ -240,7 +239,7 @@ strategies:
     axes: {hold_s: [5, 20, 50], trades_per_day: [50, 100, 240]}  # 9 cells
     objective: mean of the daily gross_bp_trade series under the queue fill rule over the walk-forward test days
     chosen: null  # {hold_s, trades_per_day}; frozen by the D amendment
-    neighbourhood: null  # every cell with its value, frozen model, thresholds and sha256, and the outright peak; frozen by the D amendment
+    neighbourhood: null  # every cell with its D value, and the outright peak; models and thresholds by cell, recorded once elsewhere; frozen by the D amendment
     thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
   A0:
     signal: boosting on walked_taker at 0 bp
@@ -249,7 +248,7 @@ strategies:
     thresholds_on: 2025-01-28..2025-02-03
     run_on: O
     executions: [taker at zero_fee, passive under each FILL rule]
-  cooldown: until the previous position is closed
+  cooldown: "until the previous position is closed and no entry order is resting: T1, T2 the hold; M1, Z the wait of at most hold for a fill, then the time to the exit"
 
 metrics:
   primary: {T1: net_bp_trade, T2: net_bp_trade, M1: net_per_100_clip_day, Z: gross_bp_trade}

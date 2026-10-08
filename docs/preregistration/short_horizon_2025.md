@@ -84,7 +84,7 @@ shaped the design. None of it is a 2025 number computed by this repository.
    from 2025-08-01 to 2025-11-16, its packaged example ran on 2025-11-09, and
    the boosted-classifier track ran until 2025-08-25. Recipe-level choices
    (architecture, feature families, the gate) were therefore made while the
-   author could see the last 20 days of H and most of F, on other instruments
+   author could see the last 20 days of H and all of F, on other instruments
    and venues. Only these dates are disclosed; none of that data is used. H and
    F are therefore not fresh for the recipes, only for every value this study
    sets on D, and T1 and T2 are also reported on H's days before 2025-08-01, as
@@ -196,8 +196,8 @@ under every fill rule except fill-on-touch.
 |---|---|---|---|
 | Ten-level book on a 100 ms grid | Bybit order-book archive, BTCUSDT linear perpetual, 500 levels (`ob500`) | `data/bybit.py`, `ARCHIVE_URL` | W, D, H |
 | the same | the same archive at 200 levels (`ob200`), same path with `ob200` in the name | `data/bybit.py`, a second name to be added | F, P |
-| Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/BTCUSDT/` | `data/bybit_trades.py`, `ARCHIVE` | all |
-| Funding | Bybit public REST endpoint, no credentials | `data/bybit_funding.py` | all |
+| Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/BTCUSDT/` | `data/bybit_trades.py`, `ARCHIVE` | all but E |
+| Funding | Bybit public REST endpoint, no credentials | `data/bybit_funding.py` | all but E |
 | Hourly bars for the break detector | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
 
 **Coverage, checked by HTTP `HEAD` on 8 October 2026** (existence and size
@@ -333,9 +333,9 @@ reads a later block than its access permits. **Two days start cold**:
 2025-07-08, because E's book is never fetched, so H's rolling statistics read
 nothing of D (not even 2025-06-30), and 2025-08-21, because the archive
 changes on it, so F's read nothing of H. On each, rolling state is rebuilt
-from the block's own rows, and the first `N` minutes are not
-scored, `N` being the longest feature lookback (recorded in the amendment),
-whatever days it spans; a day stays usable with fewer decision rows. Fitted
+from the block's own rows, and the first `N` minutes from its midnight are
+not scored, `N` being the longest feature lookback (recorded in the
+amendment), whatever days they span; a day stays usable with fewer decision rows. Fitted
 values (the size floors fitted on W, the frozen models and thresholds) are not
 rolling state and are used on every block.
 
@@ -530,16 +530,19 @@ validation so that each side would enter half of the target rate of trades a
 day before the one-position rule.
 
 **The EV gate** (T2). With μ and σ the predicted forward move over `h` in bp,
-`c` = 2 × 5.5 bp, and `w_t` the cost in bp of walking the current book for the
-clip and back (from the snapshot, in bp of mid): go long when
-`μ − kσ > c + w_t + b`, short when `−μ − kσ > c + w_t + b`. One entry per event
+`c` = 2 × 5.5 bp, `w_t` the cost in bp of walking the current book for the
+clip and back (from the snapshot, in bp of mid), and `β` the buffer in bp (not
+the break date `b`): go long when `μ − kσ > c + w_t + β`, short when
+`−μ − kσ > c + w_t + β`. One entry per event
 (a run of rows on which the gate is open); a new entry needs the gate to close
 and reopen. Every T2 trade is one full clip: no Kelly sizing is applied
 (`strategies/sizing.py`'s `FractionalKelly` cannot size this gate in either
 unit; see [Choices and their reasons](#choices-and-their-reasons)).
 
 **Every strategy** holds one position at a time: the next entry is possible
-only after the previous position is closed (cooldown equal to the hold).
+only when the previous position is closed and no entry order is resting. For
+T1 and T2 that is the hold after each entry; for M1 and Z it is the wait of
+at most `h` for a fill, and after a fill the time to the exit.
 Profit and loss comes only from realised fills in the execution mode, never
 from a sum of predicted values.
 
@@ -554,7 +557,7 @@ after a further `h`.
 | hold `h` | T1, T2, Z | {5, 20, 50} s | searched on D |
 | target trades a day | T1, Z | {50, 100, 240} | searched on D |
 | `k` (σ multiple) | T2 | {0, 0.5, 1} | searched on D |
-| `b` (buffer) | T2 | {0, 1, 2} bp | searched on D |
+| `β` (buffer) | T2 | {0, 1, 2} bp | searched on D |
 | M1's signal | M1 | T1 or T2, whichever has the higher mean of its daily `net_bp_trade` series over D's test days at its chosen cell (T1 on a tie); the one with a chosen cell, if only one has | chosen on D |
 | A0's settings | A0 | 240 trades a day, `h` = 50 s, trained 2025-01-01 to 01-27, thresholds on 01-28 to 02-03, run on O | fixed: the original protocol's trade rate and its close-by-time hold (about 50 s, inferred from the research code) |
 | clip, latency, fees, entry wait | all | as above | fixed |
@@ -872,7 +875,7 @@ under K-leak, K-units, K-acct, K-cap; inconclusive under K-trades.
 ## T2 — the Gaussian network with an expected-value gate
 
 **Statement.** On H at the base tier, T2 (the network on the tensor and the
-selected set, the EV gate `μ − kσ > 11 bp + walk cost + b`, one entry per
+selected set, the EV gate `μ − kσ > 11 bp + walk cost + β`, one entry per
 event, one clip a trade, a taker exit after the chosen hold) earns a
 positive `net_bp_trade`.
 
@@ -1003,7 +1006,7 @@ the same orders under three rules:
 | (b) trade-through | only on prints strictly through its price, up to their size (R7 alone) | pessimistic |
 | (c) queue | after the visible queue ahead is consumed by prints at its price (R5, R6), or on prints through it (R7) | the simulator's default |
 
-Reported for each: fill ratio, markouts at 1, 10 and 30 s by path, gross and
+Reported for each: fill ratio, markouts at 1, 5, 10 and 30 s by path, gross and
 net. **The fill ratio** is the share of posted orders that receive any fill
 (the convention of `fill_rate` in `backtest/maker.py`); filled volume over
 posted volume is reported beside it. The prediction below is on the share of
@@ -1099,7 +1102,7 @@ the pattern of `data/ensure.py`: only missing days are fetched, and no
 archive is kept after its replay).
 
 **Replay workers.** `data/ensure.ensure_book` replays one day at a time
-(`workers=1`), which would take W and D about 8–14 hours. Running
+(`workers=1`), which would take W and D about 7–14 hours. Running
 `data/bybit.download_range` with more workers runs out of memory instead:
 `reconstruct` holds a day's rows as Python dictionaries until the day ends, at
 most 864,000 rows (one per 100 ms) of about 5.5 KB each, so 5–6 GB per worker
@@ -1173,7 +1176,7 @@ log in `logs/`.
 | Run | Size | Estimate |
 |---|---|---|
 | Download, stage 1 | 91.3 GB of archives (76.0 book, 15.3 print) | 0.5–2.5 hours at 10–50 MB/s, overlapping the replay |
-| Replay W and D | 212 days at 2–3 minutes of replay and up to a minute of download a day (the 2025 archives are larger than the 90 s measured on 2024's), on at most 4 workers | 3–4 hours |
+| Replay W and D | 212 days at 2–3 minutes of replay and up to a minute of download a day (the 2025 archives are larger than the 90 s measured on 2024's), on at most 4 workers | about 2–3.5 hours |
 | Download and replay, stages 2–4 | H 13.5 GB (44 days), F 21.7 GB (88 days), P 13.4 GB (45 days) | about 1, 2 and 1 hours |
 | Features W and D | 212 days | 2–4 hours |
 | Boosting (T1, Z, A0) | 3 holds × 5 folds + 3 frozen fits, each for T1 and Z, plus A0 | 4–10 hours |
@@ -1279,7 +1282,12 @@ compute record, with the replay's measured peak memory and worker count and
 the feature store's size; the fits that lacked a class, with the side; and
 the sha256 of `configs/short_horizon_2025.yaml` after
 the frozen values are written into its placeholders, on a line of the form
-``Frozen configuration sha256: `<hash>` ``. Nothing else may change.
+``Frozen configuration sha256: `<hash>` ``. Nothing else may change. Each
+frozen value has one placeholder: weight sha256s under
+`models.weights_sha256`, checkpoint epochs under `models.checkpoint_epoch`,
+hold-first thresholds under `strategies.<X>.thresholds`; a neighbourhood
+lists its cells, their D values and the outright peak, and refers to those
+by cell without repeating them.
 
 A correction found after this registration and before H is read (a bug in a
 ported feature, the label, the simulator or a reader) is made only by a
@@ -1315,7 +1323,7 @@ hypothesis: F is still read and reported, but nothing is taken to P.
 - **That H and F are comparable.** The book archive changes on F's first day;
   a difference between H and F may be the archive.
 - **That H and F are fresh for the recipes.** The 2025 research developed
-  its recipes on dates that overlap H's last 20 days and most of F (item 1 of
+  its recipes on dates that overlap H's last 20 days and all of F (item 1 of
   [what was known](#what-was-known-before-this-was-written)); they are fresh
   only for the values this study sets on D. P is the one held-out block after
   every dated entry of that research.
@@ -1446,7 +1454,7 @@ value open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`a481c3a902be4aeb65216314dac6f31f3d4d738de7bf8de981ed7210c28a3f79`.
+`729f042bc55cae70fbdf786d8f38581b2539fc1a422a978d8bf9c674cee58fd8`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and
