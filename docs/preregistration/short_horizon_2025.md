@@ -196,7 +196,7 @@ under every fill rule except fill-on-touch.
 | the same | the same archive at 200 levels (`ob200`), same path with `ob200` in the name | `data/bybit.py`, a second name to be added | F, P |
 | Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/BTCUSDT/` | `data/bybit_trades.py`, `ARCHIVE` | all |
 | Funding | Bybit public REST endpoint, no credentials | `data/bybit_funding.py` | all |
-| Hourly bars for the break detector | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-11-01, E included (bars only) |
+| Hourly bars for the break detector | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
 
 **Coverage, checked by HTTP `HEAD` on 8 October 2026** (existence and size
 only; nothing downloaded). Sizes in MB. The `ob500` and print columns use the
@@ -329,8 +329,9 @@ whatever days it spans; a day stays usable with fewer decision rows.
 
 Days excluded from every verdict, counted and reported per block: more book
 sequence gaps than `max_sequence_gaps`, a non-positive price or a price off
-the tick grid (`validate_book` raises), a missing plane, or a missing funding
-history. **`max_sequence_gaps` is the 95th percentile of D's per-day gap
+the tick grid (`validate_book` raises), a missing plane (an HTTP 404 only;
+a failed download is retried, never excluded, as the [fetch plan](#fetch-plan)
+says), or a missing funding history. **`max_sequence_gaps` is the 95th percentile of D's per-day gap
 counts, rounded up**, computed by that formula and recorded in the amendment;
 the same value is used on every block. Each verdict is also reported with the
 gap-excluded days included, as a measurement, so that the exclusion cannot
@@ -953,7 +954,8 @@ Fixed now, run as the ledger opens each block.
   returns at the same UTC hour (a 24-value profile fitted on D only), so that
   the daily cycle of volatility is not read as a series of breaks.
 - **One continuous stream from 2024-12-01**, so the monitor is warm by
-  2025-01-01. E's hourly bars are in it: they are fetched and read when the
+  2025-01-01. Bars are fetched from that day, so the stream's first return is
+  its second hour (`log_returns`, close to close); no 2024-11 bar is needed. E's hourly bars are in it: they are fetched and read when the
   ledger opens H (bars only; E's book, prints and funding are never fetched),
   so no return spans the embargo. **A missing hour** has its close carried
   forward and a zero return, and is counted and reported; the walk continues
@@ -1014,9 +1016,27 @@ exceeds 24 GB. That peak is measured before stage 1 on a 2024 day the
 repository has already replayed (a day's row count, not its archive's size,
 sets it) and recorded in the amendment. The replay itself is unchanged.
 
+**A failed download is not an exclusion.** `data/ensure._fetch_days` reports
+any exception as an unavailable day, and `data/bybit._one_day` turns any
+download error, a 404 or a dropped connection alike, into a skipped day. A
+failed download of a large archive, which belongs to a busy day, would then
+be excluded as a missing plane and tilt D and H toward calm days. In this
+study's fetch, **every day the `HEAD` check lists as present must be
+fetched**: any failure other than an HTTP 404 (a timeout, a dropped or reset
+connection, another HTTP status, an archive that does not decompress) deletes
+the partial file and is retried with backoff until the day is on disk, and a
+stage is not complete, and nothing is computed on its block, until every such
+day is. Only an HTTP 404 makes a missing plane; a 404 on a day the `HEAD`
+check found present is reported as such. Funding and hourly bars follow the
+same rule: a failed request is retried, and only the venue's answer that it
+has no data (an HTTP 404, or an empty funding history) is a missing plane. The print downloader's 120 s
+timeout (`data/bybit_trades.download_day`) bounds each socket read, not the
+whole file, so a large file does not fail by its size; a stalled connection
+does, and is retried.
+
 | Stage | When | What | Book archives (GB) | Print archives (GB) |
 |---|---|---|---:|---:|
-| 1 | after this registration and the code it names are merged | W and D (212 days, `ob500`), funding for W and D only, hourly bars 2024-11 to 2025-06; the three `ob200` reader-test days of 2026 | 76.0 | 15.3 |
+| 1 | after this registration and the code it names are merged | W and D (212 days, `ob500`), funding for W and D only, hourly bars 2024-12-01 to 2025-06-30; the three `ob200` reader-test days of 2026 | 76.0 | 15.3 |
 | 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4 | 2.1 |
 | 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8 | 5.9 |
 | 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9 | 3.5 |
@@ -1090,7 +1110,9 @@ The pull requests that follow this one add, before stage 1:
   fixed `clip_btc` setting, the lazy window dataset, and the Newey–West t in
   `evaluation/significance.py`;
 - **this study's fetch and feature store** ([fetch plan](#fetch-plan)): the
-  book replay on at most 4 workers with its measured peak memory, the float32
+  book replay on at most 4 workers with its measured peak memory, the retry
+  of every failed download until success (only an HTTP 404 is a missing
+  plane), the float32
   per-day feature store, the disk check before each stage, and the deletion of
   W's and D's features before stage 3;
 - **this study's loader, ledger and single entry point**, on the pattern of
@@ -1283,7 +1305,7 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`d08297f0e13951d48afc8a85ebcca202ae8c3f47fa4fc8d5d42a60ce55e5e616`.
+`d02fe285fa297ef6a740a3a1742efa03ea2285faeb4cfa711c1bb73f1fbef1bb`.
 (Earlier drafts, written before the reviews were applied in full and never
 merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they

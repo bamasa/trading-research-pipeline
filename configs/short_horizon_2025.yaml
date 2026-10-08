@@ -66,7 +66,7 @@ data:
     ob200_reader_test: synthetic ob200 fixture and the reader-test days pass validate_book before H is opened; no ob200 day of 2025 fetched before stage 3
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
   funding: bybit public REST, no credentials
-  detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-11-01, frequency_after_2025_06_30: daily archives only, E_bars: "fetched and read when H opens, bars only"}
+  detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-12-01, frequency_after_2025_06_30: daily archives only, E_bars: "fetched and read when H opens, bars only"}
   head_check:
     date: 2026-10-08
     days_checked: 396  # every day, 2024-12-01..2025-12-31
@@ -365,6 +365,7 @@ detector:
 fetch:
   via: this study's fetch (new code, on data/ensure.py's pattern)  # only missing days; archives not kept after the replay
   replay: {code: data/bybit.reconstruct, unchanged: true, workers_max: 4, workers_rule: "fewer if 4 x the peak RSS of one replayed day exceeds 24 GB", peak_rss_measured: before stage 1 on a 2024 day already replayed by the repository, recorded_in: the amendment}
+  failures: {every_day_present_in_head_check: fetched, other_than_http_404: partial file deleted and retried with backoff until on disk, stage_complete: only when every such day is on disk, missing_plane: HTTP 404 only, funding_and_bars: same rule; an empty funding history is a missing plane}
   disk:
     free_gb_at_registration: 121
     feature_store: {dtype: float32, format: one zstd parquet per day, holds: model inputs only, budget_mb_per_day: 250}  # labels, gate walk cost and fills from the book's float64 prices
@@ -374,7 +375,7 @@ fetch:
   ledger_records: sha256 and UTC download time of every fetched file
   open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block
   stages:
-    - {stage: 1, when: after this registration and its code are merged, what: [W, D, funding for W and D only, hourly bars 2024-11..2025-06, ob200 reader-test days 2026-01-05..07], archives_gb: {book: 76.0, prints: 15.3}}
+    - {stage: 1, when: after this registration and its code are merged, what: [W, D, funding for W and D only, hourly bars 2024-12-01..2025-06-30, ob200 reader-test days 2026-01-05..07], archives_gb: {book: 76.0, prints: 15.3}}
     - {stage: 2, when: inside H's opened access after the amendment is committed, what: [H, H's funding, E's and H's hourly bars from daily archives], archives_gb: {book: 11.4, prints: 2.1}}
     - {stage: 3, when: inside F's opened access after H's results are committed, what: [F, F's funding, F's hourly bars from daily archives], archives_gb: {book: 15.8, prints: 5.9}}
     - {stage: 4, when: inside P's opened access after F's results are committed and only if the condition holds, what: [P, P's funding, P's hourly bars from daily archives], archives_gb: {book: 9.9, prints: 3.5}}
