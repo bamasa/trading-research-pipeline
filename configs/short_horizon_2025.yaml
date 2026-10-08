@@ -472,7 +472,7 @@ kill_conditions:
     S25-Z: {execution: signal-entry quoter at 0/0, series: [gross_bp_trade, net at 0/0], kills: [K1, K2, K-label, K-placebo with stale, K-drift, K-nbhd, K-days, K-queue, K-latency], exempt: [K-fee], beside: [net at the base tier on the same trades, fill decomposition]}
   void: [K-leak, K-flag-leak, K-units, K-acct, K-cap]  # K-leak (features or the fold-level test) voids every result; K-flag-leak every slot with a regime window above 0; K-units every slot whose gate or cost input (fee, walk, funding) it reaches, S25-Z included, and S-P and S-M when it reaches their signal's gate
   K-flag-leak: the flag-causality test fails (search.regime_source.flag_causality_test); found before D, fixed by a dated amendment
-  status_only: {K-trades: 100, K-trades_counts: "round trips; for the quoter, entries with any fill, not the simulator's fill rows", K-MDE: "below the minimum detectable effect, only when no kill fired"}
+  status_only: {K-trades: 100, K-trades_counts: "round trips; for the quoter, entries with any fill, not the simulator's fill rows; for S-M, returns to a flat position", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
   K2: net at zero fees (gross plus funding) <= 0  # S25-Z
   K-days_share_positive_max: 0.5  # half or fewer positive days of the daily series kills

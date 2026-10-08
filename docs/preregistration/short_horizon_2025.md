@@ -22,8 +22,8 @@ are listed under [the code to come](#the-code-to-come).
 
 ## Why this study
 
-The repository's earlier studies each tested a strategy chosen by hand, and
-each was killed. This one asks whether a **registered search** over the parts
+The repository's earlier directional and market-making studies were all
+killed. This one asks whether a **registered search** over the parts
 of a short-horizon strategy finds one that pays at published fees and survives
 held-out data: the instrument, the features, the label and its fee, the model,
 an entry gate, the holding horizon, the decision threshold, a policy for
@@ -32,7 +32,7 @@ The search is fixed in advance. Its catalogue of configurations is enumerated
 and hashed; every configuration is scored on the same 150 development days and
 recorded in a trial ledger; the choice of finalists is a registered rule; a
 searched finalist must beat the same search re-run on placebo targets before
-it is admitted; and five finalists, a number fixed now, are confirmed on
+it is admitted; and five finalists, a number fixed now, are tested on
 held-out blocks under Holm's procedure with m = 5.
 
 One configuration is named in advance: **S25**, a gradient-boosted classifier
@@ -327,7 +327,8 @@ amendment), whatever days they span; a day stays usable with fewer decision
 rows. Fitted values (the size floors fitted on W, the frozen models and
 thresholds) are not rolling state and are used on every block, never
 refitted at a read. Every fitted value that is not a weight (W's size floors
-and normalisers, the tensor's floors, any other fitted constant) is written
+and normalisers, the tensor's floors, each instrument's clip, any other
+fitted constant) is written
 to one file whose sha256 the amendment records, and the H, F and P gates
 check it beside the weights.
 
@@ -348,7 +349,7 @@ order, an exit or the day-end close, that no snapshot followed before the
 book ended walked a snapshot more than 5 s older than the order); a day
 `market_making/events.load_day` refuses (`DayUnavailable`, whatever the
 reason: a funding interval other than 8 h, print sizes or aggressor flags
-outside its contract, no print on the day), for every strategy, taker
+outside its contract, no print on the day), for every configuration, taker
 included; or an unreadable archive or unfetchable day ([fetch
 plan](#fetch-plan)). Each is counted by reason. **A day flagged
 `flatten_stale` in any run on the block** (on a held-out block, any run of
@@ -1090,11 +1091,11 @@ backtest overfitting.
 **Precedence**, the same on every block, so that each result has exactly one
 status:
 
-1. **void** — K-leak, K-units, K-acct or K-cap fires; counted as killed.
+1. **void** — K-leak, K-flag-leak (for a slot with a regime window above 0),
+   K-units, K-acct or K-cap fires; counted as killed.
 2. **inconclusive (too few trades)** — K-trades: fewer than 100 trades over
    the block (round trips for the taker slots; entries with any fill, that is
-   round trips, for S-P and S25-Z; the market maker's round trips back to
-   flat for S-M). Nothing below
+   round trips, for S-P and S25-Z; returns to a flat position for S-M). Nothing below
    is evaluated.
 3. **killed** — any kill condition fires. Rejection needs no significance.
 4. **candidate** (on H) or **passes** (on F and P) — the bar is met.
@@ -1268,7 +1269,8 @@ Not kills, but they set the status:
 
 - **K-trades** — fewer than 100 round trips over the block (entries with any
   fill for the quoter, not the simulator's fill rows, which count partial
-  fills and taker exits) makes the result inconclusive whatever its sign; it
+  fills and taker exits; returns to a flat position for the market maker)
+  makes the result inconclusive whatever its sign; it
   is applied before any kill (the precedence above).
 - **K-MDE** — a result that does not pass, with no kill, and is smaller in
   size than the MDE is "inconclusive, below the minimum detectable effect".
@@ -2248,7 +2250,7 @@ open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f`.
+`035c4f44d85c3b3926e08016ad94a4c9bb20a51c7ac775514a256ef0af324f71`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2260,7 +2262,9 @@ final consistency check,
 `729f042bc55cae70fbdf786d8f38581b2539fc1a422a978d8bf9c674cee58fd8` before the
 last review, and
 `511626b7c0464cd91bafc469ea151af0769121b13946a2066c46a6ca22265fe7` before the
-recast into a search.)
+recast into a search, and
+`3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f` before the
+market maker's round trips were defined.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, as the earlier rounds' loaders do.
 
