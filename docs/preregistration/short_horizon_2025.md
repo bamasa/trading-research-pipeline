@@ -648,10 +648,14 @@ A gate, a regime window and a decision threshold need no fit of their own,
 so 120 signal configurations (C: model × inputs × hold × label fee; R: model
 × hold, per instrument) cover the 7,200 taker cells. The simulator runs on D
 are fixed by rule ([selection](#selection-on-d-admission-and-the-finalists)):
-S25-Z's 12 cells, always; S-P's at most 27 cells and 3 regime measurements;
-S-M's 3 cells and 6 regime measurements; A0 and FILL's 4 runs on O. The
-**trial bound** is N_max = 7,200 + 12 + 30 + 9 + 4 = **7,255**; the trial
-ledger records the actual N.
+S25-Z's 12 cells, always; S-P's at most 27 cells and 3 regime measurements
+(its cell at each regime window other than its signal's own, of none, 4, 24
+and 120 h); S-M's 3 cells and 6 regime measurements (`guard_pull` and
+`guard_widen` at 4, 24 and 120 h with λ = 1); A0 and FILL's 4 runs on O. The
+passive-exit variant of S-P and S25-Z runs on the held-out blocks only, never
+on D. The **trial bound** is N_max = 7,200 + 12 + 30 + 9 + 4 = **7,255**; the
+trial ledger records the actual N, and every row counts in N_trials even
+beyond N_max.
 
 **The catalogue** is the 7,200 taker cell keys, written
 `<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>`
@@ -771,8 +775,9 @@ gives each one's time and disk.
    are made in this order until the projection fits: (1) the network on
    ETHUSDT and XRPUSDT; (2) XRPUSDT entirely; (3) the 120 s hold; (4) stratum
    C's micro-selected + tensor inputs; (5) the `quiet_out` gate. The cuts, the
-   new catalogue hash and the new N_max go into a dated amendment committed
-   before stage 1. Nothing is cut once a 2025 file is on disk; a run slower
+   new catalogue hash, the new N_max, the configuration's new
+   null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut go
+   into a dated amendment committed before stage 1. Nothing is cut once a 2025 file is on disk; a run slower
    than projected only takes longer. **The walk-table parity test** of [the
    placebo search](#the-placebo-search) runs here, on the same 2024 days,
    before any 2025 fetch: a failure blocks stage B until it is fixed by a
@@ -851,14 +856,35 @@ gives each one's time and disk.
 **Frozen before scoring.** The configuration's `search` block fixes, before
 stage 1: the catalogue and its hash, the choice and admission rules, the nulls
 with their seeds, shifts and replications, the ceiling and the reduction
-order. The single entry point is committed before any test day of February to
-June is scored, and every score on a test day comes from it. It writes the
-**trial ledger**, `experiments/results/short_horizon_2025_trials.csv`: one row
-per configuration per day, with the key, the catalogue's sha256, the commit,
-net, G, L, S, trades and skips; the ledger is committed at the end of each
-stage. Any hand run on a test day counts as a trial: its configuration joins
-the catalogue and both nulls before the amendment. W and each instrument's
-January are the sandbox, where nothing is counted.
+order. **The study code is frozen before the stage 1 fetch**: a dated note,
+`docs/short_horizon_2025_code_freeze.md`, records the commit of all study code
+(the entry point, features, labels, models, executor, quoter, nulls and
+statistics) before any W or D file is fetched, and any change to that code
+before H is read is a correction under the [amendment
+protocol](#amendment-protocol). Every score on a test day of February to June
+comes from the single entry point. It writes the **trial ledger**,
+`experiments/results/short_horizon_2025_trials.parquet` (zstd), one row per
+D run, configuration and test day, with the columns `run`, `key`, `day`,
+`net_bp`, `G_bp`, `pnl_long_bp`, `pnl_short_bp`, `trades` and `skips`; the
+catalogue's sha256 and each run's commit go in a sidecar,
+`…_trials.json`, with the file's sha256 and row count, and the file is split
+into parts under 100 MB if it needs to be. The ledger is committed at the end
+of each stage. **N_trials** is the number of distinct (run, key) pairs: every
+configuration scored in every complete D run, counted even beyond N_max. It
+is the N quoted on every page and given to N_eff and the deflated Sharpe
+ratio; the rows of a superseded run stay in the ledger and in N_trials.
+
+**Hand runs.** No configuration is added to the catalogue after stage 0. A
+computation on a February to June test day outside the entry point (a
+configuration run by hand, or any statistic of a label, a return, a
+prediction or a P&L on those days, a feature's IC included) is a **hand
+run**. Replay, validation, the leakage tests and feature building are not.
+A hand run is logged in the ledger's sidecar with its date, what it computed
+and the days it read, and it sets every searched slot (S-C, S-R, and S-P or
+S-M when their signal is C\* or R\*) to `not admitted on D (hand run)`, with
+p = 1 on every block. The rule can only lower statuses, and it leaves the
+catalogue and its hash unchanged. W and each instrument's January are the
+sandbox, where nothing is counted.
 
 **The choice: one cell per stratum.**
 
@@ -1137,8 +1163,8 @@ status:
    fired). Never reported as a positive.
 
 **The statuses set on D**, each entering Holm with p = 1 on every block:
-`not admitted on D (<condition (i) to (iv)>)`, `not run (no admissible cell
-on D)` and `same as S25`.
+`not admitted on D (<condition (i) to (iv)>)`, `not admitted on D (hand
+run)`, `not run (no admissible cell on D)` and `same as S25`.
 
 **Slots on S25's signal**: S25, S25-Z, and S-P and S-M when their signal is
 S25's ([the information set of
@@ -1865,9 +1891,11 @@ The pull requests that follow this one add, before stage 1:
   `block_of` is not used): the YAML validated against this registration,
   placeholders hashed as in the earlier rounds, and an access that permits
   days per block, plane and instrument. The entry point,
-  `experiments/short_horizon_2025.py`, is committed before any test day of D
-  is scored and frozen with the amendment, and computes everything a block's
-  read produces, statuses and kills included, in one read session.
+  `experiments/short_horizon_2025.py`, is committed with all study code
+  before the stage 1 fetch (the code-freeze note of
+  [selection](#selection-on-d-admission-and-the-finalists)) and frozen with
+  the amendment, and computes everything a block's read produces, statuses
+  and kills included, in one read session.
 
 ### Access
 
@@ -1883,8 +1911,8 @@ E's bars, H, F and P.
 - **H** opens only if the amendment records the YAML's sha256, the file on
   disk has it and is committed, the tree is clean, every frozen weight file's
   sha256, every frozen finalist file's and the fitted-values file's sha256
-  equal the amendment's, the trial ledger is committed with the sha256 and
-  the row count the amendment records, the catalogue's sha256 equals the
+  equal the amendment's, the trial ledger and its sidecar are committed with
+  the sha256 and the row count the amendment records, the catalogue's sha256 equals the
   registered one (or stage 0's amendment's), and no file of H and no hourly
   bar of E is already on disk.
 - **Every open (H, F and P), and the start of every process of a read
@@ -1950,13 +1978,15 @@ this study's loader.
 ## Amendment protocol
 
 Stage 0's cuts, if the projection needs any, are a dated amendment of their
-own, committed before stage 1 with the new catalogue hash and N_max. After the
+own, committed before stage 1 with the new catalogue hash, N_max, the
+configuration's new null-placeholder sha256 and S25's and S25-Z's
+neighbourhoods as cut; the code-freeze note follows it, also before stage 1. After the
 development runs, and before H is read, one dated amendment is appended and
 committed: per instrument, the days excluded and the sequence-gap threshold
 (by its formula), the tick and lot steps, the clip and the selected features;
 the longest feature lookback `N`; the reader-test days' message counts,
-intervals and gaps; the trial ledger's sha256, its row count N_trials and
-N_eff; for each stratum the chosen cell with its neighbourhood, its S and the
+intervals and gaps; the trial ledger's sha256 and row count, N_trials, N_eff,
+R_D and the hand-run log; for each stratum the chosen cell with its neighbourhood, its S and the
 outright peak; every replication of the placebo search (A per stratum under
 Null A and Null B and at the refit, the seeds, the shifts, the quantiles and
 the p-values); each admission decision with its reason, the carry-forward
@@ -1968,7 +1998,8 @@ the declaration that R is untestable; the fold-wise flag lists and the
 detector's 24-value hour-of-day profile fitted on D; the sha256 of the
 fitted-values file ([Blocks](#blocks)); the sha256 of every frozen weight
 file and of each frozen finalist file, every threshold and every checkpoint
-epoch; the entry point, committed before D was scored and frozen with it; the
+epoch; the entry point, committed before the stage 1 fetch and frozen with
+it; the
 compute record, with the replay's measured peak memory, the worker counts,
 the device and the stores' sizes; the fits that lacked a class, with the
 side; and the sha256 of `configs/short_horizon_2025.yaml` after the frozen
@@ -1989,7 +2020,12 @@ loads exactly that set, and this study places no order.
 A correction found after this registration and before H is read (a bug in a
 ported feature, the label, the simulator or a reader) is made only by a
 further dated amendment that states it and, if it could change a development
-number, re-runs D in full before anything is frozen. After H is read, nothing
+number, re-runs D in full before anything is frozen. Every change to the
+frozen study code before H is read is such a correction. **Complete D runs
+are numbered**, and R_D is their number: the rows of every superseded run stay
+in the trial ledger and in N_trials, and admission (iv) and p_search are taken
+at α / R_D (Bonferroni over runs), so that fixing and re-running until
+something is admitted is paid for. After H is read, nothing
 is changed and nothing is re-run under a different rule; the ledger's
 conditions for opening F and P enforce this for the code, the configuration,
 this document, the environment, the frozen weights and the fitted values.
@@ -2022,9 +2058,10 @@ slot: F is still read and reported, but nothing is taken to P.
 
 **Files**, written by the entry point:
 
-- `experiments/results/short_horizon_2025_trials.csv`, the trial ledger; its
-  row count is the N quoted on every page, and its sha256 goes in the
-  amendment;
+- `experiments/results/short_horizon_2025_trials.parquet` and its sidecar
+  `…_trials.json`, the trial ledger; N_trials, its distinct (run, key)
+  pairs, is the N quoted on every page, and its sha256 and row count go in
+  the amendment;
 - `…_leaderboard.csv`: every configuration with gross, net, G, trades a day,
   day-level t, IC, S, A, the admissible flag, its rank within its stratum and
   overall, the region tags (T1, T2) and S25's badge; the header gives N
@@ -2330,7 +2367,9 @@ recast into a search, and
 `3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f` before the
 market maker's round trips were defined.)
 This study's loader will check that putting `null` back into every placeholder
-of the frozen file gives this hash, as the earlier rounds' loaders do.
+of the frozen file gives this hash, or the hash recorded by the latest
+amendment committed before stage 1 (stage 0's, if it cuts anything), as the
+earlier rounds' loaders do.
 
 ---
 
