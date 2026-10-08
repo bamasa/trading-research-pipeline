@@ -5,7 +5,12 @@
 # each value means and why it was chosen. The two were committed together on
 # 8 October 2026, before any 2025 book, print, hourly bar or funding file was
 # fetched, and revised together the same day after three reviews (peeking,
-# multiplicity, feasibility), still before any data was read. They must agree.
+# multiplicity, feasibility), then recast from fixed hypotheses into a
+# registered strategy search, still before any data was read. They must agree.
+#
+# The search block below is generic: its schema (clock, cluster, stages, axes,
+# catalogue, strata, slots, regime source, nulls, admission, budget) is meant
+# to be reused by later registrations with only its values changing.
 #
 # Every value here is fixed now, except those set to null with the comment
 # "frozen by the D amendment". Those are chosen on block D by the
@@ -18,7 +23,8 @@
 #
 # Conventions of the market-making rounds hold: units in the key's suffix (_bp
 # basis points, _ms milliseconds, _s seconds, _h hours, _btc and _usdt sizes),
-# UTC dates inclusive, seed ranges inclusive.
+# UTC dates inclusive, seed ranges inclusive. Slot names (S25, S-C, S-R, S-P,
+# S-M, S25-Z) are keys as written in the document.
 #
 # No code reads this file yet. The loader arrives with the study's ledger;
 # until then it is a record, not an input.
@@ -27,25 +33,36 @@ name: short_horizon_2025_preregistration
 registered: 2026-10-08
 registered_against: "af148b5"  # main when this was written
 document: docs/preregistration/short_horizon_2025.md
+registers: a strategy search (search block below), with the named configuration S25 tested by name
 venue: bybit
 product: linear_perpetual
-symbol: BTCUSDT
+instruments: [BTCUSDT, ETHUSDT, XRPUSDT]
 computed_before_registration: none  # no 2025 book, print, hourly bar or funding fetched or computed on
 
 prior_information:
   - liquidation cascade of 2025-10-10..11, general market knowledge
   - BTC's 2025 daily price path, in the README's break figure and the daily bars on disk, and general knowledge
-  - this repository's kills (sections 25 and 26, maker execution, market-making rounds one and two)
+  - this repository's kills (sections 25 and 26, maker execution, market-making rounds one and two); the same signal worth +3 to +8 bp crossing and -0.5 to -4.2 bp resting in 2024
   - Bybit fee schedule as published in 2026 (backtest/costs.py, BYBIT_FEE_CAVEAT, whose text names 2024-02..04; parametrised by period, carried here with 2025's dates)
-  - HTTP HEAD of every BTCUSDT book (ob500, ob200) and print archive, 2024-12-01..2025-12-31; existence and size only
-  - HTTP HEAD of the ob200 and ob500 book archives for 2026-01-05..07; ob200 present, ob500 absent
+  - HTTP HEAD of every BTCUSDT, ETHUSDT and XRPUSDT book (ob500, ob200) and print archive, 2024-12-01..2025-12-31; existence and size only
+  - HTTP HEAD of the BTCUSDT ob200 and ob500 book archives for 2026-01-05..07; ob200 present, ob500 absent
   - "experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; the README (written 2026-10-02) names its 2025 alarm, 2025-09-13, scale, downward, and a near miss on 2025-06-29; both known when F's span and the hourly detector's setting were set; never defines b"
+  - "S25's information set: its coordinates are not claimed to have been chosen without knowledge of market conditions after 2025-08-01; H before that date is reported for every slot as a labelled sensitivity"
 
 expected_outcome:
-  taker_bp: {base: 5.5, cheapest_published: 1.5}  # BTCUSDT; cheapest is pro6_g1
+  taker_bp: {base: 5.5, cheapest_published: 1.5}  # group g1, all three instruments; cheapest is pro6_g1
   taker_round_trip_bp: {base: 11.0, cheapest_published: 3.0}  # a taker pays at the base tier only with a gross edge above 5.5 bp of turnover
   passive_break_even_bp_turnover: {cheapest_published: 0.75, base: 3.75}  # (maker + taker) / 2
-  predictions: {T1: killed by K1, T2: killed by K1 or inconclusive under K-trades, M1: killed by K1, Z: killed by K1, R: not tested}
+  predictions:
+    S25: killed by K1 on H
+    S25-Z: killed by K1
+    S-C: not admitted on D (i)  # signal admission (information) not predicted
+    S-R: not admitted on D (i)
+    S-P: not admitted on D (i); if it reaches H, killed by K1
+    S-M: not admitted on D (i); if it reaches H, killed by K1 or K-dir
+    regime_axis: adds nothing beyond random pauses
+    R: not tested
+    FILL: measurements.FILL.prediction
 
 data:
   book:
@@ -57,7 +74,7 @@ data:
       ob500: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob500.data.zip", present: [2024-12-01, 2025-08-20]}
       ob200: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob200.data.zip", present: [2025-08-21, 2025-12-31]}
     archive_change: 2025-08-21  # no day has both; the H/F boundary was moved onto it
-    ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # outside every block; used for nothing else but the entry point's dry run; never in a successor's blocks
+    ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # BTCUSDT; the reader is the same code for every instrument; outside every block; used for nothing else but the entry point's dry run; never in a successor's blocks
     ob200_reader_test: synthetic ob200 fixture and the reader-test days pass before H is opened; no ob200 day of 2025 fetched before stage 3
     ob200_reader_test_pass: "as the loader passes a block day: no positive_prices error in validate_book's report, no off-grid price, sequence gaps at most D's max_sequence_gaps; every other finding by check and severity recorded in the amendment beside D's; a failure is a reader fault, corrected by amendment before H"
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
@@ -71,23 +88,32 @@ data:
     set_from_it: only the H/F boundary; later revisions used only the archive change it found; fetch sizes and the disk budget use its block sums and W's and D's largest and median archive, no searched value
     missing_under_code_pattern: {book_ob500: [2025-08-21, 2025-12-31], prints: none}
     first_and_fifteenth: all prints present; ob500 present to 2025-08-15, absent from 2025-09-01; ob200 present from 2025-09-01
+  head_check_eth_xrp:
+    date: 2026-10-08
+    days_checked: 396  # every day, 2024-12-01..2025-12-31, for each of ETHUSDT and XRPUSDT
+    table: experiments/results/short_horizon_2025_head_check_eth_xrp.csv
+    table_sha256: 6e294fbed3d259a2eafa96472380cbc52fa64abdc45e686ee3157453e3aa3c9e
+    coverage: as BTCUSDT's; ob500 on 263 days to 2025-08-20, ob200 on 133 days from 2025-08-21, no day with both, prints on all 396 days
+    set_from_it: no searched value; fetch sizes and the disk budget use its block sums
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
-  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every strategy, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
-  flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every hypothesis on that block and counted once toward unreadability
-  max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up; the same value on every block
-  max_sequence_gaps: null  # by the rule above; frozen by the D amendment
+  exclusions_unit: instrument-day  # unreadability judged per instrument, on the days of the instrument a slot trades
+  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every configuration, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
+  flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every slot on that instrument and block and counted once toward unreadability
+  max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up, per instrument; the same value on every block for that instrument
+  max_sequence_gaps: null  # {instrument: value}, by the rule above; frozen by the D amendment
   unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
   gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
-  excluded_days_D: null  # with reasons; frozen by the D amendment
+  excluded_days_D: null  # {instrument: [day, reason]}; frozen by the D amendment
+  instrument_spec: null  # {instrument: {tick, lot}} from the venue's instrument specification; frozen by the D amendment
 
 blocks:
   W: {role: warm_up, start: 2024-12-01, end: 2024-12-31, days: 31, archive: ob500, scored: false, reads: free}
   D: {role: development, start: 2025-01-01, end: 2025-06-30, days: 181, archive: ob500, reads: free}
   O: {role: descriptive_window_inside_D, start: 2025-02-04, end: 2025-02-26, days: 23, archive: ob500, use: [A0, FILL]}
   E: {role: embargo, start: 2025-07-01, end: 2025-07-07, days: 7, archive: ob500, book_prints_funding_fetched: false, hourly_bars: "read by the detector only, opened with H"}
-  H: {role: held_out, start: 2025-07-08, end: 2025-08-20, days: 44, archive: ob500, hypotheses: [T1, T2, M1, Z], reads: 1, read_after: the D amendment is committed}
+  H: {role: held_out, start: 2025-07-08, end: 2025-08-20, days: 44, archive: ob500, slots: [S25, S-C, S-R, S-P, S-M, S25-Z], reads: 1, read_after: the D amendment is committed}
   F: {role: boundary, start: 2025-08-21, end: 2025-11-16, days: 88, archive: ob200, reads: 1, read_after: H's results are committed, read_always: true}
-  P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: "a hypothesis (Z included) passed on F"}
+  P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: "a slot (S25-Z included) passed on F"}
   moved_by_head_check: {H_end: {planned: 2025-09-21, registered: 2025-08-20}, F_start: {planned: 2025-09-22, registered: 2025-08-21}}
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
@@ -95,7 +121,8 @@ blocks:
   spent: H, F and P are spent for every configuration of this catalogue on the three instruments; successors use blocks after 2025-12-31
 
 common:
-  clip_btc: 0.010  # fixed for every configuration and every execution path
+  clip_btc: 0.010  # BTCUSDT, for every configuration and every execution path; no Kelly sizing
+  clip_other_instruments: "0.010 x (BTC's mean mid on W) / (the coin's mean mid on W), rounded down to the lot step; written to the fitted-values file (features.fitted_values_sha256)"
   report_per_100_usdt_of_clip: true
   max_position_clips: 1
   latency_ms: 10  # simulator rule R3
@@ -105,7 +132,7 @@ common:
     slippage_bp_on_top_of_walk: 0
     entry_skip: {clip_exceeds_visible_depth: true}  # entry only; skipped and counted; no skip by snapshot age
     entry_late_snapshot: an entry whose walked snapshot is stamped more than 1 s after the order arrives is counted and reported; no day excluded
-    exit: "walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price, counted (flatten_beyond_visible_book); a walked snapshot stamped more than 1 s after the order arrives is counted and reported (exit_late_snapshot), every taker exit including the passive strategies', no day excluded"
+    exit: "walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price, counted (flatten_beyond_visible_book); a walked snapshot stamped more than 1 s after the order arrives is counted and reported (exit_late_snapshot), every taker exit including the passive slots', no day excluded"
     exit_after_book_end: walk the last snapshot; if it is more than 5 s older than the order, the day is flagged flatten_stale and excluded (R16)
     funding: R14
     accounting_identity: R15, turnover equal to the sum of fill notionals
@@ -113,7 +140,7 @@ common:
   passive_fill:
     simulator: market_making/simulator.py
     rules: [R5, R6, R7]
-    clip_btc: 0.010  # new setting; replaces clip_notional and clip_touch_share
+    clip_btc: common.clip_btc, or the instrument's clip  # new setting; replaces clip_notional and clip_touch_share
     queue_priority: tail
     cancel_attribution: proportional
     arrival_growth: pro_rata_time
@@ -123,7 +150,7 @@ common:
     cancel_latency_ms: 10
     feed_latency_ms: 0
     soft_limit_clips: 1
-    max_sequence_gaps: data.max_sequence_gaps (the frozen value)  # SimConfig's default of 0 not used
+    max_sequence_gaps: data.max_sequence_gaps (the frozen value for the instrument)  # SimConfig's default of 0 not used
     warmup_s: 60
     stop_quoting_at: "23:58"
     flatten_at: "23:59"
@@ -134,13 +161,24 @@ common:
     touch_window_s: 3600  # simulator default; not used by the signal-entry quoter
     quoter: "signal-entry quoter (new code): one clip at the touch on the signal's side at decision + 10 ms, kept at its first price, never re-pegged, cancelled unfilled after hold"
     quoter_after_pause: an entry pulled by a pause is not re-posted; its unfilled part counts as unfilled, and a part filled before the pause is exited as any fill
-    exit: reduce-only cross hold after the fill, priced by the taker executor's walk
+    exit: reduce-only cross hold after the fill, priced by the taker executor's walk, with its late-snapshot counters
     flatten_slippage_bp: 0
+    signal_timing: "the decision reaches the quoter as a tape row stamped at the decision row's stamp t; under the strictly-before rule it is first seen by the event after t and the order is live no earlier than t + 10 ms; unit test: no event at or before t sees it, every post live at or after t + 10 ms"
+    regime_guard: a resting entry is cancelled at the first event after a flag inside its window
     not_used: round one's SignalExecutor (X1)
+  market_maker:
+    strategy: S1 with the signal lean (pipeline/market_making, lean > 0)
+    S1: {skew_bp: 2, k: 0.5, min_edge_bp: 4}  # round one's frozen values, configs/mm_prereg.yaml
+    soft_limit_clips: 1
+    lean: [0.5, 1, 2]  # the slot's neighbourhood; the cell is 1
+    lean_window_s: the signal's hold
+    lean_tape: "pipeline/market_making.signal_tapes on the signal's accepted entry decisions; signed strength in bp: mu for a regressor, and for a classifier the side times the median absolute forward move over the hold on the fold's training rows"
+    guard: {slot: guard_pull at the signal's regime window (none when it has none), measured: [guard_pull and guard_widen at 4, 24 and 120 h with lean 1], guard_window_min: 60 x the window in hours}
+    simulator_settings: passive_fill
   fees:
     verdict_tier: {name: base, maker_bp: 2.0, taker_bp: 5.5}  # BYBIT_BASE
-    measurement_tiers: BYBIT_LINEAR_TIERS rows for group g1, and BYBIT_MM_PROGRAMME_MAKER_BP  # with BYBIT_FEE_CAVEAT, parametrised by period, carrying 2025's dates
-    zero_fee: {maker_bp: 0.0, taker_bp: 0.0, used_by: [A0, Z]}
+    measurement_tiers: BYBIT_LINEAR_TIERS rows for group g1 (all three instruments), and BYBIT_MM_PROGRAMME_MAKER_BP  # with BYBIT_FEE_CAVEAT, parametrised by period, carrying 2025's dates
+    zero_fee: {maker_bp: 0.0, taker_bp: 0.0, used_by: [A0, S25-Z]}  # a 0 bp label fee is a searched label value, not a verdict fee
   funding: charged at each settlement on the position held (R14)
   day: {no_entry_before: "00:01", no_entry_after: "23:58", flatten_at: "23:59"}
   accounting_identity: R15, checked at every day's end

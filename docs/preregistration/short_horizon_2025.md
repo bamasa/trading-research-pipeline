@@ -270,7 +270,7 @@ instead of inside a block. Its consequences:
   `ob200` days. If more than a quarter of a held-out block's days are
   excluded, that block is reported as **unreadable**, nothing is retuned, and
   no status changes on it (the
-  [status rules](#status-rules-family-of-three-primaries-t1-t2-m1) say what
+  [status rules](#status-rules) say what
   follows for H, F and P);
 - the downloader records each F and P day's message count, median interval
   and sequence gaps only inside that block's opened access, as it records
@@ -354,7 +354,7 @@ plan](#fetch-plan)). Each is counted by reason. **A day flagged
 `flatten_stale` in any run on the block** (on a held-out block, any run of
 its read session: the true strategy, a placebo draw, a neighbour cell, the
 K-latency re-run, a bracket) is excluded from every series of every
-hypothesis on that block, and is counted once toward unreadability.
+slot on that block, and is counted once toward unreadability.
 **`max_sequence_gaps` is the 95th percentile of D's per-day gap
 counts, rounded up**, per instrument, computed by that formula and recorded in
 the amendment; the same value is used on every block for that instrument. Each verdict is also reported with the
@@ -404,7 +404,7 @@ quietly favour a result.
   `flatten_beyond_visible_book`. **An order whose walked snapshot is stamped
   more than 1 s after the order arrives** (a feed gap) is counted as
   `entry_late_snapshot` or `exit_late_snapshot` and reported, for every taker
-  order, the passive strategies' taker exits included; it is a measurement
+  order, the passive slots' taker exits included; it is a measurement
   and excludes no day. An exit that no snapshot follows before the book ends
   walks the last one, and if that snapshot is more than 5 s
   (`suspend_after_pause_s`) older than the order the day is flagged
