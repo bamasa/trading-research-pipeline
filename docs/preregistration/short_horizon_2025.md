@@ -172,11 +172,11 @@ Predictions, one per slot, fixed now:
 
 | Plane | Source | Code | Blocks |
 |---|---|---|---|
-| Ten-level book on a 100 ms grid | Bybit order-book archive, BTCUSDT linear perpetual, 500 levels (`ob500`) | `data/bybit.py`, `ARCHIVE_URL` | W, D, H |
+| Ten-level book on a 100 ms grid | Bybit order-book archive, BTCUSDT, ETHUSDT and XRPUSDT linear perpetuals, 500 levels (`ob500`) | `data/bybit.py`, `ARCHIVE_URL` | W, D, H |
 | the same | the same archive at 200 levels (`ob200`), same path with `ob200` in the name | `data/bybit.py`, a second name to be added | F, P |
-| Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/BTCUSDT/` | `data/bybit_trades.py`, `ARCHIVE` | all but E |
+| Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/<symbol>/` | `data/bybit_trades.py`, `ARCHIVE` | all but E |
 | Funding | Bybit public REST endpoint, no credentials | `data/bybit_funding.py` | all but E |
-| Hourly bars for the break detector | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
+| Hourly bars for the break detector (BTCUSDT only, for every instrument) | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
 
 **Coverage, checked by HTTP `HEAD` on 8 October 2026** (existence and size
 only; nothing downloaded). Sizes in MB. The `ob500` and print columns use the
@@ -211,7 +211,8 @@ URL patterns in `data/bybit.py` and `data/bybit_trades.py` as they stand; the
 | 2025-12-01 | **404** | — | 200 | 289 | 200 | 129 |
 | 2025-12-15 | **404** | — | 200 | 243 | 200 | 96 |
 
-The same check on **every day** from 2024-12-01 to 2025-12-31 (396 days):
+The same check on **every day** from 2024-12-01 to 2025-12-31 (396 days), for
+BTCUSDT, and identically for ETHUSDT and XRPUSDT:
 
 | Archive | Present | Absent |
 |---|---|---|
@@ -226,19 +227,34 @@ either, but the two archives may differ in ways the existence check cannot
 show (message cadence, snapshot frequency), and no overlap day exists to
 compare them on. Prints are unaffected.
 
+**ETHUSDT and XRPUSDT** were checked the same way on the same day, every day
+from 2024-12-01 to 2025-12-31
+([`short_horizon_2025_head_check_eth_xrp.csv`](../../experiments/results/short_horizon_2025_head_check_eth_xrp.csv),
+sha256 `6e294fbed3d259a2eafa96472380cbc52fa64abdc45e686ee3157453e3aa3c9e`).
+Their coverage is BTCUSDT's: `ob500` on 263 days to 2025-08-20, `ob200` on 133
+days from 2025-08-21, no day with both, and prints on all 396 days. The
+archive change therefore falls on the same H/F boundary for every instrument.
+Their archive sizes per block, in GB of book and prints:
+
+| Instrument | W and D | H | F | P |
+|---|---:|---:|---:|---:|
+| ETHUSDT | 70.2 + 14.1 | 12.7 + 3.8 | 18.5 + 7.4 | 9.4 + 3.6 |
+| XRPUSDT | 49.6 + 12.3 | 11.1 + 2.3 | 17.3 + 3.3 | 7.0 + 1.3 |
+
 **What the archive change moved.** The plan before the check ended H on
 2025-09-21 and began F on 2025-09-22. H would then have mixed the two archives,
-and every primary verdict would have rested partly on a book source that D
+and every held-out verdict would have rested partly on a book source that D
 never saw. Before anything else in this registration was written, the blocks
 were adjusted: **H now ends on 2025-08-20**, the last `ob500` day, and **F
 begins on 2025-08-21**, the first `ob200` day. D and H, where every value is
-chosen and every primary verdict is taken, share one archive; F and P share
+chosen and every held-out verdict is taken, share one archive; F and P share
 the other. The archive change falls on the H/F boundary, where it is visible,
 instead of inside a block. Its consequences:
 
 - the data pull request adds the `ob200` name to `data/bybit.py` for days from
   2025-08-21, with a test on a synthetic `ob200` fixture and on the three
-  **reader-test days, 2026-01-05, 06 and 07**, which lie outside every block
+  **reader-test days, 2026-01-05, 06 and 07** (BTCUSDT; the reader is the
+  same code for every instrument), which lie outside every block
   and are used for nothing else but the entry point's dry run (no successor
   study may put them in a block). No `ob200` day from 2025-08-21 to 2025-12-31 is fetched before
   stage 3. The `ob200` replay is proven before H is opened: each reader-test
@@ -315,7 +331,9 @@ and normalisers, the tensor's floors, any other fitted constant) is written
 to one file whose sha256 the amendment records, and the H, F and P gates
 check it beside the weights.
 
-Days excluded from every verdict, counted and reported per block: more book
+Exclusions are per instrument-day, and a block's unreadability is judged per
+instrument, on the days of the instrument a slot trades. Days excluded from
+every verdict, counted and reported per block and instrument: more book
 sequence gaps than `max_sequence_gaps`; a non-positive price, found as a
 `positive_prices` error in `validate_book`'s report (the function returns its
 findings and does not raise, so the study's loader excludes the day on that
@@ -338,8 +356,8 @@ its read session: the true strategy, a placebo draw, a neighbour cell, the
 K-latency re-run, a bracket) is excluded from every series of every
 hypothesis on that block, and is counted once toward unreadability.
 **`max_sequence_gaps` is the 95th percentile of D's per-day gap
-counts, rounded up**, computed by that formula and recorded in the amendment;
-the same value is used on every block. Each verdict is also reported with the
+counts, rounded up**, per instrument, computed by that formula and recorded in
+the amendment; the same value is used on every block for that instrument. Each verdict is also reported with the
 gap-excluded days included, as a measurement, so that the exclusion cannot
 quietly favour a result.
 
@@ -394,7 +412,7 @@ quietly favour a result.
   the accounting identity (R15), with turnover equal to the sum of fill
   notionals, hold for it as for the simulator. The label's walks and the
   executor's call the same function.
-- **Passive fills** (M1, Z, FILL) come from round one's event-time simulator
+- **Passive fills** (S-P, S-M, S25-Z, A0 and FILL) come from round one's event-time simulator
   with these settings: a queue per order joining the tail of the visible size
   (R5), advance and fills only from prints at the price (R6) or through it
   (R7), proportional cancellation attribution, pro-rata arrival growth,
@@ -414,13 +432,33 @@ quietly favour a result.
   is not re-posted**: its unfilled part counts as unfilled, and a part filled
   before the pause is exited as any fill. Once filled, the exit is a
   reduce-only cross `h` after the fill, priced by the taker executor's walk
-  (`flatten_slippage_bp` 0). The brackets (`none`, `all_ahead`;
-  `pessimistic`) are run for K-queue.
+  (`flatten_slippage_bp` 0), with the late-snapshot counters of the taker
+  executor. **The decision reaches the quoter as a tape row stamped at the
+  decision row's stamp `t`.** Under the simulator's strictly-before rule that
+  row is first seen by the event after `t`, and the order is live no earlier
+  than `t` + 10 ms; a unit test checks that no event at or before `t` sees the
+  signal and that every post is live at or after `t` + 10 ms. A regime guard
+  ([the regime-break policy axis](#the-regime-break-policy-axis)) cancels a
+  resting entry at the first event after the flag. The brackets (`none`,
+  `all_ahead`; `pessimistic`) are run for K-queue.
+- **The market maker** (S-M) is round one's S1 with the signal lean, on the
+  same simulator settings: S1 at round one's frozen values `skew_bp` 2, `k`
+  0.5 and `min_edge_bp` 4 (`configs/mm_prereg.yaml`), `soft_limit_clips` 1,
+  `clip_btc` the instrument's clip, the lean λ ∈ {0.5, 1, 2} on its signal's
+  tape (`pipeline/market_making.signal_tapes`: the signal's accepted entry
+  decisions, each with a signed strength in bp, μ for a regressor and, for a
+  classifier, the side times the median absolute forward move over the hold
+  on the fold's training rows), `lean_window_s` equal to the signal's hold,
+  and the regime guard of
+  `pipeline/market_making` (`guard_pull`, or `guard_widen` as a measurement)
+  with `guard_window_min` equal to 60 × the window in hours.
 - **Fees for verdicts**: the base tier, 2.0 bp maker and 5.5 bp taker
-  (`BYBIT_BASE`). Other published BTCUSDT tiers (`BYBIT_LINEAR_TIERS`, group
-  `g1`, down to 0.0 maker and 1.5 taker) and the programme's −1.0 bp maker
-  rebate are measurements only, each with `BYBIT_FEE_CAVEAT`. A 0/0 schedule is
-  used for A0 and Z only, and labelled.
+  (`BYBIT_BASE`), for every instrument. Other published tiers
+  (`BYBIT_LINEAR_TIERS`, group `g1`, which holds all three instruments, down
+  to 0.0 maker and 1.5 taker) and the programme's −1.0 bp maker rebate are
+  measurements only, each with `BYBIT_FEE_CAVEAT`. A 0/0 schedule is used for
+  A0 and S25-Z only, and labelled; a label fee of 0 bp is a searched value of
+  the classifier's label, not a fee any verdict is taken at.
 - **Funding** is charged at each settlement on the position held then
   (R14); a day without its funding history is excluded.
 - **The day**: no entry before 00:01 or after 23:58 UTC; anything open at
