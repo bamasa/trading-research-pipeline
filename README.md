@@ -1281,6 +1281,15 @@ basis points against an 11 bp taker round trip at the base tier.
       m = 5; passive entry and a market maker that always run; a regime map as
       a measurement; a 6-day compute ceiling with a reduction order fixed
       before any fetch; headline sentences fixed for every outcome
+- [x] The search reviewed for search multiplicity, protocol and
+      executability, before any data is read: admission by a count p-value
+      at α over the number of development runs; no configuration added after
+      stage 0, and a hand run on a test day disqualifies every searched slot;
+      study code frozen before the first fetch; the walk-table parity proven
+      on 2024 days before any 2025 fetch; the slots on S25's signal assessed
+      only on the held-out days before 2025-08-01; the market maker's
+      position limit, reference volatility and making part pinned; the null
+      replications in the compute budget
 - [ ] The code to come: the search's entry point, trial ledger, candidate
       tapes and walk tables; ten-level tensor, walked-book label, Gaussian
       head with a lazy window dataset, hold-first thresholds and the EV gate;
