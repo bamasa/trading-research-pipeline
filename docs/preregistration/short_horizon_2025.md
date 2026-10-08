@@ -356,7 +356,7 @@ quietly favour a result.
   stamped at or after `t + h`. `data/grid.to_grid` works in whole seconds and
   is used only for the 1 s grid of the book CUSUM, with `label="right"`.
 - **Clip**: 0.010 BTC a trade, the original's traded size, fixed for every
-  strategy and both execution paths (T2's Kelly size is at most one clip);
+  strategy and both execution paths (T2 included: it is not Kelly-sized);
   results are also given per 100 USDT of clip a day, with the clip's notional
   taken at entry. One position at a time, never more than one clip (K-cap).
   In the simulator the clip is the fixed `clip_btc` setting, which replaces
@@ -483,9 +483,9 @@ day before the one-position rule.
 clip and back (from the snapshot, in bp of mid): go long when
 `μ − kσ > c + w_t + b`, short when `−μ − kσ > c + w_t + b`. One entry per event
 (a run of rows on which the gate is open); a new entry needs the gate to close
-and reopen. Size by `strategies/sizing.py`'s `FractionalKelly` at fraction 0.5
-on μ and σ, capped at one clip; below one lot (0.001 BTC) the trade is
-skipped.
+and reopen. Every T2 trade is one full clip: no Kelly sizing is applied
+(`strategies/sizing.py`'s `FractionalKelly` cannot size this gate in either
+unit; see [Choices and their reasons](#choices-and-their-reasons)).
 
 **Every strategy** holds one position at a time: the next entry is possible
 only after the previous position is closed (cooldown equal to the hold).
@@ -506,7 +506,7 @@ after a further `h`.
 | `b` (buffer) | T2 | {0, 1, 2} bp | searched on D |
 | M1's signal | M1 | T1 or T2, whichever has the higher D net per trade at its chosen cell (T1 on a tie) | chosen on D |
 | A0's settings | A0 | 240 trades a day, `h` = 50 s, trained 2025-01-01 to 01-27, thresholds on 01-28 to 02-03, run on O | fixed: the original protocol's trade rate and its close-by-time hold (about 50 s, inferred from the research code) |
-| clip, latency, fees, entry wait, Kelly fraction | all | as above | fixed |
+| clip, latency, fees, entry wait | all | as above | fixed |
 
 The axes are 9 cells for T1, 27 for T2 and 9 for Z. Nothing else is searched,
 and nothing else may be chosen after the amendment.
@@ -563,8 +563,8 @@ and nothing else may be chosen after the amendment.
   the entry notional, × 1e4, less fees in bp of the entry notional, plus
   funding. **Primary for T1 and T2.** A day's value is the day's net in USDT
   summed over its round trips, over the sum of their entry notionals, × 1e4:
-  basis points of traded notional, so a full-clip loser outweighs a
-  minimum-lot winner. The daily series has one value per day with at least
+  basis points of traded notional (every trade is one clip, so the weights
+  differ only with the price at entry). The daily series has one value per day with at least
   one trade.
 - **`net_per_100_clip_day`**: **primary for M1.** Its daily series has one
   row for every usable calendar day of the block: the sum of that day's net
@@ -628,8 +628,8 @@ status:
 
 1. **void** — K-leak, K-units, K-acct or K-cap fires; counted as killed.
 2. **inconclusive (too few trades)** — K-trades: fewer than 100 trades over
-   the block (clip-equivalents, the sum of sizes over 0.010 BTC, for T2; fills
-   for M1 and Z). Nothing below is evaluated.
+   the block (round trips for T1 and T2; fills for M1 and Z). Nothing below
+   is evaluated.
 3. **killed** — any kill condition fires. Rejection needs no significance.
 4. **candidate** (on H) or **passes** (on F and P) — the bar is met.
 5. **inconclusive** — otherwise; labelled "below the minimum detectable
@@ -748,8 +748,8 @@ Kill conditions:
 
 Not kills, but they set the status:
 
-- **K-trades** — fewer than 100 trades over the block (clip-equivalents for
-  T2; fills for M1 and Z) makes the result inconclusive whatever its sign; it
+- **K-trades** — fewer than 100 trades over the block (round trips for T1
+  and T2; fills for M1 and Z) makes the result inconclusive whatever its sign; it
   is applied before any kill (the precedence above).
 - **K-MDE** — a result that does not pass, with no kill, and is smaller in
   size than the MDE is "inconclusive, below the minimum detectable effect".
@@ -792,7 +792,7 @@ under K-leak, K-units, K-acct, K-cap; inconclusive under K-trades.
 
 **Statement.** On H at the base tier, T2 (the network on the tensor and the
 selected set, the EV gate `μ − kσ > 11 bp + walk cost + b`, one entry per
-event, Kelly-sized up to one clip, a taker exit after the chosen hold) earns a
+event, one clip a trade, a taker exit after the chosen hold) earns a
 positive `net_bp_trade`.
 
 **Kill conditions.** As T1. Reported beside: the control model's IC against
@@ -1197,6 +1197,15 @@ different fixes, or a fix left a value open, the choice and its reason:
   kills nor passes a hypothesis.
 - **The mean channel is read from `odds_mean`**, the column `detect_breaks`
   writes; its internal name is `sr_mean`.
+- **T2 trades one full clip, and Kelly sizing is dropped** (feasibility
+  review). `FractionalKelly.scale(edge, volatility)` returns fraction × edge /
+  volatility², clipped to [0, 2]. With μ and σ in bp, a gated trade with
+  μ = 15 and σ = 10 gets 0.075 of a clip, below the 0.001 BTC lot, so T2 would
+  be inconclusive by construction; in decimal units the same trade gets 750,
+  clipped to the cap, so every trade would be one clip and Kelly would do
+  nothing. A scaling between the two would be a value set without a basis,
+  and the research's sizing values are not used. Without it, T2's trade count
+  is its gate's, and K-trades counts round trips as for T1.
 - **No 2026 confirmation block is registered here.** P begins after every
   dated entry of the 2025 research, so it is fresh for the recipes; a
   confirmation on 2026 data needs its own registration, which the
@@ -1206,10 +1215,11 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`.
-(The first draft, before the reviews and never merged, had
-`e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`; it does
-not count.)
+`564dfdbdd37a7e958866a12cbab38b6e4446655c057ef76009703f2345ed1299`.
+(Earlier drafts, written before the reviews were applied in full and never
+merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
+and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they
+do not count.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, as the earlier rounds' loaders do.
 

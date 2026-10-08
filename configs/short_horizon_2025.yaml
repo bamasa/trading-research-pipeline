@@ -210,7 +210,7 @@ strategies:
     signal: gaussian_network on the tensor and the selected set
     gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + b, mirrored for shorts"
     one_entry_per_event: true
-    sizing: {code: strategies/sizing.py FractionalKelly, fraction: 0.5, cap_clips: 1, min_lot_btc: 0.001}
+    sizing: one full clip a trade; no Kelly sizing (strategies/sizing.py FractionalKelly not used)
     execution: taker in, taker out after hold
     fee: base
     axes: {hold_s: [5, 20, 50], k: [0, 0.5, 1], buffer_bp: [0, 1, 2]}  # 27 cells
@@ -290,7 +290,7 @@ kill_conditions:
   void: [K-leak, K-units, K-acct, K-cap]
   kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency]
   passive_only: [K-dir, K-queue]  # M1 and Z
-  status_only: {K-trades: 100, K-trades_counts: "trades; clip-equivalents (sum of sizes / 0.010 BTC) for T2; fills for M1 and Z", K-MDE: "below the minimum detectable effect, only when no kill fired"}
+  status_only: {K-trades: 100, K-trades_counts: "round trips for T1 and T2; fills for M1 and Z", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
   K-days_share_positive_max: 0.5  # half or fewer positive days of the daily series kills
   K-nbhd: {statistic: median over the neighbourhood's cells of the daily series' mean, kills_at_or_below: 0, neighbourhood: as d_procedure.choice.neighbourhood, cell_without_trade_scores: 0, runs_only: the frozen files whose sha256 the amendment records}
