@@ -270,8 +270,8 @@ instead of inside a block. Its consequences:
 - the data pull request adds the `ob200` name to `data/bybit.py` for days from
   2025-08-21, with a test on a synthetic `ob200` fixture and on the three
   **reader-test days, 2026-01-05, 06 and 07**, which lie outside every block
-  and are never used for anything else (no successor study may put them in a
-  block). No `ob200` day from 2025-08-21 to 2025-12-31 is fetched before
+  and are used for nothing else but the entry point's dry run (no successor
+  study may put them in a block). No `ob200` day from 2025-08-21 to 2025-12-31 is fetched before
   stage 3. The `ob200` replay is proven before H is opened: each reader-test
   day must pass as the study's loader passes a block day, with no
   `positive_prices` error in `validate_book`'s report, no price off the tick
@@ -347,7 +347,11 @@ from the block's own rows, and the first `N` minutes from its midnight are
 not scored, `N` being the longest feature lookback (recorded in the
 amendment), whatever days they span; a day stays usable with fewer decision
 rows. Fitted values (the size floors fitted on W, the frozen models and
-thresholds) are not rolling state and are used on every block.
+thresholds) are not rolling state and are used on every block, never
+refitted at a read. Every fitted value that is not a weight (W's size floors
+and normalisers, the tensor's floors, any other fitted constant) is written
+to one file whose sha256 the amendment records, and the H, F and P gates
+check it beside the weights.
 
 Days excluded from every verdict, counted and reported per block: more book
 sequence gaps than `max_sequence_gaps`; a non-positive price, found as a
@@ -357,10 +361,21 @@ finding); a price off the tick grid, which `validate_book` does not check
 (the simulator's day loader, `market_making/events.load_day`, refuses such a
 day under R16, and the study's loader applies the same check to every day,
 taker strategies included); a missing plane (an HTTP 404 only; a failed
-download is retried, never excluded, as the [fetch plan](#fetch-plan) says);
+download is retried, and excluded only under the [fetch
+plan](#fetch-plan)'s two terminal rules);
 a missing funding history; or a day flagged `flatten_stale` (R16: a taker
 order, an exit or the day-end close, that no snapshot followed before the
-book ended walked a snapshot more than 5 s older than the order). **`max_sequence_gaps` is the 95th percentile of D's per-day gap
+book ended walked a snapshot more than 5 s older than the order); a day
+`market_making/events.load_day` refuses (`DayUnavailable`, whatever the
+reason: a funding interval other than 8 h, print sizes or aggressor flags
+outside its contract, no print on the day), for every strategy, taker
+included; or an unreadable archive or unfetchable day ([fetch
+plan](#fetch-plan)). Each is counted by reason. **A day flagged
+`flatten_stale` in any run on the block** (on a held-out block, any run of
+its read session: the true strategy, a placebo draw, a neighbour cell, the
+K-latency re-run, a bracket) is excluded from every series of every
+hypothesis on that block, and is counted once toward unreadability.
+**`max_sequence_gaps` is the 95th percentile of D's per-day gap
 counts, rounded up**, computed by that formula and recorded in the amendment;
 the same value is used on every block. Each verdict is also reported with the
 gap-excluded days included, as a measurement, so that the exclusion cannot
@@ -620,7 +635,12 @@ and nothing else may be chosen after the amendment.
    checkpoint epoch go in the amendment.
 8. **A0 and FILL on O**, the detector's alarm rate on D, σ of the daily
    results and the minimum detectable effects (below).
-9. **The amendment**, committed before H is read, with the study's single
+9. **A dry run of the entry point**, end to end, before the amendment: on
+   D's last 44 days (2025-05-18 to 06-30) standing in for H, and on the three
+   `ob200` reader-test days standing in for F and P. Its outputs are
+   discarded and never reported; it is the reader-test days' one use besides
+   the reader test.
+10. **The amendment**, committed before H is read, with the study's single
    entry point (`experiments/short_horizon_2025.py`), which computes every
    hypothesis, placebo, bracket, neighbourhood cell, tier and status for a
    block in one read session.
@@ -647,7 +667,9 @@ and nothing else may be chosen after the amendment.
   the median day, K1, K-days, the placebos, K-nbhd, σ_D and the minimum
   detectable effect are all computed on the hypothesis's daily series as
   defined above, never on trade rows. `assess` is given one row per day
-  (`cluster="day"`, `series=None`). The degrees of freedom are the number of
+  (`cluster="day"`, `series=None`); a series with fewer than two days is not
+  given to it (`assess` raises on one cluster), fails the bar's day count and
+  enters Holm with p = 1. The degrees of freedom are the number of
   days in the series minus one, per hypothesis and per block.
 - **`gross_bp_turnover`**: gross over turnover (both sides' notional), × 1e4:
   the fee break-even per side. Reported for every strategy against the base
@@ -690,8 +712,8 @@ of these hold on its daily series ([Metrics](#metrics)):
 
 - its one-sided day-level p-value passes Holm's procedure at 5% with
   **m = 3 on every block** (T1, T2, M1). A primary that is killed, void,
-  inconclusive under K-trades, not run or not taken to the block enters with
-  p = 1, so m never shrinks after a result is seen and a result on too few
+  inconclusive under K-trades, not run, not taken to the block, or scored on
+  P only by its mean (R supported) enters with p = 1, so m never shrinks after a result is seen and a result on too few
   trades never moves another primary to a laxer Holm step;
 - the day-level t is at least 3, its degrees of freedom being the days in the
   series minus one;
@@ -774,7 +796,9 @@ confirmed (P unreadable)**.
 
 **R void.** If a later run of the detector does not reproduce an earlier
 run's alarms ([The break detector](#the-break-detector)), R is `void` and read
-as not supported. Found when F is read, `b` does not split F and statuses on
+as not supported. Found when H is read (against D's alarms in the
+amendment), R is void, and F is assessed on all of F, labelled. Found when F
+is read, `b` does not split F and statuses on
 F are computed on all of F, labelled. Found when P is read, F's statuses stand
 as committed, and P is scored with the full bar, R read as not supported.
 
@@ -968,7 +992,10 @@ with the reason, and read as not supported.
 minus its mean on F's usable days after `d`: R is **supported** if the
 hypothesis passes on F−, its mean on F+ is ≤ 0, and Δ(`b`) exceeds the 95th
 percentile of Δ(`d`) over the **reference set**; **not supported**
-otherwise.
+otherwise. For Z, every claim of R and the mean on P are evaluated on both
+of its claims' series (gross, and net at 0/0): R is supported only if every
+claim holds on both, and on P the break persisted only if both means are
+≤ 0.
 
 **The reference set** is every admissible split day `d` of F (at least 20
 usable days before it and at least 10 after; about 58 days), enumerated in
@@ -1088,7 +1115,8 @@ Fixed now, run as the ledger opens each block.
   `detect_breaks` call runs over the whole stream from 2024-12-01 to the last
   hour of the highest opened block, its windows anchored at the stream's
   start. The walk is causal, so each later run must reproduce every alarm of
-  the earlier runs; if it does not, R is void and read as not supported (see
+  the earlier runs, D's as the amendment records them (timestamp and
+  channel) and each block's as its results file records them; if it does not, R is void and read as not supported (see
   "R void" under the status rules).
 - **The mean channel** is read from the `odds_mean` column of the same run,
   against 8.93, and reported. It is not in `statistics`, so it never
@@ -1149,7 +1177,15 @@ fetched**: any failure other than an HTTP 404 (a timeout, a dropped or reset
 connection, another HTTP status, an archive that does not decompress) deletes
 the partial file and is retried with backoff until the day is on disk, and a
 stage is not complete, and nothing is computed on its block, until every such
-day is. Only an HTTP 404 makes a missing plane; a 404 on a day the `HEAD`
+day is on disk or excluded by one of two terminal rules, on every block, W
+and D included. An **unreadable archive**: a day whose archive was downloaded
+completely at least twice with the same sha256 and still does not
+decompress, or whose replay raises on a complete archive (`reconstruct`'s
+"produced no usable book rows", a line the decoder cannot parse); likewise
+for prints. An **unfetchable day**: one whose download still fails after 10
+attempts spread over at least 48 hours. Each is an exclusion, counted per
+block by reason, and counts toward the more-than-a-quarter unreadable rule.
+Only an HTTP 404 makes a missing plane; a 404 on a day the `HEAD`
 check found present is reported as such. Funding and hourly bars follow the
 same rule: a failed request is retried, and only the venue's answer that it
 has no data (an HTTP 404, or an empty funding history) is a missing plane.
@@ -1164,8 +1200,8 @@ its size; a stalled connection does, and is retried.
 | 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8 | 5.9 |
 | 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9 | 3.5 |
 
-**The ledger opens before the fetch.** `open` writes its entry first, and the
-block's fetch then runs under that access; the entry records each fetched
+**The ledger opens before the fetch.** `open` writes its entry first and
+commits and pushes it, and the block's fetch then runs under that access; the entry records each fetched
 file's sha256 and UTC download time. `open` refuses if any book, print,
 funding or hourly-bar file of that block is already on disk, and H's `open`
 also if any hourly bar of E is.
@@ -1197,7 +1233,8 @@ otherwise. The amendment records the measured sizes.
 ## Compute budget
 
 On the machine the market-making rounds ran on (10 cores, 32 GB), with
-8 worker processes (at most 4 for the book replay), each heavy run started under `nohup caffeinate` with its
+8 worker processes by default (a runtime argument the ledger records, not a
+hashed value; at most 4 for the book replay), each heavy run started under `nohup caffeinate` with its
 log in `logs/`.
 
 | Run | Size | Estimate |
@@ -1260,12 +1297,38 @@ E's bars, H, F and P.
 
 - **H** opens only if the amendment records the YAML's sha256, the file on
   disk has it and is committed, the tree is clean, every frozen weight file's
-  sha256 equals the amendment's, and no file of H and no hourly bar of E is
-  already on disk.
-- **A read session** is bound to (block, commit, config sha256). Any number of
-  processes and resumptions at that commit count as the first read; outputs
-  are not inspected until the session writes the block's results file. A
-  resumption at another commit is a second read.
+  sha256 and the fitted-values file's sha256 equal the amendment's, and no
+  file of H and no hourly bar of E is already on disk.
+- **Every open (H, F and P), and the start of every process of a read
+  session**, also require: `git status --porcelain --untracked-files=normal`
+  lists nothing but the ledger file; `git diff --name-only <session's
+  commit>..HEAD` lists nothing but the ledger file (for an open, HEAD is the
+  session's commit); and the **environment fingerprint**, the sha256 of the
+  installed distributions with their versions (`structural-break` at its
+  locked commit included), equals the one H's open entry records.
+- **The open entry is committed and pushed before the block's fetch
+  begins.** It records block, session commit, config sha256, environment
+  fingerprint and UTC time; the fetch's per-file records are committed when
+  the fetch ends, before anything is computed. Every later process of the
+  session, and every later open, refuses unless that entry is in HEAD's
+  history, so a crashed read cannot be erased and opened again.
+- **A read session** is bound to (block, commit, config sha256, environment
+  fingerprint). Any number of processes and resumptions at that commit count
+  as the first read; outputs are not inspected until the session writes the
+  block's results file. A resumption at another commit is a second read. The
+  **worker count** is a runtime argument recorded in the ledger, not part of
+  the configuration's hash; a test shows the entry point's outputs identical
+  at 1 and at N workers, and a resumption may use fewer workers.
+- **A read that cannot finish.** A failed process of a first read is resumed
+  at the same commit. If the same stage fails again with the same exception,
+  or the read has not finished after five resumptions, the session closes by
+  writing the block's results file with every hypothesis `not assessed
+  (<block> read failed)`, the stage reached and the exception. The block is
+  then handled as an unreadable block of the same letter: after H, nothing is
+  taken to F, F is read as measurements at the same commit and P is not
+  read; after F, H's statuses stand, marked "F read failed", and P is not
+  read; after P, as P unreadable. No code changes; a corrected run is a
+  successor registration.
 - **The session closes** by writing the block's statuses and every kill,
   computed by the entry point, to `experiments/results/short_horizon_2025_H.json`
   (`_F.json`, `_P.json` for the later blocks), and that file's sha256 into
@@ -1275,8 +1338,9 @@ E's bars, H, F and P.
   only `README.md` and paths under `experiments/results/` and under `docs/`
   outside `docs/preregistration/` (so the code, the configuration, this
   registration, the tests, the entry point and the lock file are those of the
-  H read), the frozen weights' sha256 still match, and no file
-  of F is on disk. **P** opens on the same conditions against F's read, and
+  H read), the frozen weights' and the fitted-values file's sha256 still
+  match, the conditions above on every open hold, and no file of F is on
+  disk. **P** opens on the same conditions against F's read, and
   only for the hypotheses that qualify.
 - Each first read writes block, commit, config sha256 and UTC time before the
   access is returned; a second read raises unless forced, and everything it
@@ -1303,8 +1367,10 @@ message counts, intervals and gaps; the selected features; for T1, T2 and Z
 the chosen cell with its neighbourhood and the outright peak; M1's signal with
 the D values that chose it; σ of each daily series on D and the minimum
 detectable effects; the A0 and FILL tables on O; the detector's alarm rate on
-D and, if it applies, the declaration that R is untestable; the detector's
-24-value hour-of-day profile fitted on D; the sha256 of
+D, with every alarm's timestamp and channel, and, if it applies, the
+declaration that R is untestable; the detector's 24-value hour-of-day
+profile fitted on D; the sha256 of the fitted-values file
+([Blocks](#blocks)); the sha256 of
 every frozen weight file (one per hold for T1, Z, T2 and the control), every
 threshold and every checkpoint epoch; the entry point, committed with it; the
 compute record, with the replay's measured peak memory and worker count and
@@ -1324,7 +1390,20 @@ further dated amendment that states it and, if it could change a development
 number, re-runs D in full before anything is frozen. After H is read, nothing
 is changed and nothing is re-run under a different rule; the ledger's
 conditions for opening F and P enforce this for the code, the configuration,
-this document and the frozen weights.
+this document, the environment, the frozen weights and the fitted values.
+
+**A defect found after a read can only lower a status.** It is stated in a
+dated note, `docs/short_horizon_2025_defects.md` (under `docs/` and outside
+`docs/preregistration/`, so the F and P gates still pass), which names the
+mechanism by which the defect could raise a result (a look-ahead in the
+executor, a funding sign, a wrongly chosen cell). Every status it could
+affect becomes `void (defect found after the <block> read)`, which counts as
+killed for routing to F and P and enters Holm with p = 1 on later blocks.
+Holm on a block already read is recomputed from its committed results file
+with that p set to 1, and a status may only fall. Later reads still run on
+the unchanged code; their numbers for a voided hypothesis are reported as
+measurements. Nothing can raise a status; a corrected run is a successor
+registration.
 
 **The ledger rule.** Only reads through the ledger count. A number computed on
 H, F or P outside it — in a notebook, a script run by hand, or a second read —
@@ -1489,6 +1568,12 @@ value open, or a proposal was not taken, the choice and its reason:
 - **A0's prediction covers the crossing run** (consistency review, which
   offered covered or excluded): the 0.36 bp is argued above to be an upper
   bound for the recipe, and fill-on-touch is excepted only for its optimism.
+- **Both terminal fetch rules, not one** (review of decisions left until
+  after a read, which offered either): the identical-hash rule ends a corrupt
+  archive, and only the attempt cap ends a download that keeps failing; both
+  count toward the unreadable rule, so neither can quietly thin a block.
+- **The open entry is pushed as well as committed**: a local commit can be
+  reset without trace, a pushed one cannot.
 
 ---
 

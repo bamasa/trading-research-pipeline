@@ -62,7 +62,7 @@ data:
       ob500: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob500.data.zip", present: [2024-12-01, 2025-08-20]}
       ob200: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob200.data.zip", present: [2025-08-21, 2025-12-31]}
     archive_change: 2025-08-21  # no day has both; the H/F boundary was moved onto it
-    ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # outside every block; used for nothing else; never in a successor's blocks
+    ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # outside every block; used for nothing else but the entry point's dry run; never in a successor's blocks
     ob200_reader_test: synthetic ob200 fixture and the reader-test days pass before H is opened; no ob200 day of 2025 fetched before stage 3
     ob200_reader_test_pass: "as the loader passes a block day: no positive_prices error in validate_book's report, no off-grid price, sequence gaps at most D's max_sequence_gaps; every other finding by check and severity recorded in the amendment beside D's; a failure is a reader fault, corrected by amendment before H"
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
@@ -77,7 +77,8 @@ data:
     missing_under_code_pattern: {book_ob500: [2025-08-21, 2025-12-31], prints: none}
     first_and_fifteenth: all prints present; ob500 present to 2025-08-15, absent from 2025-09-01; ob200 present from 2025-09-01
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
-  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended"]
+  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every strategy, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
+  flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every hypothesis on that block and counted once toward unreadability
   max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up; the same value on every block
   max_sequence_gaps: null  # by the rule above; frozen by the D amendment
   unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
@@ -172,6 +173,8 @@ features:
   selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}}
   selected: null  # frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
+  fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, any other fitted constant), in one file; used on every block, never refitted at a read
+  fitted_values_sha256: null  # the sha256 of that file; checked by the H, F and P gates beside the weights; frozen by the D amendment
 
 models:
   boosting: {code: models/gbm.py, classes: 3, hyperparameters: repository defaults, used_by: [T1, A0, Z], missing_class_in_fit: that side's probability is 0 (_align_columns) and it never trades with that model; reported}
@@ -202,6 +205,7 @@ d_procedure:
     models: one per hold in {5, 20, 50} s for T1, Z, T2 and the control
     thresholds: every (hold, trades-a-day) cell of T1 and Z
     covers_every_neighbourhood: true  # K-nbhd on a held-out block runs only frozen files
+  dry_run: "the entry point end to end before the amendment, on D's last 44 days (2025-05-18..06-30) for H and the three ob200 reader-test days for F and P; outputs discarded, never reported"
 
 strategies:
   T1:
@@ -263,7 +267,7 @@ metrics:
   beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10_30s_by_path, spread_plus_adverse_5s, trades_per_day,
            share_days_positive, median_day, max_drawdown, net_usdt_day, funding, every_published_tier, by_side, newey_west_t,
            entries_skipped, entry_late_snapshot, exit_late_snapshot, flatten_beyond_visible_book]
-  significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level}  # series=None, one series
+  significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level, fewer_than_two_days: not given to assess; fails the day count; p = 1}  # series=None, one series
   degrees_of_freedom: days in the daily series minus one, per hypothesis and per block
   newey_west: {kernel: bartlett, lag_days: 5}
   all_calendar_days_scored: true  # no row filtered or reweighted by label, outcome or model state
@@ -276,7 +280,7 @@ metrics:
 
 family: [T1, T2, M1]
 statuses:
-  holm: {alpha: 0.05, sided: one, across: family, m: 3, m_fixed_on_every_block: true, enter_with_p_1: [killed, void, inconclusive under K-trades, not run, not taken to the block], degrees_of_freedom: days in the daily series minus one}
+  holm: {alpha: 0.05, sided: one, across: family, m: 3, m_fixed_on_every_block: true, enter_with_p_1: [killed, void, inconclusive under K-trades, not run, not taken to the block, "scored on P only by its mean (R supported)"], degrees_of_freedom: days in the daily series minus one}
   bar: [no kill, Holm passes with m = 3, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on F (or F-) and on P (M1: usable days)"]
   precedence: ["void (K-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
   void_counts_as_killed: true
@@ -293,13 +297,15 @@ statuses:
     H: "no hypothesis assessed, each recorded as not assessed (H unreadable); nothing taken to F; F read and reported as measurements; P not read; H, F and P spent"
     F: statuses after H stand, marked F unreadable; P not read
     P: "statuses after F stand, marked P unreadable: a candidate that passed on F is candidate, not confirmed (P unreadable), whatever R showed; one first significant on F is exploratory: significant on F, not confirmed (P unreadable)"
-  R_void: "a later detector run does not reproduce an earlier run's alarms; R read as not supported; found at F's read, b does not split F (all of F, labelled); found at P's read, F's statuses stand and P is scored with the full bar"
+  R_void: "a later detector run does not reproduce an earlier run's alarms (D's as the amendment records them, each block's as its results file does); R read as not supported; found at H's read, F assessed on all of F, labelled; found at F's read, b does not split F (all of F, labelled); found at P's read, F's statuses stand and P is scored with the full bar"
   not_taken_to_F: F reported as one whole block, never split at b
+  read_failed: "a first read that fails again at the same stage with the same exception after a resumption at the same commit, or is unfinished after five resumptions, closes with every hypothesis not assessed (<block> read failed), the stage reached and the exception; then as an unreadable block of the same letter (H: nothing taken to F, F read as measurements at the same commit, P not read; F: H's statuses stand, marked F read failed, P not read; P: as P unreadable); no code change"
+  defect_after_read: "stated in a dated note, docs/short_horizon_2025_defects.md, naming the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read), counted as killed for routing and p = 1 in Holm on later blocks; Holm on a block already read recomputed from its committed results file with that p = 1; a status may only fall; later reads run on unchanged code and report it as measurements"
   measurements_never_described_as_working: [any fee tier other than base, any non-default fill rule or exit, F for a hypothesis not taken to F]
   outcomes:
-    after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, not run, "not assessed (H unreadable)"]
-    after_F_and_P: [confirmed, "candidate, not confirmed", confirmed until the break, "candidate; the break did not last", "confirmed on P, first significant on F", "exploratory: significant on F", "exploratory: significant on F, not confirmed", inconclusive, killed on F, killed on P, void]
-    marks: [assessed on all of F, F unreadable, P unreadable, "conditional on a zero-fee venue (Z)"]
+    after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, not run, "not assessed (H unreadable)", "not assessed (H read failed)", "void (defect found after the H read)"]
+    after_F_and_P: [confirmed, "candidate, not confirmed", confirmed until the break, "candidate; the break did not last", "confirmed on P, first significant on F", "exploratory: significant on F", "exploratory: significant on F, not confirmed", inconclusive, killed on F, killed on P, void, "void (defect found after the <block> read)"]
+    marks: [assessed on all of F, F unreadable, P unreadable, F read failed, P read failed, "conditional on a zero-fee venue (Z)"]
   Z: {family: none, alpha: 0.0125, sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
 
 kill_conditions:
@@ -341,6 +347,7 @@ hypotheses:
     statistic: Delta(d) = mean of the daily series on F's usable days before d minus its mean on those after d
     claims: [passes on F-, mean daily series on F_plus <= 0, Delta(b) above the 95th percentile of Delta(d) over the reference set]
     supported: all three claims hold
+    Z_series: every claim and the P mean evaluated on both of Z's claims' series (gross, net at 0/0); supported only if every claim holds on both; on P the break persisted only if both means are <= 0
     when_F_minus_fails: Delta(b) reported with its percentile among all admissible days, as a measurement
     untestable: [no alarm in F, fewer than 20 usable days before b or fewer than 10 after, alarm rate on D above one per 14 days, fewer than 20 days in the reference set]
     untestable_reads_as: not supported
@@ -378,6 +385,8 @@ detector:
   alarm_rate_D_optimistic: true  # hour profile fitted on D itself; thresholds calibrated on Gaussian null paths; disclosed, not corrected
   hour_profile: null  # 24 values fitted on D; frozen by the D amendment
   alarm_rate_D: null  # alarms over 2025-01-01..06-30; frozen by the D amendment
+  alarms_D: null  # timestamp and channel of every alarm over 2025-01-01..06-30, for the reproduction check; frozen by the D amendment
+  alarms_recorded: each block's run's alarms, with timestamp and channel, in that block's results file
   r_untestable_declared: null  # true or false; frozen by the D amendment
   reported_beside:
     changepoint: {code: validation/changepoint.py detect, grid: "data/grid.to_grid, 1 s, label right", window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, runs: [continuous over D, restarted on 2025-07-08, continuous over H, restarted on 2025-08-21, continuous from F through P], label_within_one_day_of: 2025-08-21}
@@ -386,7 +395,10 @@ detector:
 fetch:
   via: this study's fetch (new code, on data/ensure.py's pattern)  # only missing days; archives not kept after the replay
   replay: {code: data/bybit.reconstruct, unchanged: true, workers_max: 4, workers_rule: "fewer if 4 x the peak RSS of one replayed day exceeds 24 GB", peak_rss_measured: before stage 1 on a 2024 day already replayed by the repository, recorded_in: the amendment}
-  failures: {every_day_present_in_head_check: fetched, other_than_http_404: partial file deleted and retried with backoff until on disk, stage_complete: only when every such day is on disk, missing_plane: HTTP 404 only, funding_and_bars: same rule; an empty funding history is a missing plane}
+  failures: {every_day_present_in_head_check: fetched, other_than_http_404: partial file deleted and retried with backoff until on disk or excluded by a terminal rule, stage_complete: only when every such day is on disk or excluded by a terminal rule,
+             unreadable_archive: "downloaded completely at least twice with the same sha256 and still not decompressing, or a replay that raises on a complete archive; likewise prints", unfetchable_day: download still failing after 10 attempts over at least 48 hours,
+             terminal_rules_apply_to: [W, D, H, F, P], terminal_exclusions: counted per block by reason and toward the unreadable rule,
+             missing_plane: HTTP 404 only, funding_and_bars: same rule; an empty funding history is a missing plane}
   disk:
     free_gb_at_registration: 121
     feature_store: {dtype: float32, format: one zstd parquet per day, holds: model inputs only, budget_mb_per_day: 250}  # labels, gate walk cost and fills from the book's float64 prices
@@ -403,7 +415,7 @@ fetch:
   E_book_prints_funding_fetched: false
 
 compute:
-  machine: {cores: 10, memory_gb: 32, workers: 8, replay_workers_max: 4}
+  machine: {cores: 10, memory_gb: 32, workers: "a runtime argument, 8 by default, recorded in the ledger; outputs identical at 1 and N workers (tested); a resumption may use fewer", replay_workers_max: 4}
   download_gb: {stage_1: 91.3, stage_2: 13.5, stage_3: 21.7, stage_4: 13.4}  # archives, from the HEAD sums
   launch: nohup caffeinate, log in logs/
   R_reference_set: about 58 split days per candidate, slices of per-day values computed on F; minutes, inside F's read session
@@ -416,11 +428,14 @@ access:
   ledger_guards: [E hourly bars, H, F, P]
   block_constants: this study's own; round one's block_of not used
   entry_point: experiments/short_horizon_2025.py  # committed with the amendment; one read session computes everything for a block
-  H: [amendment records the YAML sha256, the file has it and is committed, tree clean, every frozen weight file's sha256 equals the amendment's, no H file and no E hourly bar on disk]
-  read_session: {bound_to: [block, commit, config sha256], resumptions_at_that_commit: first read, outputs_inspected: only after the results file is written, resumption_at_another_commit: second read}
+  H: [amendment records the YAML sha256, the file has it and is committed, tree clean, every frozen weight file's sha256 and the fitted-values file's sha256 equal the amendment's, no H file and no E hourly bar on disk]
+  every_open_and_every_process: ["git status --porcelain --untracked-files=normal lists nothing but the ledger file", "git diff --name-only <session's commit>..HEAD lists nothing but the ledger file", the environment fingerprint equals H's open entry's, the block's open entry is in HEAD's history]
+  environment_fingerprint: sha256 of the installed distributions with their versions, structural-break at its locked commit included; recorded in H's open entry
+  open_entry: committed and pushed before the block's fetch begins; records block, session commit, config sha256, environment fingerprint and UTC time; the fetch's per-file records committed when the fetch ends, before anything is computed
+  read_session: {bound_to: [block, commit, config sha256, environment fingerprint], resumptions_at_that_commit: first read, outputs_inspected: only after the results file is written, resumption_at_another_commit: second read, failure: statuses.read_failed}
   results_files: {H: experiments/results/short_horizon_2025_H.json, F: experiments/results/short_horizon_2025_F.json, P: experiments/results/short_horizon_2025_P.json}
   session_closes: the results file, statuses and every kill computed by the entry point, is written and its sha256 entered in the block's ledger entry
-  F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only README.md and paths under experiments/results/ and under docs/ outside docs/preregistration/", frozen weights' sha256 match, no F file on disk]
+  F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only README.md and paths under experiments/results/ and under docs/ outside docs/preregistration/", frozen weights' and the fitted-values file's sha256 match, every_open_and_every_process holds, no F file on disk]
   P: [the same conditions against F's read, for the hypotheses that qualify]
   second_read: raises unless forced; stamped second read; cannot change a status
   earlier_accesses_used: false  # neither round one's nor round two's; pipeline/execution's market-maker path (round one's access_for) not used
@@ -429,6 +444,6 @@ access:
 amendment:
   planned: 1
   before: the read of H
-  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D and any untestable declaration, the detector's 24-value hour-of-day profile fitted on D, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, "the compute record, with the replay's peak memory and worker count and the feature store's size", fits that lacked a class with the side, the frozen YAML sha256]
+  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, "the compute record, with the replay's peak memory and worker count and the feature store's size", fits that lacked a class with the side, the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment
