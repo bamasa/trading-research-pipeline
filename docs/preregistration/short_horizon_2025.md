@@ -502,7 +502,20 @@ quietly favour a result.
 - **The ten-level tensor**: 40 columns, each level's price distance from the
   touch over a rolling σ with a spread floor, and each level's size z-scored
   against a floor fitted on W only.
-- Every feature passes `validation/leakage.py` before any D run (K-leak).
+- **Prints are aligned backward**: a print belongs to the first row stamped
+  at or after it, so row `t` holds the prints in (s_{t−1}, s_t], s being the
+  row stamps (`searchsorted(..., side="left")`, the rule of
+  `features/align.py`). `features/flow.align_to_grid` puts a print into the
+  last row stamped at or before it, which on `reconstruct`'s event-time rows
+  gives row `t` the prints after its stamp; it is not used as it stands. The
+  existing flow features and the 2025 trade-plane features (inter-trade time
+  included) use the backward rule.
+- Every feature passes `validation/leakage.py` before any D run (K-leak). The
+  depth and flow builders, which are frame builders outside the registry,
+  are wrapped as registered features with declared lookbacks, so that the
+  checker, the purge and `N` cover them. For trade-plane features the
+  checker cuts the prints at a time strictly inside a row interval, not at a
+  row, and the streaming-parity test compares values at each decision stamp.
   Every gate input is in basis points computed from prices, never a
   normalised column (K-units).
 - **Selection**: `features/selection.py`, once, on D's January, from the
@@ -727,7 +740,8 @@ status:
 
 1. **void** — K-leak, K-units, K-acct or K-cap fires; counted as killed.
 2. **inconclusive (too few trades)** — K-trades: fewer than 100 trades over
-   the block (round trips for T1 and T2; fills for M1 and Z). Nothing below
+   the block (round trips for T1 and T2; entries with any fill, that is round
+   trips, for M1 and Z). Nothing below
    is evaluated.
 3. **killed** — any kill condition fires. Rejection needs no significance.
 4. **candidate** (on H) or **passes** (on F and P) — the bar is met.
@@ -873,7 +887,9 @@ Kill conditions:
 Not kills, but they set the status:
 
 - **K-trades** — fewer than 100 trades over the block (round trips for T1
-  and T2; fills for M1 and Z) makes the result inconclusive whatever its sign; it
+  and T2; entries with any fill, that is round trips, for M1 and Z; not the
+  simulator's fill rows, which count partial fills and taker exits) makes the
+  result inconclusive whatever its sign; it
   is applied before any kill (the precedence above).
 - **K-MDE** — a result that does not pass, with no kill, and is smaller in
   size than the MDE is "inconclusive, below the minimum detectable effect".
@@ -905,6 +921,16 @@ strategy, on the same block.
 | all-long, all-short | the same entry times, one direction (K-drift) | T1, T2, M1, Z | — |
 | control model | the network trained on the control label; its IC against its own label and against the realised move, reported beside K-label | T2 | the training seed |
 | other break dates | `b` replaced by every admissible split day of F (at least 20 usable days before it, at least 10 after), enumerated in full; the reference set keeps those at which the hypothesis also passes on the days before them | R | none; enumerated |
+
+**Placebo positions.** Each placebo runs on the true strategy's entry
+decision times with its own one-position state. A decision time at which the
+placebo is still in a position, or has an entry resting, is skipped and
+counted; the skip counts are reported beside K-placebo and K-drift. For T1
+and T2 nothing is skipped, since a taker exit's time does not depend on the
+direction; for M1 and Z a placebo order fills at other times than the true
+one, or not at all, so it may still be busy at the next one. **The one-day
+shift** gives each usable day the signal tape of the previous usable day,
+circularly over the block's usable days, so it steps over excluded days.
 
 ---
 
@@ -1264,7 +1290,9 @@ The pull requests that follow this one add, before stage 1:
 - the ported pieces (the tensor, the microstructure set, the walked-book
   label, the Gaussian head, the hold-first rule, the EV gate, the fill-rule
   comparison), each under the leakage checker and with streaming-versus-batch
-  parity tests;
+  parity tests; the depth and flow builders wrapped as registered features
+  with declared lookbacks, and prints aligned backward
+  ([Labels, features and models](#labels-features-and-models));
 - the `ob200` archive name in `data/bybit.py`, proven on a synthetic fixture
   before stage 1, and on the three reader-test days, against D's frozen
   `max_sequence_gaps`, before H is opened ([Data](#data)); and the daily-only

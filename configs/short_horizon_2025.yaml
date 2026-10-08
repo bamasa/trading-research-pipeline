@@ -168,7 +168,8 @@ features:
   added_2025: [volatility_1s, return_sign_autocorrelation, turn_count, run_length, inter_trade_time, level0_lag_logs]
   tensor: {columns: 40, levels: 10, price: distance from touch over rolling sigma with spread floor, size: z-scored against floors fitted on W}
   winsorising: trailing quantiles only
-  leakage_check: validation/leakage.py, every feature, before any D run
+  leakage_check: "validation/leakage.py, every feature, before any D run; depth and flow builders wrapped as registered features with declared lookbacks (covered by the purge and N); for trade-plane features the prints cut at a time strictly inside a row interval, and streaming parity compared at each decision stamp"
+  print_alignment: "backward: a print belongs to the first row stamped at or after it, row t holds prints in (s_t-1, s_t] (side=left, as features/align.py); features/flow.align_to_grid as it stands not used"
   gate_inputs: basis points from prices only
   selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}}
   selected: null  # frozen by the D amendment
@@ -282,7 +283,7 @@ family: [T1, T2, M1]
 statuses:
   holm: {alpha: 0.05, sided: one, across: family, m: 3, m_fixed_on_every_block: true, enter_with_p_1: [killed, void, inconclusive under K-trades, not run, not taken to the block, "scored on P only by its mean (R supported)"], degrees_of_freedom: days in the daily series minus one}
   bar: [no kill, Holm passes with m = 3, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on F (or F-) and on P (M1: usable days)"]
-  precedence: ["void (K-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
+  precedence: ["void (K-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades: round trips; for M1 and Z entries with any fill); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
   void_counts_as_killed: true
   not_run: no admissible cell on D; enters Holm with p = 1
   taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (Z: both claims' means positive)"]  # inconclusive (too few trades), step 2, is not taken to F whatever its sign
@@ -313,7 +314,7 @@ kill_conditions:
   kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency]
   passive_only: [K-queue]  # M1 and Z
   reported_not_kill: {fill_decomposition: "spread + adverse(5 s) and the rest, for M1 and Z (round one's K-dir)"}
-  status_only: {K-trades: 100, K-trades_counts: "round trips for T1 and T2; fills for M1 and Z", K-MDE: "below the minimum detectable effect, only when no kill fired"}
+  status_only: {K-trades: 100, K-trades_counts: "round trips for T1 and T2; entries with any fill (round trips) for M1 and Z, not the simulator's fill rows", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
   K-days_share_positive_max: 0.5  # half or fewer positive days of the daily series kills
   K-nbhd: {statistic: median over the neighbourhood's cells of the daily series' mean, kills_at_or_below: 0, neighbourhood: as d_procedure.choice.neighbourhood, cell_without_trade_scores: 0, runs_only: the frozen files whose sha256 the amendment records}
@@ -328,9 +329,10 @@ placebo_percentile: 95
 placebos:
   sign_flipped: {used_by: [T1, T2, M1, Z]}
   random_direction: {used_by: [T1, T2, M1, Z], draws: 200, seeds: [0, 199]}
-  one_day_shift: {used_by: [T1, T2, M1, Z], circular_within_block: true}
+  one_day_shift: {used_by: [T1, T2, M1, Z], circular_within_block: true, source: "the previous usable day, stepping over excluded days"}
   stale: {used_by: [M1, Z], delay: one hold}
   all_long_all_short: {used_by: [T1, T2, M1, Z]}  # K-drift
+  positions: each placebo on the true strategy's entry decision times with its own one-position state; a decision time at which it is in a position or has an entry resting is skipped and counted; skip counts reported beside K-placebo and K-drift
   control_model: {used_by: [T2], reported: IC against its own label and against the realised move}
   other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the hypothesis also passes on F's days before them, min_reference_days: 20,
                        evaluated_at_each_d: "the whole bar, kills and Holm included, on F's usable days before d as on F-; other primaries taken to F evaluated there the same way, p = 1 where killed, void or inconclusive under K-trades there, or not taken to F; K-trades counts trades before d",
