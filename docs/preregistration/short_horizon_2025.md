@@ -270,7 +270,8 @@ instead of inside a block. Its consequences:
 - F and P use D's frozen `max_sequence_gaps` (below), never a value set on
   `ob200` days. If more than a quarter of a held-out block's days are
   excluded, that block is reported as **unreadable**, nothing is retuned, and
-  no status changes on it;
+  no status changes on it (the [status rules](#status-rules-family-of-three-primaries-t1-t2-m1)
+  say what follows for H, F and P);
 - the downloader records each F and P day's message count, median interval
   and sequence gaps only inside that block's opened access, as it records
   row counts;
@@ -665,9 +666,10 @@ and nothing else may be chosen after the amendment.
 of these hold on its daily series ([Metrics](#metrics)):
 
 - its one-sided day-level p-value passes Holm's procedure at 5% with
-  **m = 3 on every block** (T1, T2, M1). A primary that is killed, void, not
-  run or not taken to the block enters with p = 1, so m never shrinks after a
-  result is seen;
+  **m = 3 on every block** (T1, T2, M1). A primary that is killed, void,
+  inconclusive under K-trades, not run or not taken to the block enters with
+  p = 1, so m never shrinks after a result is seen and a result on too few
+  trades never lowers another primary's step;
 - the day-level t is at least 3, its degrees of freedom being the days in the
   series minus one;
 - the Newey–West t is at least 2;
@@ -693,8 +695,8 @@ A primary with no admissible cell on D is `not run`.
 **F.** With `b` the first alarm of the frozen detector in F, F− is F's usable
 days before the alarm's day and F+ its usable days after it; the alarm's own
 day is in neither. **Statuses on F, kills included, are computed on F−** when
-there is an alarm in F, F− has at least 20 usable days, and R was not declared
-untestable on D. Otherwise they are computed on all of F, labelled "assessed
+there is an alarm in F, F− has at least 20 usable days, R was not declared
+untestable on D, and R is not void (below). Otherwise they are computed on all of F, labelled "assessed
 on all of F", and F is not split. F+ enters only R. Taken to F: every
 candidate, and every hypothesis inconclusive on H with a positive mean (for Z,
 both claims positive).
@@ -714,8 +716,11 @@ both claims positive).
 
 "Passes" on F and P is the bar above, with m = 3. "R untestable" and "R not
 tested" are read as "not supported". For a hypothesis with R supported, P is
-scored only as mean ≤ 0 (the break persisted) or > 0 (it did not last), and
-no kill condition is applied to it on P. A hypothesis that is `candidate`
+scored only as mean ≤ 0 (the break persisted) or > 0 (it did not last):
+neither K-trades nor any kill condition is applied to it on P, but the void
+conditions are (a void result on P is `void`), and a P series without a day
+with a trade has mean 0, as a neighbour cell without a trade scores 0 in
+K-nbhd, so it reads as the break persisted. A hypothesis that is `candidate`
 after H keeps that status whatever F and P show unless a kill fires there; the
 later reads add to it. **A hypothesis first significant on F gets no second
 route to candidacy**: it is "exploratory: significant on F" until P, which is
@@ -723,14 +728,28 @@ its only confirmatory test; R is not tested for it, and the README never calls
 it a candidate.
 
 P is read once, after F's results are committed, only for hypotheses that
-passed on F with at least 20 usable days in the series they were assessed on.
-F is read once, after H's results are committed, whatever H's outcome: its
+passed on F. F is read once, after H's results are committed, whatever H's outcome: its
 detector alarms and every frozen strategy's numbers on F are reported as
 measurements even when nothing is taken there. **For a hypothesis not taken
-to F, F is reported as one whole block, never split at `b`.** If F is
-unreadable (more than a quarter of its days excluded), statuses after H stand,
-marked "F unreadable", and P is not read. Every comparison from H into F
-crosses the archive change and is labelled so.
+to F, F is reported as one whole block, never split at `b`.** Every
+comparison from H into F crosses the archive change and is labelled so.
+
+**An unreadable block** (more than a quarter of its days excluded,
+[Blocks](#blocks)) changes no status. If H is unreadable, no hypothesis is
+assessed: each is recorded as `not assessed (H unreadable)`, nothing is taken
+to F, F is still read and reported as measurements, P is not read, and H, F
+and P are spent all the same. If F is unreadable, statuses after H stand,
+marked "F unreadable", and P is not read. If P is unreadable, each hypothesis
+read on P keeps its status after F, marked "P unreadable": a candidate that
+passed on F is **candidate, not confirmed (P unreadable)**, whatever R showed,
+and one first significant on F is **exploratory: significant on F, not
+confirmed (P unreadable)**.
+
+**R void.** If a later run of the detector does not reproduce an earlier
+run's alarms ([The break detector](#the-break-detector)), R is `void` and read
+as not supported. Found when F is read, `b` does not split F and statuses on
+F are computed on all of F, labelled. Found when P is read, F's statuses stand
+as committed, and P is scored with the full bar, R read as not supported.
 
 **No number at a fee tier other than the base, under a non-default fill rule
 or exit, or on F for a hypothesis not taken to F, may be described as the
@@ -1026,7 +1045,8 @@ Fixed now, run as the ledger opens each block.
   `detect_breaks` call runs over the whole stream from 2024-12-01 to the last
   hour of the highest opened block, its windows anchored at the stream's
   start. The walk is causal, so each later run must reproduce every alarm of
-  the earlier runs; if it does not, R is void.
+  the earlier runs; if it does not, R is void and read as not supported (see
+  "R void" under the status rules).
 - **The mean channel** is read from the `odds_mean` column of the same run,
   against 8.93, and reported. It is not in `statistics`, so it never
   re-anchors the walk and never defines `b`.
@@ -1392,11 +1412,22 @@ value open, or a proposal was not taken, the choice and its reason:
   and the snapshot walked is never older than the order. Reading it as "the
   next snapshot comes more than 1 s late" would make a trade depend on the
   feed after the decision, at the feed gaps where a skip would select most.
+- **P is read for every hypothesis that passed on F**, without the earlier
+  "at least 20 usable days" condition: counted in calendar days it always
+  held, and counted in days with a trade it left a hypothesis that passed on
+  F with 10 to 19 such days without a status; the bar on F already asks for
+  10.
+- **A primary inconclusive under K-trades enters Holm with p = 1**: its
+  p-value is not evaluated, and a small one would otherwise move another
+  primary to a laxer step.
+- **With R supported, an empty P series has mean 0**, as a neighbour cell
+  without a trade scores 0 in K-nbhd: a strategy that does not trade after
+  the break has not paid after it.
 
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`f1abba61b2fa1c3ed91c0e13001c2a9a8beb9ee1f4f9b725cd387220c94105be`.
+`e8064fa3279d8e380192f87a398173e397d9cb8c52a2ba12a1dbf878daf542dd`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and
