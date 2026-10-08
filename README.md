@@ -1257,7 +1257,9 @@ turnover, against a cheapest published Bybit taker fee of 1.5 bp.
       then checked against the code it names: T2 trades one clip (Kelly
       sizing cannot size its gate), a failed download is retried rather than
       excluded, and the replay and feature store fit the machine's memory and
-      disk
+      disk; then checked once more for consistency: every horizon measured on
+      row stamps, a status for an unreadable block and a void break test, and
+      late snapshots counted rather than skipped
 - [ ] The ported pieces: ten-level tensor, walked-book label, Gaussian head
       with a lazy window dataset, EV gate, an event-time taker executor and a
       signal-entry quoter, fill-rule comparison, streaming parity, the

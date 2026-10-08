@@ -7,7 +7,7 @@ agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read, after three reviews (peeking, multiplicity, feasibility); the choices the reviews left open are under [Choices and their reasons](#choices-and-their-reasons) |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read, after three reviews (peeking, multiplicity, feasibility) and a final consistency check; the choices the reviews left open are under [Choices and their reasons](#choices-and-their-reasons) |
 | **What it registers** | A re-run, on Bybit's public BTCUSDT archives, of the short-horizon order-book research the author did in 2025: the blocks, the data and its coverage, the labels, models and strategies, what is searched on the development block, hypotheses T1, T2, M1, Z and R with their metrics, kill conditions and placebos, the measurements A0 and FILL, the break detector, the status rules, the fetch plan, the compute budget and the amendment protocol |
 | **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 7 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
 | **How it changes** | Only under the [amendment protocol](#amendment-protocol): dated amendments appended at the end. One amendment is planned, after the development-period runs and before the held-out block is read |
@@ -1336,7 +1336,8 @@ hypothesis: F is still read and reported, but nothing is taken to P.
 ## Choices and their reasons
 
 The registration was reviewed three times before it was merged and before any
-data was read, for peeking, for multiplicity and for feasibility. Every
+data was read, for peeking, for multiplicity and for feasibility, and the
+revision was checked once more for consistency. Every
 blocking and should-fix point was taken in, and the notes where they
 pointed to a gap. Where the reviews proposed different fixes, a fix left a
 value open, or a proposal was not taken, the choice and its reason:
@@ -1459,7 +1460,9 @@ The configuration as registered, with every placeholder `null`, has sha256
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and
 `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262` before the
-feasibility review's later points; they do not count.)
+feasibility review's later points and
+`6d35940bc3e4845b30056daaf60887d01dbf2c6e6ddbb361ff8ab3ecd1fec1f5` before the
+final consistency check; they do not count.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, as the earlier rounds' loaders do.
 
