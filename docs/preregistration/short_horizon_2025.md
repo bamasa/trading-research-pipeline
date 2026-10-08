@@ -20,8 +20,8 @@ unless this document says otherwise. Names that do not exist on `main` at
 Gaussian-head network and its lazy window dataset, the hold-first rule, the EV
 gate, the event-time taker executor, the signal-entry quoter and the fixed
 `clip_btc` setting of the simulator, the fill-rule comparison, the Newey–West
-day-level t, the daily-only fetch of hourly bars, this study's loader, ledger
-and single entry point — refer to code added by the pull
+day-level t, the daily-only fetch of hourly bars, this study's fetch, feature
+store, loader, ledger and single entry point — refer to code added by the pull
 requests that follow this one. The code they re-type from the author's 2025
 research comes in under [`docs/disclosure_policy.md`](../disclosure_policy.md);
 none of that work's data, model weights, fee terms, internal paths or tuned
@@ -999,8 +999,20 @@ Fixed now, run as the ledger opens each block.
 ## Fetch plan
 
 Nothing below has been fetched. Sizes are the archives' own, summed from the
-`HEAD` requests. Every archive goes through `data/ensure.py`, which fetches
-only missing days and keeps no archive after the replay.
+`HEAD` requests. Every archive goes through this study's fetch (new code, on
+the pattern of `data/ensure.py`: only missing days are fetched, and no
+archive is kept after its replay).
+
+**Replay workers.** `data/ensure.ensure_book` replays one day at a time
+(`workers=1`), which would take W and D about 8–14 hours. Running
+`data/bybit.download_range` with more workers runs out of memory instead:
+`reconstruct` holds a day's rows as Python dictionaries until the day ends, at
+most 864,000 rows (one per 100 ms) of about 5.5 KB each, so 5–6 GB per worker
+at peak. The fetch therefore replays books with **at most 4 worker
+processes**, fewer if four times the peak resident memory of one replayed day
+exceeds 24 GB. That peak is measured before stage 1 on a 2024 day the
+repository has already replayed (a day's row count, not its archive's size,
+sets it) and recorded in the amendment. The replay itself is unchanged.
 
 | Stage | When | What | Book archives (GB) | Print archives (GB) |
 |---|---|---|---:|---:|
@@ -1015,22 +1027,40 @@ file's sha256 and UTC download time. `open` refuses if any book, print,
 funding or hourly-bar file of that block is already on disk.
 
 E's book, prints and funding are never fetched; its hourly bars are fetched
-with H's. At most about 0.4 GB of archive is on disk at once per
-worker. Replayed at ten levels, a BTCUSDT day took about 35 MB in the 2024
-books, so W and D take about 7 GB and the whole year about 14 GB; prints add a
-few GB.
+with H's. At most one archive per worker is on disk at once; the largest book
+archive of W and D is 0.92 GB (the median 0.34 GB), so under 4 GB with four
+workers. Replayed at ten levels, a BTCUSDT day took about 35 MB in the 2024
+books, so W and D take about 7 GB and the whole year about 14 GB. The print
+archives come to 26.8 GB for the year, and the parquet written from them is
+budgeted at the same size.
+
+**Disk.** 121 GB were free on the machine when this was registered. The
+feature store holds model inputs only, **as float32, one zstd-compressed
+parquet file per day**; labels, the gate's walk cost and every fill are
+computed from the book's float64 prices, never from the store. At about
+864,000 rows and about 100 columns a day is about 345 MB before compression,
+budgeted at 250 MB: about 53 GB for W and D, 11 GB for H and 33 GB for F and
+P. With the books, the prints and the archives in flight, keeping everything
+would need about 140 GB, so **W's and D's features are deleted after H's
+results are committed and before stage 3**; no later read uses them (F and P
+run only frozen models), and they can be rebuilt from the books. Before each
+stage, the fetch checks that free disk exceeds the stage's budget (its
+archives in flight, books, prints and features) by 10 GB, and refuses to start
+otherwise. The amendment records the measured sizes.
 
 ---
 
 ## Compute budget
 
 On the machine the market-making rounds ran on (10 cores, 32 GB), with
-8 worker processes, each heavy run started under `nohup caffeinate` with its
+8 worker processes (at most 4 for the book replay), each heavy run started under `nohup caffeinate` with its
 log in `logs/`.
 
 | Run | Size | Estimate |
 |---|---|---|
-| Replay W and D | 212 days at 2–3 minutes a day (the 2025 archives are larger than the 90 s measured on 2024's) | 1–2 hours |
+| Download, stage 1 | 91.3 GB of archives (76.0 book, 15.3 print) | 0.5–2.5 hours at 10–50 MB/s, overlapping the replay |
+| Replay W and D | 212 days at 2–3 minutes of replay and up to a minute of download a day (the 2025 archives are larger than the 90 s measured on 2024's), on at most 4 workers | 3–4 hours |
+| Download and replay, stages 2–4 | H 13.5 GB (44 days), F 21.7 GB (88 days), P 13.4 GB (45 days) | about 1, 2 and 1 hours |
 | Features W and D | 212 days | 2–4 hours |
 | Boosting (T1, Z, A0) | 3 holds × 5 folds + 3 frozen fits, each for T1 and Z, plus A0 | 4–10 hours |
 | Network (T2, control) | 3 holds × 5 folds + 3 frozen fits, plus the control | 8–24 hours |
@@ -1059,6 +1089,10 @@ The pull requests that follow this one add, before stage 1:
 - the event-time taker executor, the simulator's signal-entry quoter and
   fixed `clip_btc` setting, the lazy window dataset, and the Newey–West t in
   `evaluation/significance.py`;
+- **this study's fetch and feature store** ([fetch plan](#fetch-plan)): the
+  book replay on at most 4 workers with its measured peak memory, the float32
+  per-day feature store, the disk check before each stage, and the deletion of
+  W's and D's features before stage 3;
 - **this study's loader, ledger and single entry point**, on the pattern of
   `market_making/round2.py`, with block constants of its own (round one's
   `block_of` is not used): the YAML validated against this registration,
@@ -1233,6 +1267,13 @@ different fixes, or a fix left a value open, the choice and its reason:
   with that series' usable days, rather than H's 44, so that the label on a
   later block describes the days it has. Its formula on H was already
   `(3 + 0.84) × σ_D / √n_eff`, as the feasibility review asked.
+- **At most 4 replay workers**, rather than a replay that writes rows into
+  preallocated arrays (feasibility review): the replay stays the code that
+  wrote the 2024 books, and the cost is a few hours of wall time.
+- **A float32 per-day feature store**, rather than features computed afresh
+  on each run: every walk-forward fold and every cell reads the same D days
+  again, and the store's 250 MB a day fits the disk once W's and D's features
+  are deleted after H's results; float64 would not fit.
 - **No 2026 confirmation block is registered here.** P begins after every
   dated entry of the 2025 research, so it is fresh for the recipes; a
   confirmation on 2026 data needs its own registration, which the
@@ -1242,7 +1283,7 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`7f2ad25382770bedeb9ba4d0ad893b27058126bb382ce3022f24e1983046f3df`.
+`d08297f0e13951d48afc8a85ebcca202ae8c3f47fa4fc8d5d42a60ce55e5e616`.
 (Earlier drafts, written before the reviews were applied in full and never
 merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they

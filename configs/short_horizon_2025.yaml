@@ -363,7 +363,13 @@ detector:
     earlier_daily_run: experiments/results/structural_breaks_BTCUSDT_breaks.csv  # public before this registration
 
 fetch:
-  via: data/ensure.py  # only missing days; archives not kept after the replay
+  via: this study's fetch (new code, on data/ensure.py's pattern)  # only missing days; archives not kept after the replay
+  replay: {code: data/bybit.reconstruct, unchanged: true, workers_max: 4, workers_rule: "fewer if 4 x the peak RSS of one replayed day exceeds 24 GB", peak_rss_measured: before stage 1 on a 2024 day already replayed by the repository, recorded_in: the amendment}
+  disk:
+    free_gb_at_registration: 121
+    feature_store: {dtype: float32, format: one zstd parquet per day, holds: model inputs only, budget_mb_per_day: 250}  # labels, gate walk cost and fills from the book's float64 prices
+    check_before_each_stage: free disk exceeds the stage's budget (archives in flight, books, prints, features) by 10 GB, or the stage refuses
+    delete_W_and_D_features: after H's results are committed, before stage 3
   ledger_opens_first: true  # the open is recorded, then the block's fetch runs under that access
   ledger_records: sha256 and UTC download time of every fetched file
   open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block
@@ -375,7 +381,8 @@ fetch:
   E_book_prints_funding_fetched: false
 
 compute:
-  machine: {cores: 10, memory_gb: 32, workers: 8}
+  machine: {cores: 10, memory_gb: 32, workers: 8, replay_workers_max: 4}
+  download_gb: {stage_1: 91.3, stage_2: 13.5, stage_3: 21.7, stage_4: 13.4}  # archives, from the HEAD sums
   launch: nohup caffeinate, log in logs/
   record: null  # measured times and peak memory; frozen by the D amendment
 
