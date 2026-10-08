@@ -4,7 +4,8 @@
 # docs/preregistration/short_horizon_2025.md is the other half: it says what
 # each value means and why it was chosen. The two were committed together on
 # 8 October 2026, before any 2025 book, print, hourly bar or funding file was
-# fetched. They must agree.
+# fetched, and revised together the same day after three reviews (peeking,
+# multiplicity, feasibility), still before any data was read. They must agree.
 #
 # Every value here is fixed now, except those set to null with the comment
 # "frozen by the D amendment". Those are chosen on block D by the
@@ -34,11 +35,14 @@ computed_before_registration: none  # no 2025 book, print, hourly bar or funding
 prior_information:
   - the author's 2025 research code and summaries, cited only to set predictions
   - original gross edge about 0.36 bp of turnover, at zero fees, Binance spot BTC/FDUSD, 2025-02-04..02-26
+  - "the research's development dates overlap H and F: network recipe on XRP data 2025-08-01..11-16, packaged example 2025-11-09, boosted track to 2025-08-25 (dates only)"
   - "the author's recollection, verbatim: it worked until an anomaly in autumn 2025 (no date in the research documents)"
   - liquidation cascade of 2025-10-10..11, general market knowledge
+  - BTC's 2025 daily price path, in the README's break figure and the daily bars on disk, and general knowledge
   - this repository's kills (sections 25 and 26, maker execution, market-making rounds one and two)
   - Bybit fee schedule as published in 2026 (backtest/costs.py, BYBIT_FEE_CAVEAT)
   - HTTP HEAD of every BTCUSDT book (ob500, ob200) and print archive, 2024-12-01..2025-12-31; existence and size only
+  - HTTP HEAD of the ob200 and ob500 book archives for 2026-01-05..07; ob200 present, ob500 absent
   - experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; its 2025 alarms not looked at (one break of three falls in 2025, count only)
 
 expected_outcome:
@@ -52,42 +56,84 @@ data:
   book:
     levels: 10
     grid_ms: 100
+    rows: "data/bybit.reconstruct at grid_ms 100: at most one row per 100 ms interval, at its first update, stamped with that update's venue time; no row for an interval without an update; no forward fill"
+    times: quantities in seconds are measured on row stamps; t + h is the first row stamped at or after t + h
     archives:
       ob500: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob500.data.zip", present: [2024-12-01, 2025-08-20]}
       ob200: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob200.data.zip", present: [2025-08-21, 2025-12-31]}
     archive_change: 2025-08-21  # no day has both; the H/F boundary was moved onto it
+    ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # outside every block; used for nothing else; never in a successor's blocks
+    ob200_reader_test: synthetic ob200 fixture and the reader-test days pass validate_book before H is opened; no ob200 day of 2025 fetched before stage 3
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
   funding: bybit public REST, no credentials
-  detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-11-01}
+  detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-11-01, frequency_after_2025_06_30: daily archives only, E_bars: "fetched and read when H opens, bars only"}
   head_check:
     date: 2026-10-08
     days_checked: 396  # every day, 2024-12-01..2025-12-31
+    table: experiments/results/short_horizon_2025_head_check.csv
+    table_sha256: 86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0
+    set_from_it: only the H/F boundary; later revisions used only the archive change it found
     missing_under_code_pattern: {book_ob500: [2025-08-21, 2025-12-31], prints: none}
     first_and_fifteenth: all prints present; ob500 present to 2025-08-15, absent from 2025-09-01; ob200 present from 2025-09-01
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
-  exclusions: [book sequence gap, non-positive or off-grid price, missing plane, missing funding]
-  max_sequence_gaps: null  # 0 unless set from D's counts; frozen by the D amendment
+  exclusions: [more book sequence gaps than max_sequence_gaps, non-positive or off-grid price, missing plane, missing funding]
+  max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up; the same value on every block
+  max_sequence_gaps: null  # by the rule above; frozen by the D amendment
+  unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it
+  gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
   excluded_days_D: null  # with reasons; frozen by the D amendment
   differences_from_original: [Bybit not Binance, perpetual not spot, USDT not FDUSD, published fees not zero, 100 ms grid rebuilt from the archive, funding charged, event-time simulator fills]
 
 blocks:
   W: {role: warm_up, start: 2024-12-01, end: 2024-12-31, days: 31, archive: ob500, scored: false, reads: free}
   D: {role: development, start: 2025-01-01, end: 2025-06-30, days: 181, archive: ob500, reads: free}
-  R: {role: replication_window_inside_D, start: 2025-02-04, end: 2025-02-26, days: 23, archive: ob500, use: [A0, FILL]}
-  E: {role: embargo, start: 2025-07-01, end: 2025-07-07, days: 7, archive: ob500, fetched: false, reads: 0}
+  O: {role: original_window_inside_D, start: 2025-02-04, end: 2025-02-26, days: 23, archive: ob500, use: [A0, FILL]}
+  E: {role: embargo, start: 2025-07-01, end: 2025-07-07, days: 7, archive: ob500, book_prints_funding_fetched: false, hourly_bars: "read by the detector only, opened with H"}
   H: {role: held_out, start: 2025-07-08, end: 2025-08-20, days: 44, archive: ob500, hypotheses: [T1, T2, M1, Z], reads: 1, read_after: the D amendment is committed}
   F: {role: boundary, start: 2025-08-21, end: 2025-11-16, days: 88, archive: ob200, reads: 1, read_after: H's results are committed, read_always: true}
-  P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: a hypothesis (Z included) passed on F-}
+  P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: "a hypothesis (Z included) passed on F with at least 20 usable days"}
   moved_by_head_check: {H_end: {planned: 2025-09-21, registered: 2025-08-20}, F_start: {planned: 2025-09-22, registered: 2025-08-21}}
-  days_independent: true  # flat at every midnight; rolling statistics may read earlier days
+  days_independent: true  # flat at every midnight; rolling statistics may read earlier days of opened blocks
+  cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
+  cold_start_unscored: the first N minutes of each cold-start day, N being features.longest_lookback_minutes
+  spent: H, F and P are spent for these recipe families on BTCUSDT; successors use blocks after 2025-12-31
 
 common:
-  clip_btc: 0.01  # the original's traded clip
+  clip_btc: 0.010  # the original's traded clip, fixed for every strategy and both execution paths
   report_per_100_usdt_of_clip: true
   max_position_clips: 1
   latency_ms: 10  # simulator rule R3
-  taker_fill: {walk_levels: 10, skip_if_clip_exceeds_visible_depth: true, max_snapshot_age_s: 1}
-  passive_fill: {simulator: market_making/simulator.py, rules: [R5, R6, R7], cancellation: proportional, arrival_growth: pro_rata_time, post_only: true}
+  taker_fill:
+    executor: event-time taker executor (new code); pipeline/execution.run_taker not used
+    entry: walk the first snapshot at or after decision + 10 ms across 10 levels, VWAP for the clip
+    slippage_bp_on_top_of_walk: 0
+    entry_skip: {clip_exceeds_visible_depth: true, snapshot_older_than_s: 1}  # entry only; skipped and counted
+    exit: walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price; counted and flagged as R16 flatten_stale
+    funding: R14
+    accounting_identity: R15, turnover equal to the sum of fill notionals
+    same_walk_function_as_label: true
+  passive_fill:
+    simulator: market_making/simulator.py
+    rules: [R5, R6, R7]
+    clip_btc: 0.010  # new setting; replaces clip_notional and clip_touch_share
+    queue_priority: tail
+    cancel_attribution: proportional
+    arrival_growth: pro_rata_time
+    crossed_policy: trade_tape
+    post_only: true
+    order_latency_ms: 10
+    cancel_latency_ms: 10
+    feed_latency_ms: 0
+    soft_limit_clips: 1
+    warmup_s: 60
+    stop_quoting_at: "23:58"
+    flatten_at: "23:59"
+    markout_horizons_s: [1, 5, 10, 30]
+    decomposition_horizon_s: 5
+    quoter: "signal-entry quoter (new code): one clip at the touch on the signal's side at decision + 10 ms, kept at its first price, never re-pegged, cancelled unfilled after hold"
+    exit: reduce-only cross hold after the fill, priced by the taker executor's walk
+    flatten_slippage_bp: 0
+    not_used: round one's SignalExecutor (X1)
   fees:
     verdict_tier: {name: base, maker_bp: 2.0, taker_bp: 5.5}  # BYBIT_BASE
     measurement_tiers: BYBIT_LINEAR_TIERS rows for group g1, and BYBIT_MM_PROGRAMME_MAKER_BP  # with BYBIT_FEE_CAVEAT
@@ -98,13 +144,15 @@ common:
 
 labels:
   walked_taker:
-    clip_btc: 0.01  # equals the traded clip
+    clip_btc: 0.010  # equals the traded clip
     horizon: hold  # the label declares h; the purge is derived from it
+    entry_snapshot: first at or after t + 10 ms
+    exit_snapshot: first at or after the entry snapshot + hold
+    normalised_by: the entry snapshot's mid
     classes: [long, hold, short]  # long if long P&L > 0, short if short P&L > 0, else hold
     fee_bp: {T1: 5.5, A0: 0.0, Z: 0.0}  # charged on both sides
-    entry_and_exit_delay_ms: 10
-  forward_move: {function: labels/targets.py forward_smoothed_move_bp, smoothing: none, horizon: hold, used_by: [T2]}
-  control: {function: labels/targets.py smoothed_move_bp, used_by: [the K-label control model]}
+  forward_move: {definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp, smoothing: 1, form: time-based, used_by: [T2]}
+  control: {function: labels/targets.py smoothed_move_bp, smoothing_rows: 20, horizon_rows: hold / 100 ms, holds_s: [5, 20, 50], reported_at: T2's chosen hold, used_by: [the K-label control models]}
 
 features:
   microstructure_set: registry book, depth and flow features over ten levels, plus the 2025 set added by the features pull request
@@ -113,15 +161,19 @@ features:
   winsorising: trailing quantiles only
   leakage_check: validation/leakage.py, every feature, before any D run
   gate_inputs: basis points from prices only
-  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1}
+  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20}
   selected: null  # frozen by the D amendment
+  longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
 
 models:
   boosting: {code: models/gbm.py, classes: 3, hyperparameters: repository defaults, used_by: [T1, A0, Z]}
   gaussian_network: {code: models/tcn.py, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: gaussian_nll, variance_prior: true, variance_clamped: true, checkpoint: rank IC of mu against the realised forward move on the inner validation, used_by: [T2]}
   control_network: same as gaussian_network, trained on the control label
-  training_rows: {every_nth_grid_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
-  weights_sha256: null  # per frozen model; frozen by the D amendment
+  windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch (new code)", inference: batched}
+  training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
+  frozen: {per_hold_s: [5, 20, 50], models: [T1, Z, T2, control], train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30}
+  weights_sha256: null  # {model: {hold_s: sha256}} for T1, Z, T2 and control; frozen by the D amendment
+  checkpoint_epoch: null  # {T2: {hold_s: epoch}, control: {hold_s: epoch}}; frozen by the D amendment
 
 d_procedure:
   walk_forward:
@@ -130,11 +182,18 @@ d_procedure:
     inner_validation_days: 7  # thresholds and checkpoints
     purge: hold plus the longest feature lookback, before the inner validation and before the test month
   choice:
-    rule: highest neighbourhood median (validation/search.py neighbourhood_scores), ties by own value
-    neighbourhood: the cell and every cell one step away on each ordered axis
-    min_trades_per_day: 5
+    rule: highest neighbourhood median (validation/search.py neighbourhood_scores) among cells averaging at least 5 trades a day, ties by own value
+    neighbourhood: "neighbourhood_scores' block: every cell within one step on every axis, diagonals included (up to 9 cells for T1 and Z, 27 for T2), every cell counted whatever its trade rate"
+    min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
+    no_admissible_cell: recorded as not run (no admissible cell on D), enters Holm with p = 1; the filter is not relaxed
     report_peak: true
-  frozen_fit: {train: 2025-01-01..2025-06-23, inner_validation: 2025-06-24..2025-06-30}
+  frozen_fit:
+    train: 2025-01-01..2025-06-23
+    purge: hold plus the longest feature lookback before 2025-06-24
+    inner_validation: 2025-06-24..2025-06-30
+    models: one per hold in {5, 20, 50} s for T1, Z, T2 and the control
+    thresholds: every (hold, trades-a-day) cell of T1 and Z
+    covers_every_neighbourhood: true  # K-nbhd on a held-out block runs only frozen files
 
 strategies:
   T1:
@@ -143,9 +202,10 @@ strategies:
     execution: taker in, taker out after hold
     fee: base
     axes: {hold_s: [5, 20, 50], trades_per_day: [50, 100, 240]}  # 9 cells
-    objective: mean daily net_bp_trade over the walk-forward test days
+    objective: mean of the daily net_bp_trade series over the walk-forward test days
     chosen: null  # {hold_s, trades_per_day}; frozen by the D amendment
-    neighbourhood: null  # cells and values, and the outright peak; frozen by the D amendment
+    neighbourhood: null  # every cell with its value, frozen model, thresholds and sha256, and the outright peak; frozen by the D amendment
+    thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
   T2:
     signal: gaussian_network on the tensor and the selected set
     gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + b, mirrored for shorts"
@@ -154,14 +214,16 @@ strategies:
     execution: taker in, taker out after hold
     fee: base
     axes: {hold_s: [5, 20, 50], k: [0, 0.5, 1], buffer_bp: [0, 1, 2]}  # 27 cells
-    objective: mean daily net_bp_trade over the walk-forward test days
+    objective: mean of the daily net_bp_trade series over the walk-forward test days
     chosen: null  # {hold_s, k, buffer_bp}; frozen by the D amendment
-    neighbourhood: null  # cells and values, and the outright peak; frozen by the D amendment
+    neighbourhood: null  # every cell with its value, frozen model and sha256, and the outright peak; frozen by the D amendment
+    checkpoint_epoch: null  # {hold_s: epoch}; frozen by the D amendment
   M1:
-    signal_rule: T1 or T2, whichever has the higher D net per trade at its chosen cell; T1 on a tie
-    execution: posted at the touch on the signal's side, waits at most hold; taker out hold after the fill
+    signal_rule: T1 or T2, whichever has the higher D mean daily net at its chosen cell; T1 on a tie
+    execution: one full clip posted at the touch on the signal's side, kept at its first price, waits at most hold; taker out hold after the fill
     variant_measured: passive exit at the touch, crossed after a further hold
     fee: base
+    not_run_if: neither T1 nor T2 has a chosen cell
     signal: null  # T1 or T2, with the D values that chose it; frozen by the D amendment
   Z:
     signal: boosting on walked_taker at 0 bp
@@ -169,49 +231,73 @@ strategies:
     execution: as M1
     fee: zero_fee
     axes: {hold_s: [5, 20, 50], trades_per_day: [50, 100, 240]}  # 9 cells
-    objective: mean daily gross_bp_trade under the queue fill rule over the walk-forward test days
+    objective: mean of the daily gross_bp_trade series under the queue fill rule over the walk-forward test days
     chosen: null  # {hold_s, trades_per_day}; frozen by the D amendment
-    neighbourhood: null  # cells and values, and the outright peak; frozen by the D amendment
+    neighbourhood: null  # every cell with its value, frozen model, thresholds and sha256, and the outright peak; frozen by the D amendment
+    thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
   A0:
     signal: boosting on walked_taker at 0 bp
     settings: {trades_per_day: 240, hold_s: 50}  # the original protocol; the hold is inferred
     train: 2025-01-01..2025-01-27
     thresholds_on: 2025-01-28..2025-02-03
-    run_on: R
+    run_on: O
     executions: [taker at zero_fee, passive under each FILL rule]
   cooldown: until the previous position is closed
 
 metrics:
   primary: {T1: net_bp_trade, T2: net_bp_trade, M1: net_per_100_clip_day, Z: gross_bp_trade}
-  per_trade_days: days with at least one trade  # net_per_100_clip_day counts days without a fill as zero
-  beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10s_by_path, spread_plus_adverse_5s, trades_per_day,
-           share_days_positive, median_day, max_drawdown, net_usdt_day, funding, every_published_tier, by_side]
-  significance: {code: evaluation/significance.py assess, cluster: day, decides: day level}
+  day_series:
+    T1: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4
+    T2: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4
+    Z: one value per day with a trade; the day's gross USDT summed over round trips / their summed entry notional x 1e4
+    M1: every usable day; the day's net USDT x 100 / the clip's notional at each entry, summed; 0 for a day without a fill
+  computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
+  ic: rank correlation of the score with the mid move from the entry snapshot to the first snapshot at or after it + hold, per day, mean over days
+  beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10_30s_by_path, spread_plus_adverse_5s, trades_per_day,
+           share_days_positive, median_day, max_drawdown, net_usdt_day, funding, every_published_tier, by_side, newey_west_t]
+  significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level}  # series=None, one series
+  degrees_of_freedom: days in the daily series minus one, per hypothesis and per block
+  newey_west: {kernel: bartlett, lag_days: 5}
   all_calendar_days_scored: true  # no row filtered or reweighted by label, outcome or model state
   mde:
-    formula: 2 * sigma_D / sqrt(n)
-    n: 44
+    formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
+    n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for M1
     sigma_d: null  # per primary and Z, over D's 150 walk-forward test days; frozen by the D amendment
     value: null  # per primary and Z; frozen by the D amendment
 
 family: [T1, T2, M1]
 statuses:
-  holm: {alpha: 0.05, sided: one, across: family, degrees_of_freedom: 43}
-  candidate: no kill, Holm passes, day t >= 3, median day > 0
-  inconclusive: no kill and the bar not met; "below the minimum detectable effect" when |mean| < MDE
+  holm: {alpha: 0.05, sided: one, across: family, m: 3, m_fixed_on_every_block: true, killed_void_not_run_or_not_taken_enter_with_p: 1, degrees_of_freedom: days in the daily series minus one}
+  bar: [no kill, Holm passes with m = 3, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on F (or F-) and on P (M1: usable days)"]
+  precedence: ["void (K-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
   void_counts_as_killed: true
-  taken_to_F: [candidate, inconclusive with a positive mean]
-  F_split: {F_minus: F days before the alarm's day, F_plus: F days after it, alarm_day: neither, no_alarm: all of F is F_minus}
-  outcomes: [confirmed, confirmed until the break, "candidate; the break did not last", candidate not confirmed, inconclusive, killed on F, killed on P, void]
-  Z: {family: none, alpha: 0.05, sided: one, best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
+  not_run: no admissible cell on D; enters Holm with p = 1
+  taken_to_F: [candidate, "inconclusive with a positive mean (Z: both claims positive)"]
+  F_split: {F_minus: F's usable days before the alarm's day, F_plus: F's usable days after it, alarm_day: neither}
+  F_assessed_on: "F- when there is an alarm in F, F- has at least 20 usable days and R was not declared untestable on D; otherwise all of F, labelled, and F is not split"
+  F_plus_enters: only R
+  P_read_for: hypotheses that passed on F with at least 20 usable days in the series they were assessed on
+  P_when_R_supported: scored only as mean <= 0 (the break persisted) or > 0 (it did not last); no kill applied
+  first_significant_on_F: "exploratory: significant on F until P; P is its only confirmatory test; R not tested; never called a candidate"
+  R_untestable_or_not_tested_reads_as: not supported
+  F_unreadable: statuses after H stand, marked F unreadable; P not read
+  not_taken_to_F: F reported as one whole block, never split at b
+  measurements_never_described_as_working: [any fee tier other than base, any non-default fill rule or exit, F for a hypothesis not taken to F]
+  outcomes: [confirmed, confirmed until the break, "candidate; the break did not last", candidate not confirmed, "confirmed on P, first significant on F", "exploratory: significant on F, not confirmed", inconclusive, killed on F, killed on P, void, not run]
+  Z: {family: none, alpha: 0.0125, sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
 
 kill_conditions:
   void: [K-leak, K-units, K-acct, K-cap]
-  kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee]
+  kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency]
   passive_only: [K-dir, K-queue]  # M1 and Z
-  status_only: {K-trades: 100, K-MDE: below the minimum detectable effect}
-  K-days_share_positive_max: 0.5  # half or fewer positive days kills
+  status_only: {K-trades: 100, K-trades_counts: "trades; clip-equivalents (sum of sizes / 0.010 BTC) for T2; fills for M1 and Z", K-MDE: "below the minimum detectable effect, only when no kill fired"}
+  K1: the mean of the daily series on the block <= 0
+  K-days_share_positive_max: 0.5  # half or fewer positive days of the daily series kills
+  K-nbhd: {statistic: median over the neighbourhood's cells of the daily series' mean, kills_at_or_below: 0, neighbourhood: as d_procedure.choice.neighbourhood, cell_without_trade_scores: 0, runs_only: the frozen files whose sha256 the amendment records}
+  K-latency: {used_by: [T1, T2, M1, Z], latency_ms: 110, kills: a positive result that is <= 0 there, unit_test: every fill's snapshot stamped at or after decision + 10 ms; label and executor share the walk function}
   K-queue_brackets: [joint pessimistic (pessimistic cancellation and all_ahead), none, all_ahead]
+  needs_positive_result: [K-dir, K-queue, K-latency]
+  on_F: applied to the series the status is assessed on (F- or all of F)
   Z_exempt: [K-fee]
   Z_extra: {K2: "net at zero fees (gross plus funding) <= 0"}
 placebo_percentile: 95
@@ -223,23 +309,27 @@ placebos:
   stale: {used_by: [M1, Z], delay: one hold}
   all_long_all_short: {used_by: [T1, T2, M1, Z]}  # K-drift
   control_model: {used_by: [T2], reported: IC against its own label and against the realised move}
-  random_break_dates: {used_by: [R], draws: 200, seeds: [0, 199], min_usable_days_each_side: 10}
+  other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the hypothesis also passes on F's days before them, min_reference_days: 20}
 
 hypotheses:
-  T1: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee], prediction: killed by K1}
-  T2: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee], prediction: killed by K1 or inconclusive under K-trades}
-  M1: {block: H, claim: net_per_100_clip_day > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-dir, K-queue], beside: [maker 0 bp, maker -1 bp, passive exit], prediction: killed by K1}
-  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-dir, K-queue], context_not_test: Binance zero-fee spot BTC/FDUSD in 2025, prediction: killed by K1}
+  T1: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1}
+  T2: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1 or inconclusive under K-trades}
+  M1: {block: H, claim: net_per_100_clip_day > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-dir, K-queue], beside: [maker 0 bp, maker -1 bp, passive exit], prediction: killed by K1}
+  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-dir, K-queue], context_not_test: Binance zero-fee spot BTC/FDUSD in 2025, prediction: killed by K1}
   R:
-    tested_for: hypotheses, Z included, that pass on F-
-    claims: [mean daily primary metric on F_plus <= 0, F_minus - F_plus above the 95th percentile of random break dates]
-    supported: both claims hold
-    untestable: [no alarm in F, fewer than 10 usable days on either side, alarm rate on D above one per 14 days]
+    tested_for: every hypothesis, Z included, that is a candidate on H, whether or not it passes on F-
+    not_tested_for: any other hypothesis, including one first significant on F
+    statistic: Delta(d) = mean of the daily series on F's usable days before d minus its mean on those after d
+    claims: [passes on F-, mean daily series on F_plus <= 0, Delta(b) above the 95th percentile of Delta(d) over the reference set]
+    supported: all three claims hold
+    when_F_minus_fails: Delta(b) reported with its percentile among all admissible days, as a measurement
+    untestable: [no alarm in F, fewer than 20 usable days before b or fewer than 10 after, alarm rate on D above one per 14 days, fewer than 20 days in the reference set]
+    untestable_reads_as: not supported
 
 measurements:
-  A0: {block: R, compare_with_bp_turnover: 0.36, label: "not comparable: different venue, product, quote currency and fee", prediction: below 0.36 bp of turnover under every rule except on_touch}
+  A0: {block: O, compare_with_bp_turnover: 0.36, label: "not comparable: different venue, product, quote currency and fee", prediction: below 0.36 bp of turnover under every rule except on_touch}
   FILL:
-    stream: A0's passive orders on R; also Z's on H
+    stream: A0's passive orders on O; also Z's on H
     rules:
       on_touch: fills in full at the first print at or through its price from the hitting side, ignoring the queue  # optimistic bound
       trade_through: fills only on prints strictly through its price, up to their size  # R7 alone
@@ -247,29 +337,41 @@ measurements:
     prediction: {on_touch_fill_ratio_min: 0.75, queue_fill_ratio_max: 0.50}
     withdrawal: if queue fills at least 0.75, the suspicion about the original's fill rule is withdrawn in writing
   fee_break_even: {taker: gross_bp_turnover, passive: maker fee at zero net with the taker exit at 5.5 and at 1.5 bp}
-  result_R: null  # A0 and FILL tables; frozen by the D amendment
+  H_before_later_development: {strategies: [T1, T2], days: 2025-07-08..2025-07-31, label: sensitivity, status: none}
+  gap_days_included: every verdict's mean, t and median day with the gap-excluded days put back
+  result_O: null  # A0 and FILL tables; frozen by the D amendment
 
 detector:
   input: hourly log returns of detector_bars, divided by D's root mean square at the same UTC hour
-  stream_from: 2024-12-01
-  monitor: {code: validation/structural_breaks.py, history_len: 365, online_len: 90, statistics: [scale, dependence], thresholds: {scale: 9.09, dependence: 7.93}, mean_reported: 8.93}
+  stream: one continuous stream from 2024-12-01, E's hourly bars included (fetched and read when H opens)
+  missing_hour: close carried forward, zero return, counted and reported; no reset
+  bars_after_2025_06_30: Binance daily archives only, one day at a time, inside the opened access of their block
+  monthly_klines: none for a month after 2025-06 fetched or cached before P's read; the loader refuses a monthly kline file reaching past the highest opened block
+  library: {name: structural-break, tag: v0.1.0, commit: 0636813fdd4ccc9f25490d97f62d6fccecb01881}
+  monitor: {code: validation/structural_breaks.py, history_len: 365, online_len: 90, min_history: 121, minimum_gap: 0, statistics: [scale, dependence], thresholds: {scale: 9.09, dependence: 7.93}}
+  run: one detect_breaks call over the stream from 2024-12-01 to the last hour of the highest opened block, windows anchored at the stream's start
+  reproduce_earlier_alarms: required; if a later run does not, R is void
+  mean_channel: {column: odds_mean, threshold: 8.93, reported: true, re_anchors: false, defines_b: false}
   b: first alarm effective in F, at the close of the hour whose return produced it
-  max_alarm_rate_D_per_14_days: 1
+  max_alarm_rate_D_per_14_days: 1  # above it, R is declared untestable before H and b does not split F
   hour_profile: null  # 24 values fitted on D; frozen by the D amendment
   alarm_rate_D: null  # alarms over 2025-01-01..06-30; frozen by the D amendment
   r_untestable_declared: null  # true or false; frozen by the D amendment
   reported_beside:
-    changepoint: {code: validation/changepoint.py detect, grid_s: 1, window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, from: 2025-01-01, label_within_one_day_of: 2025-08-21}
+    changepoint: {code: validation/changepoint.py detect, grid: "data/grid.to_grid, 1 s, label right", window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, runs: [continuous over D, restarted on 2025-07-08, continuous from H through F and P], label_within_one_day_of: 2025-08-21}
     earlier_daily_run: experiments/results/structural_breaks_BTCUSDT_breaks.csv  # public before this registration
 
 fetch:
   via: data/ensure.py  # only missing days; archives not kept after the replay
+  ledger_opens_first: true  # the open is recorded, then the block's fetch runs under that access
+  ledger_records: sha256 and UTC download time of every fetched file
+  open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block
   stages:
-    - {stage: 1, when: after this registration and its code are merged, what: [W, D, funding, hourly bars 2024-11..2025-06], archives_gb: {book: 75.4, prints: 15.3}}
-    - {stage: 2, when: after the amendment is committed, what: [H, its funding and bars], archives_gb: {book: 11.4, prints: 2.1}}
-    - {stage: 3, when: after H's results are committed, what: [F, its funding and bars], archives_gb: {book: 15.8, prints: 5.9}}
-    - {stage: 4, when: after F's results are committed and only if the condition holds, what: [P, its funding and bars], archives_gb: {book: 9.9, prints: 3.5}}
-  E_fetched: false
+    - {stage: 1, when: after this registration and its code are merged, what: [W, D, funding for W and D only, hourly bars 2024-11..2025-06, ob200 reader-test days 2026-01-05..07], archives_gb: {book: 76.0, prints: 15.3}}
+    - {stage: 2, when: inside H's opened access after the amendment is committed, what: [H, H's funding, E's and H's hourly bars from daily archives], archives_gb: {book: 11.4, prints: 2.1}}
+    - {stage: 3, when: inside F's opened access after H's results are committed, what: [F, F's funding, F's hourly bars from daily archives], archives_gb: {book: 15.8, prints: 5.9}}
+    - {stage: 4, when: inside P's opened access after F's results are committed and only if the condition holds, what: [P, P's funding, P's hourly bars from daily archives], archives_gb: {book: 9.9, prints: 3.5}}
+  E_book_prints_funding_fetched: false
 
 compute:
   machine: {cores: 10, memory_gb: 32, workers: 8}
@@ -277,16 +379,25 @@ compute:
   record: null  # measured times and peak memory; frozen by the D amendment
 
 access:
-  development: [W and D book, prints and funding, hourly bars up to 2025-06-30]
+  development: [W and D book, prints and funding, hourly bars up to 2025-06-30, the ob200 reader-test days]
+  development_refuses: every 2025 day after 2025-06-30 in every plane, including data/bars/BTCUSDT/klines-1d
   ledger: experiments/results/short_horizon_2025_ledger.json
-  H: amendment records the YAML sha256, the file has it and is committed, tree clean
-  F: H's results committed and the ledger records H
-  P: F's results committed, for the hypotheses that qualify
+  ledger_guards: [E hourly bars, H, F, P]
+  block_constants: this study's own; round one's block_of not used
+  entry_point: experiments/short_horizon_2025.py  # committed with the amendment; one read session computes everything for a block
+  H: [amendment records the YAML sha256, the file has it and is committed, tree clean, every frozen weight file's sha256 equals the amendment's, no H file on disk]
+  read_session: {bound_to: [block, commit, config sha256], resumptions_at_that_commit: first read, outputs_inspected: only after the results file is written, resumption_at_another_commit: second read}
+  results_files: {H: experiments/results/short_horizon_2025_H.json, F: experiments/results/short_horizon_2025_F.json, P: experiments/results/short_horizon_2025_P.json}
+  session_closes: the results file, statuses and every kill computed by the entry point, is written and its sha256 entered in the block's ledger entry
+  F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only experiments/results/, docs/ and README.md", frozen weights' sha256 match, no F file on disk]
+  P: [the same conditions against F's read, for the hypotheses that qualify]
   second_read: raises unless forced; stamped second read; cannot change a status
   earlier_accesses_used: false  # neither round one's nor round two's
+  spent_blocks: "H, F and P are spent for these recipe families on BTCUSDT; a successor, a corrected re-run included, uses blocks after 2025-12-31 and never the reader-test days"
 
 amendment:
   planned: 1
   before: the read of H
+  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D and any untestable declaration, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, the compute record, the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment

@@ -1248,8 +1248,17 @@ turnover, against a cheapest published Bybit taker fee of 1.5 bp.
 - [x] Pre-registration, with an archive check that moved the held-out block's
       end to 2025-08-20, where Bybit's book archive changes from 500 to 200
       levels
-- [ ] The ported pieces: ten-level tensor, walked-book label, Gaussian head,
-      EV gate, fill-rule comparison, streaming parity, and the study's ledger
+- [x] Reviewed for peeking, multiplicity and feasibility before any data is
+      read, and tightened: no file of a later block on disk before the ledger
+      opens it, statuses computed by code and hashed, no code change between
+      the held-out reads, metrics fixed at the day level, Holm's family fixed
+      at three on every block, a break test whose placebo goes through the
+      same selection, and fill and timing rules pinned in the configuration
+- [ ] The ported pieces: ten-level tensor, walked-book label, Gaussian head
+      with a lazy window dataset, EV gate, an event-time taker executor and a
+      signal-entry quoter, fill-rule comparison, streaming parity, the
+      200-level book reader proven on three 2026 days outside the study, and
+      the study's ledger and single entry point
 - [ ] Development period and the amendment that freezes it
 - [ ] The held-out read, then the boundary block and the break
 
