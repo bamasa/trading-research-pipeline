@@ -333,8 +333,9 @@ amendment), whatever days they span; a day stays usable with fewer decision
 rows. Fitted values (the size floors fitted on W, the frozen models and
 thresholds) are not rolling state and are used on every block, never
 refitted at a read. Every fitted value that is not a weight (W's size floors
-and normalisers, the tensor's floors, each instrument's clip, any other
-fitted constant) is written
+and normalisers, the tensor's floors, each instrument's clip, S1's
+`sigma_ref`, the raw-size scale of the feature stores, any other fitted
+constant) is written
 to one file whose sha256 the amendment records, and the H, F and P gates
 check it beside the weights.
 
@@ -347,7 +348,10 @@ findings and does not raise, so the study's loader excludes the day on that
 finding); a price off the tick grid, which `validate_book` does not check
 (the simulator's day loader, `market_making/events.load_day`, refuses such a
 day under R16, and the study's loader applies the same check to every day,
-taker strategies included); a missing plane (an HTTP 404 only; a failed
+taker strategies included, with each day's own tick, derived from its book by
+`events.derive_tick` as `load_day` derives it; the loader also reports every
+day whose tick differs from the specification's or is not a multiple of it,
+which excludes no day); a missing plane (an HTTP 404 only; a failed
 download is retried, and excluded only under the [fetch
 plan](#fetch-plan)'s two terminal rules);
 a missing funding history; or a day flagged `flatten_stale` (R16: a taker
@@ -361,7 +365,7 @@ plan](#fetch-plan)). Each is counted by reason. **A day flagged
 `flatten_stale` in any run on the block** (on a held-out block, any run of
 its read session: the true strategy, a placebo draw, a neighbour cell, the
 K-latency re-run, a bracket) is excluded from every series of every
-slot on that block, and is counted once toward unreadability.
+slot on that instrument and block, and is counted once toward unreadability.
 **`max_sequence_gaps` is the 95th percentile of D's per-day gap
 counts, rounded up**, per instrument, computed by that formula and recorded in
 the amendment; the same value is used on every block for that instrument. Each verdict is also reported with the
@@ -376,7 +380,8 @@ quietly favour a result.
   categorical axis of the search. Each is fetched, replayed, validated and
   excluded day by day under the same rules; the loader is per instrument, and
   its tick and lot steps come from the venue's instrument specification,
-  recorded in the amendment.
+  recorded in the amendment; the off-grid exclusion uses each day's own tick
+  ([Blocks](#blocks)).
 - **Rows and timing**: the 100 ms rows are `data/bybit.reconstruct`'s, at
   `grid_ms=100`: at most one row per 100 ms interval, emitted at the
   interval's first update, stamped with that update's venue time and carrying
@@ -394,7 +399,8 @@ quietly favour a result.
   mean mid on W), rounded down to the lot step, and written to the
   fitted-values file ([Blocks](#blocks)), so that a clip has about the same
   notional on every instrument. Results are also given per 100 USDT of clip a
-  day, with the clip's notional taken at entry. One position at a time, never more than one clip (K-cap).
+  day, with the clip's notional taken at entry. One position at a time, never more than one clip; for S-M, never more
+  than the simulator's hard limit of two clips (K-cap).
   In the simulator the clip is the fixed `clip_btc` setting, which replaces
   `clip_notional` and the touch-share cap, so K-cap compares with a constant.
 - **Taker fills** come from an event-time taker executor (new code; the
@@ -450,7 +456,10 @@ quietly favour a result.
   `all_ahead`; `pessimistic`) are run for K-queue.
 - **The market maker** (S-M) is round one's S1 with the signal lean, on the
   same simulator settings: S1 at round one's frozen values `skew_bp` 2, `k`
-  0.5 and `min_edge_bp` 4 (`configs/mm_prereg.yaml`), `soft_limit_clips` 1,
+  0.5 and `min_edge_bp` 4 (`configs/mm_prereg.yaml`), with `sigma_ref` per
+  instrument the median of the simulator's `vol_bp_1m` (its estimator, at
+  `vol_half_life_s` 60) over W's rows, written to the fitted-values file
+  ([Blocks](#blocks)), `soft_limit_clips` 1,
   `clip_btc` the instrument's clip, the lean λ ∈ {0.5, 1, 2} on its signal's
   tape (`pipeline/market_making.signal_tapes`: the signal's accepted entry
   decisions, each with a signed strength in bp, μ for a regressor and, for a
@@ -516,7 +525,12 @@ pooled across instruments.
   autocorrelation, turn count, run length, inter-trade time, lagged level-0
   logs). **Winsorising** clips each such feature at the 0.1% and 99.9%
   quantiles of its own trailing 3,600 s on row stamps, never at whole-day
-  quantiles.
+  quantiles. **A feature in raw size units** (order-flow imbalance such as
+  the registry's `ofi_1` and `ofi_20`, depth and print-volume sums) is then
+  divided by the instrument's median touch size on W, written to the
+  fitted-values file, before the float16 cast. A test on W checks that every
+  stored column is finite after the cast; a column that fails it is stored at
+  float32 on every block, recorded in the amendment.
 - **The ten-level tensor**: 40 columns. Each level's price distance from the
   touch is divided by the larger of σ × mid and a spread floor, σ being the
   standard deviation of the mid's row-to-row log changes over the trailing
@@ -693,7 +707,8 @@ full clip: no Kelly sizing is applied (`strategies/sizing.py`'s
 
 **Every configuration** holds one position at a time: the next entry is
 possible only when the previous position is closed and no entry order is
-resting. For a taker that is the hold after each entry; for the quoter it is
+resting; an order whose cancel is in flight counts as resting until the
+cancel is acknowledged or the order is filled. For a taker that is the hold after each entry; for the quoter it is
 the wait of at most `h` for a fill, and after a fill the time to the exit.
 Profit and loss comes only from realised fills in the execution path, never
 from a sum of predicted values.
@@ -828,8 +843,9 @@ gives each one's time and disk.
    and FILL on O.
 9. **Stage E: the frozen fits.** For every hold and label fee in the
    neighbourhood of each stratum's chosen cell, admitted or not, and of
-   S25's: at most 16 boosted or logistic fits and at most 4 network fits with
-   4 control fits, trained on D from 2025-01-01 to 06-23 with the purge
+   S25's: at most 12 boosted or logistic fits (6 for C\*'s holds and label
+   fees, 6 for S25's), at most 3 bound-regressor fits (R\*'s holds) and at
+   most 4 network fits with 4 control fits, trained on D from 2025-01-01 to 06-23 with the purge
    before 06-24; their θ and checkpoints set on 06-24 to 06-30. These cover
    every cell of every finalist's neighbourhood, so K-nbhd on a held-out block
    runs only frozen files. The weights stay in the ignored `models/`
@@ -893,7 +909,11 @@ sandbox, where nothing is counted.
   days. **The neighbourhood** is `validation/search.neighbourhood_scores`'
   block over the ordered axes (hold; rate, or k and β; label fee; regime
   window): every cell within one step on every ordered axis, diagonals
-  included, at the cell's categorical values. Every cell is counted whatever
+  included, at the cell's categorical values. The ordered axes enter it as
+  numbers: hold in seconds, rate in trades a day, k, β and label fee in bp,
+  and the regime window in hours (0 for none, 4, 24, 120), never as the
+  catalogue's strings, which would sort `pull_120h` before `pull_4h`; a test
+  asserts S25's 24-cell neighbourhood. Every cell is counted whatever
   its trade rate; a cell without a trade on D scores 0, which the entry point
   writes (`neighbourhood_scores` drops a missing value). The entry point uses
   a vectorised version of `neighbourhood_scores`, tested equal to it on small
@@ -1295,7 +1315,13 @@ Void conditions; the slot is recorded as `void`:
   comes from the same walks and its net at 0/0 from the same funding.
 - **K-acct** — the accounting identity (R15) fails on any day, or turnover
   does not equal the sum of fill notionals.
-- **K-cap** — |position| exceeds one clip at any event.
+- **K-cap** — |position| exceeds one clip at any event (taker slots, S-P and
+  S25-Z), or for S-M the simulator's hard limit, `soft_limit_clips` + 1 = 2
+  clips. S1 may send a re-priced order while the old one's cancel is in
+  flight, and both can fill; the simulator then sends a reduce-only taker
+  order back to the soft limit. S-M's time above one clip and those orders
+  are counted and reported. For the signal-entry quoter an order whose cancel
+  is in flight counts as resting, so its position never exceeds one clip.
 
 Kill conditions:
 

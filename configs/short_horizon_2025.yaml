@@ -97,13 +97,14 @@ data:
     set_from_it: no searched value; fetch sizes and the disk budget use its block sums
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
   exclusions_unit: instrument-day  # unreadability judged per instrument, on the days of the instrument a slot trades
-  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every configuration, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
+  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day with the day's own tick from events.derive_tick)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every configuration, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
   flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every slot on that instrument and block and counted once toward unreadability
   max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up, per instrument; the same value on every block for that instrument
   max_sequence_gaps: null  # {instrument: value}, by the rule above; frozen by the D amendment
   unreadable_block: more than a quarter of a held-out block's days excluded for the slot's instrument; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
   gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
   excluded_days_D: null  # {instrument: [day, reason]}; frozen by the D amendment
+  off_grid_tick: "each day's own, from events.derive_tick as load_day derives it; every day whose tick differs from the specification's or is not a multiple of it is reported, and no day is excluded for that"
   instrument_spec: null  # {instrument: {tick, lot}} from the venue's instrument specification; frozen by the D amendment
 
 blocks:
@@ -124,7 +125,7 @@ common:
   clip_btc: 0.010  # BTCUSDT, for every configuration and every execution path; no Kelly sizing
   clip_other_instruments: "0.010 x (BTC's mean mid on W) / (the coin's mean mid on W), rounded down to the lot step; written to the fitted-values file (features.fitted_values_sha256)"
   report_per_100_usdt_of_clip: true
-  max_position_clips: 1
+  max_position_clips: 1  # S-M: the simulator's hard limit, soft_limit_clips + 1 = 2 (kill_conditions.K-cap)
   latency_ms: 10  # simulator rule R3
   taker_fill:
     executor: event-time taker executor (new code); pipeline/execution.run_taker not used
@@ -165,10 +166,12 @@ common:
     flatten_slippage_bp: 0
     signal_timing: "the decision reaches the quoter as a tape row stamped at the decision row's stamp t; under the strictly-before rule it is first seen by the event after t and the order is live no earlier than t + 10 ms; unit test: no event at or before t sees it, every post live at or after t + 10 ms"
     regime_guard: a resting entry is cancelled at the first event after a flag inside its window
+    cancel_in_flight: counts as resting until acknowledged or filled; no new entry meanwhile
     not_used: round one's SignalExecutor (X1)
   market_maker:
     strategy: S1 with the signal lean (pipeline/market_making, lean > 0)
     S1: {skew_bp: 2, k: 0.5, min_edge_bp: 4}  # round one's frozen values, configs/mm_prereg.yaml
+    sigma_ref_rule: "per instrument, the median of the simulator's vol_bp_1m (its estimator, vol_half_life_s 60) over W's rows; in the fitted-values file"
     soft_limit_clips: 1
     lean: [0.5, 1, 2]  # the slot's neighbourhood; the cell is 1
     lean_window_s: the signal's hold
@@ -207,10 +210,10 @@ features:
   gate_inputs: basis points from prices only
   lookbacks: "declared in seconds on row stamps, except the network's 64-row window and the control label's 20-row smoothing; N = the longest lookback in seconds, rounded up to whole minutes; on a cold-start day a row is also unscored until the row-declared windows have their rows since midnight"
   selection: {code: features/selection.py, runs: once per instrument, window: the instrument's 2025-01-01..2025-01-31, rows: every tenth row (at most 2.68 million), target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}, name: micro-selected}
-  stores: {dtype: float16, every_tenth_row: every instrument, every_row: "the network's inputs, one instrument at a time; two never coexist", format: one zstd parquet per instrument-day, parity_tests_at: float16}  # labels, costs, gate inputs, walk tables and fills from the book's float64 prices
+  stores: {dtype: float16, every_tenth_row: every instrument, every_row: "the network's inputs, one instrument at a time; two never coexist", format: one zstd parquet per instrument-day, parity_tests_at: float16, raw_size_columns: "order-flow imbalance (ofi_1, ofi_20), depth and print-volume sums divided by the instrument's median touch size on W (fitted-values file) before the cast", finiteness_test: "on W, every stored column finite after the float16 cast; a column that fails is stored at float32 on every block, recorded in the amendment"}  # labels, costs, gate inputs, walk tables and fills from the book's float64 prices
   selected: null  # {instrument: [features]}; frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
-  fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, each instrument's clip, any other fitted constant), in one file; used on every block, never refitted at a read
+  fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, each instrument's clip, S1's sigma_ref, the raw-size scale, any other fitted constant), in one file; used on every block, never refitted at a read
   fitted_values_sha256: null  # the sha256 of that file; checked by the H, F and P gates beside the weights; frozen by the D amendment
 
 models:
@@ -222,7 +225,7 @@ models:
   control_network: same as tcn, trained on the control label
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch, streamed per day from the every-row store (new code)", inference: batched}
   training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
-  frozen: {train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30, fits: "every hold and label fee in the neighbourhood of C*, R* (admitted or not) and S25", max_fits: {gbm_and_logistic: 16, tcn: 4, control: 4}}
+  frozen: {train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30, fits: "every hold and label fee in the neighbourhood of C*, R* (admitted or not) and S25", max_fits: {gbm_and_logistic: 12, bound_ridge: 3, tcn: 4, control: 4}}  # gbm/logistic: 6 for C*'s holds and label fees, 6 for S25's; bound_ridge: R*'s holds
   weights_sha256: null  # {fit key: sha256} for every frozen fit; the only place they are written; frozen by the D amendment
   checkpoint_epoch: null  # {fit key: epoch} for the frozen network and control fits; the only place they are written; frozen by the D amendment
 
@@ -285,6 +288,7 @@ search:
     per: stratum, across every group on all three instruments
     S: "median over the cell's neighbourhood of each cell's mean daily net_bp_trade at the base tier over the 150 test days"
     neighbourhood: "validation/search.neighbourhood_scores' block over the stratum's ordered axes, every cell within one step, diagonals included, at the cell's categorical values; every cell counted whatever its trade rate; a cell without a trade on D scores 0, written by the entry point"
+    axes_as_numbers: {hold_s: seconds, trades_per_day: trades a day, k: k, beta_bp: bp, label_fee_bp: bp, regime: "window in hours: none 0, pull_4h 4, pull_24h 24, pull_120h 120"}  # never the catalogue's strings; a test asserts S25's 24-cell neighbourhood
     vectorised: tested equal to neighbourhood_scores on small grids
     min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
     rule: highest S among admissible cells; ties by the cell's own mean
@@ -484,6 +488,7 @@ kill_conditions:
     S25-Z: {execution: signal-entry quoter at 0/0, series: [gross_bp_trade, net at 0/0], kills: [K1, K2, K-label, K-placebo with stale, K-drift, K-nbhd, K-days, K-queue, K-latency], exempt: [K-fee], beside: [net at the base tier on the same trades, fill decomposition]}
   void: [K-leak, K-flag-leak, K-units, K-acct, K-cap]  # K-leak (features or the fold-level test) voids every result; K-flag-leak every slot with a regime window above 0; K-units every slot whose gate or cost input (fee, walk, funding) it reaches, S25-Z included, and S-P and S-M when it reaches their signal's gate
   K-flag-leak: the flag-causality test fails (search.regime_source.flag_causality_test); found before D, fixed by a dated amendment
+  K-cap: {taker_S-P_S25-Z: "|position| above one clip at any event (the quoter counts an order whose cancel is in flight as resting)", S-M: "|position| above the simulator's hard limit, soft_limit_clips + 1 = 2 clips", S-M_reported: time above one clip and the reduce-only taker orders back to the soft limit}
   status_only: {K-trades: 100, K-trades_counts: "round trips; for the quoter, entries with any fill, not the simulator's fill rows; for S-M, returns to a flat position", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
   K2: net at zero fees (gross plus funding) <= 0  # S25-Z
