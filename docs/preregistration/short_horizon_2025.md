@@ -1067,10 +1067,10 @@ stage is not complete, and nothing is computed on its block, until every such
 day is. Only an HTTP 404 makes a missing plane; a 404 on a day the `HEAD`
 check found present is reported as such. Funding and hourly bars follow the
 same rule: a failed request is retried, and only the venue's answer that it
-has no data (an HTTP 404, or an empty funding history) is a missing plane. The print downloader's 120 s
-timeout (`data/bybit_trades.download_day`) bounds each socket read, not the
-whole file, so a large file does not fail by its size; a stalled connection
-does, and is retried.
+has no data (an HTTP 404, or an empty funding history) is a missing plane.
+The print downloader's 120 s timeout (`data/bybit_trades.download_day`)
+bounds each socket read, not the whole file, so a large file does not fail by
+its size; a stalled connection does, and is retried.
 
 | Stage | When | What | Book archives (GB) | Print archives (GB) |
 |---|---|---|---:|---:|
