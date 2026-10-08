@@ -269,9 +269,13 @@ instead of inside a block. Its consequences:
   grid, and no more sequence gaps than D's frozen `max_sequence_gaps`. Their
   message counts, median interval between messages and sequence-gap counts,
   and every other finding of their reports by check and severity beside the
-  same counts for D, go in the amendment. A day that fails is a reader fault,
-  corrected under the amendment protocol before H is opened; the replay
-  itself is unchanged;
+  same counts for D, go in the amendment. A day that fails is first checked
+  as a reader fault, and a fault found is corrected under the amendment
+  protocol before H is opened; the replay itself is unchanged. If, the reader
+  checked, a day fails on its sequence-gap count alone, that is a property of
+  the archive: it is recorded in the amendment and the study continues, F's
+  and P's days being excluded by the frozen threshold and the unreadable-block
+  rule deciding;
 - F and P use D's frozen `max_sequence_gaps` (below), never a value set on
   `ob200` days. If more than a quarter of a held-out block's days are
   excluded, that block is reported as **unreadable**, nothing is retuned, and
@@ -741,9 +745,12 @@ before m's first day; one `detect_breaks` call runs over the stream from
 2024-12-01 to m's last hour; and the guard uses that run's alarms in
 [m's start − 120 h, m's end]. On H, F and P, and in the dry run, the flags are
 the frozen detector's, its profile fitted on all of D. A **flag-causality
-test**, on the pattern of `validation/leakage.py`, checks in every fold that
-mutating every bar after hour t leaves every flag at or before t unchanged; if
-it fails, K-flag-leak voids every slot with a window above 0.
+test**, on the pattern of `validation/leakage.py`, checks in every fold that,
+for every hour τ of test month m, mutating every bar after τ leaves every flag
+the guard uses at or before τ unchanged. The flags in the lead-in before m's
+start come from fold m's run, whose hour profile is fitted on hours up to m's
+start; they may use bars up to m's start, and the test begins at m's first
+hour. If it fails, K-flag-leak voids every slot with a window above 0.
 
 **The policy acts before execution**, and only on pairs that
 `pipeline/execution.VALID_PAIRS` already allows:
@@ -786,7 +793,8 @@ gives each one's time and disk.
    checks the catalogue's sha256. The code to come is timed on 2024 days
    already on disk (BTCUSDT 2024-02-11, a quiet day, and 2024-03-05, the
    busiest; one XRPUSDT day of 2024), and D's wall time is projected from
-   those times. **The ceiling is 6 days of wall time for D.** Over it, cuts
+   those times, Null B at full size (137 × the catalogue's cell-days) and the
+   refit with its store rebuilds included. **The ceiling is 6 days of wall time for D.** Over it, cuts
    are made in this order until the projection fits: (1) the network on
    ETHUSDT and XRPUSDT; (2) XRPUSDT entirely; (3) the 120 s hold; (4) stratum
    C's micro-selected + tensor inputs; (5) the `quiet_out` gate. The cuts, the
@@ -814,8 +822,11 @@ gives each one's time and disk.
    validation sets the per-side θ from the target rate, which reads no
    outcome, and the network's checkpoint by inner rank IC, which reads only
    days before the purge. **The fold-level leakage test**: mutating every
-   label and price after fold m's training cutoff leaves fold m's weights, θ,
-   gate levels and checkpoint unchanged (by sha256).
+   price after fold m's cutoff, and every label at a row after it, leaves fold
+   m's weights, θ, gate levels and checkpoint unchanged (by sha256). The
+   cutoff is the end of fold m's inner validation plus the hold, inside the
+   purge before test month m: the inner validation's labels and forward moves
+   read prices up to a hold past its end, and nothing fitted reads later.
 5. **Stage A: fits.** The 600 walk-forward fits (120 signal configurations ×
    5 folds), the predictions on the test days, and for each signal
    configuration and test day a **candidate-row tape**: the rows at which the
@@ -977,10 +988,10 @@ S-M) and the named S25. Every slot exists on every block, whatever D shows.
 The chosen cell of a non-admitted C\* or R\*, and a non-admitted S-P or S-M,
 are still run once on H and F as labelled measurements, with no placebo and
 no status, and on P only when P is opened for a qualifying slot, in that read
-session. A sixth slot would cost power for no information: at 10 days on F
-or P (9 degrees of freedom) the one-sided p at t = 3 is 0.0075, and Holm's
-first step α/m stays above it only for m ≤ 6, so with more slots Holm rather
-than the t ≥ 3 bar would decide on short F and P series. One slot per stratum
+session. At 10 days on F or P (9 degrees of freedom) the one-sided p at
+t = 3 is 0.0075, and Holm's first step α/m stays above it only for m ≤ 6: a
+sixth slot would cost power with no gain, and a seventh would let Holm,
+rather than the t ≥ 3 bar, decide on short F and P series. One slot per stratum
 and execution path is the most informative use of five.
 
 ---
@@ -1856,17 +1867,24 @@ already on disk: a boosted fit on 1 million rows × 40 (× 100) columns 15 s
 2.2 s; a network training batch 8.9 ms on MPS (557 ms on the CPU), so a full
 network fit 22–44 minutes; the event-jump entry loop 6 ms per cell-day; the
 simulator 5.6–10.3 s per BTCUSDT cell-day in one process, 0.85–2.5 s of wall
-time on 6 workers; the normaliser 49 s per day for 28 columns.
+time on 6 workers; the normaliser 49 s per day for 28 columns. Null B and
+the refit have no measured unit cost yet: stage 0 measures Null B's
+vectorised cost per cell-day and shift, the refit's per-instrument rebuild of
+the every-row store, the network's inference per test day and its scoring of
+the inner validation at every epoch, and projects Null B at 137 × the
+catalogue's cell-days.
 
 | Stage | Size | Estimate |
 |---|---|---|
 | 1: fetch, replay, features, selection | 237 GB of archives; 636 instrument-days replayed at 2–3 minutes on 4 workers; two feature stores | 10–15 hours |
-| A: fits | 600 walk-forward fits (boosted 240 × 1–2.2 minutes, logistic 240, bound regressor 60, network 60 × 22–44 minutes on MPS), predictions, candidate tapes | 30–55 hours, the network dominating |
+| A: fits | 600 walk-forward fits (boosted 240 × 1–2.2 minutes, logistic 240, bound regressor 60, network 60 × 22–44 minutes on MPS), predictions, the network's inference on every row of the test days and its inner-validation scoring at every epoch, candidate tapes | 30–55 hours, the network dominating, plus the inference and scoring stage 0 times |
 | B: taker scoring | 7,200 cells × 150 days = 1.08 million cell-days from walk tables | 1–2 hours on 8 workers |
-| D: the placebo search | Null A (999 draws on hourly sums), Null B (137 shifts), the refit replication, carry-forward, PBO and DSR | 7–15 hours |
+| D: the choice and Null A | Null A (999 draws on hourly sums), carry-forward, PBO and DSR | 7–15 hours |
+| D: Null B | 137 shifts × 1.08 million cell-days, about 148 million re-pairings, at most the entry loop's 6 ms each | at most about 247 CPU-hours, about 31 hours on 8 workers; less if vectorised, as stage 0 measures |
+| D: the refit | 240 boosted fits (4–9 hours), 240 logistic fits, every row of the 150 test days re-predicted per instrument with that instrument's every-row store rebuilt, stratum C re-scored | about 10–20 hours, timed at stage 0 |
 | C: simulator | at most about 7,750 cell-days (S25-Z 1,800; S-P at most 4,500; S-M 1,350; A0 and FILL 92) | 1.8–5.4 hours (19–58 hours at 9–27 s a cell-day, the bound stage 0 tests) |
 | E: freeze | frozen fits, A0 and FILL on O, σ_D and the MDEs, the dry run | 17–33 hours |
-| **D in all** | | **68–126 hours, 2.8–5.3 days**, under the 6-day ceiling |
+| **D in all** | | **about 100–160 hours, 4.2–6.7 days**; the upper end is above the 6-day (144-hour) ceiling, so stage 0's projection decides whether the reduction order cuts |
 | H's read | the taker slots from walk tables; about 237 runs × 44 days for each simulator slot (206 placebo runs, at most 27 neighbours, 3 brackets, 1 latency); measured rows and the regime map | at most about 31,300 cell-days, 7–22 hours, one read session of at most 1.5 days |
 | F's read | every frozen slot once as a measurement; each slot taken to F with its full kills about twice its H cost (88 days) | under a day, plus about 2 × H per slot taken |
 | P's read | each slot read on P | about 1 × H per slot read |
@@ -1889,7 +1907,12 @@ The pull requests that follow this one add, before stage 1:
 - **the search's single entry point** over stages 0 to E, with the catalogue
   hash check and the trial ledger; candidate-row tapes, walk tables at every
   100 ms row and the event-jump thinning loop; the vectorised neighbourhood
-  scores, tested equal to `validation/search.neighbourhood_scores`;
+  scores, tested equal to `validation/search.neighbourhood_scores`, with the
+  ordered axes as numbers and a test of S25's 24-cell neighbourhood; the
+  market gate's two inputs on row stamps, the mid's realised volatility over
+  the trailing 60 s and the quoted spread, both in bp from float64 prices,
+  with their K-units test (`backtest/gating.MarketGate`'s default columns,
+  `log_mid_vol50` on the 5 s grid and `spread_bp_now`, are not used);
 - **the signal pieces**: the per-side θ of the hold-first rule, the EV gate,
   the Gaussian head with its lazy window dataset, the ten-level tensor, the
   2025 microstructure set, the walked-book label, and the time-based forward
@@ -1910,7 +1933,9 @@ The pull requests that follow this one add, before stage 1:
   refit replication, carry-forward,
   CSCV PBO, and the deflated Sharpe ratio with N_eff;
 - **execution**: the event-time taker executor; the simulator's signal-entry
-  quoter and S1 with the lean on a fixed `clip_btc`, wired to `guard_pull`
+  quoter, with a unit test that an order whose cancel is in flight counts as
+  resting, and S1 with the lean and its `sigma_ref` from W on a fixed
+  `clip_btc`, wired to `guard_pull`
   and `guard_widen`; the simulator's taker orders priced by the executor's
   walk function in place of `_walk` with `flatten_slippage_bp` 0.5, with a
   parity test of the two walks and the late-snapshot counters in the
@@ -1922,7 +1947,8 @@ The pull requests that follow this one add, before stage 1:
 - **this study's fetch and feature stores** ([fetch plan](#fetch-plan)): the
   book replay on at most 4 workers with its measured peak memory, the retry
   of every failed download until success (only an HTTP 404 is a missing
-  plane), the two float16 stores, the disk check before each stage, and the
+  plane), the two float16 stores with the raw-size scaling and the
+  finiteness test, the disk check before each stage, and the
   deletion of W's and D's features before stage 3;
 - **the presentation**: regime attribution and the regime map; the
   leaderboard, marginals, nulls and regime-map files, the figures, and the
@@ -1954,8 +1980,11 @@ E's bars, H, F and P.
   sha256, every frozen finalist file's and the fitted-values file's sha256
   equal the amendment's, the trial ledger and its sidecar are committed with
   the sha256 and the row count the amendment records, the catalogue's sha256 equals the
-  registered one (or stage 0's amendment's), and no file of H and no hourly
-  bar of E is already on disk.
+  registered one (or stage 0's amendment's), and no book, print, funding or
+  hourly-bar file of H and no hourly bar of E is already on disk (the Binance
+  daily bars of item 5 of [what was
+  known](#what-was-known-before-this-was-written) are not a plane of this
+  study).
 - **Every open (H, F and P), and the start of every process of a read
   session**, also require: `git status --porcelain --untracked-files=normal`
   lists nothing but the ledger file; `git diff --name-only <session's
@@ -1996,8 +2025,8 @@ E's bars, H, F and P.
   outside `docs/preregistration/` (so the code, the configuration, this
   registration, the tests, the entry point and the lock file are those of the
   H read), the frozen weights' and the fitted-values file's sha256 still
-  match, the conditions above on every open hold, and no file of F is on
-  disk. **P** opens on the same conditions against F's read, and
+  match, the conditions above on every open hold, and no book, print,
+  funding or hourly-bar file of F is on disk. **P** opens on the same conditions against F's read, and
   only when a slot qualifies; its session then computes the qualifying
   slots' statuses and, as measurements, every other frozen slot, measured row
   and regime-map segment on P.
@@ -2239,7 +2268,8 @@ open, or a proposal was not taken, the choice and its reason:
   killed pure quoting.
 - **k = m = 5**, one slot per stratum and execution path plus S25: at m = 5
   the t ≥ 3 bar binds on every block, so the breadth of the search costs
-  nothing on H; a seventh slot would let Holm decide on short F and P series.
+  nothing on H; a sixth slot would cost power with no gain, and a seventh
+  would let Holm, rather than the t ≥ 3 bar, decide on short F and P series.
 - **S25-Z at α/6**: the earlier α/(m + 1) rule carried to m = 5.
 - **The slots on S25's signal take their status from H before 2025-08-01 and
   stop at candidate** (multiplicity and protocol reviews), rather than a
