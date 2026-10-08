@@ -8,7 +8,7 @@ agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons) |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons) |
 | **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT, ETHUSDT and XRPUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy, holding horizons and instruments: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the break detector, the status rules, the fetch plan, the compute budget and the amendment protocol |
 | **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
 | **How it changes** | Only under the [amendment protocol](#amendment-protocol): dated amendments appended at the end. One amendment is planned, after the development-period runs and before the held-out block is read |
@@ -2239,7 +2239,8 @@ The registration was reviewed three times before it was merged and before any
 data was read, for peeking, for multiplicity and for feasibility, and the
 revision was checked once more for consistency; a last review read it for
 consistency, for decisions left until after a read, and against the code it
-names. Every
+names. After the recast, a review for search multiplicity, protocol and
+executability read the search before any data was read. Every
 blocking and should-fix point was taken in, and the notes where they
 pointed to a gap. It was then recast, still before any data was read, from
 a test of hand-picked hypotheses into a registered search, from three
@@ -2302,6 +2303,26 @@ open, or a proposal was not taken, the choice and its reason:
 - **No earlier figure enters the expected outcome or the edge ladder**; the
   prior rests on this repository's own results and the fee arithmetic.
 
+**The review of the search** (search multiplicity, protocol, executability).
+Every blocking and minor point was taken in; where a point offered two fixes:
+
+- **Admission (iv) is the count p-value alone**, rather than keeping
+  `exceeds_placebos` with another interpolation: one rule, the stricter,
+  computed by the entry point as a count.
+- **K-cap for S-M is the simulator's hard limit of two clips**, rather than a
+  new setting that blocks an order on a side while a cancel there is in
+  flight: S1 runs as round one ran it, and its time above one clip is
+  reported.
+- **p_search is the one D number quoted**, labelled and adjusted over D runs,
+  rather than every D sentence carrying a label: it is the search's answer to
+  whether it found anything beyond selection noise.
+- **Raw-size features are scaled by W's median touch size**, with float32 only
+  for a column that still fails the finiteness test, rather than float32 for
+  every raw-size column: the disk budget holds.
+- **The trial ledger's catalogue hash and commits go in a sidecar**, rather
+  than a header: a parquet file stays one table, and the sidecar carries its
+  sha256 and row count.
+
 **Earlier choices, kept.**
 
 - **Holm's m is fixed on every block**, not the number taken to F or P: the
@@ -2309,8 +2330,9 @@ open, or a proposal was not taken, the choice and its reason:
 - **A missing hour carries its close with a zero return**, rather than being
   dropped: one row per hour keeps the windows in hours and the hour-of-day
   profile aligned, and the move over the gap enters the next return either way.
-- **R is tested for every candidate on H, with a reference set of split days
-  at which the slot also passes**: testing on H's candidacy removes the
+- **R is tested for every candidate on H (the slots on S25's signal
+  excepted), with a reference set of split days at which the slot also
+  passes**: testing on H's candidacy removes the
   gate on F−, and the conditioned reference set removes the selection that
   "confirmed until the break" still makes. The split days are enumerated
   (about 58), `b` excluded, so the floor is 19 qualifying days besides `b`
@@ -2434,7 +2456,7 @@ open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`035c4f44d85c3b3926e08016ad94a4c9bb20a51c7ac775514a256ef0af324f71`.
+`77263756c67b48a3cbfbceb0f04cd92162d301615ef0f744d32ee6edff727156`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2448,7 +2470,9 @@ last review, and
 `511626b7c0464cd91bafc469ea151af0769121b13946a2066c46a6ca22265fe7` before the
 recast into a search, and
 `3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f` before the
-market maker's round trips were defined.)
+market maker's round trips were defined, and
+`035c4f44d85c3b3926e08016ad94a4c9bb20a51c7ac775514a256ef0af324f71` before the
+review of the search.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the

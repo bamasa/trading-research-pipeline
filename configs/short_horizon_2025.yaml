@@ -6,7 +6,8 @@
 # 8 October 2026, before any 2025 book, print, hourly bar or funding file was
 # fetched, and revised together the same day after three reviews (peeking,
 # multiplicity, feasibility), then recast from fixed hypotheses into a
-# registered strategy search, still before any data was read. They must agree.
+# registered strategy search, and the search reviewed for search multiplicity,
+# protocol and executability, still before any data was read. They must agree.
 #
 # The search block below is generic: its schema (clock, cluster, stages, axes,
 # catalogue, strata, slots, regime source, nulls, admission, budget) is meant
