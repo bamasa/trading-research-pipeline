@@ -319,19 +319,30 @@ Why these blocks.
 
 Days are independent: each starts flat, no position is held across midnight,
 and the day is the cluster for every statistic. Rolling statistics may read
-the previous days of the same or an earlier opened block (W before D, H
-before F, F before P); a reader never reads a later block than its access
-permits. **Two days start cold**: 2025-07-08, because E's book is never
-fetched, and 2025-08-21, because the archive changes on it. On each, rolling
-state is rebuilt from the block's own rows, and the first `N` minutes are not
+the previous days of the same block, and of the block before it where the two
+are adjacent and share an archive (W before D, F before P); a reader never
+reads a later block than its access permits. **Two days start cold**:
+2025-07-08, because E's book is never fetched, so H's rolling statistics read
+nothing of D (not even 2025-06-30), and 2025-08-21, because the archive
+changes on it, so F's read nothing of H. On each, rolling state is rebuilt
+from the block's own rows, and the first `N` minutes are not
 scored, `N` being the longest feature lookback (recorded in the amendment),
-whatever days it spans; a day stays usable with fewer decision rows.
+whatever days it spans; a day stays usable with fewer decision rows. Fitted
+values (the size floors fitted on W, the frozen models and thresholds) are not
+rolling state and are used on every block.
 
 Days excluded from every verdict, counted and reported per block: more book
-sequence gaps than `max_sequence_gaps`, a non-positive price or a price off
-the tick grid (`validate_book` raises), a missing plane (an HTTP 404 only;
-a failed download is retried, never excluded, as the [fetch plan](#fetch-plan)
-says), or a missing funding history. **`max_sequence_gaps` is the 95th percentile of D's per-day gap
+sequence gaps than `max_sequence_gaps`; a non-positive price, found as a
+`positive_prices` error in `validate_book`'s report (the function returns its
+findings and does not raise, so the study's loader excludes the day on that
+finding); a price off the tick grid, which `validate_book` does not check
+(the simulator's day loader, `market_making/events.load_day`, refuses such a
+day under R16, and the study's loader applies the same check to every day,
+taker strategies included); a missing plane (an HTTP 404 only; a failed
+download is retried, never excluded, as the [fetch plan](#fetch-plan) says);
+a missing funding history; or a day flagged `flatten_stale` (R16: a taker
+order, an exit or the day-end close, that no snapshot followed before the
+book ended walked a snapshot more than 5 s older than the order). **`max_sequence_gaps` is the 95th percentile of D's per-day gap
 counts, rounded up**, computed by that formula and recorded in the amendment;
 the same value is used on every block. Each verdict is also reported with the
 gap-excluded days included, as a measurement, so that the exclusion cannot
@@ -370,8 +381,11 @@ quietly favour a result.
   depth, or whose snapshot is more than 1 s old, is skipped and counted; **the
   skip rule applies only at entry**. An exit walks the first snapshot at or
   after its decision + 10 ms whatever its age; depth beyond the tenth level is
-  charged at the tenth level's price, and such exits are counted and flagged,
-  as round one's R16 `flatten_stale`. Funding (R14) and the accounting identity
+  charged at the tenth level's price and counted, as the simulator's
+  `flatten_beyond_visible_book`. An exit that no snapshot follows before the
+  book ends walks the last one, and if that snapshot is more than 5 s older
+  than the order the day is flagged `flatten_stale` and excluded, as in the
+  simulator (R16). Funding (R14) and the accounting identity
   (R15), with turnover equal to the sum of fill notionals, hold for it as for
   the simulator. The label's walks and the executor's call the same function.
 - **Passive fills** (M1, Z, FILL) come from round one's event-time simulator
@@ -450,6 +464,12 @@ quietly favour a result.
 repository's defaults, not the 2025 research's.
 
 - **Gradient boosting** (`models/gbm.py`), three classes, for T1, A0 and Z.
+  With `balance_classes` (its default), a fit (a walk-forward fold or a
+  frozen model) whose training rows lack the `long` or the `short` class gives
+  that side a probability of 0 (`models/linear._align_columns` fills a missing
+  class with zeros), so that side never trades with that model. This is the
+  code's intended behaviour, not a fault; the fits and sides it affects are
+  reported.
 - **The Gaussian-head network** for T2: `models/tcn.py`'s causal dilated
   network (window 64 rows, 32 channels, 4 levels, kernel 3, dropout 0.1, at most
   20 epochs) with a head for μ and log σ², trained by Gaussian negative
@@ -575,7 +595,8 @@ and nothing else may be chosen after the amendment.
 - **`net_per_100_clip_day`**: **primary for M1.** Its daily series has one
   row for every usable calendar day of the block: the sum of that day's net
   in USDT × 100 / the clip's notional at each entry, and 0 for a day without
-  a fill.
+  a fill. The zero rows are written into the table given to `assess`, which
+  averages only the rows it is given (`evaluation/significance.py`).
 - **`gross_bp_trade`**: `net_bp_trade` before fees and funding. **Primary for
   Z**, with the day's value formed as for T1 (gross USDT over entry notional).
 - **The daily series decides.** The mean, the day-level t, the Newey–West t,
@@ -922,7 +943,10 @@ the same orders under three rules:
 | (c) queue | after the visible queue ahead is consumed by prints at its price (R5, R6), or on prints through it (R7) | the simulator's default |
 
 Reported for each: fill ratio, markouts at 1, 10 and 30 s by path, gross and
-net.
+net. **The fill ratio** is the share of posted orders that receive any fill
+(the convention of `fill_rate` in `backtest/maker.py`); filled volume over
+posted volume is reported beside it. The prediction below is on the share of
+orders.
 **Prediction, fixed now: the fill ratio is at least 0.75 under (a) and at most
 0.50 under (c).** The original's closed engine reported about four in five
 orders filled; if (c) also fills at least 0.75, the suspicion that the
@@ -1159,7 +1183,10 @@ registration, a corrected re-run after a bug included, uses blocks after
 2025-12-31 and never the reader-test days.
 
 Round one's `prereg.Access` and the round-two access are not used to read any
-day of this study.
+day of this study. `pipeline/execution`'s market-maker path builds its access
+with round one's `access_for`, so it is not used either: the passive
+strategies call `market_making/simulator` directly, on days loaded through
+this study's loader.
 
 ---
 
@@ -1296,6 +1323,17 @@ different fixes, or a fix left a value open, the choice and its reason:
   on each run: every walk-forward fold and every cell reads the same D days
   again, and the store's 250 MB a day fits the disk once W's and D's features
   are deleted after H's results; float64 would not fit.
+- **The fill ratio counts orders with any fill**, rather than filled volume
+  over posted volume: it is the repository's existing `fill_rate`, and it is
+  the measure closer to the original engine's "orders filled". A partial fill
+  counts as filled, which makes FILL's prediction for the queue rule harder to
+  meet, not easier; filled volume is reported beside it.
+- **Only `validate_book`'s `positive_prices` error excludes a day**, as
+  registered, rather than any error in its report: the registration named a
+  non-positive price, and adding the function's other checks now would add
+  exclusions that D has not been looked at for. The off-grid check moves to
+  the simulator's day loader, where the code has it, and `flatten_stale`
+  joins the exclusions as R16 has it.
 - **No 2026 confirmation block is registered here.** P begins after every
   dated entry of the 2025 research, so it is fresh for the recipes; a
   confirmation on 2026 data needs its own registration, which the
@@ -1305,7 +1343,7 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`d02fe285fa297ef6a740a3a1742efa03ea2285faeb4cfa711c1bb73f1fbef1bb`.
+`ed38d141f7ef55a90bf36d2fe44cba3d2d41774644857ec09c319bc875eebce8`.
 (Earlier drafts, written before the reviews were applied in full and never
 merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they

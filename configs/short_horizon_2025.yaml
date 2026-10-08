@@ -76,7 +76,7 @@ data:
     missing_under_code_pattern: {book_ob500: [2025-08-21, 2025-12-31], prints: none}
     first_and_fifteenth: all prints present; ob500 present to 2025-08-15, absent from 2025-09-01; ob200 present from 2025-09-01
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
-  exclusions: [more book sequence gaps than max_sequence_gaps, non-positive or off-grid price, missing plane, missing funding]
+  exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended"]
   max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up; the same value on every block
   max_sequence_gaps: null  # by the rule above; frozen by the D amendment
   unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it
@@ -93,7 +93,7 @@ blocks:
   F: {role: boundary, start: 2025-08-21, end: 2025-11-16, days: 88, archive: ob200, reads: 1, read_after: H's results are committed, read_always: true}
   P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: "a hypothesis (Z included) passed on F with at least 20 usable days"}
   moved_by_head_check: {H_end: {planned: 2025-09-21, registered: 2025-08-20}, F_start: {planned: 2025-09-22, registered: 2025-08-21}}
-  days_independent: true  # flat at every midnight; rolling statistics may read earlier days of opened blocks
+  days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
   cold_start_unscored: the first N minutes of each cold-start day, N being features.longest_lookback_minutes
   spent: H, F and P are spent for these recipe families on BTCUSDT; successors use blocks after 2025-12-31
@@ -108,7 +108,8 @@ common:
     entry: walk the first snapshot at or after decision + 10 ms across 10 levels, VWAP for the clip
     slippage_bp_on_top_of_walk: 0
     entry_skip: {clip_exceeds_visible_depth: true, snapshot_older_than_s: 1}  # entry only; skipped and counted
-    exit: walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price; counted and flagged as R16 flatten_stale
+    exit: walk the first snapshot at or after decision + 10 ms whatever its age; depth beyond level 10 at the tenth level's price, counted (flatten_beyond_visible_book)
+    exit_after_book_end: walk the last snapshot; if it is more than 5 s older than the order, the day is flagged flatten_stale and excluded (R16)
     funding: R14
     accounting_identity: R15, turnover equal to the sum of fill notionals
     same_walk_function_as_label: true
@@ -166,7 +167,7 @@ features:
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
 
 models:
-  boosting: {code: models/gbm.py, classes: 3, hyperparameters: repository defaults, used_by: [T1, A0, Z]}
+  boosting: {code: models/gbm.py, classes: 3, hyperparameters: repository defaults, used_by: [T1, A0, Z], missing_class_in_fit: that side's probability is 0 (_align_columns) and it never trades with that model; reported}
   gaussian_network: {code: models/tcn.py, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: gaussian_nll, variance_prior: true, variance_clamped: true, checkpoint: rank IC of mu against the realised forward move on the inner validation, used_by: [T2]}
   control_network: same as gaussian_network, trained on the control label
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch (new code)", inference: batched}
@@ -250,7 +251,7 @@ metrics:
     T1: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4
     T2: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4
     Z: one value per day with a trade; the day's gross USDT summed over round trips / their summed entry notional x 1e4
-    M1: every usable day; the day's net USDT x 100 / the clip's notional at each entry, summed; 0 for a day without a fill
+    M1: every usable day; the day's net USDT x 100 / the clip's notional at each entry, summed; 0 for a day without a fill, written as a row into the table given to assess
   computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
   ic: rank correlation of the score with the mid move from the entry snapshot to the first snapshot at or after it + hold, per day, mean over days
   beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10_30s_by_path, spread_plus_adverse_5s, trades_per_day,
@@ -335,6 +336,7 @@ measurements:
       on_touch: fills in full at the first print at or through its price from the hitting side, ignoring the queue  # optimistic bound
       trade_through: fills only on prints strictly through its price, up to their size  # R7 alone
       queue: R5, R6 and R7  # the simulator's default
+    fill_ratio: share of posted orders with any fill (backtest/maker.py fill_rate); filled over posted volume reported beside
     prediction: {on_touch_fill_ratio_min: 0.75, queue_fill_ratio_max: 0.50}
     withdrawal: if queue fills at least 0.75, the suspicion about the original's fill rule is withdrawn in writing
   fee_break_even: {taker: gross_bp_turnover, passive: maker fee at zero net with the taker exit at 5.5 and at 1.5 bp}
@@ -401,7 +403,7 @@ access:
   F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only experiments/results/, docs/ and README.md", frozen weights' sha256 match, no F file on disk]
   P: [the same conditions against F's read, for the hypotheses that qualify]
   second_read: raises unless forced; stamped second read; cannot change a status
-  earlier_accesses_used: false  # neither round one's nor round two's
+  earlier_accesses_used: false  # neither round one's nor round two's; pipeline/execution's market-maker path (round one's access_for) not used
   spent_blocks: "H, F and P are spent for these recipe families on BTCUSDT; a successor, a corrected re-run included, uses blocks after 2025-12-31 and never the reader-test days"
 
 amendment:
