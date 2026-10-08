@@ -916,7 +916,9 @@ hold:
 - **(iv) the placebo search**: max(p_A, p_B) ≤ 0.05 ([below](#the-placebo-search)).
 
 **Slot admission (payoff).** A slot that fails is `not admitted on D
-(<condition>)` and enters Holm with p = 1 on every block.
+(<conditions>)`, naming every condition that fails (for example `not admitted
+on D (i, iv)`), and enters Holm with p = 1 on every block. A prediction of
+`not admitted on D (i)` is scored on condition (i) alone.
 
 - **S-C ← C\*, S-R ← R\***: the signal is admitted, and (i) the chosen cell's
   S > 0; and (ii) the neighbourhood median of the monthly mean net is > 0 in at
@@ -931,8 +933,9 @@ hold:
 - **S-M**: S1 with the lean on S-P's signal, the cell λ = 1 and its
   neighbourhood λ ∈ {0.5, 1, 2}, the lean window the signal's hold, the guard
   `guard_pull` at the signal's regime window (none when it has none). It is
-  admitted on (i) and (ii) on `net_per_100_clip_day`, and on spread capture
-  > 0 on D.
+  admitted on (i) and (ii) on `net_per_100_clip_day`, and on its making part
+  being positive on D: the mean of `spread + adverse(5 s)` over its passive
+  fills, in bp per fill, the quantity K-dir reads.
 - S-P and S-M make no choice on a passive outcome, and S25's signal is fixed
   before D, so neither needs a search-level null; their conditions only remove
   slots.
@@ -967,8 +970,11 @@ and execution path is the most informative use of five.
 when no configuration has information, under exactly D's selection. A searched
 finalist's p-value against the maximum over strata of that null must be at
 most 0.05: single-step max-T (Romano–Wolf), at most a 5% chance that any
-searched slot is admitted by noise. Its p-value, **p_search**, whether the search found
-anything beyond selection noise whatever the fee, is a headline result of D.
+searched slot is admitted by noise. **p_search** is max(p_A, p_B) of the
+stratum with the larger A, times R_D and capped at 1 (Bonferroni over D runs):
+whether the search found anything beyond selection noise whatever the fee.
+It is the one D number quoted as a result, labelled "on development data,
+selected".
 
 **What is re-run, and what is not.** Re-run: every step that reads a test
 day's outcome, which is the per-cell daily series, the 5-trade filter, the
@@ -1245,9 +1251,11 @@ F are computed on all of F, labelled. Found when P is read, F's statuses stand
 as committed, and P is scored with the full bar, R read as not supported.
 
 **No number at a fee tier other than the base, under a non-default fill rule
-or exit, on F for a slot not taken to F, for a measured row, or for a
-regime-map segment, may be described as the strategy working.** Such numbers
-are measurements.
+or exit, on F for a slot not taken to F, for a measured row, for a
+regime-map segment, on H before 2025-08-01 (except as the status window of a
+slot on S25's signal), with the gap-excluded days included, or inside S25's
+information set may be described as the strategy working.** Such numbers are
+measurements.
 
 **S25-Z** is outside the family. It is tested alone at α/6 = 0.83%
 (α/(m + 1)), one-sided,
@@ -1598,7 +1606,7 @@ non-admitted S-P or S-M, run once on H, F and P with no placebo and no status
 numbers, ranks and region tags, the per-axis marginals, and every replication
 of the placebo search ([artefacts](#artefacts-and-headline-sentences)). Every
 D number is labelled "selected, biased upward" and is never quoted as a
-result.
+result, except p_search ([the placebo search](#the-placebo-search)).
 
 **H before 2025-08-01**, a labelled sensitivity: every slot not on S25's
 signal at its frozen cell on H's usable days from 2025-07-08 to 07-31 (24
@@ -2093,18 +2101,26 @@ point and never edited.
 
 | Outcome | Sentence |
 |---|---|
-| Search on D | "Searched [N] configurations ([axes]) on 150 development days across [instruments]; the best direction edge [was / was not] distinguishable from search noise (Null A p = [x], Null B p = [y])." |
-| Payoff on D | "[No configuration paid the 5.5 bp taker fee on development data / S-[x] admitted at S = [v] bp]." |
+| Search on D | "Searched [N] configurations ([axes]) on 150 development days across [instruments]; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)." |
+| Payoff on D | "[No configuration paid the 5.5 bp taker fee on development data / S-[x] was admitted on development data, selected]." |
 | Each slot on H, F, P | "[slot] on [block]: [status]; first kill [K-x] at [value] against [reference]." |
-| S25 | "S25's gross edge was [x] bp of turnover against the 5.5 bp taker fee; break-even [y] bp per side; on H: [status]." |
-| Passive entry and market maker | "Passive entry and the market maker on [signal]: [D status / H status]; spread capture [v] bp." |
-| Regime axis | "Guards after detector alarms [did / did not] add more than random pauses ([percentile])." |
+| S25 | "S25's gross edge was [x] bp of turnover against the 5.5 bp taker fee; break-even [y] bp per side; on H before 2025-08-01: [status]." |
+| Passive entry and market maker | "Passive entry and the market maker on [signal]: [D status / H status]; the market maker's making part on [block] was [v] bp per fill." |
+| Regime axis, one per slot with a window above 0 | "[slot] on H: its [w] h guard after detector alarms [did / did not] add more than random pauses ([percentile] of the random flag sets)." |
 | Regime map | "Between detector alarms, [slot] was positive in [a] of [b] segments; the detector cut the segments, not the results." |
 | Break | "R: [supported / not supported / untestable (reason) / not tested]." |
 
+The first kill is the first that fires in the order of the slot's row of
+[the kill table](#kill-conditions-per-slot). Values are in bp of traded
+notional for S25, S-C, S-R and S25-Z, and per 100 USDT of clip a day for S-P
+and S-M. In the regime-axis sentence "did" means the slot's difference from
+its window-0 twin is above the 95th percentile of the random flag sets. The
+making part's [block] is H when S-M has a status on H, else D.
+
 A negative result therefore reads as the pipeline measuring how far each
 configuration was from paying; it is not a missing result. D numbers are never
-quoted as results; only H, F and P statuses are.
+quoted as results, except p_search, labelled "on development data, selected";
+otherwise only H, F and P statuses are.
 
 **Later horizons.** The configuration's `search` block is generic: the same
 block, entry point, ledger, nulls, regime axis, verdict helpers and status
