@@ -769,9 +769,6 @@ Kill conditions:
   at the base tier this can only fire through an accounting fault, so it is
   also a check; its main use is the report of how far each strategy was from
   paying.
-- **K-dir** (M1, Z) — `spread + adverse(5 s)` over the passive fills is ≤ 0
-  while the primary metric is > 0: the result is the move held after a fill
-  that was adversely selected at the fill.
 - **K-queue** (M1, Z) — a positive result that is not positive under the
   joint pessimistic queue bracket (pessimistic cancellation attribution and
   `all_ahead` arrival growth), or under either `none` or `all_ahead` alone.
@@ -784,8 +781,16 @@ Not kills, but they set the status:
 - **K-MDE** — a result that does not pass, with no kill, and is smaller in
   size than the MDE is "inconclusive, below the minimum detectable effect".
 
+Reported, not a kill:
+
+- **The fill decomposition** (M1, Z; called K-dir in round one) —
+  `spread + adverse(5 s)` over the passive fills, and the rest. A directional
+  signal entered passively is meant to earn the move held after the fill, so
+  a non-positive part at the fill with a positive result is the mechanism
+  under test, not a fault; it is reported beside every M1 and Z verdict.
+
 Each condition is applied to every claim of a hypothesis. A condition that
-needs a positive result (K-queue, K-dir, K-latency) fires only when the
+needs a positive result (K-queue, K-latency) fires only when the
 result is positive under the default rules. On F the conditions are applied
 to the series the status is assessed on (F− or all of F).
 
@@ -841,8 +846,8 @@ the queue ahead under rules R5–R7, a taker exit `h` after the fill) earns a
 positive `net_per_100_clip_day`, on the zero-filled series of every usable
 day.
 
-**Kill conditions.** As T1, plus K-dir and K-queue. Reported beside: the
-fill ratio, markouts by fill path, the passive-exit variant, and the result at
+**Kill conditions.** As T1, plus K-queue. Reported beside: the fill
+decomposition, the fill ratio, markouts by fill path, the passive-exit variant, and the result at
 maker fees of 0 and −1 bp (the cheapest published BTCUSDT maker tier and the
 programme's rebate), each with the fee caveat.
 
@@ -862,7 +867,7 @@ order book for that pair).
 
 **Kill conditions.** K1 (mean of the daily `gross_bp_trade` series over H
 ≤ 0); K2 (the mean of the daily net at 0/0, gross plus funding, ≤ 0);
-K-label, K-placebo (with the stale signal), K-drift, K-nbhd, K-days, K-dir,
+K-label, K-placebo (with the stale signal), K-drift, K-nbhd, K-days,
 K-queue, K-latency; void under K-leak, K-acct, K-cap; inconclusive under
 K-trades. K-fee does not apply: the
 hypothesis is about a fee the base tier does not offer.
@@ -1009,6 +1014,13 @@ Fixed now, run as the ledger opens each block.
 - **On D**, the monitor's alarm rate over 2025-01-01 to 06-30 is recorded in
   the amendment. Above one alarm per 14 days, R is declared untestable then,
   before H is read, `b` does not split F, and the monitor is not retuned.
+  This rate is optimistic: the hour-of-day profile is fitted on D itself, and
+  the recorded thresholds were calibrated on Gaussian null paths
+  (`structural_breaks.py`), not on heavy-tailed hourly returns. On F, where
+  the profile is out of sample, the first alarm is likely to come sooner, and
+  after a re-anchor the monitor can alarm again once `min_history` (121 hours)
+  has passed. An early first alarm leaves F− short or R untestable: it lowers
+  R's power, and the placebo splits keep it from making R easier to support.
 - **Reading**: bars up to 2025-06-30 are development data; E's and H's bars
   open with H, F's with F and P's with P, through the ledger.
 - **Reported beside, never defining `b`**: `validation/changepoint.detect` on
@@ -1334,6 +1346,16 @@ different fixes, or a fix left a value open, the choice and its reason:
   exclusions that D has not been looked at for. The off-grid check moves to
   the simulator's day loader, where the code has it, and `flatten_stale`
   joins the exclusions as R16 has it.
+- **K-dir is reported, not a kill, for M1 and Z** (multiplicity review,
+  notes). In round one it guarded a market maker whose result should be
+  earned at the fill; a directional signal entered passively is meant to earn
+  the move after it, so the kill would remove the mechanism under test. It
+  could only cause false negatives; the false-positive routes stay guarded by
+  K-placebo (with the stale signal), K-drift, K-queue and K-latency.
+- **The detector's alarm rate on D stays in-sample, and is disclosed as
+  optimistic** (peeking and multiplicity reviews, notes), rather than
+  measured with a profile fitted elsewhere: the leniency can only end R early
+  or make it untestable, never make it supported.
 - **No 2026 confirmation block is registered here.** P begins after every
   dated entry of the 2025 research, so it is fresh for the recipes; a
   confirmation on 2026 data needs its own registration, which the
@@ -1343,7 +1365,7 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`ed38d141f7ef55a90bf36d2fe44cba3d2d41774644857ec09c319bc875eebce8`.
+`abff072158434c982bc9a23405942d43b08bdcd81f8b04de382127260d4ad44e`.
 (Earlier drafts, written before the reviews were applied in full and never
 merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they

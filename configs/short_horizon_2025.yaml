@@ -291,14 +291,15 @@ statuses:
 kill_conditions:
   void: [K-leak, K-units, K-acct, K-cap]
   kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency]
-  passive_only: [K-dir, K-queue]  # M1 and Z
+  passive_only: [K-queue]  # M1 and Z
+  reported_not_kill: {fill_decomposition: "spread + adverse(5 s) and the rest, for M1 and Z (round one's K-dir)"}
   status_only: {K-trades: 100, K-trades_counts: "round trips for T1 and T2; fills for M1 and Z", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
   K-days_share_positive_max: 0.5  # half or fewer positive days of the daily series kills
   K-nbhd: {statistic: median over the neighbourhood's cells of the daily series' mean, kills_at_or_below: 0, neighbourhood: as d_procedure.choice.neighbourhood, cell_without_trade_scores: 0, runs_only: the frozen files whose sha256 the amendment records}
   K-latency: {used_by: [T1, T2, M1, Z], latency_ms: 110, kills: a positive result that is <= 0 there, unit_test: every fill's snapshot stamped at or after decision + 10 ms; label and executor share the walk function}
   K-queue_brackets: [joint pessimistic (pessimistic cancellation and all_ahead), none, all_ahead]
-  needs_positive_result: [K-dir, K-queue, K-latency]
+  needs_positive_result: [K-queue, K-latency]
   on_F: applied to the series the status is assessed on (F- or all of F)
   Z_exempt: [K-fee]
   Z_extra: {K2: "net at zero fees (gross plus funding) <= 0"}
@@ -316,8 +317,8 @@ placebos:
 hypotheses:
   T1: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1}
   T2: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1 or inconclusive under K-trades}
-  M1: {block: H, claim: net_per_100_clip_day > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-dir, K-queue], beside: [maker 0 bp, maker -1 bp, passive exit], prediction: killed by K1}
-  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-dir, K-queue], context_not_test: Binance zero-fee spot BTC/FDUSD in 2025, prediction: killed by K1}
+  M1: {block: H, claim: net_per_100_clip_day > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-queue], beside: [fill decomposition, maker 0 bp, maker -1 bp, passive exit], prediction: killed by K1}
+  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-queue], beside: [fill decomposition], context_not_test: Binance zero-fee spot BTC/FDUSD in 2025, prediction: killed by K1}
   R:
     tested_for: every hypothesis, Z included, that is a candidate on H, whether or not it passes on F-
     not_tested_for: any other hypothesis, including one first significant on F
@@ -357,6 +358,7 @@ detector:
   mean_channel: {column: odds_mean, threshold: 8.93, reported: true, re_anchors: false, defines_b: false}
   b: first alarm effective in F, at the close of the hour whose return produced it
   max_alarm_rate_D_per_14_days: 1  # above it, R is declared untestable before H and b does not split F
+  alarm_rate_D_optimistic: true  # hour profile fitted on D itself; thresholds calibrated on Gaussian null paths; disclosed, not corrected
   hour_profile: null  # 24 values fitted on D; frozen by the D amendment
   alarm_rate_D: null  # alarms over 2025-01-01..06-30; frozen by the D amendment
   r_untestable_declared: null  # true or false; frozen by the D amendment
