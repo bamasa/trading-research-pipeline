@@ -749,57 +749,240 @@ the same frozen detector; the axis is a short guard after any alarm. A finalist
 with a window above 0 keeps its guard on H, F and P, so F− and F+ are its own
 guarded series, and `b`'s alarm triggers its guard too.
 
-### The development-period procedure (D only)
+---
 
-1. **Fetch** W and D only ([fetch plan](#fetch-plan)); no H, F or P file is
-   on disk before the amendment. Validate every day; exclusions per the
-   [blocks](#blocks).
-2. **Leakage**: every feature through `validation/leakage.py`; any failure
-   stops the study until fixed by a dated amendment (K-leak).
-3. **Selection** on D's January.
+## The development-period procedure (D only)
+
+The search runs in registered stages; the [compute budget](#compute-budget)
+gives each one's time and disk.
+
+0. **Stage 0, before any 2025 fetch: the hard budget.** The entry point
+   checks the catalogue's sha256. The code to come is timed on 2024 days
+   already on disk (BTCUSDT 2024-02-11, a quiet day, and 2024-03-05, the
+   busiest; one XRPUSDT day of 2024), and D's wall time is projected from
+   those times. **The ceiling is 6 days of wall time for D.** Over it, cuts
+   are made in this order until the projection fits: (1) the network on
+   ETHUSDT and XRPUSDT; (2) XRPUSDT entirely; (3) the 120 s hold; (4) stratum
+   C's micro-selected + tensor inputs; (5) the `quiet_out` gate. The cuts, the
+   new catalogue hash and the new N_max go into a dated amendment committed
+   before stage 1. Nothing is cut once a 2025 file is on disk; a run slower
+   than projected only takes longer.
+1. **Stage 1: fetch, replay and features**, W and D, one instrument at a time
+   ([fetch plan](#fetch-plan)); no H, F or P file is on disk before the
+   amendment. Validate every day; exclusions per the [blocks](#blocks).
+   Features go to two float16 stores: every tenth row, for every instrument;
+   and every row, holding the network's inputs, for one instrument at a time.
+2. **Leakage**: every feature through `validation/leakage.py`, the fold-level
+   leakage test and the flag-causality test; any failure stops the study
+   until fixed by a dated amendment (K-leak, K-flag-leak).
+3. **Selection**, per instrument, on its January.
 4. **Walk-forward over D** by calendar month: for each test month from
-   February to June, train on D's days before it except the last seven, which
-   are the inner validation for thresholds and checkpoints; purge the hold plus
-   the longest feature lookback before the inner validation and before the
-   test month. Every cell of every search runs in this walk-forward, which
-   gives 150 test days per cell.
-5. **The choice**: per strategy, the objective is the mean of the daily
-   series (see [Metrics](#metrics)) over the 150 test days (net at the base
-   tier for T1 and T2; gross under the queue rule for Z). The cell chosen is
-   the one with the highest neighbourhood median among cells averaging at
-   least 5 trades a day, ties broken by its own value. **The neighbourhood** is
-   `validation/search.neighbourhood_scores`' block: every cell within one step
-   of the cell on every axis, diagonals included (up to 9 cells for T1 and Z,
-   27 for T2), every cell counted whatever its trade rate, and a cell without
-   a trade on D scoring 0, as in K-nbhd (`neighbourhood_scores` drops a
-   missing value, so the entry point writes the 0); the 5-trade filter only
-   limits which cell may be chosen. The outright peak is reported beside
-   it. **If no cell qualifies**, the hypothesis is recorded as `not run (no
-   admissible cell on D)` and enters Holm with p = 1; the filter is not
-   relaxed. If only one of T1 and T2 has a chosen cell, M1 uses its signal;
-  M1 is not run if neither has.
-6. **M1's signal** from the T1 and T2 choices; M1 run on D's test days for its
-   σ.
-7. **The frozen models**: for T1, Z, T2 and the control, one model per hold
-   in {5, 20, 50} s, trained on D from 2025-01-01 to 06-23 with the purge (the
-   hold plus the longest feature lookback) before 06-24; T2's and the
-   control's checkpoint epoch per hold, and the hold-first thresholds
-   `θ_long`, `θ_short` for every (hold, trades-a-day) cell of T1 and Z, set on
-   06-24 to 06-30. These cover every cell of every neighbourhood, so K-nbhd on
-   a held-out block runs only frozen files. The weights stay in the ignored
-   `models/` directory; every weight file's sha256, every threshold and every
-   checkpoint epoch go in the amendment.
-8. **A0 and FILL on O**, the detector's alarm rate on D, σ of the daily
-   results and the minimum detectable effects (below).
-9. **A dry run of the entry point**, end to end, before the amendment: on
-   D's last 44 days (2025-05-18 to 06-30) standing in for H, and on the three
-   `ob200` reader-test days standing in for F and P. Its outputs are
-   discarded and never reported; it is the reader-test days' one use besides
-   the reader test.
-10. **The amendment**, committed before H is read, with the study's single
-   entry point (`experiments/short_horizon_2025.py`), which computes every
-   hypothesis, placebo, bracket, neighbourhood cell, tier and status for a
-   block in one read session.
+   February to June (150 test days), train on D's days before it except the
+   last seven, which are the inner validation; purge the hold plus the
+   longest feature lookback before the inner validation and before the test
+   month (`experiments/grand_search.py`'s purge is not used). The inner
+   validation sets the per-side θ from the target rate, which reads no
+   outcome, and the network's checkpoint by inner rank IC, which reads only
+   days before the purge. **The fold-level leakage test**: mutating every
+   label and price after fold m's training cutoff leaves fold m's weights, θ,
+   gate levels and checkpoint unchanged (by sha256).
+5. **Stage A: fits.** The 600 walk-forward fits (120 signal configurations ×
+   5 folds), the predictions on the test days, and for each signal
+   configuration and test day a **candidate-row tape**: the rows at which the
+   loosest cell could enter (θ at 240 trades a day; k = 0 and β = 0; gate
+   open; no guard), each with its scores, gate states and guard state. Every
+   stricter cell is a subset of these rows. The daily IC is computed on all
+   decision rows and stored as one value per day.
+6. **Stage B: taker scoring, every cell on every test day.** Per
+   instrument-day and hold, a **walk table** holds the long and the short
+   walked P&L at every 100 ms row, from the taker executor's walk (10 ms
+   latency, funding included), built in memory one day at a time and never
+   stored. Each cell's entries are thinned from its tape (one position at a
+   time, an event-jump loop); its trades' long and short P&L, L and S, are
+   looked up; net is read on the cell's side, and **G = net − (L + S)/2**, the
+   cell's edge with the costs and the block's drift taken out. Every cell-day
+   writes one row to the trial ledger.
+7. **Stage D: the choice, admission and the placebo search**
+   ([selection](#selection-on-d-admission-and-the-finalists), [the placebo
+   search](#the-placebo-search)), with the refit replication.
+8. **Stage C: the simulator**: S25-Z, S-P and S-M on their signals, and A0
+   and FILL on O.
+9. **Stage E: the frozen fits.** For every hold and label fee in the
+   neighbourhood of each stratum's chosen cell, admitted or not, and of
+   S25's: at most 16 boosted or logistic fits and at most 4 network fits with
+   4 control fits, trained on D from 2025-01-01 to 06-23 with the purge
+   before 06-24; their θ and checkpoints set on 06-24 to 06-30. These cover
+   every cell of every finalist's neighbourhood, so K-nbhd on a held-out block
+   runs only frozen files. The weights stay in the ignored `models/`
+   directory; every weight file's sha256, every threshold and every checkpoint
+   epoch go in the amendment.
+10. **σ of the daily series and the minimum detectable effects** (below), per
+    slot, and the detector's alarm rate on D.
+11. **A dry run of the entry point**, end to end, before the amendment: on
+    D's last 44 days (2025-05-18 to 06-30) standing in for H, and on the three
+    `ob200` reader-test days standing in for F and P. Its outputs are
+    discarded and never reported; it is the reader-test days' one use besides
+    the reader test. It includes the walk-table parity test of [the placebo
+    search](#the-placebo-search).
+12. **The amendment**, committed before H is read, with the study's single
+    entry point (`experiments/short_horizon_2025.py`), which computes every
+    slot, placebo, bracket, neighbourhood cell, tier, status and regime-map
+    row for a block in one read session.
+
+---
+
+## Selection on D, admission and the finalists
+
+**Frozen before scoring.** The configuration's `search` block fixes, before
+stage 1: the catalogue and its hash, the choice and admission rules, the nulls
+with their seeds, shifts and replications, the ceiling and the reduction
+order. The single entry point is committed before any test day of February to
+June is scored, and every score on a test day comes from it. It writes the
+**trial ledger**, `experiments/results/short_horizon_2025_trials.csv`: one row
+per configuration per day, with the key, the catalogue's sha256, the commit,
+net, G, L, S, trades and skips; the ledger is committed at the end of each
+stage. Any hand run on a test day counts as a trial: its configuration joins
+the catalogue and both nulls before the amendment. W and each instrument's
+January are the sandbox, where nothing is counted.
+
+**The choice: one cell per stratum.**
+
+- In each group, a cell's **S** is the median, over its neighbourhood, of
+  each cell's mean daily `net_bp_trade` at the base tier over the 150 test
+  days. **The neighbourhood** is `validation/search.neighbourhood_scores`'
+  block over the ordered axes (hold; rate, or k and β; label fee; regime
+  window): every cell within one step on every ordered axis, diagonals
+  included, at the cell's categorical values. Every cell is counted whatever
+  its trade rate; a cell without a trade on D scores 0, which the entry point
+  writes (`neighbourhood_scores` drops a missing value). The entry point uses
+  a vectorised version of `neighbourhood_scores`, tested equal to it on small
+  grids.
+- Across every group of the stratum on all three instruments, the chosen cell
+  (**C\*** or **R\***) is the one with the highest S among cells averaging at
+  least 5 trades a day; ties go to the cell's own mean. The 5-trade filter
+  only limits which cell may be chosen. The outright peak is reported beside
+  it. If no cell qualifies, the stratum's slot is `not run (no admissible cell
+  on D)`; the filter is not relaxed.
+
+**Signal admission (information)**, for C\* and R\*; both conditions must
+hold:
+
+- **(iii) carry-forward**: for each test month m in March to June, the choice
+  is re-run on the test months before m, and the newly chosen cell's G is
+  scored on m's days after a 5-day embargo. The mean over the four months must
+  be > 0. This mean, computed for net too, is the D estimate of the effect
+  that the power on H is computed from;
+- **(iv) the placebo search**: max(p_A, p_B) ≤ 0.05 ([below](#the-placebo-search)).
+
+**Slot admission (payoff).** A slot that fails is `not admitted on D
+(<condition>)` and enters Holm with p = 1 on every block.
+
+- **S-C ← C\*, S-R ← R\***: the signal is admitted, and (i) the chosen cell's
+  S > 0; and (ii) the neighbourhood median of the monthly mean net is > 0 in at
+  least 4 of the 5 test months.
+- **S-P**: its signal is the admitted C\* or R\*; if both are admitted, the one
+  with the larger carry-forward G, C\* on a tie; **if neither is admitted,
+  S25's signal**. It enters by the signal-entry quoter at that cell. Its
+  neighbourhood is the signal's hold × rate × label fee (or hold × k × β) at
+  the signal's categorical and regime values, every cell simulated on the 150
+  test days. It is admitted on (i) and (ii) computed on
+  `net_per_100_clip_day`.
+- **S-M**: S1 with the lean on S-P's signal, the cell λ = 1 and its
+  neighbourhood λ ∈ {0.5, 1, 2}, the lean window the signal's hold, the guard
+  `guard_pull` at the signal's regime window (none when it has none). It is
+  admitted on (i) and (ii) on `net_per_100_clip_day`, and on spread capture
+  > 0 on D.
+- S-P and S-M make no choice on a passive outcome, and S25's signal is fixed
+  before D, so neither needs a search-level null; their conditions only remove
+  slots.
+- A searched slot whose chosen cell is S25's is `same as S25` and enters Holm
+  with p = 1.
+
+**Reported, gating nothing.** Every D number of a finalist is labelled
+"selected, biased upward". Beside it: N_trials and
+N_eff = `effective_count(N_trials, mean_pairwise_correlation(daily G panel))`
+(`evaluation/significance.py`); the deflated Sharpe ratio of each finalist's
+daily G and net; the selection premium (the median of the null maximum of A,
+and A minus it); the probability of backtest overfitting by combinatorially
+symmetric cross-validation per stratum (10 blocks of 15 days, 252 splits, the
+identical rule); and the minimum detectable effect and the power at t ≥ 3 for
+the carry-forward estimate.
+
+**The finalists are fixed now: k = 5**, four searched slots (S-C, S-R, S-P,
+S-M) and the named S25. Every slot exists on every block, whatever D shows.
+The chosen cell of a non-admitted C\* or R\*, and a non-admitted S-P or S-M,
+are still run once on H, F and P as labelled measurements, with no placebo and
+no status. A sixth slot would cost power for no information: at 10 days on F
+or P (9 degrees of freedom) the one-sided p at t = 3 is 0.0075, and Holm's
+first step α/m stays above it only for m ≤ 6, so with more slots Holm rather
+than the t ≥ 3 bar would decide on short F and P series. One slot per stratum
+and execution path is the most informative use of five.
+
+---
+
+## The placebo search
+
+**Purpose.** To measure how good the best configuration of each stratum looks
+when no configuration has information, under exactly D's selection. A searched
+finalist must beat the 95th percentile of the maximum over strata of that null:
+single-step max-T (Romano–Wolf), at most a 5% chance that any searched slot is
+admitted by noise. Its p-value, **p_search**, whether the search found
+anything beyond selection noise whatever the fee, is a headline result of D.
+
+**What is re-run, and what is not.** Re-run: every step that reads a test
+day's outcome, which is the per-cell daily series, the 5-trade filter, the
+neighbourhood medians, the choice inside each group and across groups and
+instruments, and the admission statistic. Not re-run: fits, θ, checkpoints,
+feature selection, gate levels and guard flags; none of them reads a test
+day's outcome, which the fold-level leakage test and the flag-causality test
+enforce. Since no step culls a configuration on an outcome, re-running these
+steps is the whole search re-run on placebo targets.
+
+**The statistic.** A = the median, over the chosen cell's neighbourhood, of
+each cell's day-level t of G, a cell without trades scoring 0. G is centred at
+zero for every fee and execution path; the t keeps the scale when a null
+pairing has another volatility; the neighbourhood median lowers the null
+maximum.
+
+- **Null A: hour-block sign flips, 999 draws.** Each UTC hour of the usable
+  test days draws a sign from `numpy.random.default_rng(b)`, b = 0 to 998.
+  The sign is shared by every configuration and instrument in that hour, so
+  their dependence is kept. A flipped trade's P&L, funding included, is the
+  stored walk of the opposite side.
+- **Null B: day re-pairing over every shift** s with 7 ≤ s ≤ n − 7 (137 at
+  n = 150), on the circular order of usable test days, the same s for every
+  instrument. The source day's accepted entries (time of day and side, after
+  its own guard) are executed on the target day's walk tables; an entry that
+  falls while the mapped previous position is still open is skipped and
+  counted. A parity test on the dry run checks that at s = 0 the walk-table
+  route equals the executor; if it fails, Null B falls back to the 19 shifts
+  at multiples of 7 days by a dated amendment before D is scored.
+- **The bar.** p_A = (1 + #{b : max over strata of A^b ≥ A_j}) / (1 + 999),
+  and p_B the same over the shifts. A searched slot passes (iv) when
+  **max(p_A, p_B) ≤ 0.05**: `market_making/verdicts.exceeds_placebos` applied
+  to the distribution of the maximum.
+- **The refit replication, mandatory, once.** Every fold's training labels are
+  circularly shifted by 28 days within its training span, every boosted and
+  logistic fit is redone, and stratum C's whole selection is re-run. If its
+  A exceeds Null B's 95th percentile, stratum C's bar becomes that A. The
+  network and the bound regressor are not refitted, for cost.
+- Also: a global sign flip, reported as a diagnostic only (it is an
+  anti-signal when information exists).
+
+Outside the null: S-P and S-M, which make no choice on a passive outcome, and
+S25, which is fixed. S25's D values are shown against the same two nulls
+applied to its fixed cell, with no selection; every slot's own placebos run on
+the held-out blocks. The amendment records every replication's A per stratum,
+the seeds, the shifts, the quantiles and the p-values.
+
+**What the breadth costs.** A synthetic null with no market data, under an
+assumed correlation along each axis, puts the 95th percentile of A at about
+2.2 for a 126-cell catalogue on BTCUSDT, 2.6 for this catalogue on BTCUSDT
+alone and 2.85 for this catalogue on the three instruments; the real nulls
+decide. A true edge therefore needs a neighbourhood-median t of G of about
+2.85 over 150 days to be admitted. Breadth costs admission power on D; it
+never costs the validity of H, which rests only on H being untouched and m
+being fixed.
 
 ---
 
