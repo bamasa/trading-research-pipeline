@@ -1500,12 +1500,23 @@ net. **The fill ratio** is the share of posted orders that receive any fill
 posted volume is reported beside it. The prediction below is on the share of
 orders.
 **Prediction, fixed now: the fill ratio is at least 0.75 under (a) and at most
-0.50 under (c).** The same three rules are reported for Z's stream on H.
+0.50 under (c).** The same three rules are reported for S25-Z's and S-P's
+streams on H.
 
-**The fee break-even**, per strategy and block: `gross_bp_turnover` for the
-taker strategies; for M1 and Z, the maker fee at which net is zero with the
-taker exit at the base fee and, separately, at 1.5 bp. Compared with every
-published BTCUSDT tier, with the fee caveat.
+**The fee break-even**, per slot and block: `gross_bp_turnover` for the
+taker slots; for S-P, S-M and S25-Z, the maker fee at which net is zero with
+the taker exit at the base fee and, separately, at 1.5 bp. Compared with
+every published tier, with the fee caveat.
+
+**Measured rows**: the chosen cell of a non-admitted C\* or R\*, and a
+non-admitted S-P or S-M, run once on H, F and P with no placebo and no status
+([selection](#selection-on-d-admission-and-the-finalists)).
+
+**The D leaderboard, marginals and nulls**: every configuration with its D
+numbers, ranks and region tags, the per-axis marginals, and every replication
+of the placebo search ([artefacts](#artefacts-and-headline-sentences)). Every
+D number is labelled "selected, biased upward" and is never quoted as a
+result.
 
 **H before 2025-08-01**, a labelled sensitivity: every slot at its frozen
 cell on H's usable days from 2025-07-08 to 07-31 (24 days), the part of H that
@@ -1514,6 +1525,24 @@ cover. Same daily series and statistics, no status.
 
 **Verdicts with the gap-excluded days included**: each verdict's mean, t and
 median day recomputed with the days excluded for sequence gaps put back.
+
+### The regime map
+
+A measurement for every slot and every measured row, never a status.
+
+- On D, each slot's walk-forward daily net is cut at each test month's
+  fold-wise alarms ([the regime-break policy
+  axis](#the-regime-break-policy-axis)); on H, F and P it is cut at the
+  frozen detector's alarms.
+- Each segment is reported with its dates, usable days, mean, day-level t and
+  cumulative net; a segment under 10 usable days is drawn but carries no t.
+- One chart per execution path (taker, passive entry, market maker) shows the
+  cumulative daily net through 2025, with the alarms marked and the blocks
+  shaded.
+- The detector cuts the segments before any result is computed for them.
+  Every segment is shown and none is selected; no segment enters any rule. A
+  positive stretch for a taker or a maker appears here as what it is: a
+  description between two alarms, read against the statuses beside it.
 
 ---
 
@@ -1524,7 +1553,12 @@ Fixed now, run as the ledger opens each block.
 - **Input**: hourly log returns, close to close, of Binance USDT-M futures
   BTCUSDT 1h klines, each divided by the root mean square of D's hourly
   returns at the same UTC hour (a 24-value profile fitted on D only), so that
-  the daily cycle of volatility is not read as a series of breaks.
+  the daily cycle of volatility is not read as a series of breaks. Inside the
+  search on D the profile is fitted fold by fold, on the hours before each
+  test month only ([the regime-break policy
+  axis](#the-regime-break-policy-axis)); the frozen profile fitted on all of D
+  gives the flags on H, F and P and in the dry run. Both flag lists are
+  recorded, and their difference on D is reported, not corrected.
 - **One continuous stream from 2024-12-01**, so the monitor is warm by
   2025-01-01. Bars are fetched from that day, so the stream's first return is
   its second hour (`log_returns`, close to close); no 2024-11 bar is needed. E's hourly bars are in it: they are fetched and read when the
