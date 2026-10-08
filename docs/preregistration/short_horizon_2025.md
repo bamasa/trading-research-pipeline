@@ -126,7 +126,9 @@ shaped the design. None of it is a 2025 number computed by this repository.
    (sha256 `86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0`).
    **No value in this registration was set from what it showed, except the
    H/F boundary it moved**; the revisions made after the reviews used only the
-   archive change it found. Three further `HEAD` requests on the same day found
+   archive change it found, and the fetch plan's sizes and disk budget use its
+   per-block sums and the largest and median archive of W and D, which set no
+   research value. Three further `HEAD` requests on the same day found
    the `ob200` book archive, and no `ob500` one, for 2026-01-05, 06 and 07
    (225, 205 and 197 MB); these are the reader-test days of
    [Data](#data), outside every block.
@@ -1214,7 +1216,9 @@ detectable effects; the A0 and FILL tables on O; the detector's alarm rate on
 D and, if it applies, the declaration that R is untestable; the sha256 of
 every frozen weight file (one per hold for T1, Z, T2 and the control), every
 threshold and every checkpoint epoch; the entry point, committed with it; the
-compute record; and the sha256 of `configs/short_horizon_2025.yaml` after
+compute record, with the replay's measured peak memory and worker count and
+the feature store's size; the fits that lacked a class, with the side; and
+the sha256 of `configs/short_horizon_2025.yaml` after
 the frozen values are written into its placeholders, on a line of the form
 ``Frozen configuration sha256: `<hash>` ``. Nothing else may change.
 
@@ -1266,8 +1270,9 @@ hypothesis: F is still read and reported, but nothing is taken to P.
 
 The registration was reviewed three times before it was merged and before any
 data was read, for peeking, for multiplicity and for feasibility. Every
-blocking and should-fix point was taken in. Where the reviews proposed
-different fixes, or a fix left a value open, the choice and its reason:
+blocking and should-fix point was taken in, and the notes where they
+pointed to a gap. Where the reviews proposed different fixes, a fix left a
+value open, or a proposal was not taken, the choice and its reason:
 
 - **Holm's m is 3 on every block**, not the number taken to F or P: the
   stricter of the two proposals, and fixed before any read.
@@ -1365,11 +1370,12 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`abff072158434c982bc9a23405942d43b08bdcd81f8b04de382127260d4ad44e`.
-(Earlier drafts, written before the reviews were applied in full and never
-merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
-and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they
-do not count.)
+`6d35940bc3e4845b30056daaf60887d01dbf2c6e6ddbb361ff8ab3ecd1fec1f5`.
+(Earlier versions of this file on its unmerged branch had other hashes,
+among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
+before the reviews and
+`c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262` before the
+feasibility review's later points; they do not count.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, as the earlier rounds' loaders do.
 

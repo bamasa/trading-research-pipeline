@@ -72,7 +72,7 @@ data:
     days_checked: 396  # every day, 2024-12-01..2025-12-31
     table: experiments/results/short_horizon_2025_head_check.csv
     table_sha256: 86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0
-    set_from_it: only the H/F boundary; later revisions used only the archive change it found
+    set_from_it: only the H/F boundary; later revisions used only the archive change it found; fetch sizes and the disk budget use its block sums and W's and D's largest and median archive, no research value
     missing_under_code_pattern: {book_ob500: [2025-08-21, 2025-12-31], prints: none}
     first_and_fifteenth: all prints present; ob500 present to 2025-08-15, absent from 2025-09-01; ob200 present from 2025-09-01
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
@@ -411,6 +411,6 @@ access:
 amendment:
   planned: 1
   before: the read of H
-  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D and any untestable declaration, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, the compute record, the frozen YAML sha256]
+  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D and any untestable declaration, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, "the compute record, with the replay's peak memory and worker count and the feature store's size", fits that lacked a class with the side, the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment
