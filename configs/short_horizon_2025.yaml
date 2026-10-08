@@ -113,7 +113,7 @@ blocks:
   E: {role: embargo, start: 2025-07-01, end: 2025-07-07, days: 7, archive: ob500, book_prints_funding_fetched: false, hourly_bars: "read by the detector only, opened with H"}
   H: {role: held_out, start: 2025-07-08, end: 2025-08-20, days: 44, archive: ob500, slots: [S25, S-C, S-R, S-P, S-M, S25-Z], reads: 1, read_after: the D amendment is committed}
   F: {role: boundary, start: 2025-08-21, end: 2025-11-16, days: 88, archive: ob200, reads: 1, read_after: H's results are committed, read_always: true}
-  P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: "a slot (S25-Z included) passed on F"}
+  P: {role: after, start: 2025-11-17, end: 2025-12-31, days: 45, archive: ob200, reads: 1, read_after: F's results are committed, condition: "a slot passed on F (never one on S25's signal, which is not taken to F)"}
   moved_by_head_check: {H_end: {planned: 2025-09-21, registered: 2025-08-20}, F_start: {planned: 2025-09-22, registered: 2025-08-21}}
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
@@ -440,7 +440,7 @@ statuses:
   precedence: ["void (K-leak, K-flag-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades: round trips; for the quoter entries with any fill); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
   void_counts_as_killed: true
   set_on_D: ["not admitted on D (<every failing condition among i to iv>)", "not admitted on D (hand run)", "not run (no admissible cell on D)", same as S25]  # each enters Holm with p = 1 on every block
-  measured_rows: the chosen cell of a non-admitted C* or R*, and a non-admitted S-P or S-M, run once on H, F and P as labelled measurements, no placebo, no status
+  measured_rows: the chosen cell of a non-admitted C* or R*, and a non-admitted S-P or S-M, run once on H and F as labelled measurements, no placebo, no status; on P only when P is opened for a qualifying slot, in that read session
   S25_signal_slots:
     slots: [S25, S25-Z, S-P when its signal is S25's, S-M when its signal is S25's]
     status_window_H: [2025-07-08, 2025-07-31]  # 24 days, the part of H outside S25's information set
@@ -507,8 +507,8 @@ placebos:
   taker_slots: placebos and K-latency from walk tables
   positions: each placebo on the true slot's entry decision times with its own one-position state; a decision time at which it is in a position or has an entry resting is skipped and counted; skip counts reported beside K-placebo and K-drift
   control_model: {used_by: [S-R on the network], reported: IC against its own label and against the realised move}
-  other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the slot also passes on F's days before them, min_reference_days: 20,
-                       evaluated_at_each_d: "the whole bar, kills and Holm with m = 5 included, on F's usable days before d as on F-; other slots taken to F evaluated there the same way, p = 1 where killed, void or inconclusive under K-trades there, or not taken to F; K-trades counts trades before d",
+  other_break_dates: {used_by: [R], split_days: "every admissible split day of F other than b (at least 20 usable days before, at least 10 after), enumerated", reference_set: "split days d != b at which the slot also passes on F's days before them; b never in its own reference set", min_reference_days_besides_b: 19,
+                       evaluated_at_each_d: "the whole bar, kills and Holm with m = 5 included, on F's usable days before d as on F-; other slots taken to F evaluated there the same way, p = 1 where killed, void or inconclusive under K-trades there, or not taken to F; K-trades counts trades before d; S25-Z and every slot on S25's signal never tested for R, nothing about them evaluated at d",
                        computed: "every series the bar reads computed once per day over all of F in F's read session (one-day shift circular within all of F) and sliced at each d; nothing re-run"}
 
 hypotheses:
@@ -522,12 +522,12 @@ hypotheses:
     tested_for: every slot that is a candidate on H, whether or not it passes on F-, except the slots on S25's signal
     not_tested_for: any other slot, including one first significant on F and every slot on S25's signal (statuses.S25_signal_slots)
     statistic: Delta(d) = mean of the daily series on F's usable days before d minus its mean on those after d
-    claims: [passes on F-, mean daily series on F_plus <= 0, Delta(b) above the 95th percentile of Delta(d) over the reference set]
+    claims: [passes on F-, mean daily series on F_plus <= 0, "p_R <= 0.05, p_R = (1 + #{d != b in the reference set with Delta(d) >= Delta(b)}) / (1 + the number of reference days other than b)"]
     supported: all three claims hold
-    S25-Z_series: every claim and the P mean evaluated on both of S25-Z's claims' series (gross, net at 0/0); supported only if every claim holds on both; on P the break persisted only if both means are <= 0
+    S25-Z: never tested (statuses.S25_signal_slots)
     guarded_slots: a slot with a regime window above 0 enters R with its own guarded series  # the regime axis does not replace R
     when_F_minus_fails: Delta(b) reported with its percentile among all admissible days, as a measurement
-    untestable: [no alarm in F, fewer than 20 usable days before b or fewer than 10 after, alarm rate on D above one per 14 days, fewer than 20 days in the reference set]
+    untestable: [no alarm in F, fewer than 20 usable days before b or fewer than 10 after, alarm rate on D above one per 14 days, fewer than 19 days in the reference set besides b]
     untestable_reads_as: not supported
     void: statuses.R_void
 
@@ -548,7 +548,7 @@ measurements:
   regime_attribution: search.regime_source.attribution
   regime_map:
     for: every slot and every measured row
-    cut_at: {D: each test month's fold-wise alarms, H_F_P: the frozen detector's alarms}
+    cut_at: {D: each test month's fold-wise alarms, H_F_P: "the frozen detector's alarms; P only when P is opened for a qualifying slot, in that read session, otherwise the map ends at F's last day"}
     per_segment: [dates, usable days, mean, day-level t, cumulative net]
     min_days_for_t: 10  # a shorter segment is drawn without a t
     charts: one per execution path (taker, passive entry, market maker), cumulative daily net through 2025, alarms marked, blocks shaded
@@ -577,8 +577,8 @@ detector:
   flags_D_foldwise: null  # {test month: [flag timestamps]} used by the guard on D; frozen by the D amendment
   foldwise_vs_frozen: both flag lists recorded; their difference on D reported, not corrected
   hour_profile: null  # 24 values fitted on D; frozen by the D amendment
-  alarm_rate_D: null  # alarms over 2025-01-01..06-30; frozen by the D amendment
-  alarms_D: null  # timestamp and channel of every alarm over 2025-01-01..06-30, for the reproduction check; frozen by the D amendment
+  alarm_rate_D: null  # alarms over 2025-01-01..06-30 from the frozen-profile run; frozen by the D amendment
+  alarms_D: null  # timestamp and channel of every alarm over 2025-01-01..06-30 from the frozen-profile run over 2024-12-01..2025-06-30, for the reproduction check (the fold-wise runs never enter it); frozen by the D amendment
   alarms_recorded: each block's run's alarms, with timestamp and channel, in that block's results file
   r_untestable_declared: null  # true or false; frozen by the D amendment
   reported_beside:
@@ -637,7 +637,7 @@ access:
   results_files: {H: experiments/results/short_horizon_2025_H.json, F: experiments/results/short_horizon_2025_F.json, P: experiments/results/short_horizon_2025_P.json}
   session_closes: the results file, statuses and every kill computed by the entry point, is written and its sha256 entered in the block's ledger entry
   F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only README.md and paths under experiments/results/ and under docs/ outside docs/preregistration/", frozen weights' and the fitted-values file's sha256 match, every_open_and_every_process holds, no F file on disk]
-  P: [the same conditions against F's read, for the slots that qualify]
+  P: [the same conditions against F's read, "only when a slot qualifies; the session computes the qualifying slots' statuses and, as measurements, every other frozen slot, measured row and regime-map segment on P"]
   after_any_read: no finalist re-ranked, no cell re-chosen, no m changed, no regime window retuned, no detector refitted; the D leaderboard never re-run on held-out data
   second_read: raises unless forced; stamped second read; cannot change a status
   earlier_accesses_used: false  # neither round one's nor round two's; pipeline/execution's market-maker path (round one's access_for) not used
@@ -657,7 +657,7 @@ artefacts:
   leaderboard_columns: [key, gross, net, G, trades_per_day, day_t, ic, S, A, admissible, rank_in_stratum, rank_overall, region, S25_badge]  # header gives N planned, scored and skipped
   frozen_finalist_file: a slot's configuration, weights, thresholds, gate levels, regime window and fitted values; a later trial on the venue loads exactly that set; this study places no order
   frozen_finalist_files_sha256: null  # {slot: sha256}; checked by the H, F and P gates; frozen by the D amendment
-  figures: [the placebo search with p_search, "the finalists on H, then F and P", the S25 page with the edge ladder, the regime map per execution path, the break-detector view 2024-12-01..2025-12-31, the fill-rule comparison]  # README, both themes through <picture>
+  figures: [the placebo search with p_search, "the finalists on H, then F and P", the S25 page with the edge ladder, the regime map per execution path, the break-detector view 2024-12-01..2025-12-31 when P is opened (else to 2025-11-16), the fill-rule comparison]  # README, both themes through <picture>
   headline_sentences:  # bracketed parts filled by the entry point, never edited
     search_on_D: "Searched [N] configurations ([axes]) on 150 development days across [instruments]; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)."
     payoff_on_D: "[No configuration paid the 5.5 bp taker fee on development data / S-[x] was admitted on development data, selected]."

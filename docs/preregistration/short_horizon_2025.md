@@ -955,8 +955,9 @@ the carry-forward estimate.
 **The finalists are fixed now: k = 5**, four searched slots (S-C, S-R, S-P,
 S-M) and the named S25. Every slot exists on every block, whatever D shows.
 The chosen cell of a non-admitted C\* or R\*, and a non-admitted S-P or S-M,
-are still run once on H, F and P as labelled measurements, with no placebo and
-no status. A sixth slot would cost power for no information: at 10 days on F
+are still run once on H and F as labelled measurements, with no placebo and
+no status, and on P only when P is opened for a qualifying slot, in that read
+session. A sixth slot would cost power for no information: at 10 days on F
 or P (9 degrees of freedom) the one-sided p at t = 3 is 0.0075, and Holm's
 first step α/m stays above it only for m ≤ 6, so with more slots Holm rather
 than the t ≥ 3 bar would decide on short F and P series. One slot per stratum
@@ -1378,7 +1379,7 @@ true slot, on the same block. For S-M each placebo replaces its signal tape.
 | stale | the signal delayed by one hold | S-P, S-M, S25-Z | — |
 | all-long, all-short | the same entry times, one direction (K-drift) | every slot, S25-Z | — |
 | control model | the network trained on the control label; its IC against its own label and against the realised move, reported beside K-label | S-R on the network | the training seed |
-| other break dates | `b` replaced by every admissible split day of F (at least 20 usable days before it, at least 10 after), enumerated in full; the reference set keeps those at which the slot also passes on the days before them | R | none; enumerated |
+| other break dates | `b` replaced by every admissible split day of F other than `b` (at least 20 usable days before it, at least 10 after), enumerated in full; the reference set keeps those at which the slot also passes on the days before them | R | none; enumerated |
 
 The taker slots' placebos come from the walk tables, and their K-latency from
 walk tables at 110 ms. **Placebo positions.** Each placebo runs on the true
@@ -1511,15 +1512,16 @@ with the reason, and read as not supported.
 **Statement.** With `b` the first alarm of the frozen detector in F, and
 Δ(`d`) the mean of the daily series on F's usable days before split day `d`
 minus its mean on F's usable days after `d`: R is **supported** if the
-slot passes on F−, its mean on F+ is ≤ 0, and Δ(`b`) exceeds the 95th
-percentile of Δ(`d`) over the **reference set**; **not supported**
-otherwise. For S25-Z, every claim of R and the mean on P are evaluated on both
-of its claims' series (gross, and net at 0/0): R is supported only if every
-claim holds on both, and on P the break persisted only if both means are
-≤ 0.
+slot passes on F−, its mean on F+ is ≤ 0, and p_R ≤ 0.05, with
+p_R = (1 + #{`d` ≠ `b` in the **reference set** : Δ(`d`) ≥ Δ(`b`)}) / (1 +
+the number of days of the reference set other than `b`); **not supported**
+otherwise. `b` is never counted in its own reference set, so p_R ≤ 0.05
+needs at least 19 other split days. S25-Z, like every slot on S25's signal,
+is never tested for R ([status rules](#status-rules)), and nothing about it
+is evaluated at the split days.
 
-**The reference set** is every admissible split day `d` of F (at least 20
-usable days before it and at least 10 after; about 58 days), enumerated in
+**The reference set** is every admissible split day `d` ≠ `b` of F (at least
+20 usable days before it and at least 10 after; about 58 days), enumerated in
 full, at which the slot also passes the bar on F's days before `d`.
 **The whole bar is evaluated at each `d`**, kills and Holm included, as on F−
 with F's usable days before `d` in its place, with m = 5: the other slots
@@ -1540,8 +1542,8 @@ measurement.
 **Untestable**, declared and not retuned, and read as not supported: no
 alarm in F; fewer than 20 usable days before `b` or fewer than 10 after it;
 the detector's alarm rate on D above one per 14 days (declared in the
-amendment, before H is read; `b` then does not split F); or fewer than 20
-days in the reference set.
+amendment, before H is read; `b` then does not split F); or fewer than 19
+days in the reference set besides `b`.
 
 **Reported beside**: every alarm in H and F with the channel that moved
 (scale or dependence, and the mean channel's odds), the second detector's
@@ -1599,7 +1601,8 @@ the taker exit at the base fee and, separately, at 1.5 bp. Compared with
 every published tier, with the fee caveat.
 
 **Measured rows**: the chosen cell of a non-admitted C\* or R\*, and a
-non-admitted S-P or S-M, run once on H, F and P with no placebo and no status
+non-admitted S-P or S-M, run once on H and F with no placebo and no status,
+and on P only when P is opened for a qualifying slot, in that read session
 ([selection](#selection-on-d-admission-and-the-finalists)).
 
 **The D leaderboard, marginals and nulls**: every configuration with its D
@@ -1625,7 +1628,8 @@ A measurement for every slot and every measured row, never a status.
 - On D, each slot's walk-forward daily net is cut at each test month's
   fold-wise alarms ([the regime-break policy
   axis](#the-regime-break-policy-axis)); on H, F and P it is cut at the
-  frozen detector's alarms.
+  frozen detector's alarms (on P only when P is opened for a qualifying slot,
+  in that read session; otherwise the map ends at F's last day).
 - Each segment is reported with its dates, usable days, mean, day-level t and
   cumulative net; a segment under 10 usable days is drawn but carries no t.
 - One chart per execution path (taker, passive entry, market maker) shows the
@@ -1674,7 +1678,10 @@ Fixed now, run as the ledger opens each block.
   hour of the highest opened block, its windows anchored at the stream's
   start. The walk is causal, so each later run must reproduce every alarm of
   the earlier runs, D's as the amendment records them (timestamp and
-  channel) and each block's as its results file records them; if it does not, R is void and read as not supported (see
+  channel, from the run with the frozen profile over 2024-12-01 to
+  2025-06-30; the fold-wise runs use other profiles, are recorded separately
+  and never enter this check) and each block's as its results file records
+  them; if it does not, R is void and read as not supported (see
   "R void" under the status rules).
 - **The mean channel** is read from the `odds_mean` column of the same run,
   against 8.93, and reported. It is not in `statistics`, so it never
@@ -1682,8 +1689,8 @@ Fixed now, run as the ledger opens each block.
 - **`b`**: the first alarm effective in F, effective at the close of the hour
   whose return produced it. F− is F's usable days before the alarm's day, F+
   its usable days after it; the alarm's own day is in neither.
-- **On D**, the monitor's alarm rate over 2025-01-01 to 06-30 is recorded in
-  the amendment. Above one alarm per 14 days, R is declared untestable then,
+- **On D**, the monitor's alarm rate over 2025-01-01 to 06-30, from the
+  frozen-profile run, is recorded in the amendment. Above one alarm per 14 days, R is declared untestable then,
   before H is read, `b` does not split F, and the monitor is not retuned.
   This rate is optimistic: the hour-of-day profile is fitted on D itself, and
   the recorded thresholds were calibrated on Gaussian null paths
@@ -1965,7 +1972,9 @@ E's bars, H, F and P.
   H read), the frozen weights' and the fitted-values file's sha256 still
   match, the conditions above on every open hold, and no file of F is on
   disk. **P** opens on the same conditions against F's read, and
-  only for the slots that qualify.
+  only when a slot qualifies; its session then computes the qualifying
+  slots' statuses and, as measurements, every other frozen slot, measured row
+  and regime-map segment on P.
 - Each first read writes block, commit, config sha256 and UTC time before the
   access is returned; a second read raises unless forced, and everything it
   produces is stamped `second read` and cannot change a status.
@@ -2091,6 +2100,7 @@ placebo percentile, K-nbhd median, the fee break-even per side against every
 tier, H before 2025-08-01 and the regime attribution; the S25 page (the edge
 ladder, the T1 and T2 region rows, the rank r of N); the regime map, one chart
 per execution path; the break-detector view for 2024-12-01 to 2025-12-31
+when P is opened, otherwise to F's last day, 2025-11-16
 (blocks and the slots' guard windows shaded, every alarm with its channel,
 `b`, F− and F+, the 1 s CUSUM's restarts, and the public 2025-09-13 daily-bar
 alarm labelled); the fill-rule comparison (A0 on O; S-P and S25-Z on H); and
@@ -2247,7 +2257,8 @@ open, or a proposal was not taken, the choice and its reason:
   at which the slot also passes**: testing on H's candidacy removes the
   gate on F−, and the conditioned reference set removes the selection that
   "confirmed until the break" still makes. The split days are enumerated
-  (about 58), so the floor is 20 qualifying days, not 50 of 200 draws.
+  (about 58), `b` excluded, so the floor is 19 qualifying days besides `b`
+  (the smallest p_R is then 1/20), not 50 of 200 draws.
 - **A result first significant on F is "exploratory" and P is its only
   confirmatory test**, rather than α being split between H and F: H stays the
   only gate to candidacy.
