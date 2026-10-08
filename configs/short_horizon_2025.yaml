@@ -161,7 +161,7 @@ features:
   winsorising: trailing quantiles only
   leakage_check: validation/leakage.py, every feature, before any D run
   gate_inputs: basis points from prices only
-  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20}
+  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: FeatureSelector defaults (score_target ic, max_features 40, correlation_threshold 0.95, variance_threshold 1e-6)}
   selected: null  # frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
 
@@ -219,7 +219,7 @@ strategies:
     neighbourhood: null  # every cell with its value, frozen model and sha256, and the outright peak; frozen by the D amendment
     checkpoint_epoch: null  # {hold_s: epoch}; frozen by the D amendment
   M1:
-    signal_rule: T1 or T2, whichever has the higher D mean daily net at its chosen cell; T1 on a tie
+    signal_rule: T1 or T2, whichever has the higher D mean daily net at its chosen cell; T1 on a tie; the one with a chosen cell if only one has
     execution: one full clip posted at the touch on the signal's side, kept at its first price, waits at most hold; taker out hold after the fill
     variant_measured: passive exit at the touch, crossed after a further hold
     fee: base
@@ -262,6 +262,7 @@ metrics:
   mde:
     formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
     n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for M1
+    n_eff_on_F_and_P: the usable days of the series the status is assessed on (F- or all of F, or P) x the same share; sigma_D as frozen
     sigma_d: null  # per primary and Z, over D's 150 walk-forward test days; frozen by the D amendment
     value: null  # per primary and Z; frozen by the D amendment
 

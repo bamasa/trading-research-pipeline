@@ -438,7 +438,11 @@ quietly favour a result.
   normalised column (K-units).
 - **Selection**: `features/selection.py`, once, on D's January, from the
   microstructure set, against one target: the walked-book label at 0 bp with
-  `h` = 20 s. The selected list is used by T1, A0, Z and as T2's auxiliary
+  `h` = 20 s as `y`, and the forward move at `h` = 20 s (as T2's, from the
+  entry snapshot) as `forward`. `FeatureSelector` runs at its defaults
+  (`score_target="ic"`, at most 40 features, correlation 0.95, variance 1e-6),
+  so it ranks by absolute correlation with `forward`, and `y` only marks the
+  rows that have a label. The selected list is used by T1, A0, Z and as T2's auxiliary
   input; it is recorded in the amendment.
 
 **Models.** No hyperparameter of either model is searched; both use this
@@ -504,7 +508,7 @@ after a further `h`.
 | target trades a day | T1, Z | {50, 100, 240} | searched on D |
 | `k` (σ multiple) | T2 | {0, 0.5, 1} | searched on D |
 | `b` (buffer) | T2 | {0, 1, 2} bp | searched on D |
-| M1's signal | M1 | T1 or T2, whichever has the higher D net per trade at its chosen cell (T1 on a tie) | chosen on D |
+| M1's signal | M1 | T1 or T2, whichever has the higher mean of its daily `net_bp_trade` series over D's test days at its chosen cell (T1 on a tie); the one with a chosen cell, if only one has | chosen on D |
 | A0's settings | A0 | 240 trades a day, `h` = 50 s, trained 2025-01-01 to 01-27, thresholds on 01-28 to 02-03, run on O | fixed: the original protocol's trade rate and its close-by-time hold (about 50 s, inferred from the research code) |
 | clip, latency, fees, entry wait | all | as above | fixed |
 
@@ -536,7 +540,8 @@ and nothing else may be chosen after the amendment.
    only limits which cell may be chosen. The outright peak is reported beside
    it. **If no cell qualifies**, the hypothesis is recorded as `not run (no
    admissible cell on D)` and enters Holm with p = 1; the filter is not
-   relaxed. M1 is not run if neither T1 nor T2 has a chosen cell.
+   relaxed. If only one of T1 and T2 has a chosen cell, M1 uses its signal;
+  M1 is not run if neither has.
 6. **M1's signal** from the T1 and T2 choices; M1 run on D's test days for its
    σ.
 7. **The frozen models**: for T1, Z, T2 and the control, one model per hold
@@ -603,7 +608,10 @@ and nothing else may be chosen after the amendment.
   catch with 80% power, with `σ_D` the standard deviation of the daily series
   over D's 150 walk-forward test days at the chosen cell and `n_eff` = 44 × the
   share of those 150 days with a trade (44 for M1, whose series has every
-  usable day).
+  usable day). On F (F− or all of F) and on P, the "below the minimum
+  detectable effect" label uses the same formula, with σ_D and the share as
+  frozen and the usable days of the series the status is assessed on in place
+  of 44.
 
 ---
 
@@ -1206,6 +1214,25 @@ different fixes, or a fix left a value open, the choice and its reason:
   nothing. A scaling between the two would be a value set without a basis,
   and the research's sizing values are not used. Without it, T2's trade count
   is its gate's, and K-trades counts round trips as for T1.
+- **Feature selection ranks by correlation with the forward move at
+  `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
+  walked-book label at 0 bp as `y`. The feasibility review proposed the label
+  at 5.5 bp; the 0 bp label, fixed after the multiplicity review, is kept.
+  Under this ranking the label only marks which rows are usable, and it
+  exists on the same rows at either fee.
+- **The other values the feasibility review found open on D were already
+  pinned** after the other reviews, and are kept: the control label's
+  smoothing at k = 20 rows (one constant for the three holds, rather than k
+  equal to the horizon in rows); the 5-trade filter, which limits only the
+  chosen cell while every neighbour counts; `not run` with p = 1 for a
+  strategy with no admissible cell; and `max_sequence_gaps` as the 95th
+  percentile of D's per-day gap counts (rather than the smallest value that
+  keeps 90% of D's days). Added: M1 uses whichever of T1 and T2 has a chosen
+  cell when only one has.
+- **The minimum detectable effect on F and P** uses the frozen σ_D and share
+  with that series' usable days, rather than H's 44, so that the label on a
+  later block describes the days it has. Its formula on H was already
+  `(3 + 0.84) × σ_D / √n_eff`, as the feasibility review asked.
 - **No 2026 confirmation block is registered here.** P begins after every
   dated entry of the 2025 research, so it is fresh for the recipes; a
   confirmation on 2026 data needs its own registration, which the
@@ -1215,7 +1242,7 @@ different fixes, or a fix left a value open, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`564dfdbdd37a7e958866a12cbab38b6e4446655c057ef76009703f2345ed1299`.
+`7f2ad25382770bedeb9ba4d0ad893b27058126bb382ce3022f24e1983046f3df`.
 (Earlier drafts, written before the reviews were applied in full and never
 merged, had `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 and `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262`; they
