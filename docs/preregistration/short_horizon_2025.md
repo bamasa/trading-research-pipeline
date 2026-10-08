@@ -586,57 +586,168 @@ this repository's defaults, with one registered seed per fit.
 
 ---
 
-## Strategies
+## The search space
 
-| Strategy | Signal | Entry and exit | Fee | Role |
-|---|---|---|---|---|
-| **T1** | gradient boosting on the walked-book label at 5.5 bp; hold-first rule | taker in, taker out after `h` | base | primary T1 |
-| **T2** | Gaussian-head network on the tensor and the selected set; EV gate | taker in, taker out after `h` | base | primary T2 |
-| **M1** | the signal of T1 or T2 (chosen on D) | one full clip posted at the touch on the signal's side, kept at its first price, waits at most `h`; once filled, taker out `h` after the fill | base | primary M1 |
-| **Z** | gradient boosting on the walked-book label at 0 bp; hold-first rule | as M1 | 0 / 0 | secondary Z |
-| **A0** | S25's signal under a short-window protocol | taker, and as M1 under each fill rule | 0 / 0 | measurement A0, FILL |
+The search is a catalogue of configurations. A configuration's **cell** is
+its full set of values; its **group** is its categorical values (instrument,
+stratum, model, inputs, gate); the ordered values (hold, decision, label fee,
+regime window) span the group's grid. Every cell is scored on every one of
+D's 150 walk-forward test days ([selection](#selection-on-d-admission-and-the-finalists)).
 
-**The hold-first rule** (T1, Z, A0). The model gives `p_long`, `p_hold`,
+| Axis | Values | Kind | Code |
+|---|---|---|---|
+| Instrument | BTCUSDT, ETHUSDT, XRPUSDT | categorical | `data/bybit.py`, `data/bybit_trades.py`; a per-instrument loader and clip (new code) |
+| Stratum | C: a three-class classifier with the hold-first rule; R: a Gaussian regressor with the EV gate | one slot each | the hold-first rule and the EV gate (new code) |
+| Model | C: `gbm`, `logistic`; R: `tcn`, `bound_ridge` | categorical | `models/gbm.py`, `models/linear.py`, `models/tcn.py` with the Gaussian head (new code), `models/uncertainty.py` |
+| Label | C: the walked-book taker label; R: the forward move | fixed by stratum | new code |
+| Label fee (C) | 0, 5.5 bp | ordered | — |
+| Inputs | C: micro-selected, or micro-selected + tensor; R: the network on tensor + micro-selected, the bound regressor on micro-selected | categorical in C, fixed by the model in R | `features/selection.py`; the tensor and the 2025 set (new code) |
+| Hold `h`, equal to the label horizon | 5, 20, 50, 120 s on row stamps | ordered | time-based horizons (new code) |
+| Decision (C) | 25, 50, 100, 240 trades a day, the hold-first thresholds' target rate | ordered | per-side θ (new code), on the pattern of `labels/directional.py` |
+| Decision (R) | k ∈ {0, 0.5, 1} and β ∈ {0, 1, 2} bp | ordered | the EV gate (new code) |
+| Market gate | `open`; `quiet_out` (realised volatility at or above the 30th percentile of the fold's training rows); `tight_only` (spread at or below their 70th percentile) | categorical | `backtest/gating.MarketGate`, as `experiments/grand_search.gate_for`, on the mid's realised volatility over the trailing 60 s and the quoted spread, both in bp from book prices |
+| Regime policy, taker and passive entry | none, pull 4 h, pull 24 h, pull 120 h | ordered by window (none is window 0) | `pipeline/execution.guarded_rows`; fold-wise flags (new code) |
+| Regime policy, market maker | pull at its signal's window; widen and the other windows measured | slot value | `pipeline/market_making` (`guard_pull`, `guard_widen`) |
+| Execution | taker (S25, S-C, S-R); signal-entry quoter (S-P, S25-Z); S1 with the lean (S-M) | slot, never chosen | the taker executor and the quoter (new code); `pipeline/market_making` |
+| Exit | close by time at `h`; a passive exit measured only | fixed | — |
+| Measured, never chosen | the fee tier; the fill rule (touch, trade-through, queue) and the brackets `none`, `all_ahead`, `pessimistic`; latency 110 ms | robustness | the fill-rule comparison (new code) |
+
+**Fixed, not searched**, with the reason:
+
+- hyperparameters and seeds: the repository's defaults, one registered seed
+  per fit;
+- cooldown 0 beyond the one-position rule, and the monthly walk-forward
+  cadence;
+- the normaliser window: each value would need a new feature store, about
+  45 GB per instrument;
+- feature selection: once per instrument on its January, at most 40
+  features;
+- sizing: one clip;
+- holds of 300 s and longer, already negative on the repository's 5 s grid;
+- exits other than the clock: a take-profit or stop needs a walk along each
+  holding path, about 25 times the cost of the clock exit;
+- the flag source: BTC's hourly monitor drives every instrument; the book
+  CUSUM stays a reported second detector.
+
+**Counts.**
+
+| | Categorical groups | Ordered grid per group | Taker cells | Signal configurations (fits per fold) |
+|---|---:|---|---:|---:|
+| C, per instrument | 12 (2 models × 2 inputs × 3 gates) | hold 4 × rate 4 × label fee 2 × regime 4 = 128 | 1,536 | 32 |
+| R, per instrument | 6 (2 models × 3 gates) | hold 4 × k 3 × β 3 × regime 4 = 144 | 864 | 8 |
+| **All three instruments** | **54** | | **7,200** | **120** (600 walk-forward fits) |
+
+A gate, a regime window and a decision threshold need no fit of their own,
+so 120 signal configurations (C: model × inputs × hold × label fee; R: model
+× hold, per instrument) cover the 7,200 taker cells. The simulator runs on D
+are fixed by rule ([selection](#selection-on-d-admission-and-the-finalists)):
+S25-Z's 12 cells, always; S-P's at most 27 cells and 3 regime measurements;
+S-M's 3 cells and 6 regime measurements; A0 and FILL's 4 runs on O. The
+**trial bound** is N_max = 7,200 + 12 + 30 + 9 + 4 = **7,255**; the trial
+ledger records the actual N.
+
+**The catalogue** is the 7,200 taker cell keys, written
+`<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>`
+and `<instrument>|R|<model>|<inputs>|<gate>|hold_s=<h>|k=<k>|beta_bp=<β>|regime=<r>`,
+with inputs `micro`, `micro+tensor` or `tensor+micro`, regime `none`,
+`pull_4h`, `pull_24h` or `pull_120h`, and numbers written as in the
+configuration (`0`, `0.5`, `5.5`). Sorted in byte order and joined with a
+newline after each key, they have sha256
+`45a32e8ada0401a4f4d225ba5c96197d5833927409b1db0a92e9fc8142aac4b5`. The
+single entry point checks this hash before stage 1 and refuses any key
+outside the catalogue. S25 is the key
+`BTCUSDT|C|gbm|micro|open|hold_s=50|trades_per_day=240|label_fee_bp=0|regime=none`.
+
+---
+
+## Strata, decision rules and execution paths
+
+**The hold-first rule** (stratum C). The model gives `p_long`, `p_hold`,
 `p_short`. Go long when `p_long ≥ θ_long` and `p_long > p_short`; short
 symmetrically; otherwise hold. `θ_long` and `θ_short` are set on the inner
-validation so that each side would enter half of the target rate of trades a
-day before the one-position rule.
+validation, without the market gate or the regime guard, so that each side
+would enter half of the target rate of trades a day before the one-position
+rule. The gate and the guard only remove decision rows, so a gated or guarded
+cell trades less than its target rate.
 
-**The EV gate** (T2). With μ and σ the predicted forward move over `h` in bp,
-`c` = 2 × 5.5 bp, `w_t` the cost in bp of walking the current book for the
-clip and back (from the snapshot, in bp of mid), and `β` the buffer in bp (not
-the break date `b`): go long when `μ − kσ > c + w_t + β`, short when
-`−μ − kσ > c + w_t + β`. One entry per event
-(a run of rows on which the gate is open); a new entry needs the gate to close
-and reopen. Every T2 trade is one full clip: no Kelly sizing is applied
-(`strategies/sizing.py`'s `FractionalKelly` cannot size this gate in either
-unit; see [Choices and their reasons](#choices-and-their-reasons)).
+**The EV gate** (stratum R). With μ and σ the predicted forward move over `h`
+in bp, `c` = 2 × 5.5 bp, `w_t` the cost in bp of walking the current book for
+the clip and back (from the snapshot, in bp of mid), and `β` the buffer in bp
+(not the break date `b`): go long when `μ − kσ > c + w_t + β`, short when
+`−μ − kσ > c + w_t + β`. One entry per event (a run of rows on which the gate
+is open); a new entry needs the gate to close and reopen. Every trade is one
+full clip: no Kelly sizing is applied (`strategies/sizing.py`'s
+`FractionalKelly` cannot size this gate in either unit; see
+[Choices and their reasons](#choices-and-their-reasons)).
 
-**Every strategy** holds one position at a time: the next entry is possible
-only when the previous position is closed and no entry order is resting. For
-T1 and T2 that is the hold after each entry; for M1 and Z it is the wait of
-at most `h` for a fill, and after a fill the time to the exit.
-Profit and loss comes only from realised fills in the execution mode, never
+**Every configuration** holds one position at a time: the next entry is
+possible only when the previous position is closed and no entry order is
+resting. For a taker that is the hold after each entry; for the quoter it is
+the wait of at most `h` for a fill, and after a fill the time to the exit.
+Profit and loss comes only from realised fills in the execution path, never
 from a sum of predicted values.
 
-**The passive variant with a passive exit** (M1 and Z, measurement only): the
-exit is posted at the touch at `h` after the fill and crossed if still open
-after a further `h`.
+**The execution paths.** The taker enters and exits through the event-time
+taker executor, the exit `h` after the entry. The signal-entry quoter posts
+one clip at the touch on the signal's side, kept at its first price, waits at
+most `h`, and once filled exits by a taker order `h` after the fill. The
+market maker quotes both sides with round one's S1, its reservation price
+leaning on the signal ([Common settings](#common-settings)). **The passive
+variant with a passive exit** (S-P and S25-Z, measurement only): the exit is
+posted at the touch at `h` after the fill and crossed if still open after a
+further `h`.
 
-### Fixed now, and searched on D
+---
 
-| Value | Strategy | Setting | How set |
-|---|---|---|---|
-| hold `h` | T1, T2, Z | {5, 20, 50} s | searched on D |
-| target trades a day | T1, Z | {50, 100, 240} | searched on D |
-| `k` (σ multiple) | T2 | {0, 0.5, 1} | searched on D |
-| `β` (buffer) | T2 | {0, 1, 2} bp | searched on D |
-| M1's signal | M1 | T1 or T2, whichever has the higher mean of its daily `net_bp_trade` series over D's test days at its chosen cell (T1 on a tie); the one with a chosen cell, if only one has | chosen on D |
-| A0's settings | A0 | 240 trades a day, `h` = 50 s, trained 2025-01-01 to 01-27, thresholds on 01-28 to 02-03, run on O | fixed: S25's trade rate and hold |
-| clip, latency, fees, entry wait | all | as above | fixed |
+## The regime-break policy axis
 
-The axes are 9 cells for T1, 27 for T2 and 9 for Z. Nothing else is searched,
-and nothing else may be chosen after the amendment.
+**The flags** come from the frozen break detector ([The break
+detector](#the-break-detector)): hourly Binance BTCUSDT log returns over one
+stream from 2024-12-01, each divided by the root mean square of its UTC hour,
+under `MonitorSpec(history_len=365, online_len=90, min_history=121)` with the
+statistics scale and dependence. A flag is an alarm, effective at the close of
+the hour whose return produced it. BTC's flags guard every instrument, as a
+market-wide break.
+
+**Causal on D, fold by fold.** For test month m of the walk-forward, the
+24-value hour profile is fitted on the hours from 2024-12-01 to the last hour
+before m's first day; one `detect_breaks` call runs over the stream from
+2024-12-01 to m's last hour; and the guard uses that run's alarms in
+[m's start − 120 h, m's end]. On H, F and P, and in the dry run, the flags are
+the frozen detector's, its profile fitted on all of D. A **flag-causality
+test**, on the pattern of `validation/leakage.py`, checks in every fold that
+mutating every bar after hour t leaves every flag at or before t unchanged; if
+it fails, K-flag-leak voids every slot with a window above 0.
+
+**The policy acts before execution**, and only on pairs that
+`pipeline/execution.VALID_PAIRS` already allows:
+
+- **none**: no guard;
+- **pull w** (taker and passive entry): no new entry decision in
+  (flag, flag + w], which is what `pipeline/execution.guarded_rows` computes.
+  An open position runs to its exit at `h`. A resting passive entry is
+  cancelled at the first event after the flag, since its fill would be a new
+  entry;
+- **the market maker**: pull is `guard_pull` (no quotes) and widen is
+  `guard_widen` (half-spread doubled), with `guard_window_min` equal to
+  60 × w.
+
+The windows are w ∈ {4, 24, 120} h. 120 h is the monitor's re-arm time
+(`min_history` 121 hours), so the longest guard covers the span after an alarm
+in which the monitor cannot alarm again.
+
+**Regime attribution**, reported for every slot with a window above 0: the
+slot's mean minus that of its window-0 twin, against the 95th percentile of
+the same difference under 200 random flag sets, each with as many flags as the
+block has at hours drawn uniformly over its usable hours, seeds 0–199 (20 sets
+for a simulator slot). It is a measurement, not a kill: a strategy that pays is
+not a false positive because its guard adds nothing.
+
+**Relation to R.** [R](#r-the-break-conditional) stays a separate,
+conditional hypothesis about the policy "stop at the first alarm in F", with
+the same frozen detector; the axis is a short guard after any alarm. A finalist
+with a window above 0 keeps its guard on H, F and P, so F− and F+ are its own
+guarded series, and `b`'s alarm triggers its guard too.
 
 ### The development-period procedure (D only)
 
