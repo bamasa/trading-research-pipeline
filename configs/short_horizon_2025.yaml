@@ -184,40 +184,144 @@ common:
   accounting_identity: R15, checked at every day's end
 
 labels:
+  per_instrument: true  # every label, feature and model is built per instrument
   walked_taker:
-    clip_btc: 0.010  # equals the traded clip
+    stratum: C
+    clip: the traded clip  # equals the traded clip on each instrument
     horizon: hold  # the label declares h; the purge is derived from it
     entry_snapshot: first at or after t + 10 ms
     exit_snapshot: first at or after the entry snapshot + hold
     normalised_by: the entry snapshot's mid
     classes: [long, hold, short]  # long if long P&L > 0, short if short P&L > 0, else hold
-    fee_bp: {T1: 5.5, A0: 0.0, Z: 0.0}  # charged on both sides
-  forward_move: {definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp (a simple return), smoothing: 1, form: time-based (new code; forward_smoothed_move_bp not used), used_by: [T2]}
-  control: {form: "time-based smoothed_move_bp (new code): log of the mean mid over the 20 rows ending at the first row stamped at or after t + hold, over the mean mid over the 20 rows ending at t, x 1e4", smoothing_rows: 20, horizon: hold, horizon_measured_on: row stamps, holds_s: [5, 20, 50], reported_at: T2's chosen hold, used_by: [the K-label control models]}
+    label_fee_bp: [0, 5.5]  # a searched axis (search.axes.label_fee_bp), charged on both sides; S25 and A0 at 0
+  forward_move: {stratum: R, definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp (a simple return), smoothing: 1, form: time-based (new code; forward_smoothed_move_bp not used)}
+  control: {form: "time-based smoothed_move_bp (new code): log of the mean mid over the 20 rows ending at the first row stamped at or after t + hold, over the mean mid over the 20 rows ending at t, x 1e4", smoothing_rows: 20, horizon: hold, horizon_measured_on: row stamps, used_by: "the K-label control networks, at the frozen fits only, on R*'s instrument and the holds of R*'s neighbourhood, when R*'s model is tcn"}
 
 features:
   microstructure_set: registry book, depth and flow features over ten levels, plus the 2025 set added by the features pull request
   added_2025: [volatility_1s, return_sign_autocorrelation, turn_count, run_length, inter_trade_time, level0_lag_logs]
-  tensor: {columns: 40, levels: 10, price: distance from touch over rolling sigma with spread floor, size: z-scored against floors fitted on W}
-  winsorising: trailing quantiles only
+  winsorising: {quantiles: [0.001, 0.999], window_s: 3600, on: each feature's own trailing values on row stamps}  # never whole-day quantiles
+  tensor: {columns: 40, levels: 10, price: "distance from the touch over max(sigma x mid, spread floor)", sigma: std of the mid's row-to-row log changes over the trailing 60 s on row stamps, spread_floor: the instrument's median quoted spread on W, size: "log(1 + size) z-scored against its mean and std on W"}  # W's values in the fitted-values file
   leakage_check: "validation/leakage.py, every feature, before any D run; depth and flow builders wrapped as registered features with declared lookbacks (covered by the purge and N); for trade-plane features the prints cut at a time strictly inside a row interval, and streaming parity compared at each decision stamp"
   print_alignment: "backward: a print belongs to the first row stamped at or after it, row t holds prints in (s_t-1, s_t] (side=left, as features/align.py); features/flow.align_to_grid as it stands not used"
   gate_inputs: basis points from prices only
-  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}}
-  selected: null  # frozen by the D amendment
+  lookbacks: "declared in seconds on row stamps, except the network's 64-row window and the control label's 20-row smoothing; N = the longest lookback in seconds, rounded up to whole minutes; on a cold-start day a row is also unscored until the row-declared windows have their rows since midnight"
+  selection: {code: features/selection.py, runs: once per instrument, window: the instrument's 2025-01-01..2025-01-31, rows: every tenth row (at most 2.68 million), target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}, name: micro-selected}
+  stores: {dtype: float16, every_tenth_row: every instrument, every_row: "the network's inputs, one instrument at a time; two never coexist", format: one zstd parquet per instrument-day, parity_tests_at: float16}  # labels, costs, gate inputs, walk tables and fills from the book's float64 prices
+  selected: null  # {instrument: [features]}; frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
-  fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, any other fitted constant), in one file; used on every block, never refitted at a read
+  fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, each instrument's clip, any other fitted constant), in one file; used on every block, never refitted at a read
   fitted_values_sha256: null  # the sha256 of that file; checked by the H, F and P gates beside the weights; frozen by the D amendment
 
 models:
-  boosting: {code: models/gbm.py, classes: 3, hyperparameters: repository defaults, used_by: [T1, A0, Z], missing_class_in_fit: that side's probability is 0 (_align_columns) and it never trades with that model; reported}
-  gaussian_network: {code: models/tcn.py, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: gaussian_nll, variance_prior: true, variance_clamped: true, checkpoint: rank IC of mu against the realised forward move on the inner validation, used_by: [T2]}
-  control_network: same as gaussian_network, trained on the control label
-  windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch (new code)", inference: batched}
+  hyperparameters: repository defaults; one registered seed per fit; none searched
+  gbm: {code: models/gbm.py, classes: 3, stratum: C, missing_class_in_fit: that side's probability is 0 (_align_columns) and it never trades with that model; reported, cores: all (n_jobs -1), one fit at a time}
+  logistic: {code: models/linear.py LogisticBaseline, classes: 3, stratum: C, missing_class_in_fit: as gbm}
+  tcn: {code: models/tcn.py, stratum: R, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: "gaussian_nll + 0.01 x mean((log_variance - log v)^2), v the variance of the fold's training targets", log_variance_clamp: log v +- 6, early_stopping: {patience_epochs: 3, on: rank IC of mu against the realised forward move on the inner validation}, checkpoint: the same rank IC, internal_validation_split: not used, device: mps, one fit at a time}
+  bound_ridge: {code: "models/uncertainty.py HeteroscedasticRegressor (pipeline/stages.py UNCERTAIN bound_ridge: ridge, ridge)", settings: defaults, stratum: R, mu: the mean model, sigma: the square root of the variance model}
+  control_network: same as tcn, trained on the control label
+  windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch, streamed per day from the every-row store (new code)", inference: batched}
   training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
-  frozen: {per_hold_s: [5, 20, 50], models: [T1, Z, T2, control], train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30}
-  weights_sha256: null  # {model: {hold_s: sha256}} for T1, Z, T2 and control; the only place they are written; frozen by the D amendment
-  checkpoint_epoch: null  # {T2: {hold_s: epoch}, control: {hold_s: epoch}}; the only place they are written; frozen by the D amendment
+  frozen: {train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30, fits: "every hold and label fee in the neighbourhood of C*, R* (admitted or not) and S25", max_fits: {gbm_and_logistic: 16, tcn: 4, control: 4}}
+  weights_sha256: null  # {fit key: sha256} for every frozen fit; the only place they are written; frozen by the D amendment
+  checkpoint_epoch: null  # {fit key: epoch} for the frozen network and control fits; the only place they are written; frozen by the D amendment
+
+search:
+  clock: {rows: data.book.rows (100 ms), decisions: every row}
+  cluster: day  # the unit of every daily series, null and Newey-West lag
+  instruments: [BTCUSDT, ETHUSDT, XRPUSDT]
+  blocks: {sandbox: [W, each instrument's January], scored: "D's walk-forward test days, 2025-02..06 (150)", held_out: [H, F, P]}
+  stages:
+    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05, one XRPUSDT day of 2024); D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days"}
+    - {stage: 1, what: "fetch, replay and features for W and D, one instrument at a time; leakage, fold-level leakage and flag-causality tests; selection per instrument on its January"}
+    - {stage: A, what: "600 walk-forward fits; predictions on the test days; candidate-row tapes per signal configuration and test day; daily IC on all decision rows"}
+    - {stage: B, what: "every taker cell on every test day from walk tables; one trial-ledger row per cell-day"}
+    - {stage: D, what: "the choice, admission and the placebo search, with the refit replication"}
+    - {stage: C, what: "the simulator: S25-Z, S-P and S-M; A0 and FILL on O"}
+    - {stage: E, what: "frozen fits; sigma_D and the MDEs; the detector's alarm rate on D; the dry run; the amendment"}
+  axes:
+    instrument: {values: [BTCUSDT, ETHUSDT, XRPUSDT], kind: categorical, stage: A, code: "data/bybit.py, data/bybit_trades.py; per-instrument loader and clip", new: true}
+    stratum: {values: [C, R], kind: slot, C: three-class classifier with the hold-first rule, R: Gaussian regressor with the EV gate}
+    model: {values: {C: [gbm, logistic], R: [tcn, bound_ridge]}, kind: categorical, stage: A, code: [models/gbm.py, models/linear.py, models/tcn.py with the Gaussian head (new), models/uncertainty.py]}
+    label: {values: {C: walked_taker, R: forward_move}, kind: fixed by stratum, new: true}
+    label_fee_bp: {values: [0, 5.5], kind: ordered, stratum: C, stage: A}
+    inputs: {values: {C: [micro, micro+tensor], R: {tcn: tensor+micro, bound_ridge: micro}}, kind: categorical in C; fixed by the model in R, stage: A, micro: features.selection (micro-selected)}
+    hold_s: {values: [5, 20, 50, 120], kind: ordered, stage: A, measured_on: row stamps, equals: the label horizon}
+    trades_per_day: {values: [25, 50, 100, 240], kind: ordered, stratum: C, stage: B, sets: per-side theta of the hold-first rule on the inner validation}
+    k: {values: [0, 0.5, 1], kind: ordered, stratum: R, stage: B}
+    beta_bp: {values: [0, 1, 2], kind: ordered, stratum: R, stage: B}
+    gate: {values: [open, quiet_out, tight_only], kind: categorical, stage: B, code: "backtest/gating.py MarketGate, as experiments/grand_search.gate_for", quiet_out: "the mid's realised volatility over the trailing 60 s, in bp, at or above the 30th percentile of the fold's training rows", tight_only: "the quoted spread in bp at or below the 70th percentile of the fold's training rows"}
+    regime: {values: [none, pull_4h, pull_24h, pull_120h], kind: ordered by window (none is 0), stage: B, applies_to: [taker, passive_entry], code: "pipeline/execution.guarded_rows; pairs in pipeline/execution.VALID_PAIRS only"}
+    execution: {values: {taker: [S25, S-C, S-R], signal_entry_quoter: [S-P, S25-Z], s1_with_lean: [S-M]}, kind: slot, chosen: never}
+    exit: {value: close by time at hold_s, kind: fixed, measured_only: passive exit at the touch, crossed after a further hold (S-P, S25-Z)}
+    measured_never_chosen: [fee tier, "fill rule (on_touch, trade_through, queue)", "queue brackets (none, all_ahead, pessimistic)", latency 110 ms]
+  validity: "C: every combination of instrument, model, inputs, gate, hold_s, trades_per_day, label_fee_bp and regime; R: every combination of instrument, model (inputs fixed by the model), gate, hold_s, k, beta_bp and regime"
+  fixed_not_searched: [hyperparameters and seeds (defaults, one seed per fit), cooldown 0 beyond the one-position rule, monthly walk-forward cadence, normaliser window, "feature selection (once per instrument, at most 40)", sizing (one clip), holds of 300 s and longer, exits other than the clock, "flag source (BTC's hourly monitor for every instrument)"]
+  catalogue:
+    key_C: "<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>"
+    key_R: "<instrument>|R|<model>|<inputs>|<gate>|hold_s=<h>|k=<k>|beta_bp=<b>|regime=<r>"
+    numbers_written_as: [0, 0.5, 1, 2, 5, 5.5, 20, 25, 50, 100, 120, 240]
+    serialisation: keys sorted in byte order, each followed by a newline, UTF-8
+    groups: 54  # C 12 and R 6 per instrument
+    taker_cells: 7200  # C 1,536 and R 864 per instrument
+    signal_configurations: 120  # C model x inputs x hold x label fee (32) and R model x hold (8), per instrument
+    walk_forward_fits: 600
+    sha256: 45a32e8ada0401a4f4d225ba5c96197d5833927409b1db0a92e9fc8142aac4b5
+    entry_point: checks the sha256 before stage 1 and refuses any key outside the catalogue
+  named:
+    S25: "BTCUSDT|C|gbm|micro|open|hold_s=50|trades_per_day=240|label_fee_bp=0|regime=none"
+  strata:
+    C: {models: [gbm, logistic], label: walked_taker, decision: hold_first, ordered_axes: [hold_s, trades_per_day, label_fee_bp, regime], slot: S-C}
+    R: {models: [tcn, bound_ridge], label: forward_move, decision: ev_gate, ordered_axes: [hold_s, k, beta_bp, regime], slot: S-R}
+  slots: [S25, S-C, S-R, S-P, S-M]  # k = 5, fixed now; see the slots block
+  regime_source:
+    detector: the detector block (BTC's hourly flags guard every instrument)
+    flags_on_D: "fold-wise: for test month m, the hour profile fitted on the hours from 2024-12-01 to the last hour before m; one detect_breaks call from 2024-12-01 to m's last hour; the guard uses its alarms in [m's start - 120 h, m's end]"
+    flags_on_H_F_P: the frozen detector, its profile fitted on all of D; also in the dry run
+    windows_h: [4, 24, 120]  # 120 h is the monitor's re-arm time (min_history 121 h)
+    flag_causality_test: "on the pattern of validation/leakage.py: mutating every bar after hour t leaves every flag at or before t unchanged, in every fold; failure is K-flag-leak"
+    attribution: {statistic: the slot's mean minus its window-0 twin's, reference: 95th percentile of the same difference under random flag sets, sets: {taker: 200, simulator: 20}, seeds: [0, 199], flags_per_set: as many as the block has, at hours drawn uniformly over its usable hours, kill: false}
+  choice:
+    per: stratum, across every group on all three instruments
+    S: "median over the cell's neighbourhood of each cell's mean daily net_bp_trade at the base tier over the 150 test days"
+    neighbourhood: "validation/search.neighbourhood_scores' block over the stratum's ordered axes, every cell within one step, diagonals included, at the cell's categorical values; every cell counted whatever its trade rate; a cell without a trade on D scores 0, written by the entry point"
+    vectorised: tested equal to neighbourhood_scores on small grids
+    min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
+    rule: highest S among admissible cells; ties by the cell's own mean
+    report_peak: true
+    no_admissible_cell: "not run (no admissible cell on D); p = 1; the filter is not relaxed"
+  admission:
+    signal:  # C* and R*; both must hold
+      iii_carry_forward: "for each m in 2025-03..06, the choice re-run on the test months before m and the new cell's G scored on m's days after a 5-day embargo; mean over the four months > 0 (also computed for net: the D estimate used for power on H)"
+      iv_placebo_search: max(p_A, p_B) <= 0.05
+    slot:  # failing slots are "not admitted on D (<condition>)", p = 1 on every block
+      S-C: [signal admitted, "i: the chosen cell's S > 0", "ii: the neighbourhood median of monthly mean net > 0 in at least 4 of the 5 test months"]
+      S-R: [signal admitted, i, ii]
+      S-P: "signal: the admitted C* or R* (both admitted: the larger carry-forward G, C* on a tie; neither: S25's); cells: the signal's hold x trades_per_day x label_fee_bp (or hold x k x beta_bp) at its categorical and regime values, each simulated on the 150 days; admitted on i and ii on net_per_100_clip_day"
+      S-M: "S1 with the lean on S-P's signal; cell lean 1, neighbourhood lean 0.5, 1, 2; admitted on i and ii on net_per_100_clip_day and spread capture > 0 on D"
+      same_as_S25: a searched slot whose chosen cell is S25's is "same as S25", p = 1
+    no_search_null_for: [S25, S-P, S-M]  # fixed, or no choice on a passive outcome
+  nulls:
+    statistic: "A = median over the chosen cell's neighbourhood of each cell's day-level t of G (0 for a cell without trades); G = net - (L + S) / 2 per trade"
+    max_over: strata
+    rerun: [per-cell daily series, the 5-trade filter, neighbourhood medians, the choice in and across groups and instruments, the admission statistic]
+    not_rerun: [fits, theta, checkpoints, feature selection, gate levels, guard flags]  # none reads a test day's outcome (fold-level leakage and flag-causality tests)
+    null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration and instrument in the hour, flipped_trade: the stored walk of the opposite side, funding included}
+    null_B: {unit: day, shifts: "every s with 7 <= s <= n - 7 on the circular order of usable test days (137 at n = 150)", same_s_for_every_instrument: true, executes: the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables, busy_entry: skipped and counted, parity_test: "at s = 0 the walk-table route equals the executor, on the dry run", fallback: "19 shifts at multiples of 7 days, by a dated amendment before D is scored"}
+    p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications)"
+    bar: max(p_A, p_B) <= 0.05  # market_making/verdicts.exceeds_placebos on the distribution of the maximum
+    refit: {mandatory: true, replications: 1, what: "every fold's training labels circularly shifted by 28 days within its training span; every gbm and logistic fit redone; stratum C's selection re-run", rule: "if its A exceeds Null B's 95th percentile, C's bar becomes that A", not_refitted: [tcn, bound_ridge]}
+    diagnostic_only: global sign flip
+    S25_against: Null A and Null B applied to its fixed cell, no selection
+  reported_not_gating: [N_trials, "N_eff = effective_count(N_trials, mean_pairwise_correlation(daily G panel))", deflated Sharpe ratio of daily G and net per finalist, "selection premium (median null maximum of A, and A minus it)", "PBO by CSCV per stratum (10 blocks of 15 days, 252 splits)", MDE and power at t >= 3 for the carry-forward estimate]  # every D number labelled "selected, biased upward"
+  trial_bound: {N_max: 7255, parts: {taker_cells: 7200, S25-Z: 12, S-P: 30, S-M: 9, A0_and_FILL: 4}}
+  trial_ledger: {file: experiments/results/short_horizon_2025_trials.csv, row: one per configuration per day, columns: [key, catalogue_sha256, commit, net, G, L, S, trades, skips], committed: at the end of each stage, hand_runs_on_test_days: count as trials and join the catalogue and both nulls before the amendment}
+  entry_point: {file: experiments/short_horizon_2025.py, committed: before any test day of 2025-02..06 is scored, every_test_day_score_from_it: true}
+  budget: {ceiling_days_D: 6, projected_D_hours: [68, 126], reduction_order: [tcn on ETHUSDT and XRPUSDT, XRPUSDT entirely, hold_s 120, C's micro+tensor inputs, quiet_out gate], cuts_by: a dated amendment with the new catalogue sha256 and N_max, committed before stage 1, after_a_2025_file_on_disk: nothing cut; a slower run only takes longer}
+  result_trials: null  # {N_trials, N_eff, trial ledger sha256 and row count}; frozen by the D amendment
+  result_choice: null  # {C*: cell, S, neighbourhood with D values, peak; R*: the same}; frozen by the D amendment
+  result_admission: null  # per slot: decision and reason, carry-forward G and net, PBO, DSR, selection premium; S-P's signal; frozen by the D amendment
+  result_nulls: null  # nulls file sha256; per stratum A, p_A, p_B, the quantiles and the refit A; frozen by the D amendment
 
 d_procedure:
   walk_forward:
