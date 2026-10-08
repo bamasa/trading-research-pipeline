@@ -1,4 +1,4 @@
-# The 2025 short-horizon study, re-run on public data: the machine-readable
+# The 2025 short-horizon strategy search, on public data: the machine-readable
 # half of the pre-registration.
 #
 # docs/preregistration/short_horizon_2025.md is the other half: it says what
@@ -33,24 +33,19 @@ symbol: BTCUSDT
 computed_before_registration: none  # no 2025 book, print, hourly bar or funding fetched or computed on
 
 prior_information:
-  - the author's 2025 research code and summaries, cited only to set predictions
-  - original gross edge about 0.36 bp of turnover, at zero fees, Binance spot BTC/FDUSD, 2025-02-04..02-26
-  - "the research's development dates overlap H and F: network recipe on XRP data 2025-08-01..11-16, packaged example 2025-11-09, boosted track to 2025-08-25 (dates only)"
-  - "the author's recollection, verbatim: it worked until an anomaly in autumn 2025 (no date in the research documents)"
   - liquidation cascade of 2025-10-10..11, general market knowledge
   - BTC's 2025 daily price path, in the README's break figure and the daily bars on disk, and general knowledge
   - this repository's kills (sections 25 and 26, maker execution, market-making rounds one and two)
   - Bybit fee schedule as published in 2026 (backtest/costs.py, BYBIT_FEE_CAVEAT, whose text names 2024-02..04; parametrised by period, carried here with 2025's dates)
   - HTTP HEAD of every BTCUSDT book (ob500, ob200) and print archive, 2024-12-01..2025-12-31; existence and size only
   - HTTP HEAD of the ob200 and ob500 book archives for 2026-01-05..07; ob200 present, ob500 absent
-  - "experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; the README (written 2026-10-02 by that earlier work) names its 2025 alarm, 2025-09-13, scale, downward, and a near miss on 2025-06-29; both known when F's span and the hourly detector's setting were set; never defines b"
+  - "experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; the README (written 2026-10-02) names its 2025 alarm, 2025-09-13, scale, downward, and a near miss on 2025-06-29; both known when F's span and the hourly detector's setting were set; never defines b"
 
 expected_outcome:
-  original_gross_bp_turnover: 0.36  # the original's own summary; its break-even fee per side
   taker_bp: {base: 5.5, cheapest_published: 1.5}  # BTCUSDT; cheapest is pro6_g1
-  net_bp_round_trip_at_original_edge: {base: -10.28, cheapest_published: -2.28}  # 2 x (0.36 - fee)
+  taker_round_trip_bp: {base: 11.0, cheapest_published: 3.0}  # a taker pays at the base tier only with a gross edge above 5.5 bp of turnover
   passive_break_even_bp_turnover: {cheapest_published: 0.75, base: 3.75}  # (maker + taker) / 2
-  predictions: {T1: killed by K1, T2: killed by K1 or inconclusive under K-trades, M1: killed by K1, Z: killed by K1, R: not tested, A0: "below 0.36 bp of turnover crossing and passive under trade_through and queue; on_touch not covered"}
+  predictions: {T1: killed by K1, T2: killed by K1 or inconclusive under K-trades, M1: killed by K1, Z: killed by K1, R: not tested}
 
 data:
   book:
@@ -73,7 +68,7 @@ data:
     days_checked: 396  # every day, 2024-12-01..2025-12-31
     table: experiments/results/short_horizon_2025_head_check.csv
     table_sha256: 86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0
-    set_from_it: only the H/F boundary; later revisions used only the archive change it found; fetch sizes and the disk budget use its block sums and W's and D's largest and median archive, no research value
+    set_from_it: only the H/F boundary; later revisions used only the archive change it found; fetch sizes and the disk budget use its block sums and W's and D's largest and median archive, no searched value
     missing_under_code_pattern: {book_ob500: [2025-08-21, 2025-12-31], prints: none}
     first_and_fifteenth: all prints present; ob500 present to 2025-08-15, absent from 2025-09-01; ob200 present from 2025-09-01
   local_2025_data: binance daily bars only  # data/bars/BTCUSDT/klines-1d, read by the earlier break run
@@ -84,12 +79,11 @@ data:
   unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
   gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
   excluded_days_D: null  # with reasons; frozen by the D amendment
-  differences_from_original: [Bybit not Binance, perpetual not spot, USDT not FDUSD, published fees not zero, 100 ms grid rebuilt from the archive, funding charged, event-time simulator fills]
 
 blocks:
   W: {role: warm_up, start: 2024-12-01, end: 2024-12-31, days: 31, archive: ob500, scored: false, reads: free}
   D: {role: development, start: 2025-01-01, end: 2025-06-30, days: 181, archive: ob500, reads: free}
-  O: {role: original_window_inside_D, start: 2025-02-04, end: 2025-02-26, days: 23, archive: ob500, use: [A0, FILL]}
+  O: {role: descriptive_window_inside_D, start: 2025-02-04, end: 2025-02-26, days: 23, archive: ob500, use: [A0, FILL]}
   E: {role: embargo, start: 2025-07-01, end: 2025-07-07, days: 7, archive: ob500, book_prints_funding_fetched: false, hourly_bars: "read by the detector only, opened with H"}
   H: {role: held_out, start: 2025-07-08, end: 2025-08-20, days: 44, archive: ob500, hypotheses: [T1, T2, M1, Z], reads: 1, read_after: the D amendment is committed}
   F: {role: boundary, start: 2025-08-21, end: 2025-11-16, days: 88, archive: ob200, reads: 1, read_after: H's results are committed, read_always: true}
@@ -98,10 +92,10 @@ blocks:
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
   cold_start_unscored: the first N minutes from each cold-start day's midnight, whatever days they span, N being features.longest_lookback_minutes
-  spent: H, F and P are spent for these recipe families on BTCUSDT; successors use blocks after 2025-12-31
+  spent: H, F and P are spent for every configuration of this catalogue on the three instruments; successors use blocks after 2025-12-31
 
 common:
-  clip_btc: 0.010  # the original's traded clip, fixed for every strategy and both execution paths
+  clip_btc: 0.010  # fixed for every configuration and every execution path
   report_per_100_usdt_of_clip: true
   max_position_clips: 1
   latency_ms: 10  # simulator rule R3
@@ -249,7 +243,7 @@ strategies:
     thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
   A0:
     signal: boosting on walked_taker at 0 bp
-    settings: {trades_per_day: 240, hold_s: 50}  # the original protocol; the hold is inferred
+    settings: {trades_per_day: 240, hold_s: 50}  # S25's
     train: 2025-01-01..2025-01-27
     thresholds_on: 2025-01-28..2025-02-03
     run_on: O
@@ -342,7 +336,7 @@ hypotheses:
   T1: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1}
   T2: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1 or inconclusive under K-trades}
   M1: {block: H, claim: net_per_100_clip_day > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-queue], beside: [fill decomposition, maker 0 bp, maker -1 bp, passive exit], prediction: killed by K1}
-  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-queue], beside: [fill decomposition], context_not_test: Binance zero-fee spot BTC/FDUSD in 2025, prediction: killed by K1}
+  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-queue], beside: [fill decomposition], asks: whether the signal pays before fees, prediction: killed by K1}
   R:
     tested_for: every hypothesis, Z included, that is a candidate on H, whether or not it passes on F-
     not_tested_for: any other hypothesis, including one first significant on F
@@ -356,7 +350,7 @@ hypotheses:
     void: statuses.R_void
 
 measurements:
-  A0: {block: O, compare_with_bp_turnover: 0.36, label: "not comparable: different venue, product, quote currency and fee", prediction: "below 0.36 bp of turnover crossing, and passive under trade_through and queue; on_touch not covered"}
+  A0: {block: O, comparison_figure: none, prediction: none}
   FILL:
     stream: A0's passive orders on O; also Z's on H
     rules:
@@ -365,9 +359,8 @@ measurements:
       queue: R5, R6 and R7  # the simulator's default
     fill_ratio: share of posted orders with any fill (backtest/maker.py fill_rate); filled over posted volume reported beside
     prediction: {on_touch_fill_ratio_min: 0.75, queue_fill_ratio_max: 0.50}
-    withdrawal: if queue fills at least 0.75, the suspicion about the original's fill rule is withdrawn in writing
   fee_break_even: {taker: gross_bp_turnover, passive: maker fee at zero net with the taker exit at 5.5 and at 1.5 bp}
-  H_before_later_development: {strategies: [T1, T2], days: 2025-07-08..2025-07-31, label: sensitivity, status: none}
+  H_before_2025_08_01: {slots: every slot, days: 2025-07-08..2025-07-31, label: sensitivity, status: none}
   gap_days_included: every verdict's mean, t and median day with the gap-excluded days put back
   result_O: null  # A0 and FILL tables; frozen by the D amendment
 
@@ -384,7 +377,7 @@ detector:
   mean_channel: {column: odds_mean, threshold: 8.93, reported: true, re_anchors: false, defines_b: false}
   b: first alarm effective in F, at the close of the hour whose return produced it
   max_alarm_rate_D_per_14_days: 1  # above it, R is declared untestable before H and b does not split F
-  alarm_rate_D_optimistic: true  # hour profile fitted on D itself; thresholds calibrated on Gaussian null paths; disclosed, not corrected
+  alarm_rate_D_optimistic: true  # hour profile fitted on D itself; thresholds calibrated on Gaussian null paths; reported, not corrected
   hour_profile: null  # 24 values fitted on D; frozen by the D amendment
   alarm_rate_D: null  # alarms over 2025-01-01..06-30; frozen by the D amendment
   alarms_D: null  # timestamp and channel of every alarm over 2025-01-01..06-30, for the reproduction check; frozen by the D amendment
@@ -441,7 +434,7 @@ access:
   P: [the same conditions against F's read, for the hypotheses that qualify]
   second_read: raises unless forced; stamped second read; cannot change a status
   earlier_accesses_used: false  # neither round one's nor round two's; pipeline/execution's market-maker path (round one's access_for) not used
-  spent_blocks: "H, F and P are spent for these recipe families on BTCUSDT; a successor, a corrected re-run included, uses blocks after 2025-12-31 and never the reader-test days"
+  spent_blocks: "H, F and P are spent for every configuration of this catalogue on the three instruments; a successor, a corrected re-run included, uses blocks after 2025-12-31 and never the reader-test days"
 
 amendment:
   planned: 1

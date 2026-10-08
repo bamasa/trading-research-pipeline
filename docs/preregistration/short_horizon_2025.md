@@ -1,57 +1,62 @@
-# Pre-registration: the 2025 short-horizon study, re-run on public data
+# Pre-registration: the 2025 short-horizon strategy search, on public data
 
-This document registers a study before any of its data is read. It is committed
-together with [`configs/short_horizon_2025.yaml`](../../configs/short_horizon_2025.yaml),
+This document registers a strategy search before any of its data is read. It
+is committed together with
+[`configs/short_horizon_2025.yaml`](../../configs/short_horizon_2025.yaml),
 which holds the same values in the form the code will read, and the two must
 agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read, after three reviews (peeking, multiplicity, feasibility), a consistency check, and a last review for consistency, for decisions left until after a read and against the code it names; the choices the reviews left open are under [Choices and their reasons](#choices-and-their-reasons) |
-| **What it registers** | A re-run, on Bybit's public BTCUSDT archives, of the short-horizon order-book research the author did in 2025: the blocks, the data and its coverage, the labels, models and strategies, what is searched on the development block, hypotheses T1, T2, M1, Z and R with their metrics, kill conditions and placebos, the measurements A0 and FILL, the break detector, the status rules, the fetch plan, the compute budget and the amendment protocol |
-| **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 7 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons) |
+| **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT, ETHUSDT and XRPUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy, holding horizons and instruments: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the break detector, the status rules, the fetch plan, the compute budget and the amendment protocol |
+| **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
 | **How it changes** | Only under the [amendment protocol](#amendment-protocol): dated amendments appended at the end. One amendment is planned, after the development-period runs and before the held-out block is read |
 
 The market-making rounds are
 [`market_making.md`](market_making.md) and
 [`market_making_round2.md`](market_making_round2.md); their conventions hold here
 unless this document says otherwise. Names that do not exist on `main` at
-`af148b5` — the ten-level book tensor, the walked-book taker label, the
-time-based forward move and control label, the Gaussian-head network and its
-lazy window dataset, the hold-first rule, the EV gate, the event-time taker
-executor, the signal-entry quoter and the fixed
-`clip_btc` setting of the simulator, the fill-rule comparison, the Newey–West
-day-level t, the daily-only fetch of hourly bars, this study's fetch, feature
-store, loader, ledger and single entry point — refer to code added by the pull
-requests that follow this one. The code they re-type from the author's 2025
-research comes in under [`docs/disclosure_policy.md`](../disclosure_policy.md);
-none of that work's data, model weights, fee terms, internal paths or tuned
-values enters the repository, and none of its results is evidence here.
+`af148b5` refer to code added by the pull requests that follow this one; they
+are listed under [the code to come](#the-code-to-come).
 
 ## Why this study
 
-In 2025 the author did short-horizon order-book research on BTC and other
-crypto pairs while employed at a trading firm. Its recipes — a gradient-boosted
-classifier on microstructure features with a hold-first decision rule, a
-convolutional network over a normalised ten-level book with an
-expected-value gate, a close-by-time exit — were never measured honestly: the
-headline backtest ran at zero fees, its thresholds were chosen on the window it
-was scored on, its fills came from a closed engine whose fill rule is not
-known, and its documents contain a units error in the costs. This study is the
-first honest measurement of those recipes, on data anyone can download, with
-the repository's leakage checks, purged splits, event-time fills and
-pre-registered verdicts.
+The repository's earlier studies each tested a strategy chosen by hand, and
+each was killed. This one asks whether a **registered search** over the parts
+of a short-horizon strategy finds one that pays at published fees and survives
+held-out data: the instrument, the features, the label and its fee, the model,
+an entry gate, the holding horizon, the decision threshold, a policy for
+regime breaks, and the execution path (taker, passive entry, market maker).
+The search is fixed in advance. Its catalogue of configurations is enumerated
+and hashed; every configuration is scored on the same 150 development days and
+recorded in a trial ledger; the choice of finalists is a registered rule; a
+searched finalist must beat the same search re-run on placebo targets before
+it is admitted; and five finalists, a number fixed now, are confirmed on
+held-out blocks under Holm's procedure with m = 5.
 
-It also asks a question the author raised: whether the recipes worked for a
-while in 2025 and then stopped. That question is the easiest one in the study
-to answer by looking for the period that flatters it. It is asked here only as
-a causal policy fixed in advance (stop at the first alarm of a frozen
-detector), and only for a strategy that has first passed on the held-out block.
+One configuration is named in advance: **S25**, a gradient-boosted classifier
+on BTCUSDT with a hold-first rule and a 50 s close-by-time exit (its
+coordinates are under [S25](#s25-the-named-2025-configuration)). It is a point
+of the catalogue that the search can reach, and it is also tested by name,
+whatever the search chooses, so the study always reports how one fixed
+configuration fared, and the passive and market-making paths always have a
+fixed signal to run on.
+
+The study also asks whether a strategy paid for a while in 2025 and then
+stopped. That question is the easiest one to answer by looking for the period
+that flatters it. It is asked only in forms fixed in advance: as a searched
+[regime-break policy](#the-regime-break-policy-axis) (a guard after each alarm
+of a frozen break detector, causal on the development block), as a causal
+stopping policy ([R](#r-the-break-conditional): stop at the first alarm),
+tested only for a finalist that has first passed on the held-out block, and as
+a [regime map](#the-regime-map) that cuts every finalist's daily net at the
+detector's alarms and shows every segment, none selected, as a measurement.
 
 **The prior is negative**, for reasons written down [below](#expected-outcome-stated-in-advance).
 The study is built so that a negative answer is informative: every verdict
-carries its fee break-even, so a reader can see how far each recipe was from
-paying.
+carries its fee break-even, so a reader can see how far each configuration
+was from paying.
 
 ---
 
@@ -60,142 +65,106 @@ paying.
 Everything below was available when the design was chosen, and some of it
 shaped the design. None of it is a 2025 number computed by this repository.
 
-1. **The author's 2025 research**, read for the plan that precedes this
-   registration: its code and its own summaries. What shaped this design, and
-   is cited only to set predictions, never as evidence:
-   - its headline backtest ran on Binance spot BTC/FDUSD, at zero fees, over 23
-     days from 4 to 26 February 2025, with entries passed to a closed backtest
-     engine whose fill rule is not known; that engine reported most orders
-     filled (about four in five);
-   - its own summary of that backtest's profit corresponds to about
-     36 parts per million of turnover, **0.36 bp of turnover**, gross, at zero
-     fees;
-   - its decision thresholds and backtest window were chosen on the window
-     that was scored, and its configurations were ranked on test days;
-   - a costs field was built as 1e4 times a rolling z-score and read as basis
-     points;
-   - a smoothed label used for one model is partly known at decision time;
-   - its label described a much larger clip over a much shorter horizon than
-     the trades it was used for;
-   - its splits by row had no purge, and some statistics (winsorising bounds,
-     size floors) were fitted on whole days, after the decision time.
-
-   **The research's development data overlaps this study's held-out blocks,
-   by date.** The network recipe that T2 re-types was developed on XRP data
-   from 2025-08-01 to 2025-11-16, its packaged example ran on 2025-11-09, and
-   the boosted-classifier track ran until 2025-08-25. Recipe-level choices
-   (architecture, feature families, the gate) were therefore made while the
-   author could see the last 20 days of H and all of F, on other instruments
-   and venues. Only these dates are disclosed; none of that data is used. H and
-   F are therefore not fresh for the recipes, only for every value this study
-   sets on D, and T1 and T2 are also reported on H's days before 2025-08-01, as
-   a labelled sensitivity ([measurements](#measurements-without-a-hypothesis)).
-   P begins after every dated entry in the research.
-
-   Each of these is corrected, or tested, by a rule below. The research's
-   tuned values (thresholds, sizing caps, smoothing constants, volatility
-   floors, cost scenarios) are not used; every value a recipe needs is
-   re-derived on block D or fixed here without reference to them.
-2. **The author's recollection**, given for this registration and recorded
-   verbatim as a recollection: *"it worked until an anomaly in autumn 2025"*.
-   The research documents, searched for this registration, record no date for
-   any such change; their dated entries run to November 2025 and none of them
-   marks one. The blocks below were fixed with this recollection in mind (F
-   contains the autumn), and the date of any break is left to the frozen
-   detector.
-3. **General market knowledge, not from the research documents**: crypto
-   markets had a widely reported liquidation cascade on 10–11 October 2025. Its
-   relevance to the recollection is not known.
-4. **This repository's own results**: directional taker trading from one
+1. **General market knowledge**: crypto markets had a widely reported
+   liquidation cascade on 10–11 October 2025, and BTC's broad 2025 path (a
+   rising year, the reversal from October) is public.
+2. **This repository's own results**: directional taker trading from one
    instrument's book is killed (§25, §26), passive entry of a directional signal
    is killed (the gross edge inverts when resting: +3 to +8 bp crossing, −0.5 to
-   −4.2 bp resting), and both market-making rounds are killed
+   −4.2 bp resting), and both market-making rounds are killed, the one apparent
+   profit being inventory carried through a rising market
    ([`docs/findings.md`](../findings.md)). These are the reason for the prior.
-5. **Bybit's fee schedule**, transcribed in 2026 into `backtest/costs.py`
+3. **Bybit's fee schedule**, transcribed in 2026 into `backtest/costs.py`
    (`BYBIT_LINEAR_TIERS`), with its caveat (`BYBIT_FEE_CAVEAT`): it is the
    schedule published in 2026, applied here to 2025 data, when it may have
    differed. The constant's text names the earlier rounds' period, February
    to April 2024; the follow-up pull requests parametrise the caveat by
    period, and every caveated number here carries it with 2025's dates.
-6. **Archive metadata, read for this registration.** HTTP `HEAD` requests for
-   Bybit's BTCUSDT order-book and trade archives on every day from 2024-12-01
-   to 2025-12-31 returned each file's existence and size and nothing else; no
-   archive was downloaded. The result, which moved two block boundaries, is in
-   [Data](#data). The per-day sizes were seen; they reflect the archives'
-   depth and a day's activity, not prices, spreads or fills, and a file's size
-   is a rough proxy for that day's activity in H, F and P. The full per-day
-   table is committed as
+4. **Archive metadata, read for this registration.** HTTP `HEAD` requests for
+   Bybit's BTCUSDT, ETHUSDT and XRPUSDT order-book and trade archives on every
+   day from 2024-12-01 to 2025-12-31 returned each file's existence and size and
+   nothing else; no archive was downloaded. The result, which moved two block
+   boundaries, is in [Data](#data). The per-day sizes were seen; they reflect
+   the archives' depth and a day's activity, not prices, spreads or fills, and
+   a file's size is a rough proxy for that day's activity in H, F and P. The
+   per-day tables are committed as
    [`experiments/results/short_horizon_2025_head_check.csv`](../../experiments/results/short_horizon_2025_head_check.csv)
-   (sha256 `86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0`).
-   **No value in this registration was set from what it showed, except the
-   H/F boundary it moved**; the revisions made after the reviews used only the
-   archive change it found, and the fetch plan's sizes and disk budget use its
-   per-block sums and the largest and median archive of W and D, which set no
-   research value. Three further `HEAD` requests on the same day found
-   the `ob200` book archive, and no `ob500` one, for 2026-01-05, 06 and 07
-   (225, 205 and 197 MB); these are the reader-test days of
+   (BTCUSDT, sha256
+   `86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0`) and
+   [`experiments/results/short_horizon_2025_head_check_eth_xrp.csv`](../../experiments/results/short_horizon_2025_head_check_eth_xrp.csv)
+   (ETHUSDT and XRPUSDT, sha256 in [Data](#data)).
+   **No value in this registration was set from what they showed, except the
+   H/F boundary the BTCUSDT check moved**; ETHUSDT and XRPUSDT show the same
+   archive change on the same day. The revisions made after the reviews used
+   only that archive change, and the fetch plan's sizes and disk budget use
+   the per-block sums and the largest and median archive of W and D, which
+   set no searched value. Three further `HEAD` requests on the same day found
+   the `ob200` book archive, and no `ob500` one, for BTCUSDT on 2026-01-05, 06
+   and 07 (225, 205 and 197 MB); these are the reader-test days of
    [Data](#data), outside every block.
-7. **A break-detector run that already covers 2025.** The repository holds a
+5. **A break-detector run that already covers 2025.** The repository holds a
    run of `validation/structural_breaks.py` at its daily setting on Binance
    BTCUSDT daily bars from 2024-01-01 to 2026-09-30
    (`experiments/results/structural_breaks_BTCUSDT*.csv` and the README's
-   figure), committed by earlier work for another purpose; the daily bars it
-   read are on disk. Its 2025 alarms are public, and they were known when
-   this was written: the README, in the paragraph under that figure written
-   by the earlier work on 2 October 2026, names the run's one break as
+   figure), committed by an earlier run in this repository for another
+   purpose; the daily bars it read are on disk. Its 2025 alarms are public,
+   and they were known when this was written: the README, in the paragraph
+   under that figure, written on 2 October 2026, names the run's one break as
    **2025-09-13, scale, downward** (odds 9.36 against 9.09, seventy-five days
    into a window opened on 2025-06-30) and a near miss on **2025-06-29**
-   (8.96). Both were in the author's README when F's span and the hourly
+   (8.96). Both were in this repository's README when F's span and the hourly
    detector's setting were set; the 2025-09-13 alarm falls inside F. Because
-   it is public, that run cannot place the break blind. It is
-   reported beside R and never used to define the break date; the detector
-   that does is a different one, on hourly bars, never run on 2025
+   it is public, that run cannot place the break blind. It is reported beside
+   R and never used to define the break date; the detector that does is a
+   different one, on hourly bars, never run on 2025
    ([The break detector](#the-break-detector)). The same figure, and the daily
-   bars on disk, show BTC's 2025 daily price path, and its broad shape (a
-   rising year, the reversal from October) is general knowledge; the author
-   knew it in that sense when the blocks were set.
-8. **Nothing else.** The repository's Bybit books end on 2024-05-10, and the
+   bars on disk, show BTC's 2025 daily price path.
+6. **Nothing else.** The repository's Bybit books end on 2024-05-10, and the
    daily bars above are its only 2025 data. No 2025 book, print, hourly bar or
    funding rate has been fetched or opened, and no 2025 number has been
    computed for this study.
+
+**The information set of S25.** S25's coordinates are not claimed to have been
+chosen without knowledge of market conditions after 2025-08-01; H's days before
+that date are reported as a labelled sensitivity for every slot
+([measurements](#measurements-without-a-hypothesis)).
 
 ---
 
 ## Expected outcome, stated in advance
 
-**T1 and M1 are expected to be killed at the base fee, T2 to be killed or
-left inconclusive by too few trades, and Z to be killed too.** The
-arithmetic:
+**No finalist is expected to pay at the base fee.** The arithmetic:
 
 - A taker strategy pays its fee on the notional of each side, and turnover
   counts both sides, so the fee at which it breaks even, per side, equals its
   gross profit in basis points of turnover.
-- The original's own summary corresponds to a gross profit of about
-  **0.36 bp of turnover**, at zero fees. That is its break-even fee per side.
-- Bybit's BTCUSDT taker fee is 5.5 bp at the base tier, and **1.5 bp at the
-  cheapest published tier** (`pro6_g1`, from 5,000 million USDT of 30-day
-  volume). 0.36 bp is about a quarter of the cheapest taker fee and about a
-  fifteenth of the base one.
-- At the original's gross edge, a taker round trip on the clip would net
-  2 × (0.36 − 5.5) = **−10.3 bp** at the base tier and
-  2 × (0.36 − 1.5) = **−2.3 bp** at the cheapest one.
-- Entering passively does not close the gap on paper: with a 0.0 bp maker
-  entry (published for BTCUSDT only from Supreme VIP or Pro 5) and the cheapest
-  taker exit, a round trip pays 1.5 bp, so the break-even is 0.75 bp of
-  turnover, twice the original's edge. At the base tier, 2.0 + 5.5 = 7.5 bp a
-  round trip, 3.75 bp of turnover.
-- The 0.36 bp is itself an upper bound: thresholds chosen on the scored
-  window, a closed fill engine, and a zero-fee spot venue all bias it upwards.
-  This repository found that a directional signal's gross edge inverts when it
-  is entered passively (+3 to +8 bp crossing, −0.5 to −4.2 bp resting), which
-  is why Z, the gross edge under an honest queue, is also expected to be
-  non-positive.
+- Bybit's taker fee is 5.5 bp at the base tier and **1.5 bp at the cheapest
+  published tier** (`pro6_g1`, from 5,000 million USDT of 30-day volume). A
+  taker round trip costs 11 bp at the base tier and 3 bp at the cheapest, so a
+  taker configuration pays at the base tier only with a gross edge above
+  5.5 bp of turnover.
+- A passive entry with a taker exit costs 2.0 + 5.5 = 7.5 bp a round trip at
+  the base tier, a break-even of 3.75 bp of turnover; with a 0.0 bp maker
+  entry (published for BTCUSDT only from Supreme VIP or Pro 5) and the
+  cheapest taker exit it costs 1.5 bp, a break-even of 0.75 bp.
+- In 2024 this repository found the same directional signal at the same
+  moments worth +3 to +8 bp crossing and −0.5 to −4.2 bp resting, against
+  costs of 14–16 bp crossing and 5.9–7.1 bp resting; every taker winner of the
+  grand search was negative on both blocks, and both market-making rounds were
+  killed ([`docs/findings.md`](../findings.md)).
 
-Predictions, one per hypothesis, fixed now: T1 and M1 killed by K1; T2
-killed by K1 or inconclusive under K-trades; Z killed by its K1; R not
-tested, because nothing reaches it; FILL as stated under its heading; A0's
-gross edge on public data below 0.36 bp of turnover in the crossing run and
-in the passive runs under trade-through and queue (fill-on-touch excepted).
+Predictions, one per slot, fixed now:
+
+- **S25** killed by K1 on H; **S25-Z** killed by its K1.
+- **S-C and S-R**: whether a searched signal is admitted for its information
+  is not predicted (a crossing gross edge of a few basis points can beat both
+  nulls); its payoff is: the chosen cell's S ≤ 0 at the base fee in both
+  strata, so both are `not admitted on D (i)`.
+- **S-P and S-M** `not admitted on D (i)` on whichever signal they run; if
+  either reaches H, killed by K1 or, for S-M, K-dir.
+- **The regime axis** adds nothing beyond random pauses.
+- **R** not tested, because nothing reaches it; **FILL** as stated under its
+  heading.
 
 ---
 
@@ -297,12 +266,6 @@ instead of inside a block. Its consequences:
 - the order-book CUSUM reported beside R (below) labels any alarm within a day
   of 2025-08-21 as "at the archive change".
 
-**Differences from the original setup**, declared now: Bybit, not Binance; a
-linear perpetual, not spot; USDT, not FDUSD; published fees, not zero; a 100 ms
-grid rebuilt from the venue's archive, not the firm's sampler (their
-equivalence is not known); funding charged; fills from this repository's
-event-time simulator, not a closed engine.
-
 ---
 
 ## Blocks
@@ -310,29 +273,28 @@ event-time simulator, not a closed engine.
 | Block | Dates (UTC, inclusive) | Days | Book archive | Use | Read |
 |---|---|---:|---|---|---|
 | **W** warm-up | 2024-12-01 to 2024-12-31 | 31 | `ob500` | normalisers, size floors, rolling statistics; never scored | freely |
-| **D** development | 2025-01-01 to 2025-06-30 | 181 | `ob500` | features, models, every searched value, the walk-forward results, σ of daily results, the minimum detectable effects, the detector's alarm rate; A0 and FILL on O | freely, through the development access |
-| O (inside D) | 2025-02-04 to 2025-02-26 | 23 | `ob500` | the original backtest's window: A0 and FILL, descriptive only | as D |
+| **D** development | 2025-01-01 to 2025-06-30 | 181 | `ob500` | features, models, the whole search and its placebo search, the walk-forward results, σ of daily results, the minimum detectable effects, the detector's alarm rate; A0 and FILL on O | freely, through the development access |
+| O (inside D) | 2025-02-04 to 2025-02-26 | 23 | `ob500` | A0 and FILL, descriptive only | as D |
 | **E** embargo | 2025-07-01 to 2025-07-07 | 7 | `ob500` | a gap, so that H tests transfer rather than continuation | book, prints and funding never fetched; its Binance hourly bars only, for the detector, opened with H |
-| **H** held out | 2025-07-08 to 2025-08-20 | 44 | `ob500` | T1, T2, M1, Z | once, after the D amendment is committed |
-| **F** boundary | 2025-08-21 to 2025-11-16 | 88 | `ob200` | the break detector's alarms; every frozen strategy's numbers; persistence of anything that passed on H; R | once, after H's results are committed |
+| **H** held out | 2025-07-08 to 2025-08-20 | 44 | `ob500` | the five finalists and S25-Z | once, after the D amendment is committed |
+| **F** boundary | 2025-08-21 to 2025-11-16 | 88 | `ob200` | the break detector's alarms; every frozen finalist's numbers; persistence of anything that passed on H; R | once, after H's results are committed |
 | **P** after | 2025-11-17 to 2025-12-31 | 45 | `ob200` | the last check of anything that passed (below) | once, after F's results are committed, only if the condition holds |
 
 Why these blocks.
 
 - **W** exists because the size floors and rolling normalisers must be fitted
   on data before the first scored day; December 2024 is never scored.
-- **D** covers the first half of 2025, and with it O, the 23 days the original
-  backtest was scored on. O is development data here: the replication on it
-  is descriptive, and nothing on O is held out.
+- **D** covers the first half of 2025, and with it O, a 23-day window on
+  which A0 and FILL are measured. O is development data: the measurements on
+  it are descriptive, and nothing on O is held out.
 - **E** is a week no strategy reads, so that a model frozen on 30 June is
   first scored a week later. Only its hourly bars are read, by the detector,
   so that its stream has no hole.
-- **H**, six weeks of July and August, is before the autumn the author
-  remembers, so the primaries are tested where the recollection says the
-  recipes still worked. It ends at the archive change.
+- **H**, six weeks of July and August, is before the autumn of 2025, and
+  ends at the archive change.
 - **F** contains the autumn, the 10–11 October cascade, and the archive change
   on its first day. It is where the frozen detector looks for the break.
-- **P**, the last six weeks of 2025, is read only for a hypothesis that passed
+- **P**, the last six weeks of 2025, is read only for a finalist that passed
   before it.
 
 Days are independent: each starts flat, no position is held across midnight,
@@ -385,10 +347,11 @@ quietly favour a result.
 
 ## Common settings
 
-- **Instrument**: Bybit BTCUSDT linear perpetual (tick 0.1 USDT). ETHUSDT and
-  XRPUSDT, the original's other instruments, are not part of this
-  registration; using them needs a separate one, committed before they are
-  fetched.
+- **Instruments**: Bybit BTCUSDT, ETHUSDT and XRPUSDT linear perpetuals, a
+  categorical axis of the search. Each is fetched, replayed, validated and
+  excluded day by day under the same rules; the loader is per instrument, and
+  its tick and lot steps come from the venue's instrument specification,
+  recorded in the amendment.
 - **Rows and timing**: the 100 ms rows are `data/bybit.reconstruct`'s, at
   `grid_ms=100`: at most one row per 100 ms interval, emitted at the
   interval's first update, stamped with that update's venue time and carrying
@@ -400,10 +363,13 @@ quietly favour a result.
   wait, lookbacks) is measured on the stamps: "`t + h`" is the first row
   stamped at or after `t + h`. `data/grid.to_grid` works in whole seconds and
   is used only for the 1 s grid of the book CUSUM, with `label="right"`.
-- **Clip**: 0.010 BTC a trade, the original's traded size, fixed for every
-  strategy and both execution paths (T2 included: it is not Kelly-sized);
-  results are also given per 100 USDT of clip a day, with the clip's notional
-  taken at entry. One position at a time, never more than one clip (K-cap).
+- **Clip**: 0.010 BTC a trade on BTCUSDT, for every configuration and every
+  execution path, with no Kelly sizing. On ETHUSDT and XRPUSDT the clip in coin
+  units is fixed per instrument at 0.010 × (BTC's mean mid on W) / (the coin's
+  mean mid on W), rounded down to the lot step, and written to the
+  fitted-values file ([Blocks](#blocks)), so that a clip has about the same
+  notional on every instrument. Results are also given per 100 USDT of clip a
+  day, with the clip's notional taken at entry. One position at a time, never more than one clip (K-cap).
   In the simulator the clip is the fixed `clip_btc` setting, which replaces
   `clip_notional` and the touch-share cap, so K-cap compares with a constant.
 - **Taker fills** come from an event-time taker executor (new code; the
@@ -527,8 +493,8 @@ quietly favour a result.
   rows that have a label. The selected list is used by T1, A0, Z and as T2's auxiliary
   input; it is recorded in the amendment.
 
-**Models.** No hyperparameter of either model is searched; both use this
-repository's defaults, not the 2025 research's.
+**Models.** No hyperparameter of any model is searched; every model uses
+this repository's defaults.
 
 - **Gradient boosting** (`models/gbm.py`), three classes, for T1, A0 and Z.
   With `balance_classes` (its default), a fit (a walk-forward fold or a
@@ -562,7 +528,7 @@ repository's defaults, not the 2025 research's.
 | **T2** | Gaussian-head network on the tensor and the selected set; EV gate | taker in, taker out after `h` | base | primary T2 |
 | **M1** | the signal of T1 or T2 (chosen on D) | one full clip posted at the touch on the signal's side, kept at its first price, waits at most `h`; once filled, taker out `h` after the fill | base | primary M1 |
 | **Z** | gradient boosting on the walked-book label at 0 bp; hold-first rule | as M1 | 0 / 0 | secondary Z |
-| **A0** | as Z, at the original protocol's settings | taker, and as M1 under each fill rule | 0 / 0 | measurement A0, FILL |
+| **A0** | S25's signal under a short-window protocol | taker, and as M1 under each fill rule | 0 / 0 | measurement A0, FILL |
 
 **The hold-first rule** (T1, Z, A0). The model gives `p_long`, `p_hold`,
 `p_short`. Go long when `p_long ≥ θ_long` and `p_long > p_short`; short
@@ -600,7 +566,7 @@ after a further `h`.
 | `k` (σ multiple) | T2 | {0, 0.5, 1} | searched on D |
 | `β` (buffer) | T2 | {0, 1, 2} bp | searched on D |
 | M1's signal | M1 | T1 or T2, whichever has the higher mean of its daily `net_bp_trade` series over D's test days at its chosen cell (T1 on a tie); the one with a chosen cell, if only one has | chosen on D |
-| A0's settings | A0 | 240 trades a day, `h` = 50 s, trained 2025-01-01 to 01-27, thresholds on 01-28 to 02-03, run on O | fixed: the original protocol's trade rate and its close-by-time hold (about 50 s, inferred from the research code) |
+| A0's settings | A0 | 240 trades a day, `h` = 50 s, trained 2025-01-01 to 01-27, thresholds on 01-28 to 02-03, run on O | fixed: S25's trade rate and hold |
 | clip, latency, fees, entry wait | all | as above | fixed |
 
 The axes are 9 cells for T1, 27 for T2 and 9 for Z. Nothing else is searched,
@@ -982,11 +948,8 @@ programme's rebate), each with the fee caveat.
 walked-book label at 0 bp, the hold-first rule at its chosen rate and hold,
 posted at the touch, a taker exit `h` after the fill) has a positive
 `gross_bp_trade`, and its net with fees at zero on both sides (gross plus
-funding) is positive too: it would pay at a venue that charged nothing. Binance
-offered zero-fee trading on the spot BTC/FDUSD pair in 2025, as a public
-promotion; that is the context for this hypothesis, not a test of it (its
-terms are not verified here, and the archives this repository reads hold no
-order book for that pair).
+funding) is positive too. It asks whether the signal pays before fees, which
+is what a venue charging nothing would earn.
 
 **Kill conditions.** K1 (mean of the daily `gross_bp_trade` series over H
 ≤ 0); K2 (the mean of the daily net at 0/0, gross plus funding, ≤ 0);
@@ -1065,15 +1028,16 @@ not why it stopped.
 
 None enters a verdict, and none can be quoted as a result.
 
-**A0, the original recipe on public data, on O.** Gradient boosting on the
-walked-book label at 0 bp, trained on 2025-01-01 to 01-27, thresholds for 240
-trades a day on 01-28 to 02-03, a 50 s hold, run on O (2025-02-04 to 02-26):
-crossing at 0/0, and posted at the touch under each of the three fill rules of
-FILL. Reported: `gross_bp_turnover` against the original's 0.36 bp, net at the
-base tier and at every published tier, trades a day, IC. The table is
-labelled **not comparable: different venue, product, quote currency and
-fee**. Prediction: below 0.36 bp in the crossing run and in the passive runs
-under trade-through and queue; fill-on-touch is the one run not covered.
+**A0, S25 under a short-window protocol, on O.** S25's signal (gradient
+boosting on BTCUSDT on the walked-book label at 0 bp, micro-selected inputs),
+trained on 2025-01-01 to 01-27, thresholds for 240 trades a day set on 01-28
+to 02-03, a 50 s hold, run on O (2025-02-04 to 02-26): crossing at 0/0, and
+posted at the touch under each of the three fill rules of FILL. Reported:
+`gross_bp_turnover`, net at the base tier and at every published tier, trades
+a day and IC. A0 differs from S25 only in protocol (thresholds from O's
+preceding week, 0/0 fees, scored on O); it is the first step of S25's
+[edge ladder](#s25-the-named-2025-configuration). It carries no comparison
+figure and no prediction.
 
 **FILL, the fill rule, with a prediction.** A0's passive order stream on O,
 the same orders under three rules:
@@ -1090,21 +1054,17 @@ net. **The fill ratio** is the share of posted orders that receive any fill
 posted volume is reported beside it. The prediction below is on the share of
 orders.
 **Prediction, fixed now: the fill ratio is at least 0.75 under (a) and at most
-0.50 under (c).** The original's closed engine reported about four in five
-orders filled; if (c) also fills at least 0.75, the suspicion that the
-original's fill rule was optimistic is withdrawn in writing in the results.
-The same three rules are reported for Z's stream on H.
+0.50 under (c).** The same three rules are reported for Z's stream on H.
 
 **The fee break-even**, per strategy and block: `gross_bp_turnover` for the
 taker strategies; for M1 and Z, the maker fee at which net is zero with the
 taker exit at the base fee and, separately, at 1.5 bp. Compared with every
 published BTCUSDT tier, with the fee caveat.
 
-**H before the research's later development data**, a labelled sensitivity:
-T1 and T2 at their frozen cells on H's usable days from 2025-07-08 to 07-31
-(24 days), the part of H that precedes every dated entry of the 2025
-research's later development ([what was known](#what-was-known-before-this-was-written),
-item 1). Same daily series and statistics, no status.
+**H before 2025-08-01**, a labelled sensitivity: every slot at its frozen
+cell on H's usable days from 2025-07-08 to 07-31 (24 days), the part of H that
+the [information set of S25](#what-was-known-before-this-was-written) does not
+cover. Same daily series and statistics, no status.
 
 **Verdicts with the gap-excluded days included**: each verdict's mean, t and
 median day recomputed with the days excluded for sequence gaps put back.
@@ -1374,7 +1334,8 @@ E's bars, H, F and P.
   access is returned; a second read raises unless forced, and everything it
   produces is stamped `second read` and cannot change a status.
 
-**H, F and P are spent** for these recipe families on BTCUSDT. A successor
+**H, F and P are spent** for every configuration of this catalogue on the
+three instruments. A successor
 registration, a corrected re-run after a bug included, uses blocks after
 2025-12-31 and never the reader-test days.
 
@@ -1443,29 +1404,34 @@ hypothesis: F is still read and reported, but nothing is taken to P.
 
 ## What this study cannot establish
 
-- **Whether the original result was real.** Venue, product, quote currency,
-  fee, sampler and fill engine all differ (listed under [Data](#data)). A
-  negative here does not refute the original on its own venue, and a positive
-  would not validate it.
 - **A fee schedule of 2025.** Bybit's tiers are the ones published in 2026,
   applied to 2025.
 - **Queue dynamics inside 100 ms.** The book is a 100 ms photograph; queue
   position is a rule, bracketed, and K-queue requires a verdict to survive the
   pessimistic side of the bracket, not the truth.
-- **Anything about capacity.** The clip is 0.01 BTC and own impact is not
-  modelled.
-- **Anything beyond one instrument and one year.** ETHUSDT and XRPUSDT are
-  outside this registration.
+- **Anything about capacity.** The clip is 0.01 BTC, or the same notional on
+  the other instruments, and own impact is not modelled.
+- **Anything beyond three instruments, one venue and one year.**
+- **A strategy outside the catalogue.** The catalogue is finite and fixed in
+  advance; what it does not contain is not looked for.
+- **A passive-only edge without direction information.** The passive-entry and
+  market-making slots inherit their signal from the taker search or from S25,
+  so an edge that only a quoter could earn is not searched for.
 - **That H and F are comparable.** The book archive changes on F's first day;
   a difference between H and F may be the archive.
-- **That H and F are fresh for the recipes.** The 2025 research developed
-  its recipes on dates that overlap H's last 20 days and all of F (item 1 of
-  [what was known](#what-was-known-before-this-was-written)); they are fresh
-  only for the values this study sets on D. P is the one held-out block after
-  every dated entry of that research.
+- **That S25 was chosen blind to H.** Its
+  [information set](#what-was-known-before-this-was-written) is stated; H's
+  days before 2025-08-01 are reported for every slot as a labelled
+  sensitivity.
+- **A null calibrated by refitting every model.** The refit replication of the
+  placebo search covers the gradient-boosted and logistic models only; the
+  network and the bound regressor rest on the fold-level leakage test.
+- **A market-wide break measured per instrument.** BTC's hourly flags guard
+  every instrument.
+- **What a regime-map segment means.** Segments between alarms are
+  descriptive; none is a status.
 - **Why a strategy stopped.** R tests a causal stopping policy on a detector
-  of BTC's returns; it does not identify the mechanism, and it does not test
-  the author's recollection, which stays a recollection.
+  of BTC's returns; it does not identify the mechanism.
 
 ---
 
@@ -1498,8 +1464,8 @@ value open, or a proposal was not taken, the choice and its reason:
 - **The passive entry is kept at its first price**, not re-pegged: no
   re-peg cadence is left to choose, and the order keeps its queue place.
 - **The clip is fixed at 0.010 BTC** (`clip_btc`), rather than K-cap being
-  measured against the clip in force at entry: it keeps the original's traded
-  size and gives K-cap one meaning.
+  measured against the clip in force at entry: it gives K-cap one
+  meaning.
 - **Three reader-test days in January 2026**, not one: more cadence and gap
   data for the `ob200` replay, all outside every block.
 - **H's and F's first days start cold**, rather than carrying rolling state
@@ -1517,8 +1483,8 @@ value open, or a proposal was not taken, the choice and its reason:
   σ in bp, a gated trade with μ = 15 and σ = 10 gets 0.0375 of a clip, below
   the 0.001 BTC lot, so T2 would be inconclusive by construction; in decimal
   units the same trade gets 375, clipped to the cap, so every trade would be one clip and Kelly would do
-  nothing. A scaling between the two would be a value set without a basis,
-  and the research's sizing values are not used. Without it, T2's trade count
+  nothing. A scaling between the two would be a value set without a basis.
+  Without it, T2's trade count
   is its gate's, and K-trades counts round trips as for T1.
 - **Feature selection ranks by correlation with the forward move at
   `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
@@ -1547,8 +1513,7 @@ value open, or a proposal was not taken, the choice and its reason:
   again, and the store's 250 MB a day fits the disk once W's and D's features
   are deleted after H's results; float64 would not fit.
 - **The fill ratio counts orders with any fill**, rather than filled volume
-  over posted volume: it is the repository's existing `fill_rate`, and it is
-  the measure closer to the original engine's "orders filled". A partial fill
+  over posted volume: it is the repository's existing `fill_rate`. A partial fill
   counts as filled, which makes FILL's prediction for the queue rule harder to
   meet, not easier; filled volume is reported beside it.
 - **Only `validate_book`'s `positive_prices` error excludes a day**, as
@@ -1563,13 +1528,12 @@ value open, or a proposal was not taken, the choice and its reason:
   the move after it, so the kill would remove the mechanism under test. It
   could only cause false negatives; the false-positive routes stay guarded by
   K-placebo (with the stale signal), K-drift, K-queue and K-latency.
-- **The detector's alarm rate on D stays in-sample, and is disclosed as
+- **The detector's alarm rate on D stays in-sample, and is reported as
   optimistic** (peeking and multiplicity reviews, notes), rather than
   measured with a profile fitted elsewhere: the leniency can only end R early
   or make it untestable, never make it supported.
-- **No 2026 confirmation block is registered here.** P begins after every
-  dated entry of the 2025 research, so it is fresh for the recipes; a
-  confirmation on 2026 data needs its own registration, which the
+- **No 2026 confirmation block is registered here.** P is the last block of
+  2025; a confirmation on 2026 data needs its own registration, which the
   spent-blocks rule confines to dates after 2025-12-31 and which is committed
   before any 2026 book or print is fetched (the reader-test days excepted).
 - **No entry is skipped for a late snapshot**, and late snapshots are counted
@@ -1595,9 +1559,6 @@ value open, or a proposal was not taken, the choice and its reason:
   predicted to end there, a route to "confirmed on P, first significant on F"
   through a sign the precedence does not read; F still reports its numbers
   as measurements.
-- **A0's prediction covers the crossing run** (consistency review, which
-  offered covered or excluded): the 0.36 bp is argued above to be an upper
-  bound for the recipe, and fill-on-touch is excepted only for its optimism.
 - **Both terminal fetch rules, not one** (review of decisions left until
   after a read, which offered either): the identical-hash rule ends a corrupt
   archive, and only the attempt cap ends a download that keeps failing; both
