@@ -469,21 +469,25 @@ quietly favour a result.
 
 ## Labels, features and models
 
+Every label, feature and model below is built per instrument; nothing is
+pooled across instruments.
+
 **Labels.**
 
-- **The walked-book taker label** (new code). At row `t` with hold `h`, for
-  the clip: long P&L = (VWAP of selling the clip into the bids at the exit
-  snapshot − VWAP of buying it from the asks at the entry snapshot) / the
+- **The walked-book taker label** (new code), stratum C. At row `t` with hold
+  `h`, for the clip: long P&L = (VWAP of selling the clip into the bids at the
+  exit snapshot − VWAP of buying it from the asks at the entry snapshot) / the
   entry snapshot's mid × 1e4 − 2 × fee, the entry snapshot being the first at
   or after `t` + 10 ms and the exit snapshot the first at or after that + `h`,
   walked by the taker executor's function; short symmetric. Class `long` if
   the long P&L is positive, `short` if the short P&L is, `hold` otherwise. The
-  fee is the base taker fee (5.5 bp) for T1, and 0 for A0 and Z. The label
-  clip is the traded clip and the label horizon is the hold, so the label
-  declares `h` and the purge is derived from it.
-- **The forward move** for T2: the mid at the exit snapshot over the mid at
-  the entry snapshot, − 1, in bp (a simple return), both snapshots as for the
-  walked label; forward-only, unsmoothed. It is new code:
+  **label fee** is a searched value, 0 or 5.5 bp, charged on both sides; S25's
+  and A0's label is at 0 bp. The label clip is the traded clip and the label
+  horizon is the hold, so the label declares `h` and the purge is derived
+  from it.
+- **The forward move**, stratum R: the mid at the exit snapshot over the mid
+  at the entry snapshot, − 1, in bp (a simple return), both snapshots as for
+  the walked label; forward-only, unsmoothed. It is new code:
   `labels/targets.py`'s `forward_smoothed_move_bp` at `smoothing=1` gives the
   log of the mid's ratio from the decision row with its horizon in rows, and
   is not used.
@@ -493,8 +497,9 @@ quietly favour a result.
   `t + h`, over the mean mid over the 20 rows ending at `t`, × 1e4. Its
   horizon is in time, as every horizon here; only its smoothing is in rows.
   It is partly known at decision time and is used only to train the control
-  models of K-label, one per hold in {5, 20, 50} s; their IC is reported at
-  T2's chosen hold.
+  models of K-label: the network on the control label, at the frozen fits
+  only, on R*'s instrument and the holds of R*'s neighbourhood, when R*'s model
+  is the network ([selection](#selection-on-d-admission-and-the-finalists)).
 
 **Features.**
 
@@ -502,10 +507,15 @@ quietly favour a result.
   over ten levels, plus the 2025 set the features pull request adds where the
   registry lacks it (one-second realised volatility, return-sign
   autocorrelation, turn count, run length, inter-trade time, lagged level-0
-  logs). Winsorising bounds come from trailing quantiles only.
-- **The ten-level tensor**: 40 columns, each level's price distance from the
-  touch over a rolling σ with a spread floor, and each level's size z-scored
-  against a floor fitted on W only.
+  logs). **Winsorising** clips each such feature at the 0.1% and 99.9%
+  quantiles of its own trailing 3,600 s on row stamps, never at whole-day
+  quantiles.
+- **The ten-level tensor**: 40 columns. Each level's price distance from the
+  touch is divided by the larger of σ × mid and a spread floor, σ being the
+  standard deviation of the mid's row-to-row log changes over the trailing
+  60 s on row stamps, and the floor the instrument's median quoted spread on
+  W. Each level's log(1 + size) is z-scored against its mean and standard
+  deviation on W. W's values are written to the fitted-values file.
 - **Prints are aligned backward**: a print belongs to the first row stamped
   at or after it, so row `t` holds the prints in (s_{t−1}, s_t], s being the
   row stamps (`searchsorted(..., side="left")`, the rule of
@@ -522,39 +532,57 @@ quietly favour a result.
   row, and the streaming-parity test compares values at each decision stamp.
   Every gate input is in basis points computed from prices, never a
   normalised column (K-units).
-- **Selection**: `features/selection.py`, once, on D's January, from the
-  microstructure set, against one target: the walked-book label at 0 bp with
-  `h` = 20 s as `y`, and the forward move at `h` = 20 s (as T2's, from the
-  entry snapshot) as `forward`. `FeatureSelector` runs at its defaults
+- **Lookbacks and `N`**: every rolling window is declared in seconds on row
+  stamps, except the network's 64-row window and the control label's 20-row
+  smoothing. `N` is the longest lookback declared in seconds, rounded up to
+  whole minutes; on a cold-start day a row is also unscored until the
+  row-declared windows have their rows since that day's midnight.
+- **Selection**: `features/selection.py`, once per instrument, on that
+  instrument's January, from the microstructure set, on every tenth row
+  (31 × 86,400 = 2.68 million rows at most), against one target: the
+  walked-book label at 0 bp with `h` = 20 s as `y`, and the forward move at
+  `h` = 20 s as `forward`. `FeatureSelector` runs at its defaults
   (`score_target="ic"`, at most 40 features, correlation 0.95, variance 1e-6),
   so it ranks by absolute correlation with `forward`, and `y` only marks the
-  rows that have a label. The selected list is used by T1, A0, Z and as T2's auxiliary
-  input; it is recorded in the amendment.
+  rows that have a label. The selected list ("micro-selected") is each
+  instrument's input set for stratum C's micro inputs, for the bound regressor
+  and as the network's auxiliary input; it is recorded in the amendment.
 
 **Models.** No hyperparameter of any model is searched; every model uses
-this repository's defaults.
+this repository's defaults, with one registered seed per fit.
 
-- **Gradient boosting** (`models/gbm.py`), three classes, for T1, A0 and Z.
-  With `balance_classes` (its default), a fit (a walk-forward fold or a
-  frozen model) whose training rows lack the `long` or the `short` class gives
-  that side a probability of 0 (`models/linear._align_columns` fills a missing
+- **Gradient boosting** (`models/gbm.py`, `gbm` below), three classes. With
+  `balance_classes` (its default), a fit (a walk-forward fold or a frozen
+  model) whose training rows lack the `long` or the `short` class gives that
+  side a probability of 0 (`models/linear._align_columns` fills a missing
   class with zeros), so that side never trades with that model. This is the
   code's intended behaviour, not a fault; the fits and sides it affects are
-  reported.
-- **The Gaussian-head network** for T2: `models/tcn.py`'s causal dilated
-  network (window 64 rows, 32 channels, 4 levels, kernel 3, dropout 0.1, at most
-  20 epochs) with a head for μ and log σ², trained by Gaussian negative
-  log-likelihood with a variance prior and a clamped variance; the checkpoint
-  is chosen by the rank correlation of μ with the realised forward move on the
-  inner validation.
-- **The control model**: the same network trained on the control label.
+  reported. The same holds for the logistic model.
+- **Logistic regression** (`models/linear.LogisticBaseline`, `logistic`),
+  three classes, the cheap baseline of stratum C.
+- **The Gaussian-head network** (`tcn`): `models/tcn.py`'s causal dilated
+  network (window 64 rows, 32 channels, 4 levels, kernel 3, dropout 0.1, at
+  most 20 epochs) with a head for μ and log σ², trained by Gaussian negative
+  log-likelihood plus 0.01 × the mean of (log σ² − log v)², v being the
+  variance of the fold's training targets, with log σ² clamped to
+  log v ± 6. Early stopping (patience 3 epochs) and the checkpoint both read
+  the rank correlation of μ with the realised forward move on the inner
+  validation; `TCNBaseline`'s internal 15% split is not used. Fits run on the
+  MPS device, one at a time.
+- **The bound regressor** (`bound_ridge`, `pipeline/stages.UNCERTAIN`): two
+  ridge models (`models/uncertainty.HeteroscedasticRegressor`, at its
+  defaults), μ from the first and σ from the second, the cheap baseline of
+  stratum R.
 - **Windows**: each of the network's windows is the 64 consecutive 100 ms
   rows ending at the decision row, in training and in inference alike.
   Training targets are taken on every tenth row (about one a second);
   decisions are made on every row. Windows are built per batch by a lazy
-  window dataset (new code) and never materialised for a whole fit or day:
+  window dataset (new code) that streams them per day from the every-row
+  feature store and never materialises them for a whole fit or day:
   `models/tcn._windowise` copies, and at 4 million rows of about 70 inputs a
   materialised fit would need about 72 GB.
+- **Training rows**: every fit reads at most 4 million training rows, taken
+  evenly in time from every tenth row.
 
 ---
 
