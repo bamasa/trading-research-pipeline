@@ -1313,108 +1313,137 @@ over excluded days.
 
 ---
 
-## T1 — the boosted classifier, crossing, at the real fee
+## S25, the named 2025 configuration
 
-**Statement.** On H at the base tier, T1 (gradient boosting on the walked-book
-label at 5.5 bp, the hold-first rule at the chosen trade rate, a taker exit
-after the chosen hold) earns a positive `net_bp_trade`.
+**S25 is one point of the catalogue**, fixed now:
 
-**Kill conditions.** K1 (mean of the daily `net_bp_trade` series over H
-≤ 0), K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency; void
-under K-leak, K-units, K-acct, K-cap; inconclusive under K-trades.
+| Coordinate | Value |
+|---|---|
+| Instrument | BTCUSDT |
+| Stratum | C |
+| Model | `gbm`, the repository's defaults |
+| Inputs | micro-selected |
+| Label | the walked-book taker label at a 0 bp label fee |
+| Hold | 50 s, closed by time |
+| Decision | the hold-first rule at 240 trades a day |
+| Gate | `open` |
+| Regime policy | none |
+| Execution | taker in and taker out, through the event-time taker executor |
+| Clip | 0.010 BTC |
+| Verdict | `net_bp_trade` at the base tier (5.5 bp taker), funding included |
 
-**Prediction.** Killed by K1.
+**How it is treated.**
 
-## T2 — the Gaussian network with an expected-value gate
+- It is reachable: it is a cell of the catalogue, and the leaderboard shows it
+  with a badge and its rank "r of N".
+- It is fixed before D: no admission and no search-level null. It goes to H
+  whatever D shows; its D values are shown against its own Null A and Null B
+  distributions.
+- It is a member of the family and carries the taker slots' kill list. Its
+  K-nbhd covers 24 cells (hold {20, 50, 120} s × rate {100, 240} × label fee
+  {0, 5.5} × regime {none, pull 4 h}), with one frozen fit per hold and label
+  fee (6 fits).
+- It is the fallback signal of S-P and S-M, so passive entry and the market
+  maker are always measured on at least one fixed signal.
 
-**Statement.** On H at the base tier, T2 (the network on the tensor and the
-selected set, the EV gate `μ − kσ > 11 bp + walk cost + β`, one entry per
-event, one clip a trade, a taker exit after the chosen hold) earns a
-positive `net_bp_trade`.
+**Statement.** On H at the base tier, S25 earns a positive `net_bp_trade`.
+**Prediction:** killed by K1.
 
-**Kill conditions.** As T1. Reported beside: the control model's IC against
-its own label and against the realised move, which shows on public data how
-much of a smoothed label is known at decision time.
+### S25-Z, the gross edge before fees (outside the family)
 
-**Prediction.** Killed by K1, or inconclusive under K-trades: an 11 bp round
-trip on BTC moves of a few basis points over a minute may leave the gate
-almost always shut.
+**Statement.** On H, under the queue fill rule, S25's signal entered by the
+signal-entry quoter (one clip posted at the touch, a taker exit `h` after the
+fill) has a positive `gross_bp_trade`, and its net with fees at zero on both
+sides (gross plus funding) is positive too. It asks whether the signal pays
+before fees, which is what a venue charging nothing would earn. Its
+neighbourhood is S25's hold × rate × label fee, 12 cells. Tested alone at α/6
+([status rules](#status-rules)); its best status is "conditional on a zero-fee
+venue", and it is never reported without the same trades' net at the base
+tier and at the cheapest published tier beside it, nor as a result a Bybit
+account could trade. **Prediction:** killed by K1: resting entries are
+adversely selected, and the repository's maker finding is that this inverts a
+crossing signal's gross edge.
 
-## M1 — the same signal, entered passively
+### Leaderboard regions
 
-**Statement.** On H at the base tier, M1 (the chosen signal, one clip posted
-at the touch on its side and kept at its first price, filled from prints after
-the queue ahead under rules R5–R7, a taker exit `h` after the fill) earns a
-positive `net_per_100_clip_day`, on the zero-filled series of every usable
-day.
+Two regions of the catalogue are reported as measurements, with no slot: **T1**
+= C × `gbm` × micro-selected × label fee 5.5 × gate `open` × regime none, and
+**T2** = R × `tcn` × gate `open` × regime none. Each region's best
+neighbourhood cell is reported with its S, A and rank. Stratum R has no named
+point.
 
-**Kill conditions.** As T1, plus K-queue. Reported beside: the fill
-decomposition, the fill ratio, markouts by fill path, the passive-exit variant, and the result at
-maker fees of 0 and −1 bp (the cheapest published BTCUSDT maker tier and the
-programme's rebate), each with the fee caveat.
+### The edge ladder
 
-**Prediction.** Killed by K1.
+One table, each step labelled with the one thing that changed:
 
-## Z — the gross edge, at a zero-fee venue (secondary, conditional)
+1. A0 on O at 0/0, crossing and under the three fill rules;
+2. S25's gross and net on D's walk-forward;
+3. S25 on H, then on F;
+4. S25's fee break-even per side against every published tier;
+5. S25-Z's net at 0/0, with FILL's fill ratios beside it.
 
-**Statement.** On H, under the queue fill rule, Z (gradient boosting on the
-walked-book label at 0 bp, the hold-first rule at its chosen rate and hold,
-posted at the touch, a taker exit `h` after the fill) has a positive
-`gross_bp_trade`, and its net with fees at zero on both sides (gross plus
-funding) is positive too. It asks whether the signal pays before fees, which
-is what a venue charging nothing would earn.
+---
 
-**Kill conditions.** K1 (mean of the daily `gross_bp_trade` series over H
-≤ 0); K2 (the mean of the daily net at 0/0, gross plus funding, ≤ 0);
-K-label, K-placebo (with the stale signal), K-drift, K-nbhd, K-days,
-K-queue, K-latency; void under K-leak, K-units, K-acct, K-cap; inconclusive
-under K-trades. K-fee does not apply: the
-hypothesis is about a fee the base tier does not offer.
+## The searched finalists
 
-**Label, fixed now.** Z is conditional on a fee schedule of zero on both
-sides. No published Bybit tier offers it: BTCUSDT's lowest published taker fee
-is 1.5 bp. A Z result is never reported without the same trades' net at the
-base tier and at the cheapest published tier beside it, and never as a result
-a Bybit account could trade.
+- **S-C** — on H at the base tier, the cell C\*, chosen and admitted on D
+  ([selection](#selection-on-d-admission-and-the-finalists)), earns a positive
+  `net_bp_trade`, taker in and out. **Prediction:** `not admitted on D (i)`.
+- **S-R** — the same for R\*: the network or the bound regressor with the EV
+  gate `μ − kσ > 11 bp + walk cost + β`, one entry per event, one clip a trade.
+  **Prediction:** `not admitted on D (i)`. Reported beside, when R\* is the
+  network: the control model's IC against its own label and against the
+  realised move, which shows on public data how much of a smoothed label is
+  known at decision time.
+- **S-P** — on H at the base tier, its signal (the admitted C\* or R\*, else
+  S25's), one clip posted at the touch on the signal's side and kept at its
+  first price, filled from prints after the queue ahead under rules R5–R7, a
+  taker exit `h` after the fill, earns a positive `net_per_100_clip_day`, on
+  the zero-filled series of every usable day. Reported beside: the fill
+  decomposition, the fill ratio, markouts by fill path, the passive-exit
+  variant, and the result at maker fees of 0 and −1 bp (the cheapest
+  published maker tier and the programme's rebate), each with the fee caveat.
+  **Prediction:** `not admitted on D (i)`; if it reaches H, killed by K1.
+- **S-M** — on H at the base tier, S1 with the lean on S-P's signal earns a
+  positive `net_per_100_clip_day` with a positive making part. Reported
+  beside: the λ neighbourhood, and `guard_pull` against `guard_widen` at 4, 24
+  and 120 h with λ = 1. **Prediction:** `not admitted on D (i)`; if it reaches
+  H, killed by K1 or K-dir.
 
-**Prediction.** Killed by K1: resting entries are adversely selected, and the
-repository's maker finding is that this inverts a crossing signal's gross
-edge.
+## R, the break (conditional)
 
-## R — the break (conditional)
-
-**Tested for** every hypothesis, Z included, that is a candidate on H,
+**Tested for** every slot, S25 and S25-Z included, that is a candidate on H,
 whether or not it passes on F−; its statistic is computed and reported in
 either case, with F−'s result beside it. Not tested for any other
-hypothesis, including one first significant on F; recorded as `not tested`,
+slot, including one first significant on F; recorded as `not tested`,
 with the reason, and read as not supported.
 
 **Statement.** With `b` the first alarm of the frozen detector in F, and
 Δ(`d`) the mean of the daily series on F's usable days before split day `d`
 minus its mean on F's usable days after `d`: R is **supported** if the
-hypothesis passes on F−, its mean on F+ is ≤ 0, and Δ(`b`) exceeds the 95th
+slot passes on F−, its mean on F+ is ≤ 0, and Δ(`b`) exceeds the 95th
 percentile of Δ(`d`) over the **reference set**; **not supported**
-otherwise. For Z, every claim of R and the mean on P are evaluated on both
+otherwise. For S25-Z, every claim of R and the mean on P are evaluated on both
 of its claims' series (gross, and net at 0/0): R is supported only if every
 claim holds on both, and on P the break persisted only if both means are
 ≤ 0.
 
 **The reference set** is every admissible split day `d` of F (at least 20
 usable days before it and at least 10 after; about 58 days), enumerated in
-full, at which the hypothesis also passes the bar on F's days before `d`.
+full, at which the slot also passes the bar on F's days before `d`.
 **The whole bar is evaluated at each `d`**, kills and Holm included, as on F−
-with F's usable days before `d` in its place: the other primaries taken to F
-are evaluated there the same way and enter Holm with p = 1 where they are
+with F's usable days before `d` in its place, with m = 5: the other slots
+taken to F are evaluated there the same way and enter Holm with p = 1 where they are
 killed, void or inconclusive under K-trades on those days, as do those not
 taken to F, and K-trades counts the trades before `d`. Nothing is re-run for
-it: every series the bar reads (the strategy's daily values and IC, its 200
+it: every series the bar reads (the slot's daily values and IC, its 200
 random-direction draws and other placebos, its neighbour cells, its 110 ms and
 bracket re-runs) is computed once per day over all of F in F's read session,
 the one-day shift circular within all of F as on F−, and each split day only
 slices those per-day values.
 Passing on F− selects lucky days before the true split, so the placebo splits
 go through the same selection; a comparison with unselected splits would make
-R come out supported too often. When the hypothesis does not pass on F−,
+R come out supported too often. When the slot does not pass on F−,
 Δ(`b`) is reported with its percentile among all admissible days, as a
 measurement.
 
@@ -1427,9 +1456,13 @@ days in the reference set.
 **Reported beside**: every alarm in H and F with the channel that moved
 (scale or dependence, and the mean channel's odds), the second detector's
 alarms, and the earlier
-daily-bar run's alarms (item 7 of [what was known](#what-was-known-before-this-was-written)),
+daily-bar run's alarms (item 5 of [what was known](#what-was-known-before-this-was-written)),
 labelled as already public. The blocks are not moved by any alarm, including
 alarms inside H.
+
+**The regime axis does not replace R.** A slot with a regime window above 0
+enters R with its own guarded series; the axis is a short guard after any
+alarm, R a stop at the first alarm in F.
 
 **What R can establish** is that a policy fixed in advance, "stop at the first
 alarm", separates days on which a strategy paid from days on which it did not;
