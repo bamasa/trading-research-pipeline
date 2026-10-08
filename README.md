@@ -1259,7 +1259,12 @@ turnover, against a cheapest published Bybit taker fee of 1.5 bp.
       excluded, and the replay and feature store fit the machine's memory and
       disk; then checked once more for consistency: every horizon measured on
       row stamps, a status for an unreadable block and a void break test, and
-      late snapshots counted rather than skipped
+      late snapshots counted rather than skipped; then reviewed for decisions
+      left until after a read: the gates check a clean tree and the
+      installed environment, and a failed read, a defect found after a read
+      and a corrupt archive each have a registered outcome that cannot raise
+      a status; prints are aligned backward, and the 2025 daily-bar alarm
+      already in this README is disclosed
 - [ ] The ported pieces: ten-level tensor, walked-book label, Gaussian head
       with a lazy window dataset, EV gate, an event-time taker executor and a
       signal-entry quoter, fill-rule comparison, streaming parity, the
