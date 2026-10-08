@@ -1252,15 +1252,15 @@ basis points against an 11 bp taker round trip at the base tier.
 
 - [x] Pre-registration, with an archive check that moved the held-out block's
       end to 2025-08-20, where Bybit's book archive changes from 500 to 200
-      levels
+      levels, on BTCUSDT, ETHUSDT and XRPUSDT alike
 - [x] Reviewed for peeking, multiplicity and feasibility before any data is
       read, and tightened: no file of a later block on disk before the ledger
       opens it, statuses computed by code and hashed, no code change between
       the held-out reads, metrics fixed at the day level, Holm's family fixed
-      at three on every block, a break test whose placebo goes through the
+      on every block, a break test whose placebo goes through the
       same selection, and fill and timing rules pinned in the configuration;
-      then checked against the code it names: T2 trades one clip (Kelly
-      sizing cannot size its gate), a failed download is retried rather than
+      then checked against the code it names: the EV gate trades one clip
+      (Kelly sizing cannot size it), a failed download is retried rather than
       excluded, and the replay and feature store fit the machine's memory and
       disk; then checked once more for consistency: every horizon measured on
       row stamps, a status for an unreadable block and a void break test, and
@@ -1270,13 +1270,28 @@ basis points against an 11 bp taker round trip at the base tier.
       and a corrupt archive each have a registered outcome that cannot raise
       a status; prints are aligned backward, and the 2025 daily-bar alarm
       already in this README is listed among what was known
-- [ ] The ported pieces: ten-level tensor, walked-book label, Gaussian head
-      with a lazy window dataset, EV gate, an event-time taker executor and a
-      signal-entry quoter, fill-rule comparison, streaming parity, the
-      200-level book reader proven on three 2026 days outside the study, the
-      study's fetch (retries, at most four replay workers) and float32 feature
-      store, and the study's ledger and single entry point
-- [ ] Development period and the amendment that freezes it
+- [x] Recast, before any data is read, from fixed hypotheses into a
+      registered search: three instruments, four models in two strata, label
+      fee, hold (5 to 120 s), decision threshold, market gate and a
+      regime-break policy from the frozen detector, causal fold by fold
+      (7,200 taker configurations, hashed); no configuration culled on an
+      outcome; a choice by neighbourhood and two admission levels; a placebo
+      search (hour-block sign flips and day re-pairing over the whole search)
+      a searched finalist must beat; five finalists, S25 by name, Holm with
+      m = 5; passive entry and a market maker that always run; a regime map as
+      a measurement; a 6-day compute ceiling with a reduction order fixed
+      before any fetch; headline sentences fixed for every outcome
+- [ ] The code to come: the search's entry point, trial ledger, candidate
+      tapes and walk tables; ten-level tensor, walked-book label, Gaussian
+      head with a lazy window dataset, hold-first thresholds and the EV gate;
+      fold-wise detector flags and the flag-causality test; the two nulls,
+      the refit replication, PBO and DSR; an event-time taker executor, a
+      signal-entry quoter and S1 with the lean on a fixed clip, fill-rule
+      comparison, streaming parity; the 200-level book reader proven on three
+      2026 days outside the study; the study's fetch for three instruments and
+      its float16 feature stores; the leaderboard, regime map and figures
+- [ ] Development period: the search, the placebo search and the amendment
+      that freezes the finalists
 - [ ] The held-out read, then the boundary block and the break
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
