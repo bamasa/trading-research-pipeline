@@ -17,8 +17,9 @@ The market-making rounds are
 [`market_making_round2.md`](market_making_round2.md); their conventions hold here
 unless this document says otherwise. Names that do not exist on `main` at
 `af148b5` — the ten-level book tensor, the walked-book taker label, the
-time-based forward move and control label, the Gaussian-head network and its lazy window dataset, the hold-first rule, the EV
-gate, the event-time taker executor, the signal-entry quoter and the fixed
+time-based forward move and control label, the Gaussian-head network and its
+lazy window dataset, the hold-first rule, the EV gate, the event-time taker
+executor, the signal-entry quoter and the fixed
 `clip_btc` setting of the simulator, the fill-rule comparison, the Newey–West
 day-level t, the daily-only fetch of hourly bars, this study's fetch, feature
 store, loader, ledger and single entry point — refer to code added by the pull
@@ -275,8 +276,9 @@ instead of inside a block. Its consequences:
 - F and P use D's frozen `max_sequence_gaps` (below), never a value set on
   `ob200` days. If more than a quarter of a held-out block's days are
   excluded, that block is reported as **unreadable**, nothing is retuned, and
-  no status changes on it (the [status rules](#status-rules-family-of-three-primaries-t1-t2-m1)
-  say what follows for H, F and P);
+  no status changes on it (the
+  [status rules](#status-rules-family-of-three-primaries-t1-t2-m1) say what
+  follows for H, F and P);
 - the downloader records each F and P day's message count, median interval
   and sequence gaps only inside that block's opened access, as it records
   row counts;
@@ -335,9 +337,9 @@ nothing of D (not even 2025-06-30), and 2025-08-21, because the archive
 changes on it, so F's read nothing of H. On each, rolling state is rebuilt
 from the block's own rows, and the first `N` minutes from its midnight are
 not scored, `N` being the longest feature lookback (recorded in the
-amendment), whatever days they span; a day stays usable with fewer decision rows. Fitted
-values (the size floors fitted on W, the frozen models and thresholds) are not
-rolling state and are used on every block.
+amendment), whatever days they span; a day stays usable with fewer decision
+rows. Fitted values (the size floors fitted on W, the frozen models and
+thresholds) are not rolling state and are used on every block.
 
 Days excluded from every verdict, counted and reported per block: more book
 sequence gaps than `max_sequence_gaps`; a non-positive price, found as a
@@ -396,12 +398,13 @@ quietly favour a result.
   more than 1 s after the order arrives** (a feed gap) is counted as
   `entry_late_snapshot` or `exit_late_snapshot` and reported, for every taker
   order, the passive strategies' taker exits included; it is a measurement
-  and excludes no day. An exit that no snapshot follows before the
-  book ends walks the last one, and if that snapshot is more than 5 s
+  and excludes no day. An exit that no snapshot follows before the book ends
+  walks the last one, and if that snapshot is more than 5 s
   (`suspend_after_pause_s`) older than the order the day is flagged
-  `flatten_stale` and excluded, as in the simulator (R16). Funding (R14) and the accounting identity
-  (R15), with turnover equal to the sum of fill notionals, hold for it as for
-  the simulator. The label's walks and the executor's call the same function.
+  `flatten_stale` and excluded, as in the simulator (R16). Funding (R14) and
+  the accounting identity (R15), with turnover equal to the sum of fill
+  notionals, hold for it as for the simulator. The label's walks and the
+  executor's call the same function.
 - **Passive fills** (M1, Z, FILL) come from round one's event-time simulator
   with these settings: a queue per order joining the tail of the visible size
   (R5), advance and fills only from prints at the price (R6) or through it
@@ -677,7 +680,7 @@ of these hold on its daily series ([Metrics](#metrics)):
   **m = 3 on every block** (T1, T2, M1). A primary that is killed, void,
   inconclusive under K-trades, not run or not taken to the block enters with
   p = 1, so m never shrinks after a result is seen and a result on too few
-  trades never lowers another primary's step;
+  trades never moves another primary to a laxer Holm step;
 - the day-level t is at least 3, its degrees of freedom being the days in the
   series minus one;
 - the Newey–West t is at least 2;
@@ -704,8 +707,9 @@ A primary with no admissible cell on D is `not run`.
 days before the alarm's day and F+ its usable days after it; the alarm's own
 day is in neither. **Statuses on F, kills included, are computed on F−** when
 there is an alarm in F, F− has at least 20 usable days, R was not declared
-untestable on D, and R is not void (below). Otherwise they are computed on all of F, labelled "assessed
-on all of F", and F is not split. F+ enters only R. Taken to F: every
+untestable on D, and R is not void (below). Otherwise they are computed on
+all of F, labelled "assessed on all of F", and F is not split. F+ enters only
+R. Taken to F: every
 candidate, and every hypothesis inconclusive on H with a positive mean (for Z,
 both claims positive).
 
@@ -736,10 +740,10 @@ its only confirmatory test; R is not tested for it, and the README never calls
 it a candidate.
 
 P is read once, after F's results are committed, only for hypotheses that
-passed on F. F is read once, after H's results are committed, whatever H's outcome: its
-detector alarms and every frozen strategy's numbers on F are reported as
-measurements even when nothing is taken there. **For a hypothesis not taken
-to F, F is reported as one whole block, never split at `b`.** Every
+passed on F. F is read once, after H's results are committed, whatever H's
+outcome: its detector alarms and every frozen strategy's numbers on F are
+reported as measurements even when nothing is taken there. **For a hypothesis
+not taken to F, F is reported as one whole block, never split at `b`.** Every
 comparison from H into F crosses the archive change and is labelled so.
 
 **An unreadable block** (more than a quarter of its days excluded,
