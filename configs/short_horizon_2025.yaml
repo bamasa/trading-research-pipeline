@@ -324,168 +324,196 @@ search:
   result_nulls: null  # nulls file sha256; per stratum A, p_A, p_B, the quantiles and the refit A; frozen by the D amendment
 
 d_procedure:
+  stages: search.stages
   walk_forward:
     test_months: [2025-02, 2025-03, 2025-04, 2025-05, 2025-06]  # 150 test days
     train: D days before the test month, except the last seven
-    inner_validation_days: 7  # thresholds and checkpoints
-    purge: hold plus the longest feature lookback, before the inner validation and before the test month
-  choice:
-    rule: highest neighbourhood median (validation/search.py neighbourhood_scores) among cells averaging at least 5 trades a day, ties by own value
-    neighbourhood: "neighbourhood_scores' block: every cell within one step on every axis, diagonals included (up to 9 cells for T1 and Z, 27 for T2), every cell counted whatever its trade rate; a cell without a trade on D scores 0, as in K-nbhd"
-    min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
-    no_admissible_cell: recorded as not run (no admissible cell on D), enters Holm with p = 1; the filter is not relaxed
-    report_peak: true
+    inner_validation_days: 7  # per-side theta from the target rate (reads no outcome) and the network's checkpoint by inner rank IC
+    purge: hold plus the longest feature lookback, before the inner validation and before the test month  # experiments/grand_search.py's purge not used
+    fold_level_leakage_test: mutating every label and price after fold m's training cutoff leaves fold m's weights, theta, gate levels and checkpoint unchanged (sha256); the precondition for nulls without refitting
+  candidate_tapes: "per signal configuration and test day, the rows at which the loosest cell could enter (theta at 240 a day; k 0 and beta 0; gate open; no guard), with scores, gate and guard states; at most 10 GB"
+  walk_tables: "per instrument-day and hold, the long and short walked P&L at every 100 ms row from the taker executor's walk (10 ms latency, funding included); built in memory one day at a time, never stored"
+  thinning: one position at a time, an event-jump loop over the cell's subset of the tape
+  choice: search.choice
+  admission: search.admission
   frozen_fit:
     train: 2025-01-01..2025-06-23
     purge: hold plus the longest feature lookback before 2025-06-24
     inner_validation: 2025-06-24..2025-06-30
-    models: one per hold in {5, 20, 50} s for T1, Z, T2 and the control
-    thresholds: every (hold, trades-a-day) cell of T1 and Z
+    fits: models.frozen
+    thresholds: every (hold, trades_per_day, label_fee_bp) cell of each frozen C neighbourhood (C*'s and S25's)
     covers_every_neighbourhood: true  # K-nbhd on a held-out block runs only frozen files
-  dry_run: "the entry point end to end before the amendment, on D's last 44 days (2025-05-18..06-30) for H and the three ob200 reader-test days for F and P; outputs discarded, never reported"
+  dry_run: "the entry point end to end before the amendment, on D's last 44 days (2025-05-18..06-30) for H and the three ob200 reader-test days for F and P, with the walk-table parity test; outputs discarded, never reported"
 
-strategies:
-  T1:
-    signal: boosting on walked_taker at 5.5 bp
-    rule: hold_first  # thresholds per side so that each side enters half the target rate on the inner validation
+slots:
+  S25:
+    key: search.named.S25
+    instrument: BTCUSDT
+    stratum: C
+    model: gbm
+    inputs: micro
+    label: walked_taker at label_fee_bp 0
+    hold_s: 50
+    rule: hold_first
+    trades_per_day: 240
+    gate: open
+    regime: none
     execution: taker in, taker out after hold
-    fee: base
-    axes: {hold_s: [5, 20, 50], trades_per_day: [50, 100, 240]}  # 9 cells
-    objective: mean of the daily net_bp_trade series over the walk-forward test days
-    chosen: null  # {hold_s, trades_per_day}; frozen by the D amendment
-    neighbourhood: null  # every cell with its D value, and the outright peak; models and thresholds by cell, recorded once elsewhere; frozen by the D amendment
-    thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
-  T2:
-    signal: gaussian_network on the tensor and the selected set
-    gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + buffer_bp, mirrored for shorts"  # the buffer is beta in the document, not the break date b
+    clip_btc: 0.010
+    verdict: net_bp_trade at the base tier (5.5 bp taker), funding included
+    fixed_before_D: true  # no admission, no search-level null; to H whatever D shows
+    neighbourhood: {hold_s: [20, 50, 120], trades_per_day: [100, 240], label_fee_bp: [0, 5.5], regime: [none, pull_4h]}  # 24 cells; one frozen fit per hold and label fee (6)
+    fallback_signal_for: [S-P, S-M]
+    leaderboard: badge and rank r of N
+    thresholds: null  # {(hold_s, trades_per_day, label_fee_bp): {theta_long, theta_short}} for its neighbourhood; frozen by the D amendment
+  S-C:
+    from: search.result_choice C*
+    admission: search.admission.slot.S-C
+    execution: taker in, taker out after hold
+    thresholds: null  # {(hold_s, trades_per_day, label_fee_bp): {theta_long, theta_short}} for C*'s neighbourhood; frozen by the D amendment
+  S-R:
+    from: search.result_choice R*
+    gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + beta_bp, mirrored for shorts"  # beta is the buffer, not the break date b
     one_entry_per_event: true
     sizing: one full clip a trade; no Kelly sizing (strategies/sizing.py FractionalKelly not used)
+    admission: search.admission.slot.S-R
     execution: taker in, taker out after hold
-    fee: base
-    axes: {hold_s: [5, 20, 50], k: [0, 0.5, 1], buffer_bp: [0, 1, 2]}  # 27 cells
-    objective: mean of the daily net_bp_trade series over the walk-forward test days
-    chosen: null  # {hold_s, k, buffer_bp}; frozen by the D amendment
-    neighbourhood: null  # every cell with its D value, and the outright peak; models and checkpoints by cell, recorded once elsewhere; frozen by the D amendment
-  M1:
-    signal_rule: T1 or T2, whichever has the higher D mean daily net at its chosen cell; T1 on a tie; the one with a chosen cell if only one has
-    execution: one full clip posted at the touch on the signal's side, kept at its first price, waits at most hold; taker out hold after the fill
+  S-P:
+    signal: search.admission.slot.S-P  # the admitted C* or R*, else S25's
+    execution: "signal-entry quoter: one clip at the touch on the signal's side, kept at its first price, waits at most hold; taker out hold after the fill"
     variant_measured: passive exit at the touch, crossed after a further hold
     fee: base
-    not_run_if: neither T1 nor T2 has a chosen cell
-    signal: null  # T1 or T2, with the D values that chose it; frozen by the D amendment
-  Z:
-    signal: boosting on walked_taker at 0 bp
-    rule: hold_first
-    execution: as M1
+  S-M:
+    signal: S-P's
+    execution: common.market_maker
+    fee: base
+  S25-Z:
+    signal: S25's
+    execution: as S-P, under the queue fill rule
     fee: zero_fee
-    axes: {hold_s: [5, 20, 50], trades_per_day: [50, 100, 240]}  # 9 cells
-    objective: mean of the daily gross_bp_trade series under the queue fill rule over the walk-forward test days
-    chosen: null  # {hold_s, trades_per_day}; frozen by the D amendment
-    neighbourhood: null  # every cell with its D value, and the outright peak; models and thresholds by cell, recorded once elsewhere; frozen by the D amendment
-    thresholds: null  # {(hold_s, trades_per_day): {theta_long, theta_short}} for all 9 cells; frozen by the D amendment
+    neighbourhood: {hold_s: [20, 50, 120], trades_per_day: [100, 240], label_fee_bp: [0, 5.5]}  # 12 cells
+    family: none  # statuses.S25-Z
   A0:
-    signal: boosting on walked_taker at 0 bp
-    settings: {trades_per_day: 240, hold_s: 50}  # S25's
-    train: 2025-01-01..2025-01-27
-    thresholds_on: 2025-01-28..2025-02-03
-    run_on: O
+    signal: S25's
+    protocol: {train: 2025-01-01..2025-01-27, thresholds_on: 2025-01-28..2025-02-03, trades_per_day: 240, hold_s: 50, run_on: O}
     executions: [taker at zero_fee, passive under each FILL rule]
-  cooldown: "until the previous position is closed and no entry order is resting: T1, T2 the hold; M1, Z the wait of at most hold for a fill, then the time to the exit"
+  regions:  # leaderboard measurements, no slot
+    T1: {stratum: C, model: gbm, inputs: micro, label_fee_bp: 5.5, gate: open, regime: none}
+    T2: {stratum: R, model: tcn, gate: open, regime: none}
+  one_position: "until the previous position is closed and no entry order is resting: a taker the hold; the quoter the wait of at most hold for a fill, then the time to the exit"
 
 metrics:
-  primary: {T1: net_bp_trade, T2: net_bp_trade, M1: net_per_100_clip_day, Z: gross_bp_trade}
+  primary: {S25: net_bp_trade, S-C: net_bp_trade, S-R: net_bp_trade, S-P: net_per_100_clip_day, S-M: net_per_100_clip_day, S25-Z: gross_bp_trade and net at 0/0}
+  choice_on_D: net_bp_trade at the base tier  # search.choice
+  admission_on_D: G  # search.nulls.statistic; per trade net minus the mean of the long and short walked P&L over the same entry and hold; a day's value is the mean over its trades
   day_series:
-    T1: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4
-    T2: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4
-    Z: one value per day with a trade; the day's gross USDT summed over round trips / their summed entry notional x 1e4
-    M1: every usable day; the day's net USDT x 100 / the clip's notional at each entry, summed; 0 for a day without a fill, written as a row into the table given to assess
+    taker: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4  # S25, S-C, S-R
+    S25-Z: one value per day with a trade; the day's gross USDT summed over round trips / their summed entry notional x 1e4; and the same for net at 0/0
+    passive: every usable day; the day's net USDT x 100 / the clip's notional at each entry, summed; 0 for a day without a fill, written as a row into the table given to assess  # S-P, S-M
   computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
-  ic: rank correlation of the score with the mid move from the entry snapshot to the first snapshot at or after it + hold, per day, mean over days
+  ic: rank correlation of the score (p_long - p_short, or mu) with the mid move from the entry snapshot to the first snapshot at or after it + hold, per day over all decision rows, mean over days
   beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10_30s_by_path, spread_plus_adverse_5s, trades_per_day,
            share_days_positive, median_day, max_drawdown, net_usdt_day, funding, every_published_tier, by_side, newey_west_t,
-           entries_skipped, entry_late_snapshot, exit_late_snapshot, flatten_beyond_visible_book]
+           entries_skipped, entry_late_snapshot, exit_late_snapshot, flatten_beyond_visible_book, regime_attribution]
   significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level, fewer_than_two_days: not given to assess; fails the day count; p = 1}  # series=None, one series
-  degrees_of_freedom: days in the daily series minus one, per hypothesis and per block
-  newey_west: {kernel: bartlett, lag_days: 5}
+  p_value: market_making/verdicts.day_t(daily series).p_one_sided  # Student t at days - 1 through verdicts.t_sf; Holm is verdicts.holm, placebos verdicts.exceeds_placebos
+  degrees_of_freedom: days in the daily series minus one, per slot and per block
+  newey_west: {kernel: bartlett, lag_days: 5, code: evaluation/significance.py (new)}
   all_calendar_days_scored: true  # no row filtered or reweighted by label, outcome or model state
   mde:
     formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
-    n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for M1
+    n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for S-P and S-M
     n_eff_on_F_and_P: the usable days of the series the status is assessed on (F- or all of F, or P) x the same share; sigma_D as frozen
-    sigma_d: null  # per primary and Z, over D's 150 walk-forward test days; frozen by the D amendment
-    value: null  # per primary and Z; frozen by the D amendment
+    searched_slots_also: sigma_D at the carry-forward estimate, with the power of the t >= 3 bar against it
+    sigma_d: null  # per slot and S25-Z, over D's 150 walk-forward test days; frozen by the D amendment
+    value: null  # per slot and S25-Z; frozen by the D amendment
 
-family: [T1, T2, M1]
+family: [S25, S-C, S-R, S-P, S-M]
 statuses:
-  holm: {alpha: 0.05, sided: one, across: family, m: 3, m_fixed_on_every_block: true, enter_with_p_1: [killed, void, inconclusive under K-trades, not run, not taken to the block, "scored on P only by its mean (R supported)"], degrees_of_freedom: days in the daily series minus one}
-  bar: [no kill, Holm passes with m = 3, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on F (or F-) and on P (M1: usable days)"]
-  precedence: ["void (K-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades: round trips; for M1 and Z entries with any fill); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
+  holm: {alpha: 0.05, sided: one, across: family, m: 5, m_fixed_on_every_block: "true (H, F- or all of F, P, each of R's split days)", code: market_making/verdicts.holm, enter_with_p_1: [killed, void, inconclusive under K-trades, "not run (no admissible cell on D)", "not admitted on D (<condition>)", same as S25, not taken to the block, "scored on P only by its mean (R supported)"], degrees_of_freedom: days in the daily series minus one}
+  holm_first_step_t: {df_43: 2.42, df_19: 2.54, df_9: 2.82}  # below 3: the t >= 3 bar binds on every block
+  no_deflation_on_H: true  # H untouched by the search; D's trials act only on D through the nulls, DSR and PBO
+  bar: [no kill, Holm passes with m = 5, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on F (or F-) and on P (S-P and S-M: usable days)"]
+  precedence: ["void (K-leak, K-flag-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades: round trips; for the quoter entries with any fill); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
   void_counts_as_killed: true
-  not_run: no admissible cell on D; enters Holm with p = 1
-  taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (Z: both claims' means positive)"]  # inconclusive (too few trades), step 2, is not taken to F whatever its sign
+  set_on_D: ["not admitted on D (<condition i to iv>)", "not run (no admissible cell on D)", same as S25]  # each enters Holm with p = 1 on every block
+  measured_rows: the chosen cell of a non-admitted C* or R*, and a non-admitted S-P or S-M, run once on H, F and P as labelled measurements, no placebo, no status
+  taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (S25-Z: both claims' means positive)"]  # inconclusive (too few trades), step 2, is not taken to F whatever its sign
   F_split: {F_minus: F's usable days before the alarm's day, F_plus: F's usable days after it, alarm_day: neither}
   F_assessed_on: "F- when there is an alarm in F, F- has at least 20 usable days, R was not declared untestable on D and R is not void; otherwise all of F, labelled, and F is not split"
   F_plus_enters: only R
-  P_read_for: hypotheses that passed on F
+  P_read_for: slots that passed on F
   P_when_R_supported: "scored only as mean <= 0 (the break persisted) or > 0 (it did not last); no K-trades and no kill applied; void conditions applied (status void); a P series without a day with a trade has mean 0"
   first_significant_on_F: "exploratory: significant on F until P; P is its only confirmatory test; R not tested; never called a candidate"
   R_untestable_or_not_tested_reads_as: not supported
   unreadable:
-    H: "no hypothesis assessed, each recorded as not assessed (H unreadable); nothing taken to F; F read and reported as measurements; P not read; H, F and P spent"
-    F: statuses after H stand, marked F unreadable; P not read
+    judged_on: the slot's instrument
+    H: "the slot recorded as not assessed (H unreadable) and not taken to F; F read and reported as measurements; H, F and P spent"
+    F: the slot's status after H stands, marked F unreadable; P not read for it
     P: "statuses after F stand, marked P unreadable: a candidate that passed on F is candidate, not confirmed (P unreadable), whatever R showed; one first significant on F is exploratory: significant on F, not confirmed (P unreadable)"
   R_void: "a later detector run does not reproduce an earlier run's alarms (D's as the amendment records them, each block's as its results file does); R read as not supported; found at H's read, F assessed on all of F, labelled; found at F's read, b does not split F (all of F, labelled); found at P's read, F's statuses stand and P is scored with the full bar"
   not_taken_to_F: F reported as one whole block, never split at b
-  read_failed: "a first read that fails again at the same stage with the same exception after a resumption at the same commit, or is unfinished after five resumptions, closes with every hypothesis not assessed (<block> read failed), the stage reached and the exception; then as an unreadable block of the same letter (H: nothing taken to F, F read as measurements at the same commit, P not read; F: H's statuses stand, marked F read failed, P not read; P: as P unreadable); no code change"
+  read_failed: "a first read that fails again at the same stage with the same exception after a resumption at the same commit, or is unfinished after five resumptions, closes with every slot not assessed (<block> read failed), the stage reached and the exception; then as an unreadable block of the same letter (H: nothing taken to F, F read as measurements at the same commit, P not read; F: H's statuses stand, marked F read failed, P not read; P: as P unreadable); no code change"
   defect_after_read: "stated in a dated note, docs/short_horizon_2025_defects.md, naming the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read), counted as killed for routing and p = 1 in Holm on later blocks; Holm on a block already read recomputed from its committed results file with that p = 1; a status may only fall; later reads run on unchanged code and report it as measurements"
-  measurements_never_described_as_working: [any fee tier other than base, any non-default fill rule or exit, F for a hypothesis not taken to F]
+  measurements_never_described_as_working: [any fee tier other than base, any non-default fill rule or exit, F for a slot not taken to F, a measured row, a regime-map segment, any D number]
   outcomes:
-    after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, not run, "not assessed (H unreadable)", "not assessed (H read failed)", "void (defect found after the H read)"]
+    after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not run (no admissible cell on D)", "not admitted on D (<condition>)", same as S25, "not assessed (H unreadable)", "not assessed (H read failed)", "void (defect found after the H read)"]
     after_F_and_P: [confirmed, "candidate, not confirmed", confirmed until the break, "candidate; the break did not last", "confirmed on P, first significant on F", "exploratory: significant on F", "exploratory: significant on F, not confirmed", inconclusive, killed on F, killed on P, void, "void (defect found after the <block> read)"]
-    marks: [assessed on all of F, F unreadable, P unreadable, F read failed, P read failed, "conditional on a zero-fee venue (Z)"]
-  Z: {family: none, alpha: 0.0125, sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
+    marks: [assessed on all of F, F unreadable, P unreadable, F read failed, P read failed, "conditional on a zero-fee venue (S25-Z)"]
+  S25-Z: {family: none, alpha: 0.008333, alpha_rule: "alpha / (m + 1)", sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
 
 kill_conditions:
-  void: [K-leak, K-units, K-acct, K-cap]  # K-leak voids every result; K-units every hypothesis whose gate or cost input (fee, walk, funding) it reaches, Z included, and M1 when it reaches its signal's gate
-  kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency]
-  passive_only: [K-queue]  # M1 and Z
-  reported_not_kill: {fill_decomposition: "spread + adverse(5 s) and the rest, for M1 and Z (round one's K-dir)"}
-  status_only: {K-trades: 100, K-trades_counts: "round trips for T1 and T2; entries with any fill (round trips) for M1 and Z, not the simulator's fill rows", K-MDE: "below the minimum detectable effect, only when no kill fired"}
+  per_slot:
+    S25: {execution: taker, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [regime attribution]}
+    S-C: {execution: taker, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [regime attribution]}
+    S-R: {execution: taker, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [control model IC (on the network), regime attribution]}
+    S-P: {execution: signal-entry quoter, series: net_per_100_clip_day, kills: [K1, K-label, K-placebo with stale, K-drift, K-nbhd, K-days, K-fee, K-latency, K-queue], beside: [fill decomposition, fill ratio, markouts by path, passive exit, maker 0 bp, maker -1 bp, regime attribution]}
+    S-M: {execution: S1 with the lean, series: net_per_100_clip_day, kills: [K1, K-label, K-placebo with stale, K-drift, K-nbhd, K-days, K-fee, K-latency, K-queue, K-dir], beside: [lean neighbourhood, guard_pull against guard_widen]}
+    S25-Z: {execution: signal-entry quoter at 0/0, series: [gross_bp_trade, net at 0/0], kills: [K1, K2, K-label, K-placebo with stale, K-drift, K-nbhd, K-days, K-queue, K-latency], exempt: [K-fee], beside: [net at the base tier on the same trades, fill decomposition]}
+  void: [K-leak, K-flag-leak, K-units, K-acct, K-cap]  # K-leak (features or the fold-level test) voids every result; K-flag-leak every slot with a regime window above 0; K-units every slot whose gate or cost input (fee, walk, funding) it reaches, S25-Z included, and S-P and S-M when it reaches their signal's gate
+  K-flag-leak: the flag-causality test fails (search.regime_source.flag_causality_test); found before D, fixed by a dated amendment
+  status_only: {K-trades: 100, K-trades_counts: "round trips; for the quoter, entries with any fill, not the simulator's fill rows", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
+  K2: net at zero fees (gross plus funding) <= 0  # S25-Z
   K-days_share_positive_max: 0.5  # half or fewer positive days of the daily series kills
-  K-nbhd: {statistic: median over the neighbourhood's cells of the daily series' mean, kills_at_or_below: 0, neighbourhood: as d_procedure.choice.neighbourhood, cell_without_trade_scores: 0, runs_only: the frozen files whose sha256 the amendment records}
-  K-latency: {used_by: [T1, T2, M1, Z], latency_ms: 110, kills: a positive result that is <= 0 there, unit_test: every fill's snapshot stamped at or after decision + 10 ms; label and executor share the walk function}
+  K-nbhd: {statistic: median over the neighbourhood's cells of the daily series' mean, kills_at_or_below: 0, neighbourhood: "search.choice.neighbourhood, regime window included; S25's slots.S25.neighbourhood; S-P its signal's hold x rate x label fee (or hold x k x beta), entered passively; S-M lean 0.5, 1, 2; S25-Z slots.S25-Z.neighbourhood", cell_without_trade_scores: 0, runs_only: the frozen files whose sha256 the amendment records}
+  K-latency: {latency_ms: 110, kills: a positive result that is <= 0 there, taker_slots: from walk tables at 110 ms, unit_test: every fill's snapshot stamped at or after decision + 10 ms; label and executor share the walk function}
   K-queue_brackets: [joint pessimistic (pessimistic cancellation and all_ahead), none, all_ahead]
-  needs_positive_result: [K-queue, K-latency]
+  K-dir: {slot: S-M, code: market_making/verdicts.k_dir, kills: the making part (spread + adverse 5 s over the passive fills) not positive while net is}
+  needs_positive_result: [K-queue, K-latency, K-dir]
   on_F: applied to the series the status is assessed on (F- or all of F)
-  Z_exempt: [K-fee]
-  Z_extra: {K2: "net at zero fees (gross plus funding) <= 0"}
+  reported_not_kill: {fill_decomposition: "spread + adverse(5 s) and the rest, for S-P and S25-Z"}
 placebo_percentile: 95
 
 placebos:
-  sign_flipped: {used_by: [T1, T2, M1, Z]}
-  random_direction: {used_by: [T1, T2, M1, Z], draws: 200, seeds: [0, 199]}
-  one_day_shift: {used_by: [T1, T2, M1, Z], circular_within_block: true, source: "the previous usable day, stepping over excluded days"}
-  stale: {used_by: [M1, Z], delay: one hold}
-  all_long_all_short: {used_by: [T1, T2, M1, Z]}  # K-drift
-  positions: each placebo on the true strategy's entry decision times with its own one-position state; a decision time at which it is in a position or has an entry resting is skipped and counted; skip counts reported beside K-placebo and K-drift
-  control_model: {used_by: [T2], reported: IC against its own label and against the realised move}
-  other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the hypothesis also passes on F's days before them, min_reference_days: 20,
-                       evaluated_at_each_d: "the whole bar, kills and Holm included, on F's usable days before d as on F-; other primaries taken to F evaluated there the same way, p = 1 where killed, void or inconclusive under K-trades there, or not taken to F; K-trades counts trades before d",
+  sign_flipped: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z]}
+  random_direction: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z], draws: 200, seeds: [0, 199]}
+  one_day_shift: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z], circular_within_block: true, source: "the previous usable day, stepping over excluded days"}
+  stale: {used_by: [S-P, S-M, S25-Z], delay: one hold}
+  all_long_all_short: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z]}  # K-drift
+  market_maker: each placebo replaces S-M's signal tape
+  taker_slots: placebos and K-latency from walk tables
+  positions: each placebo on the true slot's entry decision times with its own one-position state; a decision time at which it is in a position or has an entry resting is skipped and counted; skip counts reported beside K-placebo and K-drift
+  control_model: {used_by: [S-R on the network], reported: IC against its own label and against the realised move}
+  other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the slot also passes on F's days before them, min_reference_days: 20,
+                       evaluated_at_each_d: "the whole bar, kills and Holm with m = 5 included, on F's usable days before d as on F-; other slots taken to F evaluated there the same way, p = 1 where killed, void or inconclusive under K-trades there, or not taken to F; K-trades counts trades before d",
                        computed: "every series the bar reads computed once per day over all of F in F's read session (one-day shift circular within all of F) and sliced at each d; nothing re-run"}
 
 hypotheses:
-  T1: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1}
-  T2: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1 or inconclusive under K-trades}
-  M1: {block: H, claim: net_per_100_clip_day > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-queue], beside: [fill decomposition, maker 0 bp, maker -1 bp, passive exit], prediction: killed by K1}
-  Z: {block: H, secondary: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: [K1, K2, K-label, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-queue], beside: [fill decomposition], asks: whether the signal pays before fees, prediction: killed by K1}
+  S25: {block: H, claim: net_bp_trade > 0, kills: kill_conditions.per_slot.S25, prediction: killed by K1}
+  S-C: {block: H, claim: net_bp_trade > 0 at C*, kills: kill_conditions.per_slot.S-C, prediction: not admitted on D (i)}
+  S-R: {block: H, claim: net_bp_trade > 0 at R*, kills: kill_conditions.per_slot.S-R, prediction: not admitted on D (i)}
+  S-P: {block: H, claim: net_per_100_clip_day > 0, kills: kill_conditions.per_slot.S-P, prediction: "not admitted on D (i); if it reaches H, killed by K1"}
+  S-M: {block: H, claim: net_per_100_clip_day > 0 with a positive making part, kills: kill_conditions.per_slot.S-M, prediction: "not admitted on D (i); if it reaches H, killed by K1 or K-dir"}
+  S25-Z: {block: H, outside_family: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: kill_conditions.per_slot.S25-Z, asks: whether the signal pays before fees, prediction: killed by K1}
   R:
-    tested_for: every hypothesis, Z included, that is a candidate on H, whether or not it passes on F-
-    not_tested_for: any other hypothesis, including one first significant on F
+    tested_for: every slot, S25 and S25-Z included, that is a candidate on H, whether or not it passes on F-
+    not_tested_for: any other slot, including one first significant on F
     statistic: Delta(d) = mean of the daily series on F's usable days before d minus its mean on those after d
     claims: [passes on F-, mean daily series on F_plus <= 0, Delta(b) above the 95th percentile of Delta(d) over the reference set]
     supported: all three claims hold
-    Z_series: every claim and the P mean evaluated on both of Z's claims' series (gross, net at 0/0); supported only if every claim holds on both; on P the break persisted only if both means are <= 0
+    S25-Z_series: every claim and the P mean evaluated on both of S25-Z's claims' series (gross, net at 0/0); supported only if every claim holds on both; on P the break persisted only if both means are <= 0
+    guarded_slots: a slot with a regime window above 0 enters R with its own guarded series  # the regime axis does not replace R
     when_F_minus_fails: Delta(b) reported with its percentile among all admissible days, as a measurement
     untestable: [no alarm in F, fewer than 20 usable days before b or fewer than 10 after, alarm rate on D above one per 14 days, fewer than 20 days in the reference set]
     untestable_reads_as: not supported
