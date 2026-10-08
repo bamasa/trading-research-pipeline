@@ -63,7 +63,8 @@ data:
       ob200: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob200.data.zip", present: [2025-08-21, 2025-12-31]}
     archive_change: 2025-08-21  # no day has both; the H/F boundary was moved onto it
     ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # outside every block; used for nothing else; never in a successor's blocks
-    ob200_reader_test: synthetic ob200 fixture and the reader-test days pass validate_book before H is opened; no ob200 day of 2025 fetched before stage 3
+    ob200_reader_test: synthetic ob200 fixture and the reader-test days pass before H is opened; no ob200 day of 2025 fetched before stage 3
+    ob200_reader_test_pass: "as the loader passes a block day: no positive_prices error in validate_book's report, no off-grid price, sequence gaps at most D's max_sequence_gaps; every other finding by check and severity recorded in the amendment beside D's; a failure is a reader fault, corrected by amendment before H"
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
   funding: bybit public REST, no credentials
   detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-12-01, frequency_after_2025_06_30: daily archives only, E_bars: "fetched and read when H opens, bars only"}
@@ -393,7 +394,7 @@ fetch:
     delete_W_and_D_features: after H's results are committed, before stage 3
   ledger_opens_first: true  # the open is recorded, then the block's fetch runs under that access
   ledger_records: sha256 and UTC download time of every fetched file
-  open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block
+  open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block; for H also any hourly bar of E
   stages:
     - {stage: 1, when: after this registration and its code are merged, what: [W, D, funding for W and D only, hourly bars 2024-12-01..2025-06-30, ob200 reader-test days 2026-01-05..07], archives_gb: {book: 76.0, prints: 15.3}}
     - {stage: 2, when: inside H's opened access after the amendment is committed, what: [H, H's funding, E's and H's hourly bars from daily archives], archives_gb: {book: 11.4, prints: 2.1}}
@@ -415,11 +416,11 @@ access:
   ledger_guards: [E hourly bars, H, F, P]
   block_constants: this study's own; round one's block_of not used
   entry_point: experiments/short_horizon_2025.py  # committed with the amendment; one read session computes everything for a block
-  H: [amendment records the YAML sha256, the file has it and is committed, tree clean, every frozen weight file's sha256 equals the amendment's, no H file on disk]
+  H: [amendment records the YAML sha256, the file has it and is committed, tree clean, every frozen weight file's sha256 equals the amendment's, no H file and no E hourly bar on disk]
   read_session: {bound_to: [block, commit, config sha256], resumptions_at_that_commit: first read, outputs_inspected: only after the results file is written, resumption_at_another_commit: second read}
   results_files: {H: experiments/results/short_horizon_2025_H.json, F: experiments/results/short_horizon_2025_F.json, P: experiments/results/short_horizon_2025_P.json}
   session_closes: the results file, statuses and every kill computed by the entry point, is written and its sha256 entered in the block's ledger entry
-  F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only experiments/results/, docs/ and README.md", frozen weights' sha256 match, no F file on disk]
+  F: ["H's results file committed unchanged (sha256 equals the ledger's)", "git diff --name-only <H read's commit>..HEAD lists only README.md and paths under experiments/results/ and under docs/ outside docs/preregistration/", frozen weights' sha256 match, no F file on disk]
   P: [the same conditions against F's read, for the hypotheses that qualify]
   second_read: raises unless forced; stamped second read; cannot change a status
   earlier_accesses_used: false  # neither round one's nor round two's; pipeline/execution's market-maker path (round one's access_for) not used

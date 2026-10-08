@@ -263,9 +263,14 @@ instead of inside a block. Its consequences:
   **reader-test days, 2026-01-05, 06 and 07**, which lie outside every block
   and are never used for anything else (no successor study may put them in a
   block). No `ob200` day from 2025-08-21 to 2025-12-31 is fetched before
-  stage 3. The `ob200` replay is proven before H is opened: the reader-test
-  days must pass `validate_book`, and their message counts, median interval
-  between messages and sequence-gap counts go in the amendment; the replay
+  stage 3. The `ob200` replay is proven before H is opened: each reader-test
+  day must pass as the study's loader passes a block day, with no
+  `positive_prices` error in `validate_book`'s report, no price off the tick
+  grid, and no more sequence gaps than D's frozen `max_sequence_gaps`. Their
+  message counts, median interval between messages and sequence-gap counts,
+  and every other finding of their reports by check and severity beside the
+  same counts for D, go in the amendment. A day that fails is a reader fault,
+  corrected under the amendment protocol before H is opened; the replay
   itself is unchanged;
 - F and P use D's frozen `max_sequence_gaps` (below), never a value set on
   `ob200` days. If more than a quarter of a held-out block's days are
@@ -1132,7 +1137,8 @@ its size; a stalled connection does, and is retried.
 **The ledger opens before the fetch.** `open` writes its entry first, and the
 block's fetch then runs under that access; the entry records each fetched
 file's sha256 and UTC download time. `open` refuses if any book, print,
-funding or hourly-bar file of that block is already on disk.
+funding or hourly-bar file of that block is already on disk, and H's `open`
+also if any hourly bar of E is.
 
 E's book, prints and funding are never fetched; its hourly bars are fetched
 with H's. At most one archive per worker is on disk at once; the largest book
@@ -1223,7 +1229,8 @@ E's bars, H, F and P.
 
 - **H** opens only if the amendment records the YAML's sha256, the file on
   disk has it and is committed, the tree is clean, every frozen weight file's
-  sha256 equals the amendment's, and no file of H is already on disk.
+  sha256 equals the amendment's, and no file of H and no hourly bar of E is
+  already on disk.
 - **A read session** is bound to (block, commit, config sha256). Any number of
   processes and resumptions at that commit count as the first read; outputs
   are not inspected until the session writes the block's results file. A
@@ -1234,9 +1241,10 @@ E's bars, H, F and P.
   the block's ledger entry.
 - **F** opens only if H's results file is committed unchanged (its sha256
   equals the ledger's), `git diff --name-only <H read's commit>..HEAD` lists
-  only paths under `experiments/results/`, `docs/` and `README.md` (so the
-  code, the configuration, the tests, the entry point and the lock file are
-  those of the H read), the frozen weights' sha256 still match, and no file
+  only `README.md` and paths under `experiments/results/` and under `docs/`
+  outside `docs/preregistration/` (so the code, the configuration, this
+  registration, the tests, the entry point and the lock file are those of the
+  H read), the frozen weights' sha256 still match, and no file
   of F is on disk. **P** opens on the same conditions against F's read, and
   only for the hypotheses that qualify.
 - Each first read writes block, commit, config sha256 and UTC time before the
@@ -1278,8 +1286,8 @@ ported feature, the label, the simulator or a reader) is made only by a
 further dated amendment that states it and, if it could change a development
 number, re-runs D in full before anything is frozen. After H is read, nothing
 is changed and nothing is re-run under a different rule; the ledger's
-conditions for opening F and P enforce this for the code, the configuration
-and the frozen weights.
+conditions for opening F and P enforce this for the code, the configuration,
+this document and the frozen weights.
 
 **The ledger rule.** Only reads through the ledger count. A number computed on
 H, F or P outside it — in a notebook, a script run by hand, or a second read —
@@ -1438,7 +1446,7 @@ value open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`99dd27254438402329f577a2610130f838b791cee10722d58696c3451c661cb6`.
+`a481c3a902be4aeb65216314dac6f31f3d4d738de7bf8de981ed7210c28a3f79`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and
