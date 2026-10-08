@@ -385,9 +385,9 @@ quietly favour a result.
   after its decision + 10 ms whatever its age; depth beyond the tenth level is
   charged at the tenth level's price and counted, as the simulator's
   `flatten_beyond_visible_book`. An exit that no snapshot follows before the
-  book ends walks the last one, and if that snapshot is more than 5 s older
-  than the order the day is flagged `flatten_stale` and excluded, as in the
-  simulator (R16). Funding (R14) and the accounting identity
+  book ends walks the last one, and if that snapshot is more than 5 s
+  (`suspend_after_pause_s`) older than the order the day is flagged
+  `flatten_stale` and excluded, as in the simulator (R16). Funding (R14) and the accounting identity
   (R15), with turnover equal to the sum of fill notionals, hold for it as for
   the simulator. The label's walks and the executor's call the same function.
 - **Passive fills** (M1, Z, FILL) come from round one's event-time simulator
@@ -396,11 +396,17 @@ quietly favour a result.
   (R7), proportional cancellation attribution, pro-rata arrival growth,
   trade-tape crossed policy, post-only, order and cancel latency 10 ms, feed
   latency 0, `soft_limit_clips` 1, `warmup_s` 60, quoting stops 23:58 and the
-  flatten at 23:59, markouts at 1, 5, 10 and 30 s, decomposition at 5 s. The
-  entry is a new signal-entry quoter (round one's `SignalExecutor`, which
+  flatten at 23:59, markouts at 1, 5, 10 and 30 s, decomposition at 5 s,
+  `suspend_after_pause_s` 5 (no snapshot for 5 s pulls every resting order
+  and nothing is quoted until the next one; the same 5 s is R16's
+  `flatten_stale` threshold), and `vol_half_life_s` 60 and `touch_window_s`
+  3600, the simulator's defaults, which the signal-entry quoter does not use.
+  The entry is a new signal-entry quoter (round one's `SignalExecutor`, which
   re-pegs and exits passively, is not used): one clip posted at the touch on
   the signal's side at decision + 10 ms, **kept at its first price**, never
-  re-pegged, and cancelled if unfilled after `h`. Once filled, the exit is a
+  re-pegged, and cancelled if unfilled after `h`. **An entry pulled by a pause
+  is not re-posted**: its unfilled part counts as unfilled, and a part filled
+  before the pause is exited as any fill. Once filled, the exit is a
   reduce-only cross `h` after the fill, priced by the taker executor's walk
   (`flatten_slippage_bp` 0). The brackets (`none`, `all_ahead`;
   `pessimistic`) are run for K-queue.
@@ -1376,7 +1382,7 @@ value open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`2db22a3af48ffc098b4d3798d53c0ef8f9eea804164958a4dc40f10c9b33bcd6`.
+`d7ebdbdf47f5adbb3a09cc14b2d098702476189485a45dee8932196d998aee76`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and
