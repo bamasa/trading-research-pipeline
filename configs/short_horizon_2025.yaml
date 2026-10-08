@@ -101,7 +101,7 @@ data:
   flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every slot on that instrument and block and counted once toward unreadability
   max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up, per instrument; the same value on every block for that instrument
   max_sequence_gaps: null  # {instrument: value}, by the rule above; frozen by the D amendment
-  unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
+  unreadable_block: more than a quarter of a held-out block's days excluded for the slot's instrument; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
   gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
   excluded_days_D: null  # {instrument: [day, reason]}; frozen by the D amendment
   instrument_spec: null  # {instrument: {tick, lot}} from the venue's instrument specification; frozen by the D amendment

@@ -1916,8 +1916,11 @@ values are written into its placeholders, on a line of the form
 ``Frozen configuration sha256: `<hash>` ``. Nothing else may change. Each
 frozen value has one placeholder: weight sha256s under
 `models.weights_sha256`, checkpoint epochs under `models.checkpoint_epoch`,
-hold-first thresholds under `slots.<slot>.thresholds`, the choice and its
-records under `search.result`; a neighbourhood lists its cells, their D values
+hold-first thresholds under `slots.<slot>.thresholds`, the search's records
+under `search.result_trials`, `search.result_choice`, `search.result_admission`
+and `search.result_nulls`, the fold-wise flags under
+`detector.flags_D_foldwise` and the frozen finalist files' sha256 under
+`artefacts.frozen_finalist_files_sha256`; a neighbourhood lists its cells, their D values
 and the outright peak, and refers to those by cell without repeating them.
 **A frozen finalist file** holds a slot's configuration, weights, thresholds,
 gate levels, regime window and fitted values; a later trial on the venue
@@ -2245,16 +2248,19 @@ open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`511626b7c0464cd91bafc469ea151af0769121b13946a2066c46a6ca22265fe7`.
-(Earlier versions of this file on its unmerged branch had other hashes,
-among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
-before the reviews and
+`3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f`.
+(Earlier versions of this file on its unmerged branch had other hashes, all
+superseded drafts that do not count:
+`e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
+before the reviews,
 `c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262` before the
-feasibility review's later points and
+feasibility review's later points,
 `6d35940bc3e4845b30056daaf60887d01dbf2c6e6ddbb361ff8ab3ecd1fec1f5` before the
-final consistency check and
+final consistency check,
 `729f042bc55cae70fbdf786d8f38581b2539fc1a422a978d8bf9c674cee58fd8` before the
-last review; they do not count.)
+last review, and
+`511626b7c0464cd91bafc469ea151af0769121b13946a2066c46a6ca22265fe7` before the
+recast into a search.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, as the earlier rounds' loaders do.
 
