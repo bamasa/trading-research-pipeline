@@ -40,17 +40,17 @@ prior_information:
   - liquidation cascade of 2025-10-10..11, general market knowledge
   - BTC's 2025 daily price path, in the README's break figure and the daily bars on disk, and general knowledge
   - this repository's kills (sections 25 and 26, maker execution, market-making rounds one and two)
-  - Bybit fee schedule as published in 2026 (backtest/costs.py, BYBIT_FEE_CAVEAT)
+  - Bybit fee schedule as published in 2026 (backtest/costs.py, BYBIT_FEE_CAVEAT, whose text names 2024-02..04; parametrised by period, carried here with 2025's dates)
   - HTTP HEAD of every BTCUSDT book (ob500, ob200) and print archive, 2024-12-01..2025-12-31; existence and size only
   - HTTP HEAD of the ob200 and ob500 book archives for 2026-01-05..07; ob200 present, ob500 absent
-  - experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; its 2025 alarms not looked at (one break of three falls in 2025, count only)
+  - "experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; the README (written 2026-10-02 by that earlier work) names its 2025 alarm, 2025-09-13, scale, downward, and a near miss on 2025-06-29; both known when F's span and the hourly detector's setting were set; never defines b"
 
 expected_outcome:
   original_gross_bp_turnover: 0.36  # the original's own summary; its break-even fee per side
   taker_bp: {base: 5.5, cheapest_published: 1.5}  # BTCUSDT; cheapest is pro6_g1
   net_bp_round_trip_at_original_edge: {base: -10.28, cheapest_published: -2.28}  # 2 x (0.36 - fee)
   passive_break_even_bp_turnover: {cheapest_published: 0.75, base: 3.75}  # (maker + taker) / 2
-  predictions: {T1: killed by K1, T2: killed by K1 or inconclusive under K-trades, M1: killed by K1, Z: killed by K1, R: not tested, A0: below 0.36 bp of turnover under every fill rule except on_touch}
+  predictions: {T1: killed by K1, T2: killed by K1 or inconclusive under K-trades, M1: killed by K1, Z: killed by K1, R: not tested, A0: "below 0.36 bp of turnover crossing and passive under trade_through and queue; on_touch not covered"}
 
 data:
   book:
@@ -128,6 +128,7 @@ common:
     cancel_latency_ms: 10
     feed_latency_ms: 0
     soft_limit_clips: 1
+    max_sequence_gaps: data.max_sequence_gaps (the frozen value)  # SimConfig's default of 0 not used
     warmup_s: 60
     stop_quoting_at: "23:58"
     flatten_at: "23:59"
@@ -143,7 +144,7 @@ common:
     not_used: round one's SignalExecutor (X1)
   fees:
     verdict_tier: {name: base, maker_bp: 2.0, taker_bp: 5.5}  # BYBIT_BASE
-    measurement_tiers: BYBIT_LINEAR_TIERS rows for group g1, and BYBIT_MM_PROGRAMME_MAKER_BP  # with BYBIT_FEE_CAVEAT
+    measurement_tiers: BYBIT_LINEAR_TIERS rows for group g1, and BYBIT_MM_PROGRAMME_MAKER_BP  # with BYBIT_FEE_CAVEAT, parametrised by period, carrying 2025's dates
     zero_fee: {maker_bp: 0.0, taker_bp: 0.0, used_by: [A0, Z]}
   funding: charged at each settlement on the position held (R14)
   day: {no_entry_before: "00:01", no_entry_after: "23:58", flatten_at: "23:59"}
@@ -168,7 +169,7 @@ features:
   winsorising: trailing quantiles only
   leakage_check: validation/leakage.py, every feature, before any D run
   gate_inputs: basis points from prices only
-  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: FeatureSelector defaults (score_target ic, max_features 40, correlation_threshold 0.95, variance_threshold 1e-6)}
+  selection: {code: features/selection.py, window: 2025-01-01..2025-01-31, runs: 1, target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}}
   selected: null  # frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
 
@@ -190,7 +191,7 @@ d_procedure:
     purge: hold plus the longest feature lookback, before the inner validation and before the test month
   choice:
     rule: highest neighbourhood median (validation/search.py neighbourhood_scores) among cells averaging at least 5 trades a day, ties by own value
-    neighbourhood: "neighbourhood_scores' block: every cell within one step on every axis, diagonals included (up to 9 cells for T1 and Z, 27 for T2), every cell counted whatever its trade rate"
+    neighbourhood: "neighbourhood_scores' block: every cell within one step on every axis, diagonals included (up to 9 cells for T1 and Z, 27 for T2), every cell counted whatever its trade rate; a cell without a trade on D scores 0, as in K-nbhd"
     min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
     no_admissible_cell: recorded as not run (no admissible cell on D), enters Holm with p = 1; the filter is not relaxed
     report_peak: true
@@ -280,7 +281,7 @@ statuses:
   precedence: ["void (K-leak, K-units, K-acct, K-cap)", "inconclusive, too few trades (K-trades); nothing below evaluated", killed (any kill), candidate or passes (the bar), "inconclusive; below the MDE when |mean| < MDE and no kill fired"]
   void_counts_as_killed: true
   not_run: no admissible cell on D; enters Holm with p = 1
-  taken_to_F: [candidate, "inconclusive with a positive mean (Z: both claims positive)"]
+  taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (Z: both claims' means positive)"]  # inconclusive (too few trades), step 2, is not taken to F whatever its sign
   F_split: {F_minus: F's usable days before the alarm's day, F_plus: F's usable days after it, alarm_day: neither}
   F_assessed_on: "F- when there is an alarm in F, F- has at least 20 usable days, R was not declared untestable on D and R is not void; otherwise all of F, labelled, and F is not split"
   F_plus_enters: only R
@@ -302,7 +303,7 @@ statuses:
   Z: {family: none, alpha: 0.0125, sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
 
 kill_conditions:
-  void: [K-leak, K-units, K-acct, K-cap]
+  void: [K-leak, K-units, K-acct, K-cap]  # K-leak voids every result; K-units every hypothesis whose gate or cost input (fee, walk, funding) it reaches, Z included, and M1 when it reaches its signal's gate
   kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency]
   passive_only: [K-queue]  # M1 and Z
   reported_not_kill: {fill_decomposition: "spread + adverse(5 s) and the rest, for M1 and Z (round one's K-dir)"}
@@ -346,7 +347,7 @@ hypotheses:
     void: statuses.R_void
 
 measurements:
-  A0: {block: O, compare_with_bp_turnover: 0.36, label: "not comparable: different venue, product, quote currency and fee", prediction: below 0.36 bp of turnover under every rule except on_touch}
+  A0: {block: O, compare_with_bp_turnover: 0.36, label: "not comparable: different venue, product, quote currency and fee", prediction: "below 0.36 bp of turnover crossing, and passive under trade_through and queue; on_touch not covered"}
   FILL:
     stream: A0's passive orders on O; also Z's on H
     rules:
@@ -368,7 +369,7 @@ detector:
   bars_after_2025_06_30: Binance daily archives only, one day at a time, inside the opened access of their block
   monthly_klines: none for a month after 2025-06 fetched or cached before P's read; the loader refuses a monthly kline file reaching past the highest opened block
   library: {name: structural-break, tag: v0.1.0, commit: 0636813fdd4ccc9f25490d97f62d6fccecb01881}
-  monitor: {code: validation/structural_breaks.py, history_len: 365, online_len: 90, min_history: 121, minimum_gap: 0, statistics: [scale, dependence], thresholds: {scale: 9.09, dependence: 7.93}}
+  monitor: {code: validation/structural_breaks.py, unit: hours (one hourly return a step), history_len: 365, online_len: 90, min_history: 121, minimum_gap: 0, statistics: [scale, dependence], thresholds: {scale: 9.09, dependence: 7.93}}
   run: one detect_breaks call over the stream from 2024-12-01 to the last hour of the highest opened block, windows anchored at the stream's start
   reproduce_earlier_alarms: required; if a later run does not, R is void and read as not supported (statuses.R_void)
   mean_channel: {column: odds_mean, threshold: 8.93, reported: true, re_anchors: false, defines_b: false}
@@ -379,7 +380,7 @@ detector:
   alarm_rate_D: null  # alarms over 2025-01-01..06-30; frozen by the D amendment
   r_untestable_declared: null  # true or false; frozen by the D amendment
   reported_beside:
-    changepoint: {code: validation/changepoint.py detect, grid: "data/grid.to_grid, 1 s, label right", window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, runs: [continuous over D, restarted on 2025-07-08, continuous from H through F and P], label_within_one_day_of: 2025-08-21}
+    changepoint: {code: validation/changepoint.py detect, grid: "data/grid.to_grid, 1 s, label right", window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, runs: [continuous over D, restarted on 2025-07-08, continuous over H, restarted on 2025-08-21, continuous from F through P], label_within_one_day_of: 2025-08-21}
     earlier_daily_run: experiments/results/structural_breaks_BTCUSDT_breaks.csv  # public before this registration
 
 fetch:
@@ -428,6 +429,6 @@ access:
 amendment:
   planned: 1
   before: the read of H
-  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D and any untestable declaration, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, "the compute record, with the replay's peak memory and worker count and the feature store's size", fits that lacked a class with the side, the frozen YAML sha256]
+  records: [excluded days and max_sequence_gaps by its rule, N, reader-test days' message counts intervals and gaps, selected features, chosen cells with neighbourhoods and peaks, M1's signal, sigma_D and MDEs, A0 and FILL on O, detector alarm rate on D and any untestable declaration, the detector's 24-value hour-of-day profile fitted on D, every frozen weight file's sha256, every threshold, every checkpoint epoch, the entry point, "the compute record, with the replay's peak memory and worker count and the feature store's size", fits that lacked a class with the side, the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment

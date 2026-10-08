@@ -114,7 +114,9 @@ shaped the design. None of it is a 2025 number computed by this repository.
 5. **Bybit's fee schedule**, transcribed in 2026 into `backtest/costs.py`
    (`BYBIT_LINEAR_TIERS`), with its caveat (`BYBIT_FEE_CAVEAT`): it is the
    schedule published in 2026, applied here to 2025 data, when it may have
-   differed.
+   differed. The constant's text names the earlier rounds' period, February
+   to April 2024; the follow-up pull requests parametrise the caveat by
+   period, and every caveated number here carries it with 2025's dates.
 6. **Archive metadata, read for this registration.** HTTP `HEAD` requests for
    Bybit's BTCUSDT order-book and trade archives on every day from 2024-12-01
    to 2025-12-31 returned each file's existence and size and nothing else; no
@@ -138,10 +140,14 @@ shaped the design. None of it is a 2025 number computed by this repository.
    BTCUSDT daily bars from 2024-01-01 to 2026-09-30
    (`experiments/results/structural_breaks_BTCUSDT*.csv` and the README's
    figure), committed by earlier work for another purpose; the daily bars it
-   read are on disk. Its 2025 alarms are therefore public. They were not looked
-   at for this registration; the only thing seen, while listing which files
-   carry 2025 dates, was a count: one of the three breaks that file lists falls
-   in 2025. Because it is public, that run cannot place the break blind. It is
+   read are on disk. Its 2025 alarms are public, and they were known when
+   this was written: the README, in the paragraph under that figure written
+   by the earlier work on 2 October 2026, names the run's one break as
+   **2025-09-13, scale, downward** (odds 9.36 against 9.09, seventy-five days
+   into a window opened on 2025-06-30) and a near miss on **2025-06-29**
+   (8.96). Both were in the author's README when F's span and the hourly
+   detector's setting were set; the 2025-09-13 alarm falls inside F. Because
+   it is public, that run cannot place the break blind. It is
    reported beside R and never used to define the break date; the detector
    that does is a different one, on hourly bars, never run on 2025
    ([The break detector](#the-break-detector)). The same figure, and the daily
@@ -157,8 +163,9 @@ shaped the design. None of it is a 2025 number computed by this repository.
 
 ## Expected outcome, stated in advance
 
-**Every primary is expected to be killed at the base fee, and Z is expected to
-be killed too.** The arithmetic:
+**T1 and M1 are expected to be killed at the base fee, T2 to be killed or
+left inconclusive by too few trades, and Z to be killed too.** The
+arithmetic:
 
 - A taker strategy pays its fee on the notional of each side, and turnover
   counts both sides, so the fee at which it breaks even, per side, equals its
@@ -184,10 +191,11 @@ be killed too.** The arithmetic:
   is why Z, the gross edge under an honest queue, is also expected to be
   non-positive.
 
-Predictions, one per hypothesis, fixed now: T1, T2 and M1 killed by their K1;
-Z killed by its K1; R not tested, because nothing reaches it; FILL as stated
-under its heading; A0's gross edge on public data below 0.36 bp of turnover
-under every fill rule except fill-on-touch.
+Predictions, one per hypothesis, fixed now: T1 and M1 killed by K1; T2
+killed by K1 or inconclusive under K-trades; Z killed by its K1; R not
+tested, because nothing reaches it; FILL as stated under its heading; A0's
+gross edge on public data below 0.36 bp of turnover in the crossing run and
+in the passive runs under trade-through and queue (fill-on-touch excepted).
 
 ---
 
@@ -410,7 +418,9 @@ quietly favour a result.
   (R5), advance and fills only from prints at the price (R6) or through it
   (R7), proportional cancellation attribution, pro-rata arrival growth,
   trade-tape crossed policy, post-only, order and cancel latency 10 ms, feed
-  latency 0, `soft_limit_clips` 1, `warmup_s` 60, quoting stops 23:58 and the
+  latency 0, `soft_limit_clips` 1, `max_sequence_gaps` the frozen value of
+  [Blocks](#blocks) (the simulator's default of 0 is not used), `warmup_s` 60,
+  quoting stops 23:58 and the
   flatten at 23:59, markouts at 1, 5, 10 and 30 s, decomposition at 5 s,
   `suspend_after_pause_s` 5 (no snapshot for 5 s pulls every resting order
   and nothing is quoted until the next one; the same 5 s is R16's
@@ -589,8 +599,10 @@ and nothing else may be chosen after the amendment.
    least 5 trades a day, ties broken by its own value. **The neighbourhood** is
    `validation/search.neighbourhood_scores`' block: every cell within one step
    of the cell on every axis, diagonals included (up to 9 cells for T1 and Z,
-   27 for T2), every cell counted whatever its trade rate; the 5-trade filter
-   only limits which cell may be chosen. The outright peak is reported beside
+   27 for T2), every cell counted whatever its trade rate, and a cell without
+   a trade on D scoring 0, as in K-nbhd (`neighbourhood_scores` drops a
+   missing value, so the entry point writes the 0); the 5-trade filter only
+   limits which cell may be chosen. The outright peak is reported beside
    it. **If no cell qualifies**, the hypothesis is recorded as `not run (no
    admissible cell on D)` and enters Holm with p = 1; the filter is not
    relaxed. If only one of T1 and T2 has a chosen cell, M1 uses its signal;
@@ -710,8 +722,11 @@ there is an alarm in F, F− has at least 20 usable days, R was not declared
 untestable on D, and R is not void (below). Otherwise they are computed on
 all of F, labelled "assessed on all of F", and F is not split. F+ enters only
 R. Taken to F: every
-candidate, and every hypothesis inconclusive on H with a positive mean (for Z,
-both claims positive).
+candidate, and every hypothesis inconclusive on H at precedence step 5 (with
+or without the label "below the minimum detectable effect") with a positive
+mean (for Z, both claims' means positive). **A result inconclusive under
+K-trades (step 2) is not taken to F, whatever its sign**: its mean is not
+evaluated, so it cannot route it.
 
 | On H | On F (F− or all of F) | R (below) | On P | Status |
 |---|---|---|---|---|
@@ -720,9 +735,9 @@ both claims positive).
 | candidate | passes | supported | mean ≤ 0 | **confirmed until the break** |
 | candidate | passes | supported | mean > 0 | **candidate; the break did not last** |
 | candidate | does not pass, no kill | reported, not used | not read for it | **candidate, not confirmed** |
-| inconclusive, positive | passes | not tested | passes | **confirmed on P, first significant on F** |
-| inconclusive, positive | passes | not tested | does not pass, no kill | **exploratory: significant on F, not confirmed** |
-| inconclusive, positive | does not pass, no kill | not tested | not read for it | **inconclusive** |
+| inconclusive (step 5), positive | passes | not tested | passes | **confirmed on P, first significant on F** |
+| inconclusive (step 5), positive | passes | not tested | does not pass, no kill | **exploratory: significant on F, not confirmed** |
+| inconclusive (step 5), positive | does not pass, no kill | not tested | not read for it | **inconclusive** |
 | either | a kill fires | — | not read for it | **killed on F** |
 | either | passes | not supported or not tested | a kill fires | **killed on P** |
 
@@ -770,8 +785,10 @@ strategy working.** Such numbers are measurements.
 **Z** is outside the family. It is tested alone at α/4 = 1.25%, one-sided,
 at the larger of its two claims' p-values (round two's rule for a hypothesis
 with two claims), with the t, Newey–West t, median-day and day-count
-conditions holding for both claims; it follows the same precedence and table,
-but its best possible status is **conditional on a zero-fee venue**: the
+conditions holding for both claims; it follows the same precedence and table
+(taken to F as a candidate, or as inconclusive at step 5 with both claims'
+means positive, never when inconclusive under K-trades), but its best
+possible status is **conditional on a zero-fee venue**: the
 condition (0 bp on both sides) is stated as a number, and the base-tier
 result, measured on the same trades, is reported beside it.
 
@@ -782,9 +799,12 @@ Void conditions; the hypothesis is recorded as `void`:
 - **K-leak** — any ported feature fails the leakage checker
   (`validation/leakage.py`, data mutated after a cutoff changes a value before
   it). Every result of the study is void.
-- **K-units** — an input to the EV gate or to a cost is not in basis points
-  computed from prices (a normalised column reached it). T2's result is void,
-  and M1's if it uses T2's signal.
+- **K-units** — an input to the EV gate or to a cost (a fee, the walk of the
+  book, funding) is not in basis points computed from prices (a normalised
+  column reached it). The result of every hypothesis whose gate or cost input
+  it reaches is void, M1's also when it reaches the gate of M1's signal. Z is
+  not exempt: its verdict is at 0/0, but its gross comes from the same walks
+  and its net at 0/0 from the same funding.
 - **K-acct** — the accounting identity (R15) fails on any day, or turnover
   does not equal the sum of fill notionals.
 - **K-cap** — |position| exceeds one clip at any event.
@@ -921,8 +941,8 @@ order book for that pair).
 **Kill conditions.** K1 (mean of the daily `gross_bp_trade` series over H
 ≤ 0); K2 (the mean of the daily net at 0/0, gross plus funding, ≤ 0);
 K-label, K-placebo (with the stale signal), K-drift, K-nbhd, K-days,
-K-queue, K-latency; void under K-leak, K-acct, K-cap; inconclusive under
-K-trades. K-fee does not apply: the
+K-queue, K-latency; void under K-leak, K-units, K-acct, K-cap; inconclusive
+under K-trades. K-fee does not apply: the
 hypothesis is about a fee the base tier does not offer.
 
 **Label, fixed now.** Z is conditional on a fee schedule of zero on both
@@ -999,7 +1019,8 @@ crossing at 0/0, and posted at the touch under each of the three fill rules of
 FILL. Reported: `gross_bp_turnover` against the original's 0.36 bp, net at the
 base tier and at every published tier, trades a day, IC. The table is
 labelled **not comparable: different venue, product, quote currency and
-fee**. Prediction: below 0.36 bp under every rule except fill-on-touch.
+fee**. Prediction: below 0.36 bp in the crossing run and in the passive runs
+under trade-through and queue; fill-on-touch is the one run not covered.
 
 **FILL, the fill rule, with a prediction.** A0's passive order stream on O,
 the same orders under three rules:
@@ -1091,9 +1112,11 @@ Fixed now, run as the ledger opens each block.
   the 1 s grid of BTCUSDT's mid and spread from the Bybit book (`to_grid`,
   `label="right"`), at its defaults (window 2000, threshold 20, reference 40,
   minimum gap 20,000, its four statistics). It runs continuously over D,
-  **restarts on H's first day**, because E's book is never fetched, and runs
-  continuously from H through F and P, with any alarm within a day of
-  2025-08-21 labelled "at the archive change". Also the earlier daily-bar run,
+  **restarts on H's first day**, because E's book is never fetched, runs
+  continuously over H, **restarts on F's first day**, 2025-08-21, so that no
+  `ob500` state is carried into `ob200` data and F's read needs nothing of H,
+  and runs continuously from F through P; any alarm within a day of
+  2025-08-21 is labelled "at the archive change". Also the earlier daily-bar run,
   labelled as public before this registration.
 
 ---
@@ -1206,8 +1229,9 @@ The pull requests that follow this one add, before stage 1:
   comparison), each under the leakage checker and with streaming-versus-batch
   parity tests;
 - the `ob200` archive name in `data/bybit.py`, proven on a synthetic fixture
-  and the three reader-test days ([Data](#data)), and the daily-only fetch of
-  hourly bars in `data/binance.py`;
+  before stage 1, and on the three reader-test days, against D's frozen
+  `max_sequence_gaps`, before H is opened ([Data](#data)); and the daily-only
+  fetch of hourly bars in `data/binance.py`;
 - the event-time taker executor, the simulator's signal-entry quoter and
   fixed `clip_btc` setting, the lazy window dataset, and the Newey–West t in
   `evaluation/significance.py`;
@@ -1279,7 +1303,8 @@ message counts, intervals and gaps; the selected features; for T1, T2 and Z
 the chosen cell with its neighbourhood and the outright peak; M1's signal with
 the D values that chose it; σ of each daily series on D and the minimum
 detectable effects; the A0 and FILL tables on O; the detector's alarm rate on
-D and, if it applies, the declaration that R is untestable; the sha256 of
+D and, if it applies, the declaration that R is untestable; the detector's
+24-value hour-of-day profile fitted on D; the sha256 of
 every frozen weight file (one per hold for T1, Z, T2 and the control), every
 threshold and every checkpoint epoch; the entry point, committed with it; the
 compute record, with the replay's measured peak memory and worker count and
@@ -1379,10 +1404,10 @@ value open, or a proposal was not taken, the choice and its reason:
   writes; its internal name is `sr_mean`.
 - **T2 trades one full clip, and Kelly sizing is dropped** (feasibility
   review). `FractionalKelly.scale(edge, volatility)` returns fraction × edge /
-  volatility², clipped to [0, 2]. With μ and σ in bp, a gated trade with
-  μ = 15 and σ = 10 gets 0.075 of a clip, below the 0.001 BTC lot, so T2 would
-  be inconclusive by construction; in decimal units the same trade gets 750,
-  clipped to the cap, so every trade would be one clip and Kelly would do
+  volatility², clipped to [0, 2]. At its default fraction of 0.25, with μ and
+  σ in bp, a gated trade with μ = 15 and σ = 10 gets 0.0375 of a clip, below
+  the 0.001 BTC lot, so T2 would be inconclusive by construction; in decimal
+  units the same trade gets 375, clipped to the cap, so every trade would be one clip and Kelly would do
   nothing. A scaling between the two would be a value set without a basis,
   and the research's sizing values are not used. Without it, T2's trade count
   is its gate's, and K-trades counts round trips as for T1.
@@ -1455,6 +1480,15 @@ value open, or a proposal was not taken, the choice and its reason:
 - **With R supported, an empty P series has mean 0**, as a neighbour cell
   without a trade scores 0 in K-nbhd: a strategy that does not trade after
   the break has not paid after it.
+- **A result inconclusive under K-trades is not taken to F** (consistency
+  review, which left the reading open): its mean is not evaluated at
+  precedence step 2, so its sign cannot route it. Taking it would give T2,
+  predicted to end there, a route to "confirmed on P, first significant on F"
+  through a sign the precedence does not read; F still reports its numbers
+  as measurements.
+- **A0's prediction covers the crossing run** (consistency review, which
+  offered covered or excluded): the 0.36 bp is argued above to be an upper
+  bound for the recipe, and fill-on-touch is excepted only for its optimism.
 
 ---
 
