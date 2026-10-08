@@ -1955,6 +1955,70 @@ slot: F is still read and reported, but nothing is taken to P.
 
 ---
 
+## Artefacts and headline sentences
+
+**Files**, written by the entry point:
+
+- `experiments/results/short_horizon_2025_trials.csv`, the trial ledger; its
+  row count is the N quoted on every page, and its sha256 goes in the
+  amendment;
+- `…_leaderboard.csv`: every configuration with gross, net, G, trades a day,
+  day-level t, IC, S, A, the admissible flag, its rank within its stratum and
+  overall, the region tags (T1, T2) and S25's badge; the header gives N
+  planned, scored and skipped;
+- `…_marginals.csv`: for each axis value, the median gross, net and G over
+  cells, the form of `docs/findings.md`'s grand-search marginals; the regime
+  row is the median per window;
+- `…_nulls.csv`: every replication's A per stratum under Null A and Null B,
+  the refit point, the quantiles and the p-values;
+- `…_regime_map.csv`: per slot and block, every segment between alarms;
+- the frozen finalist files, by sha256 in the amendment.
+
+**Pages and figures**, in the README, in both themes through `<picture>`: the
+placebo search (the real A against both null distributions and the refit
+point, with p_search); the finalists on H, then F and P, one row per slot and
+S25-Z, with the status, the first kill and its value against its reference
+(`verdicts.KillCheck`), the mean, t, Newey–West t, median day, trades, MDE,
+placebo percentile, K-nbhd median, the fee break-even per side against every
+tier, H before 2025-08-01 and the regime attribution; the S25 page (the edge
+ladder, the T1 and T2 region rows, the rank r of N); the regime map, one chart
+per execution path; the break-detector view for 2024-12-01 to 2025-12-31
+(blocks and the slots' guard windows shaded, every alarm with its channel,
+`b`, F− and F+, the 1 s CUSUM's restarts, and the public 2025-09-13 daily-bar
+alarm labelled); the fill-rule comparison (A0 on O; S-P and S25-Z on H); and
+the rows of `docs/findings.md` and the README summary.
+
+**Headline sentences, fixed now.** The bracketed parts are filled by the entry
+point and never edited.
+
+| Outcome | Sentence |
+|---|---|
+| Search on D | "Searched [N] configurations ([axes]) on 150 development days across [instruments]; the best direction edge [was / was not] distinguishable from search noise (Null A p = [x], Null B p = [y])." |
+| Payoff on D | "[No configuration paid the 5.5 bp taker fee on development data / S-[x] admitted at S = [v] bp]." |
+| Each slot on H, F, P | "[slot] on [block]: [status]; first kill [K-x] at [value] against [reference]." |
+| S25 | "S25's gross edge was [x] bp of turnover against the 5.5 bp taker fee; break-even [y] bp per side; on H: [status]." |
+| Passive entry and market maker | "Passive entry and the market maker on [signal]: [D status / H status]; spread capture [v] bp." |
+| Regime axis | "Guards after detector alarms [did / did not] add more than random pauses ([percentile])." |
+| Regime map | "Between detector alarms, [slot] was positive in [a] of [b] segments; the detector cut the segments, not the results." |
+| Break | "R: [supported / not supported / untestable (reason) / not tested]." |
+
+A negative result therefore reads as the pipeline measuring how far each
+configuration was from paying; it is not a missing result. D numbers are never
+quoted as results; only H, F and P statuses are.
+
+**Later horizons.** The configuration's `search` block is generic: the same
+block, entry point, ledger, nulls, regime axis, verdict helpers and status
+rules carry over to a later registration with only values changing. Funding
+carry would use a clock of 8 h settlements, a week as the cluster, a universe
+from `pipeline/discovery.py`, the positioning features, taker execution at
+settlement, the same detector with windows in settlements, Null A flipping
+signs per settlement-week and Null B re-pairing whole weeks; daily trend, 1 d
+klines with a month as the cluster. Each needs its own blocks, the Newey–West
+lag in cluster units, and a replacement for the rule that a day starts flat
+and is the cluster.
+
+---
+
 ## What this study cannot establish
 
 - **A fee schedule of 2025.** Bybit's tiers are the ones published in 2026,
