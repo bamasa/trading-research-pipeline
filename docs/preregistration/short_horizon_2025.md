@@ -125,9 +125,14 @@ shaped the design. None of it is a 2025 number computed by this repository.
    computed for this study.
 
 **The information set of S25.** S25's coordinates are not claimed to have been
-chosen without knowledge of market conditions after 2025-08-01; H's days before
-that date are reported as a labelled sensitivity for every slot
-([measurements](#measurements-without-a-hypothesis)).
+chosen without knowledge of market conditions after 2025-08-01. Of the scored
+2025 days, only D and H's days before that date (2025-07-08 to 07-31) lie
+outside that information set. Every slot whose signal is S25's (S25, S25-Z,
+and S-P and S-M when they run on S25's signal) therefore takes its status on
+H from those 24 days only, its best status is **candidate (H before
+2025-08-01)**, and its numbers on the rest of H, on F and on P are
+measurements labelled "inside S25's information set"
+([status rules](#status-rules)).
 
 ---
 
@@ -155,7 +160,8 @@ that date are reported as a labelled sensitivity for every slot
 
 Predictions, one per slot, fixed now:
 
-- **S25** killed by K1 on H; **S25-Z** killed by its K1.
+- **S25** killed by K1 on H before 2025-08-01; **S25-Z** killed by its K1
+  there.
 - **S-C and S-R**: whether a searched signal is admitted for its information
   is not predicted (a crossing gross edge of a few basis points can beat both
   nulls); its payoff is: the chosen cell's S ≤ 0 at the base fee in both
@@ -1050,7 +1056,8 @@ being fixed.
   catch with 80% power, with `σ_D` the standard deviation of the daily series
   over D's 150 walk-forward test days at the chosen cell and `n_eff` = 44 × the
   share of those 150 days with a trade (44 for S-P and S-M, whose series has
-  every usable day). For a searched slot, σ_D is also given at the
+  every usable day; 24 in place of 44 for a slot on S25's signal, whose status
+  window on H is 24 days). For a searched slot, σ_D is also given at the
   carry-forward estimate, with the power of the t ≥ 3 bar against it. On F (F− or all of F) and on P, the "below the minimum
   detectable effect" label uses the same formula, with σ_D and the share as
   frozen and the usable days of the series the status is assessed on in place
@@ -1107,13 +1114,26 @@ status:
 `not admitted on D (<condition (i) to (iv)>)`, `not run (no admissible cell
 on D)` and `same as S25`.
 
+**Slots on S25's signal**: S25, S25-Z, and S-P and S-M when their signal is
+S25's ([the information set of
+S25](#what-was-known-before-this-was-written)). On H their status, kills,
+placebos, bar and K-trades are computed on H's usable days from 2025-07-08 to
+07-31 only (24 days; the bar's 20 days with a trade, or usable days for S-P
+and S-M, still apply), and `candidate` is written **candidate (H before
+2025-08-01)**. That is their best and final status: they are not taken to F, R
+is not tested for them, and on F and P they enter Holm with p = 1. Their
+numbers on H from 2025-08-01 to 08-20 and on all of H, on F (one whole block)
+and on P (only when P is opened for another slot) are computed in the same
+read sessions, kills and placebos included, and reported as measurements
+labelled "inside S25's information set".
+
 **F.** With `b` the first alarm of the frozen detector in F, F− is F's usable
 days before the alarm's day and F+ its usable days after it; the alarm's own
 day is in neither. **Statuses on F, kills included, are computed on F−** when
 there is an alarm in F, F− has at least 20 usable days, R was not declared
 untestable on D, and R is not void (below). Otherwise they are computed on
 all of F, labelled "assessed on all of F", and F is not split. F+ enters only
-R. Taken to F: every
+R. Taken to F, except the slots on S25's signal: every
 candidate, and every slot inconclusive on H at precedence step 5 (with
 or without the label "below the minimum detectable effect") with a positive
 mean (for S25-Z, both claims' means positive). **A result inconclusive under
@@ -1181,12 +1201,11 @@ are measurements.
 (α/(m + 1)), one-sided,
 at the larger of its two claims' p-values (round two's rule for a hypothesis
 with two claims), with the t, Newey–West t, median-day and day-count
-conditions holding for both claims; it follows the same precedence and table
-(taken to F as a candidate, or as inconclusive at step 5 with both claims'
-means positive, never when inconclusive under K-trades), but its best
-possible status is **conditional on a zero-fee venue**: the
-condition (0 bp on both sides) is stated as a number, and the base-tier
-result, measured on the same trades, is reported beside it.
+conditions holding for both claims; it follows the same precedence as a slot
+on S25's signal, on H before 2025-08-01, and is not taken to F. Its best
+possible status is **candidate (H before 2025-08-01), conditional on a
+zero-fee venue**: the condition (0 bp on both sides) is stated as a number,
+and the base-tier result, measured on the same trades, is reported beside it.
 
 ### Kill conditions per slot
 
@@ -1341,6 +1360,10 @@ over excluded days.
 - It is fixed before D: no admission and no search-level null. It goes to H
   whatever D shows; its D values are shown against its own Null A and Null B
   distributions.
+- Its status is taken on H's days before 2025-08-01 only and stops at
+  **candidate (H before 2025-08-01)**; the rest of H, F and P are inside its
+  [information set](#what-was-known-before-this-was-written) and give
+  measurements ([status rules](#status-rules)).
 - It is a member of the family and carries the taker slots' kill list. Its
   K-nbhd covers 24 cells (hold {20, 50, 120} s × rate {100, 240} × label fee
   {0, 5.5} × regime {none, pull 4 h}), with one frozen fit per hold and label
@@ -1348,19 +1371,21 @@ over excluded days.
 - It is the fallback signal of S-P and S-M, so passive entry and the market
   maker are always measured on at least one fixed signal.
 
-**Statement.** On H at the base tier, S25 earns a positive `net_bp_trade`.
+**Statement.** On H's days before 2025-08-01, at the base tier, S25 earns a
+positive `net_bp_trade`.
 **Prediction:** killed by K1.
 
 ### S25-Z, the gross edge before fees (outside the family)
 
-**Statement.** On H, under the queue fill rule, S25's signal entered by the
+**Statement.** On H's days before 2025-08-01, under the queue fill rule,
+S25's signal entered by the
 signal-entry quoter (one clip posted at the touch, a taker exit `h` after the
 fill) has a positive `gross_bp_trade`, and its net with fees at zero on both
 sides (gross plus funding) is positive too. It asks whether the signal pays
 before fees, which is what a venue charging nothing would earn. Its
 neighbourhood is S25's hold × rate × label fee, 12 cells. Tested alone at α/6
-([status rules](#status-rules)); its best status is "conditional on a zero-fee
-venue", and it is never reported without the same trades' net at the base
+([status rules](#status-rules)); its best status is "candidate (H before
+2025-08-01), conditional on a zero-fee venue", and it is never reported without the same trades' net at the base
 tier and at the cheapest published tier beside it, nor as a result a Bybit
 account could trade. **Prediction:** killed by K1: resting entries are
 adversely selected, and the repository's maker finding is that this inverts a
@@ -1380,7 +1405,8 @@ One table, each step labelled with the one thing that changed:
 
 1. A0 on O at 0/0, crossing and under the three fill rules;
 2. S25's gross and net on D's walk-forward;
-3. S25 on H, then on F;
+3. S25 on H before 2025-08-01, then on all of H and on F, labelled inside its
+   information set;
 4. S25's fee break-even per side against every published tier;
 5. S25-Z's net at 0/0, with FILL's fill ratios beside it.
 
@@ -1405,7 +1431,8 @@ One table, each step labelled with the one thing that changed:
   decomposition, the fill ratio, markouts by fill path, the passive-exit
   variant, and the result at maker fees of 0 and −1 bp (the cheapest
   published maker tier and the programme's rebate), each with the fee caveat.
-  **Prediction:** `not admitted on D (i)`; if it reaches H, killed by K1.
+  **Prediction:** `not admitted on D (i)`; if it reaches H, killed by K1. On
+  S25's signal its status is taken on H before 2025-08-01 only, as for S25.
 - **S-M** — on H at the base tier, S1 with the lean on S-P's signal earns a
   positive `net_per_100_clip_day` with a positive making part. Reported
   beside: the λ neighbourhood, and `guard_pull` against `guard_widen` at 4, 24
@@ -1414,8 +1441,9 @@ One table, each step labelled with the one thing that changed:
 
 ## R, the break (conditional)
 
-**Tested for** every slot, S25 and S25-Z included, that is a candidate on H,
-whether or not it passes on F−; its statistic is computed and reported in
+**Tested for** every slot that is a candidate on H, whether or not it passes
+on F−, except the slots on S25's signal, which are never taken to F
+([status rules](#status-rules)); its statistic is computed and reported in
 either case, with F−'s result beside it. Not tested for any other
 slot, including one first significant on F; recorded as `not tested`,
 with the reason, and read as not supported.
@@ -1520,10 +1548,12 @@ of the placebo search ([artefacts](#artefacts-and-headline-sentences)). Every
 D number is labelled "selected, biased upward" and is never quoted as a
 result.
 
-**H before 2025-08-01**, a labelled sensitivity: every slot at its frozen
-cell on H's usable days from 2025-07-08 to 07-31 (24 days), the part of H that
-the [information set of S25](#what-was-known-before-this-was-written) does not
-cover. Same daily series and statistics, no status.
+**H before 2025-08-01**, a labelled sensitivity: every slot not on S25's
+signal at its frozen cell on H's usable days from 2025-07-08 to 07-31 (24
+days), the part of H that the [information set of
+S25](#what-was-known-before-this-was-written) does not cover. Same daily
+series and statistics, no status. For a slot on S25's signal these 24 days
+are its status window, and its numbers on all of H are the measurement.
 
 **Verdicts with the gap-excluded days included**: each verdict's mean, t and
 median day recomputed with the days excluded for sequence gaps put back.
@@ -2041,10 +2071,10 @@ and is the cluster.
   so an edge that only a quoter could earn is not searched for.
 - **That H and F are comparable.** The book archive changes on F's first day;
   a difference between H and F may be the archive.
-- **That S25 was chosen blind to H.** Its
-  [information set](#what-was-known-before-this-was-written) is stated; H's
-  days before 2025-08-01 are reported for every slot as a labelled
-  sensitivity.
+- **That S25 was chosen blind to H's days from 2025-08-01, to F or to P.**
+  Its [information set](#what-was-known-before-this-was-written) is stated;
+  the slots on its signal take their status from H's days before 2025-08-01
+  only and can be no more than candidates.
 - **A null calibrated by refitting every model.** The refit replication of the
   placebo search covers the gradient-boosted and logistic models only; the
   network and the bound regressor rest on the fold-level leakage test.
@@ -2094,6 +2124,12 @@ open, or a proposal was not taken, the choice and its reason:
   the t ≥ 3 bar binds on every block, so the breadth of the search costs
   nothing on H; a seventh slot would let Holm decide on short F and P series.
 - **S25-Z at α/6**: the earlier α/(m + 1) rule carried to m = 5.
+- **The slots on S25's signal take their status from H before 2025-08-01 and
+  stop at candidate** (multiplicity and protocol reviews), rather than a
+  narrower statement of S25's information set: the registration does not
+  claim S25 blind to market conditions after 2025-08-01, so only D and H's
+  days before that date can test it, and a status on later days could be
+  earned on blocks its coordinates may reflect.
 - **S25 is one fixed point**, rather than named points chosen on D: a point
   chosen on D is a region, so T1 and T2 survive as leaderboard regions with
   no slot.

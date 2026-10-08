@@ -47,15 +47,15 @@ prior_information:
   - HTTP HEAD of every BTCUSDT, ETHUSDT and XRPUSDT book (ob500, ob200) and print archive, 2024-12-01..2025-12-31; existence and size only
   - HTTP HEAD of the BTCUSDT ob200 and ob500 book archives for 2026-01-05..07; ob200 present, ob500 absent
   - "experiments/results/structural_breaks_BTCUSDT*.csv, daily bars 2024-01-01..2026-09-30, public; the README (written 2026-10-02) names its 2025 alarm, 2025-09-13, scale, downward, and a near miss on 2025-06-29; both known when F's span and the hourly detector's setting were set; never defines b"
-  - "S25's information set: its coordinates are not claimed to have been chosen without knowledge of market conditions after 2025-08-01; H before that date is reported for every slot as a labelled sensitivity"
+  - "S25's information set: its coordinates are not claimed to have been chosen without knowledge of market conditions after 2025-08-01; only D and H before that date lie outside it (statuses.S25_signal_slots)"
 
 expected_outcome:
   taker_bp: {base: 5.5, cheapest_published: 1.5}  # group g1, all three instruments; cheapest is pro6_g1
   taker_round_trip_bp: {base: 11.0, cheapest_published: 3.0}  # a taker pays at the base tier only with a gross edge above 5.5 bp of turnover
   passive_break_even_bp_turnover: {cheapest_published: 0.75, base: 3.75}  # (maker + taker) / 2
   predictions:
-    S25: killed by K1 on H
-    S25-Z: killed by K1
+    S25: killed by K1 on H before 2025-08-01
+    S25-Z: killed by K1 on H before 2025-08-01
     S-C: not admitted on D (i)  # signal admission (information) not predicted
     S-R: not admitted on D (i)
     S-P: not admitted on D (i); if it reaches H, killed by K1
@@ -361,7 +361,7 @@ slots:
     execution: taker in, taker out after hold
     clip_btc: 0.010
     verdict: net_bp_trade at the base tier (5.5 bp taker), funding included
-    fixed_before_D: true  # no admission, no search-level null; to H whatever D shows
+    fixed_before_D: true  # no admission, no search-level null; to H whatever D shows; status on H before 2025-08-01 only (statuses.S25_signal_slots)
     neighbourhood: {hold_s: [20, 50, 120], trades_per_day: [100, 240], label_fee_bp: [0, 5.5], regime: [none, pull_4h]}  # 24 cells; one frozen fit per hold and label fee (6)
     fallback_signal_for: [S-P, S-M]
     leaderboard: badge and rank r of N
@@ -422,7 +422,7 @@ metrics:
   all_calendar_days_scored: true  # no row filtered or reweighted by label, outcome or model state
   mde:
     formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
-    n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for S-P and S-M
+    n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for S-P and S-M; 24 in place of 44 for a slot on S25's signal (statuses.S25_signal_slots)
     n_eff_on_F_and_P: the usable days of the series the status is assessed on (F- or all of F, or P) x the same share; sigma_D as frozen
     searched_slots_also: sigma_D at the carry-forward estimate, with the power of the t >= 3 bar against it
     sigma_d: null  # per slot and S25-Z, over D's 150 walk-forward test days; frozen by the D amendment
@@ -438,7 +438,16 @@ statuses:
   void_counts_as_killed: true
   set_on_D: ["not admitted on D (<condition i to iv>)", "not run (no admissible cell on D)", same as S25]  # each enters Holm with p = 1 on every block
   measured_rows: the chosen cell of a non-admitted C* or R*, and a non-admitted S-P or S-M, run once on H, F and P as labelled measurements, no placebo, no status
-  taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (S25-Z: both claims' means positive)"]  # inconclusive (too few trades), step 2, is not taken to F whatever its sign
+  S25_signal_slots:
+    slots: [S25, S25-Z, S-P when its signal is S25's, S-M when its signal is S25's]
+    status_window_H: [2025-07-08, 2025-07-31]  # 24 days, the part of H outside S25's information set
+    on_window: status, kills, placebos, the bar (at least 20 days with a trade; S-P and S-M usable days) and K-trades computed on these days only; MDE with 24 in place of 44
+    best_status: candidate (H before 2025-08-01)  # final; not taken to F
+    taken_to_F: false
+    R: not tested
+    holm_on_F_and_P: p = 1
+    measured_inside_information_set: "H 2025-08-01..08-20 and all of H, F as one whole block, and P only when P is opened for another slot; computed in the same read sessions with kills and placebos; labelled inside S25's information set"
+  taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (S25-Z: both claims' means positive)"]  # never a slot on S25's signal (S25_signal_slots); inconclusive (too few trades), step 2, is not taken to F whatever its sign
   F_split: {F_minus: F's usable days before the alarm's day, F_plus: F's usable days after it, alarm_day: neither}
   F_assessed_on: "F- when there is an alarm in F, F- has at least 20 usable days, R was not declared untestable on D and R is not void; otherwise all of F, labelled, and F is not split"
   F_plus_enters: only R
@@ -457,10 +466,10 @@ statuses:
   defect_after_read: "stated in a dated note, docs/short_horizon_2025_defects.md, naming the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read), counted as killed for routing and p = 1 in Holm on later blocks; Holm on a block already read recomputed from its committed results file with that p = 1; a status may only fall; later reads run on unchanged code and report it as measurements"
   measurements_never_described_as_working: [any fee tier other than base, any non-default fill rule or exit, F for a slot not taken to F, a measured row, a regime-map segment, any D number]
   outcomes:
-    after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not run (no admissible cell on D)", "not admitted on D (<condition>)", same as S25, "not assessed (H unreadable)", "not assessed (H read failed)", "void (defect found after the H read)"]
+    after_H: [candidate, "candidate (H before 2025-08-01)", inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not run (no admissible cell on D)", "not admitted on D (<condition>)", same as S25, "not assessed (H unreadable)", "not assessed (H read failed)", "void (defect found after the H read)"]
     after_F_and_P: [confirmed, "candidate, not confirmed", confirmed until the break, "candidate; the break did not last", "confirmed on P, first significant on F", "exploratory: significant on F", "exploratory: significant on F, not confirmed", inconclusive, killed on F, killed on P, void, "void (defect found after the <block> read)"]
-    marks: [assessed on all of F, F unreadable, P unreadable, F read failed, P read failed, "conditional on a zero-fee venue (S25-Z)"]
-  S25-Z: {family: none, alpha: 0.008333, alpha_rule: "alpha / (m + 1)", sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: conditional on a zero-fee venue, reported_beside: [net at base tier, net at cheapest published tier]}
+    marks: [assessed on all of F, F unreadable, P unreadable, F read failed, P read failed, "conditional on a zero-fee venue (S25-Z)", "inside S25's information set (measurements)"]
+  S25-Z: {family: none, status_window: S25_signal_slots, alpha: 0.008333, alpha_rule: "alpha / (m + 1)", sided: one, p_value: the larger of its two claims' p-values, conditions_on_both_claims: [t >= 3, Newey-West t >= 2, median day > 0, day counts as the bar], best_status: "candidate (H before 2025-08-01), conditional on a zero-fee venue", reported_beside: [net at base tier, net at cheapest published tier]}
 
 kill_conditions:
   per_slot:
@@ -500,15 +509,15 @@ placebos:
                        computed: "every series the bar reads computed once per day over all of F in F's read session (one-day shift circular within all of F) and sliced at each d; nothing re-run"}
 
 hypotheses:
-  S25: {block: H, claim: net_bp_trade > 0, kills: kill_conditions.per_slot.S25, prediction: killed by K1}
+  S25: {block: H before 2025-08-01 (statuses.S25_signal_slots), claim: net_bp_trade > 0, kills: kill_conditions.per_slot.S25, prediction: killed by K1}
   S-C: {block: H, claim: net_bp_trade > 0 at C*, kills: kill_conditions.per_slot.S-C, prediction: not admitted on D (i)}
   S-R: {block: H, claim: net_bp_trade > 0 at R*, kills: kill_conditions.per_slot.S-R, prediction: not admitted on D (i)}
   S-P: {block: H, claim: net_per_100_clip_day > 0, kills: kill_conditions.per_slot.S-P, prediction: "not admitted on D (i); if it reaches H, killed by K1"}
   S-M: {block: H, claim: net_per_100_clip_day > 0 with a positive making part, kills: kill_conditions.per_slot.S-M, prediction: "not admitted on D (i); if it reaches H, killed by K1 or K-dir"}
-  S25-Z: {block: H, outside_family: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: kill_conditions.per_slot.S25-Z, asks: whether the signal pays before fees, prediction: killed by K1}
+  S25-Z: {block: H before 2025-08-01 (statuses.S25_signal_slots), outside_family: true, conditional: zero fee on both sides, claims: [gross_bp_trade > 0, net at zero fees > 0], kills: kill_conditions.per_slot.S25-Z, asks: whether the signal pays before fees, prediction: killed by K1}
   R:
-    tested_for: every slot, S25 and S25-Z included, that is a candidate on H, whether or not it passes on F-
-    not_tested_for: any other slot, including one first significant on F
+    tested_for: every slot that is a candidate on H, whether or not it passes on F-, except the slots on S25's signal
+    not_tested_for: any other slot, including one first significant on F and every slot on S25's signal (statuses.S25_signal_slots)
     statistic: Delta(d) = mean of the daily series on F's usable days before d minus its mean on those after d
     claims: [passes on F-, mean daily series on F_plus <= 0, Delta(b) above the 95th percentile of Delta(d) over the reference set]
     supported: all three claims hold
@@ -530,7 +539,7 @@ measurements:
     fill_ratio: share of posted orders with any fill (backtest/maker.py fill_rate); filled over posted volume reported beside
     prediction: {on_touch_fill_ratio_min: 0.75, queue_fill_ratio_max: 0.50}
   fee_break_even: {taker: gross_bp_turnover, passive: maker fee at zero net with the taker exit at 5.5 and at 1.5 bp}
-  H_before_2025_08_01: {slots: every slot, days: 2025-07-08..2025-07-31, label: sensitivity, status: none}
+  H_before_2025_08_01: {slots: every slot not on S25's signal, days: 2025-07-08..2025-07-31, label: sensitivity, status: none}  # for a slot on S25's signal these days are its status window and all of H is the measurement
   gap_days_included: every verdict's mean, t and median day with the gap-excluded days put back
   measured_rows: statuses.measured_rows
   regime_attribution: search.regime_source.attribution
@@ -542,7 +551,7 @@ measurements:
     charts: one per execution path (taker, passive entry, market maker), cumulative daily net through 2025, alarms marked, blocks shaded
     rule: the detector cuts the segments before any result is computed; every segment shown, none selected; never a status, never in any rule
   leaderboard_regions: slots.regions  # each region's best neighbourhood cell with its S, A and rank
-  edge_ladder: [A0 on O at 0/0 crossing and under the three fill rules, S25's gross and net on D's walk-forward, "S25 on H, then F", S25's fee break-even per side against every published tier, S25-Z's net at 0/0 with FILL's fill ratios]
+  edge_ladder: [A0 on O at 0/0 crossing and under the three fill rules, S25's gross and net on D's walk-forward, "S25 on H before 2025-08-01, then on all of H and on F, inside its information set", S25's fee break-even per side against every published tier, S25-Z's net at 0/0 with FILL's fill ratios]
   result_O: null  # A0 and FILL tables; frozen by the D amendment
 
 detector:
