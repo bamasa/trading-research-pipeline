@@ -1757,48 +1757,76 @@ and nothing registered is dropped to save time once a 2025 file is on disk
 
 ## Who may read what, and the code that will enforce it
 
+### The code to come
+
 The pull requests that follow this one add, before stage 1:
 
-- the ported pieces (the tensor, the microstructure set, the walked-book
-  label, the Gaussian head, the hold-first rule, the EV gate, the fill-rule
-  comparison), each under the leakage checker and with streaming-versus-batch
-  parity tests; the depth and flow builders wrapped as registered features
-  with declared lookbacks, and prints aligned backward
+- **the search's single entry point** over stages 0 to E, with the catalogue
+  hash check and the trial ledger; candidate-row tapes, walk tables at every
+  100 ms row and the event-jump thinning loop; the vectorised neighbourhood
+  scores, tested equal to `validation/search.neighbourhood_scores`;
+- **the signal pieces**: the per-side θ of the hold-first rule, the EV gate,
+  the Gaussian head with its lazy window dataset, the ten-level tensor, the
+  2025 microstructure set, the walked-book label, and the time-based forward
+  move and control label, each under the leakage checker and with
+  streaming-versus-batch parity tests; the depth and flow builders wrapped as
+  registered features with declared lookbacks, and prints aligned backward
   ([Labels, features and models](#labels-features-and-models));
-- the `ob200` archive name in `data/bybit.py`, proven on a synthetic fixture
-  before stage 1, and on the three reader-test days, against D's frozen
-  `max_sequence_gaps`, before H is opened ([Data](#data)); and the daily-only
-  fetch of hourly bars in `data/binance.py`;
-- the event-time taker executor, the simulator's signal-entry quoter and
-  fixed `clip_btc` setting, the lazy window dataset, and the Newey–West t in
+- **the per-instrument loader and clip**; the `ob200` archive name in
+  `data/bybit.py`, proven on a synthetic fixture before stage 1, and on the
+  three reader-test days, against D's frozen `max_sequence_gaps`, before H is
+  opened ([Data](#data)); and the daily-only fetch of hourly bars in
+  `data/binance.py`;
+- **the fold-wise detector flags**, the flag-causality test and the
+  fold-level leakage test;
+- **the placebo search**: Null A, Null B with its walk-table route and its
+  parity test against the executor, the refit replication, carry-forward,
+  CSCV PBO, and the deflated Sharpe ratio with N_eff;
+- **execution**: the event-time taker executor; the simulator's signal-entry
+  quoter and S1 with the lean on a fixed `clip_btc`, wired to `guard_pull`
+  and `guard_widen`; the simulator's taker orders priced by the executor's
+  walk function in place of `_walk` with `flatten_slippage_bp` 0.5, with a
+  parity test of the two walks and the late-snapshot counters in the
+  simulator; the fill-rule comparison;
+- **statistics**: the one-sided day-level p-value, Holm and the placebo
+  comparison through `market_making/verdicts.day_t`, `holm`,
+  `exceeds_placebos` and `t_sf`, and the Newey–West t in
   `evaluation/significance.py`;
-- **this study's fetch and feature store** ([fetch plan](#fetch-plan)): the
+- **this study's fetch and feature stores** ([fetch plan](#fetch-plan)): the
   book replay on at most 4 workers with its measured peak memory, the retry
   of every failed download until success (only an HTTP 404 is a missing
-  plane), the float32
-  per-day feature store, the disk check before each stage, and the deletion of
-  W's and D's features before stage 3;
-- **this study's loader, ledger and single entry point**, on the pattern of
+  plane), the two float16 stores, the disk check before each stage, and the
+  deletion of W's and D's features before stage 3;
+- **the presentation**: regime attribution and the regime map; the
+  leaderboard, marginals, nulls and regime-map files, the figures, and the
+  filler of the headline sentences ([artefacts](#artefacts-and-headline-sentences));
+- **this study's loader and ledger**, on the pattern of
   `market_making/round2.py`, with block constants of its own (round one's
   `block_of` is not used): the YAML validated against this registration,
   placeholders hashed as in the earlier rounds, and an access that permits
-  days per block and plane. The entry point, `experiments/short_horizon_2025.py`,
-  is committed with the amendment and computes everything a block's read
-  produces, statuses and kills included, in one read session.
+  days per block, plane and instrument. The entry point,
+  `experiments/short_horizon_2025.py`, is committed before any test day of D
+  is scored and frozen with the amendment, and computes everything a block's
+  read produces, statuses and kills included, in one read session.
 
-**The development access** permits W and D (book, prints, funding), the
-hourly bars up to 2025-06-30 and the reader-test days. It refuses every 2025
-day after 2025-06-30 in every plane, including the daily bars already on disk
-(`data/bars/BTCUSDT/klines-1d`); a read of those after that date falls under
-the ledger rule below.
+### Access
+
+**The development access** permits W and D (book, prints, funding) for the
+three instruments, the hourly bars up to 2025-06-30 and the reader-test days.
+It refuses every 2025 day after 2025-06-30 in every plane, including the daily
+bars already on disk (`data/bars/BTCUSDT/klines-1d`); a read of those after
+that date falls under the ledger rule below.
 
 **The ledger**, `experiments/results/short_horizon_2025_ledger.json`, guards
 E's bars, H, F and P.
 
 - **H** opens only if the amendment records the YAML's sha256, the file on
   disk has it and is committed, the tree is clean, every frozen weight file's
-  sha256 and the fitted-values file's sha256 equal the amendment's, and no
-  file of H and no hourly bar of E is already on disk.
+  sha256, every frozen finalist file's and the fitted-values file's sha256
+  equal the amendment's, the trial ledger is committed with the sha256 and
+  the row count the amendment records, the catalogue's sha256 equals the
+  registered one (or stage 0's amendment's), and no file of H and no hourly
+  bar of E is already on disk.
 - **Every open (H, F and P), and the start of every process of a read
   session**, also require: `git status --porcelain --untracked-files=normal`
   lists nothing but the ledger file; `git diff --name-only <session's
@@ -1822,7 +1850,7 @@ E's bars, H, F and P.
 - **A read that cannot finish.** A failed process of a first read is resumed
   at the same commit. If the same stage fails again with the same exception,
   or the read has not finished after five resumptions, the session closes by
-  writing the block's results file with every hypothesis `not assessed
+  writing the block's results file with every slot `not assessed
   (<block> read failed)`, the stage reached and the exception. The block is
   then handled as an unreadable block of the same letter: after H, nothing is
   taken to F, F is read as measurements at the same commit and P is not
@@ -1841,7 +1869,7 @@ E's bars, H, F and P.
   H read), the frozen weights' and the fitted-values file's sha256 still
   match, the conditions above on every open hold, and no file of F is on
   disk. **P** opens on the same conditions against F's read, and
-  only for the hypotheses that qualify.
+  only for the slots that qualify.
 - Each first read writes block, commit, config sha256 and UTC time before the
   access is returned; a second read raises unless forced, and everything it
   produces is stamped `second read` and cannot change a status.
@@ -1861,29 +1889,39 @@ this study's loader.
 
 ## Amendment protocol
 
-After the development runs, and before H is read, one dated amendment is
-appended and committed: the days excluded and the sequence-gap threshold
-(by its formula); the longest feature lookback `N`; the reader-test days'
-message counts, intervals and gaps; the selected features; for T1, T2 and Z
-the chosen cell with its neighbourhood and the outright peak; M1's signal with
-the D values that chose it; σ of each daily series on D and the minimum
-detectable effects; the A0 and FILL tables on O; the detector's alarm rate on
-D, with every alarm's timestamp and channel, and, if it applies, the
-declaration that R is untestable; the detector's 24-value hour-of-day
-profile fitted on D; the sha256 of the fitted-values file
-([Blocks](#blocks)); the sha256 of
-every frozen weight file (one per hold for T1, Z, T2 and the control), every
-threshold and every checkpoint epoch; the entry point, committed with it; the
-compute record, with the replay's measured peak memory and worker count and
-the feature store's size; the fits that lacked a class, with the side; and
-the sha256 of `configs/short_horizon_2025.yaml` after
-the frozen values are written into its placeholders, on a line of the form
+Stage 0's cuts, if the projection needs any, are a dated amendment of their
+own, committed before stage 1 with the new catalogue hash and N_max. After the
+development runs, and before H is read, one dated amendment is appended and
+committed: per instrument, the days excluded and the sequence-gap threshold
+(by its formula), the tick and lot steps, the clip and the selected features;
+the longest feature lookback `N`; the reader-test days' message counts,
+intervals and gaps; the trial ledger's sha256, its row count N_trials and
+N_eff; for each stratum the chosen cell with its neighbourhood, its S and the
+outright peak; every replication of the placebo search (A per stratum under
+Null A and Null B and at the refit, the seeds, the shifts, the quantiles and
+the p-values); each admission decision with its reason, the carry-forward
+estimates, PBO, the deflated Sharpe ratios and the selection premium; S-P's
+signal with the values that chose it; σ of each slot's daily series on D and
+the minimum detectable effects; the A0 and FILL tables on O; the detector's
+alarm rate on D, with every alarm's timestamp and channel, and, if it applies,
+the declaration that R is untestable; the fold-wise flag lists and the
+detector's 24-value hour-of-day profile fitted on D; the sha256 of the
+fitted-values file ([Blocks](#blocks)); the sha256 of every frozen weight
+file and of each frozen finalist file, every threshold and every checkpoint
+epoch; the entry point, committed before D was scored and frozen with it; the
+compute record, with the replay's measured peak memory, the worker counts,
+the device and the stores' sizes; the fits that lacked a class, with the
+side; and the sha256 of `configs/short_horizon_2025.yaml` after the frozen
+values are written into its placeholders, on a line of the form
 ``Frozen configuration sha256: `<hash>` ``. Nothing else may change. Each
 frozen value has one placeholder: weight sha256s under
 `models.weights_sha256`, checkpoint epochs under `models.checkpoint_epoch`,
-hold-first thresholds under `strategies.<X>.thresholds`; a neighbourhood
-lists its cells, their D values and the outright peak, and refers to those
-by cell without repeating them.
+hold-first thresholds under `slots.<slot>.thresholds`, the choice and its
+records under `search.result`; a neighbourhood lists its cells, their D values
+and the outright peak, and refers to those by cell without repeating them.
+**A frozen finalist file** holds a slot's configuration, weights, thresholds,
+gate levels, regime window and fitted values; a later trial on the venue
+loads exactly that set, and this study places no order.
 
 A correction found after this registration and before H is read (a bug in a
 ported feature, the label, the simulator or a reader) is made only by a
@@ -1892,6 +1930,9 @@ number, re-runs D in full before anything is frozen. After H is read, nothing
 is changed and nothing is re-run under a different rule; the ledger's
 conditions for opening F and P enforce this for the code, the configuration,
 this document, the environment, the frozen weights and the fitted values.
+After any block is read, no finalist is re-ranked, no cell re-chosen, no m
+changed, no regime window retuned and no detector refitted, and the D
+leaderboard is never re-run on held-out data.
 
 **A defect found after a read can only lower a status.** It is stated in a
 dated note, `docs/short_horizon_2025_defects.md` (under `docs/` and outside
@@ -1902,7 +1943,7 @@ affect becomes `void (defect found after the <block> read)`, which counts as
 killed for routing to F and P and enters Holm with p = 1 on later blocks.
 Holm on a block already read is recomputed from its committed results file
 with that p set to 1, and a status may only fall. Later reads still run on
-the unchanged code; their numbers for a voided hypothesis are reported as
+the unchanged code; their numbers for a voided slot are reported as
 measurements. Nothing can raise a status; a corrected run is a successor
 registration.
 
@@ -1910,7 +1951,7 @@ registration.
 H, F or P outside it — in a notebook, a script run by hand, or a second read —
 is not a result, cannot change a status, and is reported as such if it is
 reported at all. A negative verdict on H ends the regime question for that
-hypothesis: F is still read and reported, but nothing is taken to P.
+slot: F is still read and reported, but nothing is taken to P.
 
 ---
 
