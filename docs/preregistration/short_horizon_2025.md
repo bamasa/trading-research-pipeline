@@ -773,7 +773,10 @@ gives each one's time and disk.
    C's micro-selected + tensor inputs; (5) the `quiet_out` gate. The cuts, the
    new catalogue hash and the new N_max go into a dated amendment committed
    before stage 1. Nothing is cut once a 2025 file is on disk; a run slower
-   than projected only takes longer.
+   than projected only takes longer. **The walk-table parity test** of [the
+   placebo search](#the-placebo-search) runs here, on the same 2024 days,
+   before any 2025 fetch: a failure blocks stage B until it is fixed by a
+   dated amendment.
 1. **Stage 1: fetch, replay and features**, W and D, one instrument at a time
    ([fetch plan](#fetch-plan)); no H, F or P file is on disk before the
    amendment. Validate every day; exclusions per the [blocks](#blocks).
@@ -805,10 +808,14 @@ gives each one's time and disk.
    walked P&L at every 100 ms row, from the taker executor's walk (10 ms
    latency, funding included), built in memory one day at a time and never
    stored. Each cell's entries are thinned from its tape (one position at a
-   time, an event-jump loop); its trades' long and short P&L, L and S, are
-   looked up; net is read on the cell's side, and **G = net − (L + S)/2**, the
-   cell's edge with the costs and the block's drift taken out. Every cell-day
-   writes one row to the trial ledger.
+   time, an event-jump loop); its trades' long and short walked P&L,
+   `pnl_long_bp` and `pnl_short_bp`, are looked up; net is read on the cell's
+   side, and **G = net − (`pnl_long_bp` + `pnl_short_bp`)/2**, which equals
+   side × (`pnl_long_bp` − `pnl_short_bp`)/2: the cell's edge with the costs
+   taken out. Drift is not taken out (a tape with more longs than shorts keeps
+   the difference of the two shares times the drift); Null B and K-drift on
+   the held-out blocks control it. Every cell-day writes one row to the trial
+   ledger.
 7. **Stage D: the choice, admission and the placebo search**
    ([selection](#selection-on-d-admission-and-the-finalists), [the placebo
    search](#the-placebo-search)), with the refit replication.
@@ -829,8 +836,9 @@ gives each one's time and disk.
     D's last 44 days (2025-05-18 to 06-30) standing in for H, and on the three
     `ob200` reader-test days standing in for F and P. Its outputs are
     discarded and never reported; it is the reader-test days' one use besides
-    the reader test. It includes the walk-table parity test of [the placebo
-    search](#the-placebo-search).
+    the reader test. It repeats stage 0's walk-table parity test as a check; a
+    failure there is a bug under the [amendment
+    protocol](#amendment-protocol), and D is re-run in full.
 12. **The amendment**, committed before H is read, with the study's single
     entry point (`experiments/short_horizon_2025.py`), which computes every
     slot, placebo, bracket, neighbourhood cell, tier, status and regime-map
@@ -931,9 +939,9 @@ and execution path is the most informative use of five.
 
 **Purpose.** To measure how good the best configuration of each stratum looks
 when no configuration has information, under exactly D's selection. A searched
-finalist must beat the 95th percentile of the maximum over strata of that null:
-single-step max-T (Romano–Wolf), at most a 5% chance that any searched slot is
-admitted by noise. Its p-value, **p_search**, whether the search found
+finalist's p-value against the maximum over strata of that null must be at
+most 0.05: single-step max-T (Romano–Wolf), at most a 5% chance that any
+searched slot is admitted by noise. Its p-value, **p_search**, whether the search found
 anything beyond selection noise whatever the fee, is a headline result of D.
 
 **What is re-run, and what is not.** Re-run: every step that reads a test
@@ -956,23 +964,37 @@ maximum.
   The sign is shared by every configuration and instrument in that hour, so
   their dependence is kept. A flipped trade's P&L, funding included, is the
   stored walk of the opposite side.
-- **Null B: day re-pairing over every shift** s with 7 ≤ s ≤ n − 7 (137 at
-  n = 150), on the circular order of usable test days, the same s for every
-  instrument. The source day's accepted entries (time of day and side, after
-  its own guard) are executed on the target day's walk tables; an entry that
-  falls while the mapped previous position is still open is skipped and
-  counted. A parity test on the dry run checks that at s = 0 the walk-table
-  route equals the executor; if it fails, Null B falls back to the 19 shifts
-  at multiples of 7 days by a dated amendment before D is scored.
+- **Null B: day re-pairing over every shift** s with 7 ≤ s ≤ 143, on the
+  circular calendar order of D's 150 test days (n = 150, 137 shifts), shared
+  by every instrument, so that one shift pairs the same calendar days on
+  every instrument. The source day's accepted entries (time of day and side,
+  after its own guard) are executed on the target day's walk tables; an entry
+  that falls while the mapped previous position is still open is skipped and
+  counted. A pair whose source or target day is excluded for an instrument
+  contributes nothing for that instrument, and is counted. **The parity
+  test** runs at stage 0, on the 2024 days already on disk (BTCUSDT
+  2024-02-11 and 2024-03-05), before any 2025 fetch: at s = 0 the walk-table
+  route equals the executor entry by entry, and ordinary entries scored from
+  walk tables equal the executor's. A failure blocks stage B until it is fixed
+  by a dated amendment; Null B has no fallback, and the dry run repeats the
+  test as a check.
 - **The bar.** p_A = (1 + #{b : max over strata of A^b ≥ A_j}) / (1 + 999),
-  and p_B the same over the shifts. A searched slot passes (iv) when
-  **max(p_A, p_B) ≤ 0.05**: `market_making/verdicts.exceeds_placebos` applied
-  to the distribution of the maximum.
+  and p_B = (1 + #{s : max over strata of A^s ≥ A_j}) / (1 + 137). A searched
+  slot passes (iv) when **max(p_A, p_B) ≤ 0.05 / R_D**, R_D being the number
+  of complete D runs (1 unless a correction re-ran D;
+  [selection](#selection-on-d-admission-and-the-finalists)). The rule is the
+  count itself: the entry point computes the counts directly, and a unit test
+  checks the boundary at 137 shifts (at R_D = 1, at most 5 shifts at or above
+  A_j pass and 6 fail). `verdicts.exceeds_placebos`, whose interpolated
+  percentile admits more, is not used for (iv).
 - **The refit replication, mandatory, once.** Every fold's training labels are
   circularly shifted by 28 days within its training span, every boosted and
-  logistic fit is redone, and stratum C's whole selection is re-run. If its
-  A exceeds Null B's 95th percentile, stratum C's bar becomes that A. The
-  network and the bound regressor are not refitted, for cost.
+  logistic fit is redone, and stratum C's whole selection is re-run, giving
+  the refit A of stratum C's chosen cell, A_refit. It adds a condition for C\*
+  only: C\* passes (iv) when the bar above holds **and** A_C\* > A_refit,
+  strictly. It compares stratum C's A with stratum C's own refit, because only
+  stratum C is refitted; the maximum over strata already enters through p_A
+  and p_B. The network and the bound regressor are not refitted, for cost.
 - Also: a global sign flip, reported as a diagnostic only (it is an
   anti-signal when information exists).
 
@@ -1013,9 +1035,13 @@ being fixed.
   notional), beside its net at 0/0.
 - **G** (on D only): for each trade, net on its side minus the mean of the
   long and the short walked P&L over the same entry and hold; a day's value
-  is the mean over its trades. It is the edge with the costs and the block's
-  drift taken out, centred at zero under every null of [the placebo
-  search](#the-placebo-search).
+  is the mean over its trades. It is the edge with the costs taken out, and
+  it is centred at zero under Null A of [the placebo
+  search](#the-placebo-search), whose sign flips make the side independent of
+  the move. It keeps the drift times the imbalance of longs and shorts, so it
+  is not centred under Null B, which applies a source day's sides to a target
+  day's drift; drift is controlled by Null B and by K-drift on held-out
+  blocks.
 - **The daily series decides.** The mean, the day-level t, the Newey–West t,
   the median day, K1, K-days, the placebos, K-nbhd, σ_D and the minimum
   detectable effect are all computed on the slot's daily series as
@@ -1812,7 +1838,9 @@ The pull requests that follow this one add, before stage 1:
 - **the fold-wise detector flags**, the flag-causality test and the
   fold-level leakage test;
 - **the placebo search**: Null A, Null B with its walk-table route and its
-  parity test against the executor, the refit replication, carry-forward,
+  parity test against the executor (run at stage 0), the counts of admission
+  (iv) computed directly with a unit test at the 137-shift boundary, the
+  refit replication, carry-forward,
   CSCV PBO, and the deflated Sharpe ratio with N_eff;
 - **execution**: the event-time taker executor; the simulator's signal-entry
   quoter and S1 with the lean on a fixed `clip_btc`, wired to `guard_pull`
@@ -2109,8 +2137,8 @@ open, or a proposal was not taken, the choice and its reason:
   cell is scored on all 150 days, so the placebo search re-runs the whole
   search exactly, and halving would raise its null maximum.
 - **The choice ranks by net, admission reads G**: net is what a slot claims;
-  G has the costs and the drift taken out, so its null is centred whatever
-  the fee.
+  G has the costs taken out, so its Null A is centred whatever the fee; the
+  drift it keeps is controlled by Null B and K-drift.
 - **Two admission levels**, information then payoff: a signal can be
   admitted for its information and still not pay, which is when passive entry
   and the market maker matter, so they are admitted on their own payoff.

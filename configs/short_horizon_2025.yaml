@@ -232,7 +232,7 @@ search:
   instruments: [BTCUSDT, ETHUSDT, XRPUSDT]
   blocks: {sandbox: [W, each instrument's January], scored: "D's walk-forward test days, 2025-02..06 (150)", held_out: [H, F, P]}
   stages:
-    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05, one XRPUSDT day of 2024); D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days"}
+    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05, one XRPUSDT day of 2024); D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
     - {stage: 1, what: "fetch, replay and features for W and D, one instrument at a time; leakage, fold-level leakage and flag-causality tests; selection per instrument on its January"}
     - {stage: A, what: "600 walk-forward fits; predictions on the test days; candidate-row tapes per signal configuration and test day; daily IC on all decision rows"}
     - {stage: B, what: "every taker cell on every test day from walk tables; one trial-ledger row per cell-day"}
@@ -293,7 +293,7 @@ search:
   admission:
     signal:  # C* and R*; both must hold
       iii_carry_forward: "for each m in 2025-03..06, the choice re-run on the test months before m and the new cell's G scored on m's days after a 5-day embargo; mean over the four months > 0 (also computed for net: the D estimate used for power on H)"
-      iv_placebo_search: max(p_A, p_B) <= 0.05
+      iv_placebo_search: max(p_A, p_B) <= 0.05 / R_D  # search.nulls.bar; R_D the number of complete D runs
     slot:  # failing slots are "not admitted on D (<condition>)", p = 1 on every block
       S-C: [signal admitted, "i: the chosen cell's S > 0", "ii: the neighbourhood median of monthly mean net > 0 in at least 4 of the 5 test months"]
       S-R: [signal admitted, i, ii]
@@ -302,15 +302,15 @@ search:
       same_as_S25: a searched slot whose chosen cell is S25's is "same as S25", p = 1
     no_search_null_for: [S25, S-P, S-M]  # fixed, or no choice on a passive outcome
   nulls:
-    statistic: "A = median over the chosen cell's neighbourhood of each cell's day-level t of G (0 for a cell without trades); G = net - (L + S) / 2 per trade"
+    statistic: "A = median over the chosen cell's neighbourhood of each cell's day-level t of G (0 for a cell without trades); G = net - (pnl_long_bp + pnl_short_bp) / 2 per trade, which is side x (pnl_long_bp - pnl_short_bp) / 2: costs removed, drift not (controlled by null_B and K-drift); centred under null_A"
     max_over: strata
     rerun: [per-cell daily series, the 5-trade filter, neighbourhood medians, the choice in and across groups and instruments, the admission statistic]
     not_rerun: [fits, theta, checkpoints, feature selection, gate levels, guard flags]  # none reads a test day's outcome (fold-level leakage and flag-causality tests)
     null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration and instrument in the hour, flipped_trade: "the stored walk of the opposite side, funding included"}
-    null_B: {unit: day, shifts: "every s with 7 <= s <= n - 7 on the circular order of usable test days (137 at n = 150)", same_s_for_every_instrument: true, executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at s = 0 the walk-table route equals the executor, on the dry run", fallback: "19 shifts at multiples of 7 days, by a dated amendment before D is scored"}
-    p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications)"
-    bar: max(p_A, p_B) <= 0.05  # market_making/verdicts.exceeds_placebos on the distribution of the maximum
-    refit: {mandatory: true, replications: 1, what: "every fold's training labels circularly shifted by 28 days within its training span; every gbm and logistic fit redone; stratum C's selection re-run", rule: "if its A exceeds Null B's 95th percentile, C's bar becomes that A", not_refitted: [tcn, bound_ridge]}
+    null_B: {unit: day, shifts: "every s with 7 <= s <= 143 on the circular calendar order of D's 150 test days (n = 150, 137 shifts)", same_s_for_every_instrument: true, order: "calendar, shared by every instrument", excluded_day: "a pair whose source or target day is excluded for an instrument contributes nothing for that instrument; counted", executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at stage 0, on BTCUSDT 2024-02-11 and 2024-03-05, before any 2025 fetch: at s = 0 the walk-table route equals the executor entry by entry, and ordinary entries from walk tables equal the executor's; a failure blocks stage B until fixed by a dated amendment; repeated in the dry run as a check (a failure there is a bug: amendment and D re-run in full)", fallback: none}
+    p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications); 999 for null_A, 137 for null_B; the counts computed directly by the entry point"
+    bar: max(p_A, p_B) <= 0.05 / R_D  # R_D the number of complete D runs (search.d_runs); unit test at 137 shifts: at R_D 1, at most 5 shifts at or above A_j pass and 6 fail; verdicts.exceeds_placebos not used for (iv)
+    refit: {mandatory: true, replications: 1, what: "every fold's training labels circularly shifted by 28 days within its training span; every gbm and logistic fit redone; stratum C's selection re-run, giving A_refit of C's chosen cell", rule: "an added condition for C* only: (iv) holds and A_C* > A_refit, strictly; stratum C against its own refit, the only stratum refitted", not_refitted: [tcn, bound_ridge]}
     diagnostic_only: global sign flip
     S25_against: Null A and Null B applied to its fixed cell, no selection
   reported_not_gating: [N_trials, "N_eff = effective_count(N_trials, mean_pairwise_correlation(daily G panel))", deflated Sharpe ratio of daily G and net per finalist, "selection premium (median null maximum of A, and A minus it)", "PBO by CSCV per stratum (10 blocks of 15 days, 252 splits)", MDE and power at t >= 3 for the carry-forward estimate]  # every D number labelled "selected, biased upward"
@@ -343,7 +343,7 @@ d_procedure:
     fits: models.frozen
     thresholds: every (hold, trades_per_day, label_fee_bp) cell of each frozen C neighbourhood (C*'s and S25's)
     covers_every_neighbourhood: true  # K-nbhd on a held-out block runs only frozen files
-  dry_run: "the entry point end to end before the amendment, on D's last 44 days (2025-05-18..06-30) for H and the three ob200 reader-test days for F and P, with the walk-table parity test; outputs discarded, never reported"
+  dry_run: "the entry point end to end before the amendment, on D's last 44 days (2025-05-18..06-30) for H and the three ob200 reader-test days for F and P, repeating stage 0's walk-table parity test as a check (a failure is a bug under the amendment protocol, and D is re-run in full); outputs discarded, never reported"
 
 slots:
   S25:
