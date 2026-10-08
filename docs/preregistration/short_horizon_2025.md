@@ -941,6 +941,16 @@ otherwise.
 **The reference set** is every admissible split day `d` of F (at least 20
 usable days before it and at least 10 after; about 58 days), enumerated in
 full, at which the hypothesis also passes the bar on F's days before `d`.
+**The whole bar is evaluated at each `d`**, kills and Holm included, as on F−
+with F's usable days before `d` in its place: the other primaries taken to F
+are evaluated there the same way and enter Holm with p = 1 where they are
+killed, void or inconclusive under K-trades on those days, as do those not
+taken to F, and K-trades counts the trades before `d`. Nothing is re-run for
+it: every series the bar reads (the strategy's daily values and IC, its 200
+random-direction draws and other placebos, its neighbour cells, its 110 ms and
+bracket re-runs) is computed once per day over all of F in F's read session,
+the one-day shift circular within all of F as on F−, and each split day only
+slices those per-day values.
 Passing on F− selects lucky days before the true split, so the placebo splits
 go through the same selection; a comparison with unselected splits would make
 R come out supported too often. When the hypothesis does not pass on F−,
@@ -1163,6 +1173,7 @@ log in `logs/`.
 | Boosting (T1, Z, A0) | 3 holds × 5 folds + 3 frozen fits, each for T1 and Z, plus A0 | 4–10 hours |
 | Network (T2, control) | 3 holds × 5 folds + 3 frozen fits, plus the control | 8–24 hours |
 | Simulator on D (Z's 9 cells, M1, FILL on O) | about 1,600 configuration-days | 4–12 hours |
+| R's reference set, on F | about 58 split days per candidate, the bar on slices of per-day values already computed on F | minutes, inside F's read session |
 | First held-out read (H): every strategy, placebos (200 random draws each for M1 and Z through the simulator), brackets, K-latency re-runs, neighbourhoods, tiers | about 25,000 configuration-days | 1–3 days, as one read session |
 
 Every fit reads at most 4 million training rows, taken evenly in time, so a
@@ -1427,7 +1438,7 @@ value open, or a proposal was not taken, the choice and its reason:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`e8064fa3279d8e380192f87a398173e397d9cb8c52a2ba12a1dbf878daf542dd`.
+`99dd27254438402329f577a2610130f838b791cee10722d58696c3451c661cb6`.
 (Earlier versions of this file on its unmerged branch had other hashes,
 among them `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
 before the reviews and

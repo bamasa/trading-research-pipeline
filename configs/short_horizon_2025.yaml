@@ -325,7 +325,9 @@ placebos:
   stale: {used_by: [M1, Z], delay: one hold}
   all_long_all_short: {used_by: [T1, T2, M1, Z]}  # K-drift
   control_model: {used_by: [T2], reported: IC against its own label and against the realised move}
-  other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the hypothesis also passes on F's days before them, min_reference_days: 20}
+  other_break_dates: {used_by: [R], split_days: "every admissible split day of F (at least 20 usable days before, at least 10 after), enumerated", reference_set: split days at which the hypothesis also passes on F's days before them, min_reference_days: 20,
+                       evaluated_at_each_d: "the whole bar, kills and Holm included, on F's usable days before d as on F-; other primaries taken to F evaluated there the same way, p = 1 where killed, void or inconclusive under K-trades there, or not taken to F; K-trades counts trades before d",
+                       computed: "every series the bar reads computed once per day over all of F in F's read session (one-day shift circular within all of F) and sliced at each d; nothing re-run"}
 
 hypotheses:
   T1: {block: H, claim: net_bp_trade > 0, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], prediction: killed by K1}
@@ -403,6 +405,7 @@ compute:
   machine: {cores: 10, memory_gb: 32, workers: 8, replay_workers_max: 4}
   download_gb: {stage_1: 91.3, stage_2: 13.5, stage_3: 21.7, stage_4: 13.4}  # archives, from the HEAD sums
   launch: nohup caffeinate, log in logs/
+  R_reference_set: about 58 split days per candidate, slices of per-day values computed on F; minutes, inside F's read session
   record: null  # measured times and peak memory; frozen by the D amendment
 
 access:
