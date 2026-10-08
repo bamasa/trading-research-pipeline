@@ -702,8 +702,8 @@ reads book statistics in non-overlapping blocks at tick frequency. The second
 ([`validation/structural_breaks.py`](src/trading_research/validation/structural_breaks.py))
 comes from [adia-structural-break](https://github.com/bamasa/adia-structural-break),
 the author's solution to the ADIA Lab Structural Break Challenge, Real-Time
-Edition (CrunchDAO, 2026; 0.6299 TS-AUC at the close of submissions, about rank 160
-of 1,716 registered participants on the public leaderboard),
+Edition (CrunchDAO, 2026; 0.6299 TS-AUC, rank 149 of 1,730 participants on the
+public leaderboard as of 8 October 2026),
 installed as a dependency rather than copied: the return series is whitened by
 its own history — an AR(p) fit by BIC, a conditional scale and the empirical
 distribution of the innovations — and every test runs on the whitened stream,
