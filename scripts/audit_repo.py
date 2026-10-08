@@ -1,10 +1,12 @@
 """Disclosure audit for the public repository.
 
-This project was written from scratch, but it was informed by closed-source work.
-The checks below are the automated half of that boundary: they fail the build if
-anything that belongs on the private side of the line shows up in the working
-tree. They run in CI on every push, not just before the first release, because a
-leak is much cheaper to catch in review than after it is public.
+This project reuses some of the author's own research code from a closed-source
+setting, re-typed under docs/disclosure_policy.md; nothing else from that setting
+may enter. The checks below are the automated half of that boundary: they fail
+the build if anything that belongs on the private side of the line shows up in
+the working tree. They run in CI on every push, not just before the first
+release, because a leak is much cheaper to catch in review than after it is
+public.
 
 What is checked:
 

@@ -1,4 +1,4 @@
-"""Do ten levels of book beat one, and how far is a smoothed target from theirs?
+"""Do ten levels of book beat one, and how much does a smoothed target flatter a model?
 
 Two questions the Bybit archives finally make answerable.
 
@@ -7,11 +7,11 @@ the touch alone, because Binance publishes nothing else, and the standing
 explanation for a weak forecast was that the data was thin. Bybit publishes ten
 levels and more, so the explanation can be tested rather than assumed.
 
-The second is a like-for-like comparison. A closed-source model on this data
-correlates with its target at 0.80, twenty times anything here — but that target
-is smoothed, and §21 measured smoothing nearly doubling a coefficient on its
-own. Measuring against the same shape of target is the only way to know how much
-of the gap is the model and how much is the ruler.
+The second is the ruler. Order-book models are often scored against a smoothed
+target, FI-2010 style, and §21 measured smoothing nearly doubling a coefficient
+on its own. Scoring the same model against both shapes of target is the only
+way to know how much of a reported coefficient is the model and how much is the
+label.
 
     uv run python -m experiments.depth_value
 """

@@ -1276,14 +1276,26 @@ What is left to do here:
 - [ ] Capacity. A fill rate in the teens turns a strategy that took 3,297 trades
       into one that takes a few hundred, which establishes much less.
 
-## Relationship to prior closed-source work
+## Relationship to the author's earlier work
 
-The author has worked on short-horizon prediction for order-book data in a
-commercial setting. This repository shares none of that code, data,
-configuration or results. It is an independent implementation, written from
-scratch, using public and generated data only, and it deliberately diverges
-where the public version can be stricter — the purging, embargo and automated
-look-ahead checks described above are additions, not reproductions.
+In 2025 the author did short-horizon order-book research while employed at a
+trading firm. The code written for that research is the author's own, and the
+terms of that employment permit reusing it. Parts of it are being brought into
+this repository on that basis: re-typed into the pipeline's own modules rather
+than copied as files, with every notebook output stripped, and put through the
+same tests as everything else, the leakage checker included. Where the original
+code had defects, the port corrects them.
+[`docs/prior_work_parity.md`](docs/prior_work_parity.md) records each piece as
+it lands, the version it came from, and what was changed on the way.
+
+Nothing else from that work is included: none of the firm's market data, model
+weights, infrastructure, fee terms, internal paths, configuration or tuned
+values. Every result in this repository is computed on public data — Bybit and
+Binance archives, or data from the repository's own synthetic generator — and
+the results of the original research are not cited as evidence for anything.
+Where the public version can be stricter it deliberately diverges: the purging,
+embargo and automated look-ahead checks described above are additions, not
+reproductions.
 
 See [`docs/disclosure_policy.md`](docs/disclosure_policy.md).
 

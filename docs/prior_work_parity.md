@@ -1,10 +1,21 @@
-# Parity with the closed-source work
+# Parity with, and provenance from, the author's 2025 research
 
-This project was built from scratch as a public counterpart to a closed research
-codebase. No code, path, data or configuration was carried across — see
-[`disclosure_policy.md`](disclosure_policy.md) — but the *techniques* are public
-knowledge and it is worth recording which of them are present here, which are
-absent, and why.
+In 2025 the author did short-horizon order-book research while employed at a
+trading firm. The code written for that research is the author's own, and the
+terms of that employment permit reusing it. Everything in this repository that
+the provenance table below does not list was written for it without carrying
+that code across: the techniques in the first table were re-implemented from
+public knowledge.
+From the 2025 short-horizon study on, parts of the research code are re-typed
+into the pipeline under the rules of [`disclosure_policy.md`](disclosure_policy.md):
+outputs stripped, the firm's paths and tuned values removed, each piece tested
+like the rest. None of the firm's data, model weights, infrastructure, fee terms
+or configuration comes with them, and no result of the original research is
+cited as evidence.
+
+This document records which of the research's techniques are present here,
+which are absent and why, and, in the provenance table, where each re-typed
+piece came from and what was changed on the way.
 
 ## Present
 
@@ -28,27 +39,26 @@ absent, and why.
 
 ## Absent, and why
 
-**Multi-level book features.** The prior work reads ten levels per side and
-normalises each level's price and size against the touch. Everything here uses
-`bookTicker`, which publishes only the best bid and ask, because that is what
-any exchange gives away free. Level imbalance, book slope and concentration are
-defined in the feature registry's docstrings and left unimplemented rather than
-faked on data that cannot support them — a collector recording the full book
-forward in time is on the roadmap.
+**A normalised ten-level book tensor.** The 2025 research reads ten levels per
+side and normalises each level's price and size against the touch into one
+tensor. Much of this repository runs on Binance `bookTicker`, which publishes
+only the best bid and ask. Bybit's archives publish the full book, and
+`features/depth.py` computes slope, concentration, weighted imbalance and
+book-walking cost from up to ten levels; §24 of the results found they add
+nothing measurable to the touch. The per-level tensor itself is not here yet; it
+is the first piece planned for porting.
 
-This is the single largest difference, and it is a data difference rather than a
-methodological one.
-
-**Calibration-period floors for volume scaling.** The prior work computes a
+**Calibration-period floors for volume scaling.** The 2025 research computes a
 floor for each size column from the distribution of its rolling standard
 deviations over a calibration window. Here the floor is either the spread or a
 fallback measure of dispersion. The calibrated version is better and needs a
 calibration period the public archives make awkward to define; the simpler floor
-solves the failure it was written for.
+solves the failure it was written for. It is planned for porting with the
+tensor, with the calibration window fixed before any scored data is read.
 
 ## Different on purpose
 
-**Everything is tested against a leakage checker.** The prior work computes
+**Everything is tested against a leakage checker.** The 2025 code computes
 rolling statistics with prefix sums for speed; this uses pandas and is slower,
 and every feature declares a lookback that a test verifies by mutating data
 after a cutoff. The trade is deliberate: this repository exists to demonstrate
@@ -60,7 +70,24 @@ thresholds and schedules are all computed inside a training block and carried
 forward. That is stricter than a research notebook usually needs and it is the
 point of the exercise.
 
-**The result is reported rather than pursued.** The closed work aims at a model
-to deploy. This aims at whether the thing is possible at all, which is why the
-central document is a list of what did not work and the arithmetic that explains
-it.
+**The result is reported rather than pursued.** The 2025 research aimed at a
+model to deploy. This aims at whether the thing is possible at all, which is why
+the central document is a list of what did not work and the arithmetic that
+explains it.
+
+## Provenance of re-typed code
+
+Each pull request that brings in a piece of the author's 2025 research code adds
+a row here. The source is named by version only; no path, file name or tool of
+the firm appears, and no value tuned on the firm's data is carried over.
+
+| Pipeline module | Source version | What was changed |
+|---|---|---|
+| — | — | Nothing has been ported yet |
+
+Planned, each in its own pull request and under the leakage checker: the
+normalised ten-level book tensor with calibration-window floors; a taker label
+that walks the book; a TCN with a Gaussian head; the hold-first decision rule;
+an expected-value gate with tradability checks and event aggregation; a
+close-by-time exit; a side-by-side comparison of fill rules; and parity tests of
+streaming against batch features and of ONNX against the trained model.

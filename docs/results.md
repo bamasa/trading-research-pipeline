@@ -1267,18 +1267,19 @@ a model that reports its own uncertainty to become visible. Everything before it
 measured how large the predictions were; this measures whether they mean
 anything, and the answer is that they are noise with a small mean.
 
-### What a working version looks like
+### What a working version would need
 
-The construction comes from a closed-source model on the same instrument whose
-predictions correlate with its target at 0.80. That implies a prediction
-dispersion near 1.6 bp against a residual near 1.2 — a ratio of about 1.3,
-twenty times ours. At that ratio the bound clears a 1 bp cost comfortably and an
-11 bp cost not at all, which is consistent with everything in §9: the rule works
+The ratio in that table is set by the forecast, not by the rule. For a
+calibrated forecast that correlates with its target at ρ, the dispersion of the
+predictions against the residual is ρ / √(1 − ρ²): about 0.05 at ρ = 0.05, and
+1 only at ρ ≈ 0.7. Ours sits at 0.05 to 0.10. Even at a ratio of order one the
+bound clears a cost that is small against a typical move and not one that is
+large against it, which is consistent with everything in §9: the rule works
 where the arithmetic already worked, and adds nothing where it did not.
 
 So the technique is sound and it is not the missing piece. What separates a
-model that can use it from ours is not the decision rule but the forecast, and
-the gap there is a factor of twenty.
+model that can use it from ours is not the decision rule but the forecast: the
+ratio would have to rise ten- to twentyfold.
 
 ## 24. Ten levels of book, and a label that grades itself
 
@@ -1312,10 +1313,11 @@ removed the gain at the same time.
 
 ### The label that grades itself
 
-The other explanation for the twenty-fold gap with the closed-source model was
-that its target is smoothed, FI-2010 style: the mean of the next *k* mids
-against the mean of the last *k*. Measured against that label our model jumps
-from 0.042 to **0.424** — the same order as the 0.80 that started the question.
+The other standing explanation for a weak forecast was the ruler. Order-book
+models are often scored against a smoothed, FI-2010 style target: the mean of
+the next *k* mids against the mean of the last *k*. Measured against that label
+our model jumps from 0.042 to **0.424** — tenfold, from changing the label
+alone.
 
 It is not forecasting.
 
@@ -1441,9 +1443,9 @@ policy can make four samples informative.
 
 This is the last of the taker-side levers. Horizon, feature set, model class,
 target definition, exit rule, market gate, instrument, retraining frequency,
-book depth and now trade rate have each been tested and none closes a
-twenty-fold gap. What remains is on the execution side (§27), not the signal
-side.
+book depth and now trade rate have each been tested and none closes the gap
+between an edge of about 0.4 bp and a round trip of 11. What remains is on the
+execution side (§27), not the signal side.
 
 ---
 
