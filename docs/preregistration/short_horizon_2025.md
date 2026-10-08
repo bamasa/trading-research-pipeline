@@ -990,28 +990,35 @@ being fixed.
 
 - **`net_bp_trade`**: for one round trip, (exit value − entry value) over
   the entry notional, × 1e4, less fees in bp of the entry notional, plus
-  funding. **Primary for T1 and T2.** A day's value is the day's net in USDT
+  funding. **Primary for S25, S-C and S-R**, and the measure the choice on D
+  ranks by. A day's value is the day's net in USDT
   summed over its round trips, over the sum of their entry notionals, × 1e4:
   basis points of traded notional (every trade is one clip, so the weights
   differ only with the price at entry). The daily series has one value per day with at least
   one trade.
-- **`net_per_100_clip_day`**: **primary for M1.** Its daily series has one
+- **`net_per_100_clip_day`**: **primary for S-P and S-M.** Its daily series has one
   row for every usable calendar day of the block: the sum of that day's net
   in USDT × 100 / the clip's notional at each entry, and 0 for a day without
   a fill. The zero rows are written into the table given to `assess`, which
   averages only the rows it is given (`evaluation/significance.py`).
 - **`gross_bp_trade`**: `net_bp_trade` before fees and funding. **Primary for
-  Z**, with the day's value formed as for T1 (gross USDT over entry notional).
+  S25-Z**, with the day's value formed as for S25 (gross USDT over entry
+  notional), beside its net at 0/0.
+- **G** (on D only): for each trade, net on its side minus the mean of the
+  long and the short walked P&L over the same entry and hold; a day's value
+  is the mean over its trades. It is the edge with the costs and the block's
+  drift taken out, centred at zero under every null of [the placebo
+  search](#the-placebo-search).
 - **The daily series decides.** The mean, the day-level t, the Newey–West t,
   the median day, K1, K-days, the placebos, K-nbhd, σ_D and the minimum
-  detectable effect are all computed on the hypothesis's daily series as
+  detectable effect are all computed on the slot's daily series as
   defined above, never on trade rows. `assess` is given one row per day
   (`cluster="day"`, `series=None`); a series with fewer than two days is not
   given to it (`assess` raises on one cluster), fails the bar's day count and
   enters Holm with p = 1. The degrees of freedom are the number of
-  days in the series minus one, per hypothesis and per block.
+  days in the series minus one, per slot and per block.
 - **`gross_bp_turnover`**: gross over turnover (both sides' notional), × 1e4:
-  the fee break-even per side. Reported for every strategy against the base
+  the fee break-even per side. Reported for every slot against the base
   fee and the cheapest published fee for the side used.
 - **IC**: per day, the rank correlation between the signal's score
   (`p_long − p_short`, or μ) and the realised forward mid move over `h`,
@@ -1024,50 +1031,70 @@ being fixed.
   the rest (the move held after it).
 - Beside every verdict: trades a day, share of days positive, median day,
   maximum drawdown, net in USDT a day at the clip used, funding, the result
-  at every published BTCUSDT tier, the result split by side, and the counts
-  of skipped entries, `entry_late_snapshot`, `exit_late_snapshot` and
-  `flatten_beyond_visible_book`.
+  at every published tier, the result split by side, the counts of skipped
+  entries, `entry_late_snapshot`, `exit_late_snapshot` and
+  `flatten_beyond_visible_book`, and, for a slot with a regime window above 0,
+  its [regime attribution](#the-regime-break-policy-axis).
 - **Statistics**: `evaluation/significance.assess` on the daily series; the
   day level decides. Score every calendar day of the block, with no row
-  filtered or reweighted by label, outcome or model state. Beside every
+  filtered or reweighted by label, outcome or model state. The one-sided
+  day-level p-value is `market_making/verdicts.day_t(daily series).p_one_sided`
+  (Student t at days − 1, through `verdicts.t_sf`), Holm is `verdicts.holm`
+  and the placebo comparison `verdicts.exceeds_placebos`. Beside every
   verdict, the **Newey–West t** of the daily mean (Bartlett weights, lag 5
-  days), because consecutive days in one regime are not independent.
-- **Minimum detectable effect**, recorded in the amendment for each primary
-  and for Z: `(3 + 0.84) × σ_D / √n_eff`, the mean that the t ≥ 3 bar would
+  days; new code in `evaluation/significance.py`), because consecutive days in
+  one regime are not independent.
+- **Minimum detectable effect**, recorded in the amendment for each slot
+  and for S25-Z: `(3 + 0.84) × σ_D / √n_eff`, the mean that the t ≥ 3 bar would
   catch with 80% power, with `σ_D` the standard deviation of the daily series
   over D's 150 walk-forward test days at the chosen cell and `n_eff` = 44 × the
-  share of those 150 days with a trade (44 for M1, whose series has every
-  usable day). On F (F− or all of F) and on P, the "below the minimum
+  share of those 150 days with a trade (44 for S-P and S-M, whose series has
+  every usable day). For a searched slot, σ_D is also given at the
+  carry-forward estimate, with the power of the t ≥ 3 bar against it. On F (F− or all of F) and on P, the "below the minimum
   detectable effect" label uses the same formula, with σ_D and the share as
   frozen and the usable days of the series the status is assessed on in place
   of 44.
 
 ---
 
-## Status rules (family of three primaries: T1, T2, M1)
+## Status rules
 
-**The bar.** A primary passes on a block when no kill condition fires and all
+**The family** is the five finalists, **{S25, S-C, S-R, S-P, S-M}, with m = 5
+on every block**: H, F (F− or all of F), P, and each of R's split days.
+
+**The bar.** A slot passes on a block when no kill condition fires and all
 of these hold on its daily series ([Metrics](#metrics)):
 
 - its one-sided day-level p-value passes Holm's procedure at 5% with
-  **m = 3 on every block** (T1, T2, M1). A primary that is killed, void,
-  inconclusive under K-trades, not run, not taken to the block, or scored on
-  P only by its mean (R supported) enters with p = 1, so m never shrinks after a result is seen and a result on too few
-  trades never moves another primary to a laxer Holm step;
+  **m = 5**. A slot enters with p = 1 when it is killed, void or inconclusive
+  under K-trades; `not run`, `not admitted on D` or `same as S25`; not taken
+  to the block; or scored on P only by its mean (R supported). So m never
+  depends on an outcome, and a result on too few trades never moves another
+  slot to a laxer Holm step. At m = 5, Holm's first step needs t ≥ 2.42 at 43
+  degrees of freedom, 2.54 at 19 and 2.82 at 9, so the t ≥ 3 bar below binds
+  on every block, and the breadth of the search costs nothing on H;
 - the day-level t is at least 3, its degrees of freedom being the days in the
   series minus one;
 - the Newey–West t is at least 2;
 - the median day is positive;
 - the series has at least 20 days with a trade on H, and at least 10 on F
-  (or F−) and on P (M1: usable days).
+  (or F−) and on P (S-P and S-M: usable days).
+
+**No deflation on H for D's trials.** H is untouched by the search, and E
+separates selection from confirmation. The finalists, their neighbourhoods,
+θ, checkpoints, weights, the fitted-values file and the regime windows are
+frozen by sha256 before H's gate opens. D's trial count acts only on D,
+through the placebo search, the deflated Sharpe ratio and the probability of
+backtest overfitting.
 
 **Precedence**, the same on every block, so that each result has exactly one
 status:
 
 1. **void** — K-leak, K-units, K-acct or K-cap fires; counted as killed.
 2. **inconclusive (too few trades)** — K-trades: fewer than 100 trades over
-   the block (round trips for T1 and T2; entries with any fill, that is round
-   trips, for M1 and Z). Nothing below
+   the block (round trips for the taker slots; entries with any fill, that is
+   round trips, for S-P and S25-Z; the market maker's round trips back to
+   flat for S-M). Nothing below
    is evaluated.
 3. **killed** — any kill condition fires. Rejection needs no significance.
 4. **candidate** (on H) or **passes** (on F and P) — the bar is met.
@@ -1075,7 +1102,9 @@ status:
    effect" when the mean is smaller in size than the MDE (only when no kill
    fired). Never reported as a positive.
 
-A primary with no admissible cell on D is `not run`.
+**The statuses set on D**, each entering Holm with p = 1 on every block:
+`not admitted on D (<condition (i) to (iv)>)`, `not run (no admissible cell
+on D)` and `same as S25`.
 
 **F.** With `b` the first alarm of the frozen detector in F, F− is F's usable
 days before the alarm's day and F+ its usable days after it; the alarm's own
@@ -1084,9 +1113,9 @@ there is an alarm in F, F− has at least 20 usable days, R was not declared
 untestable on D, and R is not void (below). Otherwise they are computed on
 all of F, labelled "assessed on all of F", and F is not split. F+ enters only
 R. Taken to F: every
-candidate, and every hypothesis inconclusive on H at precedence step 5 (with
+candidate, and every slot inconclusive on H at precedence step 5 (with
 or without the label "below the minimum detectable effect") with a positive
-mean (for Z, both claims' means positive). **A result inconclusive under
+mean (for S25-Z, both claims' means positive). **A result inconclusive under
 K-trades (step 2) is not taken to F, whatever its sign**: its mean is not
 evaluated, so it cannot route it.
 
@@ -1103,33 +1132,33 @@ evaluated, so it cannot route it.
 | either | a kill fires | — | not read for it | **killed on F** |
 | either | passes | not supported or not tested | a kill fires | **killed on P** |
 
-"Passes" on F and P is the bar above, with m = 3. "R untestable" and "R not
-tested" are read as "not supported". For a hypothesis with R supported, P is
+"Passes" on F and P is the bar above, with m = 5. "R untestable" and "R not
+tested" are read as "not supported". For a slot with R supported, P is
 scored only as mean ≤ 0 (the break persisted) or > 0 (it did not last):
 neither K-trades nor any kill condition is applied to it on P, but the void
 conditions are (a void result on P is `void`), and a P series without a day
 with a trade has mean 0, as a neighbour cell without a trade scores 0 in
-K-nbhd, so it reads as the break persisted. A hypothesis that is `candidate`
+K-nbhd, so it reads as the break persisted. A slot that is `candidate`
 after H keeps that status whatever F and P show unless a kill fires there; the
-later reads add to it. **A hypothesis first significant on F gets no second
+later reads add to it. **A slot first significant on F gets no second
 route to candidacy**: it is "exploratory: significant on F" until P, which is
 its only confirmatory test; R is not tested for it, and the README never calls
 it a candidate.
 
-P is read once, after F's results are committed, only for hypotheses that
+P is read once, after F's results are committed, only for slots that
 passed on F. F is read once, after H's results are committed, whatever H's
-outcome: its detector alarms and every frozen strategy's numbers on F are
-reported as measurements even when nothing is taken there. **For a hypothesis
-not taken to F, F is reported as one whole block, never split at `b`.** Every
+outcome: its detector alarms and every frozen slot's and measured row's
+numbers on F are reported as measurements even when nothing is taken there.
+**For a slot not taken to F, F is reported as one whole block, never split at `b`.** Every
 comparison from H into F crosses the archive change and is labelled so.
 
 **An unreadable block** (more than a quarter of its days excluded,
-[Blocks](#blocks)) changes no status. If H is unreadable, no hypothesis is
-assessed: each is recorded as `not assessed (H unreadable)`, nothing is taken
-to F, F is still read and reported as measurements, P is not read, and H, F
-and P are spent all the same. If F is unreadable, statuses after H stand,
-marked "F unreadable", and P is not read. If P is unreadable, each hypothesis
-read on P keeps its status after F, marked "P unreadable": a candidate that
+[Blocks](#blocks), judged on the slot's instrument) changes no status. A slot
+whose instrument's H is unreadable is recorded as `not assessed (H
+unreadable)` and is not taken to F; F is still read and reported as
+measurements, and H, F and P are spent all the same. If F is unreadable for a
+slot, its status after H stands, marked "F unreadable", and P is not read for
+it. If P is unreadable, each slot read on P keeps its status after F, marked "P unreadable": a candidate that
 passed on F is **candidate, not confirmed (P unreadable)**, whatever R showed,
 and one first significant on F is **exploratory: significant on F, not
 confirmed (P unreadable)**.
@@ -1143,10 +1172,12 @@ F are computed on all of F, labelled. Found when P is read, F's statuses stand
 as committed, and P is scored with the full bar, R read as not supported.
 
 **No number at a fee tier other than the base, under a non-default fill rule
-or exit, or on F for a hypothesis not taken to F, may be described as the
-strategy working.** Such numbers are measurements.
+or exit, on F for a slot not taken to F, for a measured row, or for a
+regime-map segment, may be described as the strategy working.** Such numbers
+are measurements.
 
-**Z** is outside the family. It is tested alone at α/4 = 1.25%, one-sided,
+**S25-Z** is outside the family. It is tested alone at α/6 = 0.83%
+(α/(m + 1)), one-sided,
 at the larger of its two claims' p-values (round two's rule for a hypothesis
 with two claims), with the t, Newey–West t, median-day and day-count
 conditions holding for both claims; it follows the same precedence and table
@@ -1156,107 +1187,129 @@ possible status is **conditional on a zero-fee venue**: the
 condition (0 bp on both sides) is stated as a number, and the base-tier
 result, measured on the same trades, is reported beside it.
 
-### Common kill conditions (every primary and Z, on every block it is read on)
+### Kill conditions per slot
 
-Void conditions; the hypothesis is recorded as `void`:
+| Slot | Execution | Primary series | Kills | Reported beside |
+|---|---|---|---|---|
+| S25, S-C, S-R | taker | `net_bp_trade` | K1, K-label, K-placebo, K-drift, K-nbhd (the full ordered neighbourhood, regime window included), K-days, K-fee, K-latency | the control model's IC (S-R on the network); regime attribution |
+| S-P | signal-entry quoter | `net_per_100_clip_day` | the taker slots' list, the stale signal in K-placebo, and K-queue | the fill decomposition; regime attribution |
+| S-M | S1 with the lean | `net_per_100_clip_day` | S-P's list, and **K-dir as a kill** | the λ neighbourhood; pull against widen |
+| S25-Z | signal-entry quoter at 0/0 | `gross_bp_trade`, and net at 0/0 | K1 and K2, K-label, K-placebo with the stale signal, K-drift, K-nbhd, K-days, K-queue, K-latency; no K-fee | net at the base tier on the same trades |
+
+Void conditions; the slot is recorded as `void`:
 
 - **K-leak** — any ported feature fails the leakage checker
   (`validation/leakage.py`, data mutated after a cutoff changes a value before
-  it). Every result of the study is void.
-- **K-units** — an input to the EV gate or to a cost (a fee, the walk of the
-  book, funding) is not in basis points computed from prices (a normalised
-  column reached it). The result of every hypothesis whose gate or cost input
-  it reaches is void, M1's also when it reaches the gate of M1's signal. Z is
-  not exempt: its verdict is at 0/0, but its gross comes from the same walks
-  and its net at 0/0 from the same funding.
+  it), or the fold-level leakage test fails. Every result of the study is
+  void.
+- **K-flag-leak** — the flag-causality test fails
+  ([the regime-break policy axis](#the-regime-break-policy-axis)). Every slot
+  with a regime window above 0 is void; found before D, the fix is a dated
+  amendment, as for K-leak.
+- **K-units** — an input to the EV gate, the market gate or a cost (a fee, the
+  walk of the book, funding) is not in basis points computed from prices (a
+  normalised column reached it). The result of every slot whose gate or cost
+  input it reaches is void, S-P's and S-M's also when it reaches their
+  signal's gate. S25-Z is not exempt: its verdict is at 0/0, but its gross
+  comes from the same walks and its net at 0/0 from the same funding.
 - **K-acct** — the accounting identity (R15) fails on any day, or turnover
   does not equal the sum of fill notionals.
 - **K-cap** — |position| exceeds one clip at any event.
 
 Kill conditions:
 
-- **K1** — the mean of the hypothesis's daily series on the block is ≤ 0.
+- **K1** — the mean of the slot's daily series on the block is ≤ 0 (for
+  S25-Z, K1 on gross and K2 on net at 0/0).
 - **K-label** — the signal's IC (from the entry snapshot's mid, as defined
   under [Metrics](#metrics)) is ≤ 0 on the block (the model has no
   information about the move it trades).
 - **K-placebo** — the true mean does not exceed: the 95th percentile of the
   200 random-direction draws; the sign-flipped signal's mean; the one-day
-  shifted signal's mean; and, for M1 and Z, the stale signal's mean (below).
+  shifted signal's mean; and, for the passive slots and S25-Z, the stale
+  signal's mean (below).
 - **K-drift** — the true mean does not exceed the larger of the all-long and
-  the all-short versions' means at the same entry times (the result is the block's
-  drift, not the signal).
+  the all-short versions' means at the same entry times (the result is the
+  block's drift, not the signal).
 - **K-nbhd** — the mean of the daily series on the block, recomputed with
   each cell of the chosen cell's neighbourhood in place of the chosen cell,
-  has a median ≤ 0 over the cells. The neighbourhood is
-  `neighbourhood_scores`' block, diagonals included, every cell counted
-  whatever its trade rate on D; a neighbour cell with no trade on the block
-  scores 0. It runs only the frozen models, thresholds and checkpoints whose
-  sha256 the amendment records. For M1, the neighbourhood is that of its
-  signal's cell, each cell entered passively.
+  has a median ≤ 0 over the cells. The neighbourhood is the one of
+  [selection](#selection-on-d-admission-and-the-finalists), every cell
+  counted whatever its trade rate on D; a neighbour cell with no trade on the
+  block scores 0. **S25's** covers 24 cells: hold {20, 50, 120} s × rate {100,
+  240} × label fee {0, 5.5} × regime {none, pull 4 h}. For S-P it is its
+  signal's hold × rate × label fee (or hold × k × β), each cell entered
+  passively; for S-M, λ ∈ {0.5, 1, 2}; for S25-Z, S25's hold × rate × label
+  fee (12 cells). It runs only the frozen models, thresholds and checkpoints
+  whose sha256 the amendment records.
 - **K-days** — half or fewer of the days in the daily series are positive
-  (days with a trade for T1, T2 and Z; every usable day for M1).
-- **K-latency** (T1, T2, M1, Z) — a positive result that is ≤ 0 when every
-  order and cancel is live 110 ms after the decision instead of 10 ms (one
-  more 100 ms row). A unit test checks that every fill's snapshot is stamped
-  at or after its decision + 10 ms, and that the label's walks and the
-  executor's use the same function.
+  (days with a trade for the taker slots and S25-Z; every usable day for S-P
+  and S-M).
+- **K-latency** — a positive result that is ≤ 0 when every order and cancel is
+  live 110 ms after the decision instead of 10 ms (one more 100 ms row). A unit
+  test checks that every fill's snapshot is stamped at or after its decision
+  + 10 ms, and that the label's walks and the executor's use the same
+  function.
 - **K-fee** — the fee break-even per side (`gross_bp_turnover` for a taker
-  strategy; for M1 the maker fee at which net is zero with the taker exit at
-  the base fee) is at or below the base fee for that side. For a positive net
-  at the base tier this can only fire through an accounting fault, so it is
-  also a check; its main use is the report of how far each strategy was from
+  slot; for S-P and S-M the maker fee at which net is zero with the taker exit
+  at the base fee) is at or below the base fee for that side. For a positive
+  net at the base tier this can only fire through an accounting fault, so it
+  is also a check; its main use is the report of how far each slot was from
   paying.
-- **K-queue** (M1, Z) — a positive result that is not positive under the
-  joint pessimistic queue bracket (pessimistic cancellation attribution and
-  `all_ahead` arrival growth), or under either `none` or `all_ahead` alone.
+- **K-queue** (S-P, S-M, S25-Z) — a positive result that is not positive under
+  the joint pessimistic queue bracket (pessimistic cancellation attribution
+  and `all_ahead` arrival growth), or under either `none` or `all_ahead`
+  alone.
+- **K-dir** (S-M only) — the making part, `spread + adverse(5 s)` over the
+  passive fills, is not positive while the net is (`verdicts.k_dir`): a
+  quoter's claim is the part earned at the fill, and a positive net without it
+  is inventory carried through a move.
 
 Not kills, but they set the status:
 
-- **K-trades** — fewer than 100 trades over the block (round trips for T1
-  and T2; entries with any fill, that is round trips, for M1 and Z; not the
-  simulator's fill rows, which count partial fills and taker exits) makes the
-  result inconclusive whatever its sign; it
+- **K-trades** — fewer than 100 round trips over the block (entries with any
+  fill for the quoter, not the simulator's fill rows, which count partial
+  fills and taker exits) makes the result inconclusive whatever its sign; it
   is applied before any kill (the precedence above).
 - **K-MDE** — a result that does not pass, with no kill, and is smaller in
   size than the MDE is "inconclusive, below the minimum detectable effect".
 
-Reported, not a kill:
+Reported, not a kill: **the fill decomposition** for S-P and S25-Z,
+`spread + adverse(5 s)` over the passive fills and the rest. A directional
+signal entered passively is meant to earn the move held after the fill, so a
+non-positive part at the fill with a positive result is the mechanism under
+test, not a fault.
 
-- **The fill decomposition** (M1, Z; called K-dir in round one) —
-  `spread + adverse(5 s)` over the passive fills, and the rest. A directional
-  signal entered passively is meant to earn the move held after the fill, so
-  a non-positive part at the fill with a positive result is the mechanism
-  under test, not a fault; it is reported beside every M1 and Z verdict.
-
-Each condition is applied to every claim of a hypothesis. A condition that
-needs a positive result (K-queue, K-latency) fires only when the
-result is positive under the default rules. On F the conditions are applied
-to the series the status is assessed on (F− or all of F).
+Each condition is applied to every claim of a slot. A condition that needs a
+positive result (K-queue, K-latency, K-dir) fires only when the result is
+positive under the default rules. On F the conditions are applied to the
+series the status is assessed on (F− or all of F).
 
 ### Placebos
 
-Each is re-run through the same execution, fee and accounting as the true
-strategy, on the same block.
+Each is re-run through the same execution, fee, guard and accounting as the
+true slot, on the same block. For S-M each placebo replaces its signal tape.
 
 | Placebo | What changes | Used by | Seeds |
 |---|---|---|---|
-| sign-flipped | the signal's direction reversed at the same entry times | T1, T2, M1, Z | — |
-| random direction | the same entry times, each direction drawn at random | T1, T2, M1, Z | 200 draws, 0–199 |
-| one-day shift | the signal tape shifted by one day at the same time of day, circularly within the block | T1, T2, M1, Z | — |
-| stale | the signal delayed by one hold | M1, Z | — |
-| all-long, all-short | the same entry times, one direction (K-drift) | T1, T2, M1, Z | — |
-| control model | the network trained on the control label; its IC against its own label and against the realised move, reported beside K-label | T2 | the training seed |
-| other break dates | `b` replaced by every admissible split day of F (at least 20 usable days before it, at least 10 after), enumerated in full; the reference set keeps those at which the hypothesis also passes on the days before them | R | none; enumerated |
+| sign-flipped | the signal's direction reversed at the same entry times | every slot, S25-Z | — |
+| random direction | the same entry times, each direction drawn at random | every slot, S25-Z | 200 draws, 0–199 |
+| one-day shift | the signal tape shifted by one day at the same time of day, circularly within the block | every slot, S25-Z | — |
+| stale | the signal delayed by one hold | S-P, S-M, S25-Z | — |
+| all-long, all-short | the same entry times, one direction (K-drift) | every slot, S25-Z | — |
+| control model | the network trained on the control label; its IC against its own label and against the realised move, reported beside K-label | S-R on the network | the training seed |
+| other break dates | `b` replaced by every admissible split day of F (at least 20 usable days before it, at least 10 after), enumerated in full; the reference set keeps those at which the slot also passes on the days before them | R | none; enumerated |
 
-**Placebo positions.** Each placebo runs on the true strategy's entry
-decision times with its own one-position state. A decision time at which the
-placebo is still in a position, or has an entry resting, is skipped and
-counted; the skip counts are reported beside K-placebo and K-drift. For T1
-and T2 nothing is skipped, since a taker exit's time does not depend on the
-direction; for M1 and Z a placebo order fills at other times than the true
-one, or not at all, so it may still be busy at the next one. **The one-day
-shift** gives each usable day the signal tape of the previous usable day,
-circularly over the block's usable days, so it steps over excluded days.
+The taker slots' placebos come from the walk tables, and their K-latency from
+walk tables at 110 ms. **Placebo positions.** Each placebo runs on the true
+slot's entry decision times with its own one-position state. A decision time
+at which the placebo is still in a position, or has an entry resting, is
+skipped and counted; the skip counts are reported beside K-placebo and
+K-drift. For a taker slot nothing is skipped, since a taker exit's time does
+not depend on the direction; for the quoter a placebo order fills at other
+times than the true one, or not at all, so it may still be busy at the next
+one. **The one-day shift** gives each usable day the signal tape of the
+previous usable day, circularly over the block's usable days, so it steps
+over excluded days.
 
 ---
 
