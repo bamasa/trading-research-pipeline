@@ -1659,12 +1659,16 @@ The print downloader's 120 s timeout (`data/bybit_trades.download_day`)
 bounds each socket read, not the whole file, so a large file does not fail by
 its size; a stalled connection does, and is retried.
 
-| Stage | When | What | Book archives (GB) | Print archives (GB) |
+| Stage | When | What | Book archives (GB): BTC, ETH, XRP | Print archives (GB): BTC, ETH, XRP |
 |---|---|---|---:|---:|
-| 1 | after this registration and the code it names are merged | W and D (212 days, `ob500`), funding for W and D only, hourly bars 2024-12-01 to 2025-06-30; the three `ob200` reader-test days of 2026 | 76.0 | 15.3 |
-| 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4 | 2.1 |
-| 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8 | 5.9 |
-| 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9 | 3.5 |
+| 1 | after this registration and the code it names are merged, and after stage 0's amendment if it cuts anything | W and D (212 days, `ob500`) for each instrument, one instrument at a time; funding for W and D only; hourly bars 2024-12-01 to 2025-06-30; the three BTCUSDT `ob200` reader-test days of 2026 | 76.0, 70.2, 49.6 | 15.3, 14.1, 12.3 |
+| 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4, 12.7, 11.1 | 2.1, 3.8, 2.3 |
+| 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8, 18.5, 17.3 | 5.9, 7.4, 3.3 |
+| 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9, 9.4, 7.0 | 3.5, 3.6, 1.3 |
+
+BTCUSDT's held-out archives are always fetched, for S25. ETHUSDT's and
+XRPUSDT's for H, F and P are fetched only when a slot or a measured row is on
+that instrument, each through the ledger as BTCUSDT's are.
 
 **The ledger opens before the fetch.** `open` writes its entry first and
 commits and pushes it, and the block's fetch then runs under that access; the entry records each fetched
@@ -1674,20 +1678,34 @@ also if any hourly bar of E is.
 
 E's book, prints and funding are never fetched; its hourly bars are fetched
 with H's. At most one archive per worker is on disk at once; the largest book
-archive of W and D is 0.92 GB (the median 0.34 GB), so under 4 GB with four
-workers. Replayed at ten levels, a BTCUSDT day took about 35 MB in the 2024
-books, so W and D take about 7 GB and the whole year about 14 GB. The print
-archives come to 26.8 GB for the year, and the parquet written from them is
-budgeted at the same size.
+archive of W and D is 0.92 GB for BTCUSDT and ETHUSDT and 0.95 GB for XRPUSDT
+(BTCUSDT's median 0.34 GB), so under 4 GB with four workers. Archives pass
+through and are deleted after replay. Replayed at ten levels, a BTCUSDT day of
+2024 took 40 MB on average and 60 MB at most, an XRPUSDT day 25 MB, so W and D
+take 25–38 GB for the three instruments. Print parquet is budgeted at 0.13 to
+0.25 of its archive, 7–10 GB for W and D.
 
-**Disk.** 121 GB were free on the machine when this was registered. The
-feature store holds model inputs only, **as float32, one zstd-compressed
-parquet file per day**; labels, the gate's walk cost and every fill are
-computed from the book's float64 prices, never from the store. At about
-864,000 rows and about 100 columns a day is about 345 MB before compression,
-budgeted at 250 MB: about 53 GB for W and D, 11 GB for H and 33 GB for F and
-P. With the books, the prints and the archives in flight, keeping everything
-would need about 140 GB, so **W's and D's features are deleted after H's
+**Disk.** 121 GB were free on the machine when this was registered; with the
+10 GB margin about 111 GB are usable. Features go to **two float16 stores, one
+zstd-compressed parquet file per instrument-day**, holding model inputs only;
+labels, costs, the gate's inputs, the walk tables and every fill are computed
+from the book's float64 prices, never from a store, and the parity tests run
+at float16. The every-tenth-row store holds every instrument; the every-row
+store, which holds the network's inputs, holds one instrument at a time, and
+two every-row stores never coexist. Peak on D:
+
+| Item | GB |
+|---|---:|
+| Replayed books, 3 × 212 days at 40–60 MB | 25–38 |
+| Print parquet | 7–10 |
+| Every-tenth-row store, float16 | 8 |
+| Every-row store, one instrument | 18 |
+| Archives in flight | 3.8 |
+| Candidate tapes and the nulls' hourly sums | ≤ 10 |
+| Models and results | about 7 |
+| **Peak** | **79–95** |
+
+Walk tables are never stored. **W's and D's features are deleted after H's
 results are committed and before stage 3**; no later read uses them (F and P
 run only frozen models), and they can be rebuilt from the books. Before each
 stage, the fetch checks that free disk exceeds the stage's budget (its
@@ -1698,28 +1716,42 @@ otherwise. The amendment records the measured sizes.
 
 ## Compute budget
 
-On the machine the market-making rounds ran on (10 cores, 32 GB), with
-8 worker processes by default (a runtime argument the ledger records, not a
-hashed value; at most 4 for the book replay), each heavy run started under `nohup caffeinate` with its
-log in `logs/`.
+On the machine the market-making rounds ran on (10 cores, 32 GB, an MPS
+device). Worker counts are runtime arguments the ledger records, not hashed
+values: at most 4 for the book replay; at most 6 for the simulator, while 6 ×
+the peak resident memory of one day stays within 24 GB (2.9 GB measured on
+the busiest BTCUSDT day of 2024); 8 for everything else. Fits run one at a
+time on all cores (`models/gbm.py`, `n_jobs=-1`); network fits queue on the
+single MPS device, which is part of the environment fingerprint. Each heavy
+run starts under `nohup caffeinate` with its log in `logs/`.
 
-| Run | Size | Estimate |
+**Unit costs**, measured on this machine on synthetic arrays and 2024 days
+already on disk: a boosted fit on 1 million rows × 40 (× 100) columns 15 s
+(32 s), its prediction on a day 0.6 s; a logistic fit on 1 million × 100
+2.2 s; a network training batch 8.9 ms on MPS (557 ms on the CPU), so a full
+network fit 22–44 minutes; the event-jump entry loop 6 ms per cell-day; the
+simulator 5.6–10.3 s per BTCUSDT cell-day in one process, 0.85–2.5 s of wall
+time on 6 workers; the normaliser 49 s per day for 28 columns.
+
+| Stage | Size | Estimate |
 |---|---|---|
-| Download, stage 1 | 91.3 GB of archives (76.0 book, 15.3 print) | 0.5–2.5 hours at 10–50 MB/s, overlapping the replay |
-| Replay W and D | 212 days at 2–3 minutes of replay and up to a minute of download a day (the 2025 archives are larger than the 90 s measured on 2024's), on at most 4 workers | about 2–3.5 hours |
-| Download and replay, stages 2–4 | H 13.5 GB (44 days), F 21.7 GB (88 days), P 13.4 GB (45 days) | about 1, 2 and 1 hours |
-| Features W and D | 212 days | 2–4 hours |
-| Boosting (T1, Z, A0) | 3 holds × 5 folds + 3 frozen fits, each for T1 and Z, plus A0 | 4–10 hours |
-| Network (T2, control) | 3 holds × 5 folds + 3 frozen fits, plus the control | 8–24 hours |
-| Simulator on D (Z's 9 cells, M1, FILL on O) | about 1,600 configuration-days | 4–12 hours |
-| R's reference set, on F | about 58 split days per candidate, the bar on slices of per-day values already computed on F | minutes, inside F's read session |
-| First held-out read (H): every strategy, placebos (200 random draws each for M1 and Z through the simulator), brackets, K-latency re-runs, neighbourhoods, tiers | about 25,000 configuration-days | 1–3 days, as one read session |
+| 1: fetch, replay, features, selection | 237 GB of archives; 636 instrument-days replayed at 2–3 minutes on 4 workers; two feature stores | 10–15 hours |
+| A: fits | 600 walk-forward fits (boosted 240 × 1–2.2 minutes, logistic 240, bound regressor 60, network 60 × 22–44 minutes on MPS), predictions, candidate tapes | 30–55 hours, the network dominating |
+| B: taker scoring | 7,200 cells × 150 days = 1.08 million cell-days from walk tables | 1–2 hours on 8 workers |
+| D: the placebo search | Null A (999 draws on hourly sums), Null B (137 shifts), the refit replication, carry-forward, PBO and DSR | 7–15 hours |
+| C: simulator | at most about 7,750 cell-days (S25-Z 1,800; S-P at most 4,500; S-M 1,350; A0 and FILL 92) | 1.8–5.4 hours (19–58 hours at 9–27 s a cell-day, the bound stage 0 tests) |
+| E: freeze | frozen fits, A0 and FILL on O, σ_D and the MDEs, the dry run | 17–33 hours |
+| **D in all** | | **68–126 hours, 2.8–5.3 days**, under the 6-day ceiling |
+| H's read | the taker slots from walk tables; about 237 runs × 44 days for each simulator slot (206 placebo runs, at most 27 neighbours, 3 brackets, 1 latency); measured rows and the regime map | at most about 31,300 cell-days, 7–22 hours, one read session of at most 1.5 days |
+| F's read | every frozen slot once as a measurement; each slot taken to F with its full kills about twice its H cost (88 days) | under a day, plus about 2 × H per slot taken |
+| P's read | each slot read on P | about 1 × H per slot read |
+| R's reference set, on F | about 58 split days per candidate, slices of per-day values computed on F | minutes, inside F's read session |
 
 Every fit reads at most 4 million training rows, taken evenly in time, so a
-fit's cost does not grow with D. The network's windows are built per batch,
-never materialised for a fit or a day. The amendment records the measured times and
-the largest worker's peak memory; a run that is slower than estimated takes
-longer, and nothing registered is dropped to save time.
+fit's cost does not grow with D. The amendment records the measured times and
+the largest worker's peak memory; a run slower than projected takes longer,
+and nothing registered is dropped to save time once a 2025 file is on disk
+(the reduction order acts only at stage 0).
 
 ---
 
