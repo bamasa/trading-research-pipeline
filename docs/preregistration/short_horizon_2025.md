@@ -2060,51 +2060,105 @@ revision was checked once more for consistency; a last review read it for
 consistency, for decisions left until after a read, and against the code it
 names. Every
 blocking and should-fix point was taken in, and the notes where they
-pointed to a gap. Where the reviews proposed different fixes, a fix left a
-value open, or a proposal was not taken, the choice and its reason:
+pointed to a gap. It was then recast, still before any data was read, from
+a test of hand-picked hypotheses into a registered search, from three
+designs (one built for rigour, one for feasibility, one for presentation)
+judged against each other; the design built for rigour is the base. Where
+the reviews or the designs proposed different things, a fix left a value
+open, or a proposal was not taken, the choice and its reason:
 
-- **Holm's m is 3 on every block**, not the number taken to F or P: the
+**The recast into a search.**
+
+- **No configuration is culled on a test day's outcome**, rather than
+  successive halving of families or fits: every fit is made and every taker
+  cell is scored on all 150 days, so the placebo search re-runs the whole
+  search exactly, and halving would raise its null maximum.
+- **The choice ranks by net, admission reads G**: net is what a slot claims;
+  G has the costs and the drift taken out, so its null is centred whatever
+  the fee.
+- **Two admission levels**, information then payoff: a signal can be
+  admitted for its information and still not pay, which is when passive entry
+  and the market maker matter, so they are admitted on their own payoff.
+- **S-P and S-M always run, on S25's signal when nothing is admitted**, rather
+  than only inheriting an admitted signal: otherwise they would usually never
+  run. They choose nothing on a passive outcome, so they need no search null.
+- **The market maker is one S1 slot with the lean**, at round one's frozen
+  values, rather than a searched family of quoters: both rounds of 2024
+  killed pure quoting.
+- **k = m = 5**, one slot per stratum and execution path plus S25: at m = 5
+  the t ≥ 3 bar binds on every block, so the breadth of the search costs
+  nothing on H; a seventh slot would let Holm decide on short F and P series.
+- **S25-Z at α/6**: the earlier α/(m + 1) rule carried to m = 5.
+- **S25 is one fixed point**, rather than named points chosen on D: a point
+  chosen on D is a region, so T1 and T2 survive as leaderboard regions with
+  no slot.
+- **The regime policy is a searched axis with pull only for the taker and
+  passive entry**, the pairs `VALID_PAIRS` allows; a new meaning of "widen"
+  (a stricter entry) was rejected, and a synthetic null showed no saving from
+  it either way. **The hour profiles are fitted fold by fold on D**, because
+  one profile fitted on all of D would leak later months into earlier folds'
+  guards. **BTC's flags guard every instrument**, as a market-wide break.
+- **Three instruments, a market gate, a 120 s hold and 25 trades a day** were
+  added to the rigour design's grid; a second boosted hyperparameter set, a
+  4 × 4 grid of k and β, take-profit, stop and cooldown exits, and the
+  network on the tensor alone were not, each for cost without a prior reason.
+- **A hard budget fixed before any fetch**: the catalogue hash, a 6-day
+  ceiling and a reduction order, applied only at stage 0, so that nothing is
+  cut once a 2025 file is on disk.
+- **Two float16 feature stores**, rather than one float32 store: three
+  instruments do not fit the disk at float32, and costs, labels and fills
+  come from float64 book prices, never from a store.
+- **The regime map is a measurement**, every segment shown and none selected,
+  rather than a status: it is the way to show a period in which a taker or a
+  maker paid without choosing that period after seeing it.
+- **No earlier figure enters the expected outcome or the edge ladder**; the
+  prior rests on this repository's own results and the fee arithmetic.
+
+**Earlier choices, kept.**
+
+- **Holm's m is fixed on every block**, not the number taken to F or P: the
   stricter of the two proposals, and fixed before any read.
 - **A missing hour carries its close with a zero return**, rather than being
   dropped: one row per hour keeps the windows in hours and the hour-of-day
   profile aligned, and the move over the gap enters the next return either way.
 - **R is tested for every candidate on H, with a reference set of split days
-  at which the hypothesis also passes**: testing on H's candidacy removes the
+  at which the slot also passes**: testing on H's candidacy removes the
   gate on F−, and the conditioned reference set removes the selection that
   "confirmed until the break" still makes. The split days are enumerated
   (about 58), so the floor is 20 qualifying days, not 50 of 200 draws.
 - **A result first significant on F is "exploratory" and P is its only
   confirmatory test**, rather than α being split between H and F: H stays the
   only gate to candidacy.
-- **Z is tested alone at α/4**, not as a fourth member of the family, so that
-  a secondary cannot change the primaries' bar.
+- **S25-Z is tested alone**, not as a member of the family, so that a
+  claim conditional on a zero-fee venue cannot change the finalists' bar.
 - **The passive entry is kept at its first price**, not re-pegged: no
   re-peg cadence is left to choose, and the order keeps its queue place.
-- **The clip is fixed at 0.010 BTC** (`clip_btc`), rather than K-cap being
-  measured against the clip in force at entry: it gives K-cap one
-  meaning.
+- **The clip is fixed** (`clip_btc`; 0.010 BTC, or the same notional at W's
+  prices on the other instruments), rather than K-cap being measured against
+  the clip in force at entry: it gives K-cap one meaning.
 - **Three reader-test days in January 2026**, not one: more cadence and gap
   data for the `ob200` replay, all outside every block.
 - **H's and F's first days start cold**, rather than carrying rolling state
   across E or across the archive change: no E day is read, and no `ob500`
   state is carried into `ob200` data.
-- **K-latency also applies to Z**, which shares M1's execution path.
+- **K-latency applies to every slot and to S25-Z**, the passive paths
+  included.
 - **K-trades is applied before the kills**: a result on fewer than 100 trades
   is inconclusive whatever its sign, so a handful of losing trades neither
-  kills nor passes a hypothesis.
+  kills nor passes a slot.
 - **The mean channel is read from `odds_mean`**, the column `detect_breaks`
   writes; its internal name is `sr_mean`.
-- **T2 trades one full clip, and Kelly sizing is dropped** (feasibility
-  review). `FractionalKelly.scale(edge, volatility)` returns fraction × edge /
+- **The EV gate trades one full clip, and Kelly sizing is dropped**
+  (feasibility review). `FractionalKelly.scale(edge, volatility)` returns fraction × edge /
   volatility², clipped to [0, 2]. At its default fraction of 0.25, with μ and
   σ in bp, a gated trade with μ = 15 and σ = 10 gets 0.0375 of a clip, below
-  the 0.001 BTC lot, so T2 would be inconclusive by construction; in decimal
-  units the same trade gets 375, clipped to the cap, so every trade would be one clip and Kelly would do
-  nothing. A scaling between the two would be a value set without a basis.
-  Without it, T2's trade count
-  is its gate's, and K-trades counts round trips as for T1.
-- **Feature selection ranks by correlation with the forward move at
-  `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
+  the 0.001 BTC lot, so the slot would be inconclusive by construction; in
+  decimal units the same trade gets 375, clipped to the cap, so every trade
+  would be one clip and Kelly would do nothing. A scaling between the two
+  would be a value set without a basis. Without it, stratum R's trade count is
+  its gate's, and K-trades counts round trips as for stratum C.
+- **Feature selection, per instrument, ranks by correlation with the
+  forward move at `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
   walked-book label at 0 bp as `y`. The feasibility review proposed the label
   at 5.5 bp; the 0 bp label, fixed after the multiplicity review, is kept.
   Under this ranking the label only marks which rows are usable, and it
@@ -2114,10 +2168,15 @@ value open, or a proposal was not taken, the choice and its reason:
   smoothing at k = 20 rows (one constant for the three holds, rather than k
   equal to the horizon in rows); the 5-trade filter, which limits only the
   chosen cell while every neighbour counts; `not run` with p = 1 for a
-  strategy with no admissible cell; and `max_sequence_gaps` as the 95th
+  slot with no admissible cell; and `max_sequence_gaps` as the 95th
   percentile of D's per-day gap counts (rather than the smallest value that
-  keeps 90% of D's days). Added: M1 uses whichever of T1 and T2 has a chosen
-  cell when only one has.
+  keeps 90% of D's days).
+- **The values the code to come needed are fixed here**, each as a value or a
+  rule that reads only W, January or a fold's training rows: the Gaussian
+  head's variance-prior weight and clamp, the tensor's σ window and spread
+  floor, the winsorising quantiles and window, the network's early stopping
+  on the inner validation's rank IC, and how `N` is derived from lookbacks
+  declared in rows. Left open, each would be an uncounted axis.
 - **The minimum detectable effect on F and P** uses the frozen σ_D and share
   with that series' usable days, rather than H's 44, so that the label on a
   later block describes the days it has. Its formula on H was already
@@ -2125,10 +2184,9 @@ value open, or a proposal was not taken, the choice and its reason:
 - **At most 4 replay workers**, rather than a replay that writes rows into
   preallocated arrays (feasibility review): the replay stays the code that
   wrote the 2024 books, and the cost is a few hours of wall time.
-- **A float32 per-day feature store**, rather than features computed afresh
-  on each run: every walk-forward fold and every cell reads the same D days
-  again, and the store's 250 MB a day fits the disk once W's and D's features
-  are deleted after H's results; float64 would not fit.
+- **A per-day feature store**, rather than features computed afresh on each
+  run: every walk-forward fold and every cell reads the same D days again
+  (float16 since the recast, above).
 - **The fill ratio counts orders with any fill**, rather than filled volume
   over posted volume: it is the repository's existing `fill_rate`. A partial fill
   counts as filled, which makes FILL's prediction for the queue rule harder to
@@ -2139,12 +2197,13 @@ value open, or a proposal was not taken, the choice and its reason:
   exclusions that D has not been looked at for. The off-grid check moves to
   the simulator's day loader, where the code has it, and `flatten_stale`
   joins the exclusions as R16 has it.
-- **K-dir is reported, not a kill, for M1 and Z** (multiplicity review,
-  notes). In round one it guarded a market maker whose result should be
-  earned at the fill; a directional signal entered passively is meant to earn
-  the move after it, so the kill would remove the mechanism under test. It
-  could only cause false negatives; the false-positive routes stay guarded by
-  K-placebo (with the stale signal), K-drift, K-queue and K-latency.
+- **K-dir is a kill for S-M only, and reported for S-P and S25-Z**
+  (multiplicity review, notes). It guards a market maker, whose claim is the
+  part earned at the fill, as in round one; a directional signal entered
+  passively is meant to earn the move after it, so the kill would remove the
+  mechanism under test. For S-P and S25-Z it could only cause false
+  negatives; the false-positive routes stay guarded by K-placebo (with the
+  stale signal), K-drift, K-queue and K-latency.
 - **The detector's alarm rate on D stays in-sample, and is reported as
   optimistic** (peeking and multiplicity reviews, notes), rather than
   measured with a profile fitted elsewhere: the leniency can only end R early
@@ -2159,22 +2218,22 @@ value open, or a proposal was not taken, the choice and its reason:
   and the snapshot walked is never older than the order. Reading it as "the
   next snapshot comes more than 1 s late" would make a trade depend on the
   feed after the decision, at the feed gaps where a skip would select most.
-- **P is read for every hypothesis that passed on F**, without the earlier
+- **P is read for every slot that passed on F**, without the earlier
   "at least 20 usable days" condition: counted in calendar days it always
-  held, and counted in days with a trade it left a hypothesis that passed on
+  held, and counted in days with a trade it left a slot that passed on
   F with 10 to 19 such days without a status; the bar on F already asks for
   10.
-- **A primary inconclusive under K-trades enters Holm with p = 1**: its
+- **A slot inconclusive under K-trades enters Holm with p = 1**: its
   p-value is not evaluated, and a small one would otherwise move another
-  primary to a laxer step.
+  slot to a laxer step.
 - **With R supported, an empty P series has mean 0**, as a neighbour cell
   without a trade scores 0 in K-nbhd: a strategy that does not trade after
   the break has not paid after it.
 - **A result inconclusive under K-trades is not taken to F** (consistency
   review, which left the reading open): its mean is not evaluated at
-  precedence step 2, so its sign cannot route it. Taking it would give T2,
-  predicted to end there, a route to "confirmed on P, first significant on F"
-  through a sign the precedence does not read; F still reports its numbers
+  precedence step 2, so its sign cannot route it. Taking it would give a
+  slot with too few trades a route to "confirmed on P, first significant on
+  F" through a sign the precedence does not read; F still reports its numbers
   as measurements.
 - **Both terminal fetch rules, not one** (review of decisions left until
   after a read, which offered either): the identical-hash rule ends a corrupt
