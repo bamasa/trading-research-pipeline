@@ -1043,6 +1043,7 @@ Documented in [`docs/`](docs/) as it lands:
 | `disclosure_policy.md` | What is public here and why, and what is not |
 | `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
 | [`preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md) | The second market-making round, on eight wide-spread instruments, registered before any of their data is fetched |
+| [`preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md) | The author's 2025 short-horizon recipes, re-run on Bybit's public BTCUSDT archives, registered before any 2025 data is fetched; predicted negative at published fees |
 
 ---
 
@@ -1229,6 +1230,28 @@ any block.
       rebate ([results](docs/preregistration/market_making_round2.md#results-of-the-first-held-out-read-read-once-4-october-2026))
 - [ ] Capacity: what a quoter could trade before its own size moves the book it
       is quoting into, which the simulator does not model
+
+**The 2025 short-horizon study, registered before any of its data is read.**
+The author's 2025 order-book research (a boosted classifier with a hold-first
+rule, a Gaussian-head network with an expected-value gate, a close-by-time
+exit) was never measured at real fees, on an audited fill rule, or on a
+window it did not choose. It is re-run here on Bybit's public BTCUSDT
+archives. The blocks, the hypotheses (T1, T2 and M1 at the base fee; Z, the
+gross edge at a zero-fee venue, as a conditional secondary; R, the autumn
+break, only for a survivor), their kill conditions and placebos, and the
+expected outcome are in
+[`docs/preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md),
+with [`configs/short_horizon_2025.yaml`](configs/short_horizon_2025.yaml). The
+prediction is negative: the original's own summary implies about 0.36 bp of
+turnover, against a cheapest published Bybit taker fee of 1.5 bp.
+
+- [x] Pre-registration, with an archive check that moved the held-out block's
+      end to 2025-08-20, where Bybit's book archive changes from 500 to 200
+      levels
+- [ ] The ported pieces: ten-level tensor, walked-book label, Gaussian head,
+      EV gate, fill-rule comparison, streaming parity, and the study's ledger
+- [ ] Development period and the amendment that freezes it
+- [ ] The held-out read, then the boundary block and the break
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
 
