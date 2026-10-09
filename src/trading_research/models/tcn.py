@@ -287,9 +287,10 @@ def _windowise(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build ``(n, features, window)`` sequences ending at each row.
 
-    Built as a strided view rather than by copying: a 500k-row, 40-feature,
-    64-step dataset is 5 GB copied and nothing as a view. The copy happens per
-    batch instead, where it is small.
+    The strided view is copied into one contiguous array, so a 500k-row,
+    40-feature, 64-step dataset takes 5 GB here. That is acceptable for the
+    classifier's fits; :mod:`trading_research.models.windows` gathers windows
+    per batch instead, for fits at every 100 ms row.
 
     Each window *ends* at its row, so the sequence for row *t* covers
     *t-window+1 … t* and never reaches past *t*.
