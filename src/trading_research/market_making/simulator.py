@@ -99,6 +99,7 @@ from trading_research.market_making.orders import (
     REJECTED,
     Order,
     OrderState,
+    OwnOrder,
 )
 from trading_research.market_making.queue import (
     CROSSED,
@@ -353,10 +354,12 @@ class _Day:
         self.clip_over_touch_n = 0
         #: When the position last left zero (-1 before the first fill).
         self.opened_ns = -1
-        #: A quoter may define ``observe(orders_out, opened_ns)``: it is told,
-        #: before each decision, how many of its orders are not done (a cancel
-        #: in flight included) and when the current position was opened.
-        self.observe: Callable[[int, int], None] | None = getattr(quoter, "observe", None)
+        #: A quoter may define ``observe(own_orders, opened_ns)``: it is told,
+        #: before each decision, which of its orders are not done (a cancel in
+        #: flight included) and when the current position was opened.
+        self.observe: Callable[[tuple[OwnOrder, ...], int], None] | None = getattr(
+            quoter, "observe", None
+        )
 
         stop = self.start + _time_ns(config.stop_quoting_at)
         flatten = self.start + _time_ns(config.flatten_at)
@@ -573,7 +576,12 @@ class _Day:
             signals,
         )
         if self.observe is not None:
-            self.observe(len(self.open[1]) + len(self.open[-1]), self.opened_ns)
+            own = tuple(
+                OwnOrder(o.side, o.price, o.remaining, o.cancel_ns is not None)
+                for side in (1, -1)
+                for o in self.open[side]
+            )
+            self.observe(own, self.opened_ns)
         wanted = self.quoter.quotes(view, self.account.position)
         self.counters.add("decisions")
         bid, ask = wanted.bid, wanted.ask

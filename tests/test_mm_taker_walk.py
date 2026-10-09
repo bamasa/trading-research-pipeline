@@ -10,6 +10,7 @@ import pytest
 from trading_research.backtest import walk
 from trading_research.backtest.taker import TakerBook
 from trading_research.market_making import simulator
+from trading_research.market_making.orders import OwnOrder
 from trading_research.market_making.quoters import NO_QUOTE, MarketView, Quote, Quotes, TouchQuoter
 from trading_research.market_making.simulator import SimConfig, simulate_day
 from trading_research.market_making.synthetic import hand_built_market, random_market
@@ -84,8 +85,8 @@ class BuyThenCross:
     uses_future: bool = False
     seen: list[tuple[int, int, int]] = field(default_factory=list)
 
-    def observe(self, orders_out: int, opened_ns: int) -> None:
-        self.seen.append((orders_out, opened_ns, 0))
+    def observe(self, own: tuple[OwnOrder, ...], opened_ns: int) -> None:
+        self.seen.append((len(own), opened_ns, 0))
 
     def quotes(self, view: MarketView, position: float) -> Quotes:
         orders_out, opened, _ = self.seen[-1]
