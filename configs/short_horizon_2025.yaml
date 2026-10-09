@@ -148,7 +148,7 @@ common:
     cancel_latency_ms: 10
     feed_latency_ms: 0
     soft_limit_clips: 1
-    max_sequence_gaps: data.max_sequence_gaps (the frozen value for the instrument)  # SimConfig's default of 0 not used
+    max_sequence_gaps: data.max_sequence_gaps (the frozen value)  # SimConfig's default of 0 not used
     warmup_s: 60
     stop_quoting_at: "23:58"
     flatten_at: "23:59"
@@ -208,7 +208,7 @@ features:
   lookbacks: "declared in seconds on row stamps, except the network's 64-row window and the control label's 20-row smoothing; N = the longest lookback in seconds, rounded up to whole minutes; on a cold-start day a row is also unscored until the row-declared windows have their rows since midnight"
   selection: {code: features/selection.py, runs: once, window: 2025-01-01..2025-01-31, rows: every tenth row (at most 2.68 million), target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}, name: micro-selected}
   stores: {dtype: float16, every_tenth_row: the inputs the fits train on, every_row: "the network's inputs, kept through D and never rebuilt", format: one zstd parquet per day, parity_tests_at: float16, raw_size_columns: "order-flow imbalance (ofi_1, ofi_20), depth and print-volume sums divided by the median touch size on W (fitted-values file) before the cast", finiteness_test: "on W, every stored column finite after the float16 cast; a column that fails is stored at float32 on every block, recorded in the amendment"}  # labels, costs, gate inputs, walk tables and fills from the book's float64 prices
-  selected: null  # {instrument: [features]}; frozen by the D amendment
+  selected: null  # [features], the micro-selected list; frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
   fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, S1's sigma_ref, the raw-size scale, any other fitted constant), in one file; used on every block, never refitted at a read
   fitted_values_sha256: null  # the sha256 of that file; checked by the H, F and P gates beside the weights; frozen by the D amendment
@@ -460,8 +460,7 @@ statuses:
   first_significant_on_F: "exploratory: significant on F until P; P is its only confirmatory test; R not tested; never called a candidate"
   R_untestable_or_not_tested_reads_as: not supported
   unreadable:
-    judged_on: the slot's instrument
-    H: "the slot recorded as not assessed (H unreadable) and not taken to F; F read and reported as measurements; H, F and P spent"
+    H: "every slot recorded as not assessed (H unreadable) and none taken to F; F read and reported as measurements; H, F and P spent"
     F: the slot's status after H stands, marked F unreadable; P not read for it
     P: "statuses after F stand, marked P unreadable: a candidate that passed on F is candidate, not confirmed (P unreadable), whatever R showed; one first significant on F is exploratory: significant on F, not confirmed (P unreadable)"
   R_void: "a later detector run does not reproduce an earlier run's alarms (D's as the amendment records them, each block's as its results file does); R read as not supported; found at H's read, F assessed on all of F, labelled; found at F's read, b does not split F (all of F, labelled); found at P's read, F's statuses stand and P is scored with the full bar"
@@ -561,7 +560,8 @@ measurements:
 
 detector:
   input: hourly log returns of detector_bars, divided by D's root mean square at the same UTC hour
-  guards: every instrument (BTC's flags, a market-wide break)
+  roles: ["locates the 2025 break b, the first alarm in F, that R tests (hypotheses.R)", "its alarms drive the regime-policy axis, the guard after each alarm (search.regime_source)", "its alarms cut the regime map (measurements.regime_map)"]
+  guards: the BTCUSDT strategies (Binance BTCUSDT hourly flags)
   profile_inside_search: "fold-wise: for test month m, fitted on the hours from 2024-12-01 to the last hour before m (search.regime_source.flags_on_D)"
   profile_on_H_F_P_and_dry_run: fitted on all of D (hour_profile)
   stream: one continuous stream from 2024-12-01, E's hourly bars included (fetched and read when H opens)
@@ -598,7 +598,7 @@ fetch:
     free_gb_at_registration: 121
     usable_gb: 111  # 121 free less the 10 GB margin
     feature_stores: features.stores
-    peak_gb_D: {replayed_books: [25, 38], print_parquet: [7, 10], every_tenth_row_store: 8, every_row_store_one_instrument: 18, archives_in_flight: 3.8, candidate_tapes_and_hourly_sums_max: 10, models_and_results: 7, peak: [79, 95]}
+    peak_gb_D: {replayed_books: [8, 13], print_parquet: [2, 4], every_tenth_row_store: 3, every_row_store: 18, archives_in_flight: 3.7, candidate_tapes_and_hourly_sums_max: 4, models_and_results: 7, peak: [46, 53]}  # 212 days at 40-60 MB replayed; prints at 0.13-0.25 of 15.3 GB; the every-row store kept through D, never rebuilt
     walk_tables_stored: false
     check_before_each_stage: free disk exceeds the stage's budget (archives in flight, books, prints, features) by 10 GB, or the stage refuses
     delete_W_and_D_features: after H's results are committed, before stage 3
@@ -606,26 +606,26 @@ fetch:
   ledger_records: sha256 and UTC download time of every fetched file
   open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block; for H also any hourly bar of E
   stages:
-    - {stage: 1, when: "after this registration and its code are merged, and after stage 0's amendment if it cuts anything", what: [W and D for each instrument, one at a time, funding for W and D only, hourly bars 2024-12-01..2025-06-30, BTCUSDT ob200 reader-test days 2026-01-05..07], archives_gb: {BTCUSDT: {book: 76.0, prints: 15.3}, ETHUSDT: {book: 70.2, prints: 14.1}, XRPUSDT: {book: 49.6, prints: 12.3}}}
-    - {stage: 2, when: inside H's opened access after the amendment is committed, what: [H, H's funding, E's and H's hourly bars from daily archives], archives_gb: {BTCUSDT: {book: 11.4, prints: 2.1}, ETHUSDT: {book: 12.7, prints: 3.8}, XRPUSDT: {book: 11.1, prints: 2.3}}}
-    - {stage: 3, when: inside F's opened access after H's results are committed, what: [F, F's funding, F's hourly bars from daily archives], archives_gb: {BTCUSDT: {book: 15.8, prints: 5.9}, ETHUSDT: {book: 18.5, prints: 7.4}, XRPUSDT: {book: 17.3, prints: 3.3}}}
-    - {stage: 4, when: inside P's opened access after F's results are committed and only if the condition holds, what: [P, P's funding, P's hourly bars from daily archives], archives_gb: {BTCUSDT: {book: 9.9, prints: 3.5}, ETHUSDT: {book: 9.4, prints: 3.6}, XRPUSDT: {book: 7.0, prints: 1.3}}}
-  held_out_instruments: BTCUSDT always (S25); ETHUSDT and XRPUSDT only when a slot or a measured row is on them, each through the ledger
-  largest_W_D_book_archive_gb: {BTCUSDT: 0.92, ETHUSDT: 0.92, XRPUSDT: 0.95}
+    - {stage: 1, when: "after this registration and its code are merged, and after stage 0's amendment if it cuts anything", what: [W and D, funding for W and D only, hourly bars 2024-12-01..2025-06-30, ob200 reader-test days 2026-01-05..07], archives_gb: {book: 76.0, prints: 15.3}}  # book includes the reader-test days' 0.6 GB
+    - {stage: 2, when: inside H's opened access after the amendment is committed, what: [H, H's funding, E's and H's hourly bars from daily archives], archives_gb: {book: 11.4, prints: 2.1}}
+    - {stage: 3, when: inside F's opened access after H's results are committed, what: [F, F's funding, F's hourly bars from daily archives], archives_gb: {book: 15.8, prints: 5.9}}
+    - {stage: 4, when: inside P's opened access after F's results are committed and only if the condition holds, what: [P, P's funding, P's hourly bars from daily archives], archives_gb: {book: 9.9, prints: 3.5}}
+  held_out_archives: H and F always (S25, and F is always read), P only if the condition holds; each through the ledger
+  largest_W_D_book_archive_gb: 0.92  # median 0.34
   E_book_prints_funding_fetched: false
 
 compute:
   machine: {cores: 10, memory_gb: 32, device: mps, workers: "runtime arguments, recorded in the ledger; outputs identical at 1 and N workers (tested); a resumption may use fewer", replay_workers_max: 4, simulator_workers_max: "6, while 6 x the peak RSS of one day stays within 24 GB", other_workers: 8, fits: one at a time on all cores; network fits queue on the MPS device}
   unit_costs: {gbm_fit_1M_x_40_s: 15, gbm_fit_1M_x_100_s: 32, gbm_predict_day_s: 0.6, logistic_fit_1M_x_100_s: 2.2, tcn_batch_ms: {mps: 8.9, cpu: 557}, tcn_fit_min: [22, 44], entry_loop_ms_per_cell_day: 6, simulator_s_per_cell_day: {one_process: [5.6, 10.3], wall_on_6_workers: [0.85, 2.5]}, normaliser_s_per_day_28_columns: 49}  # measured on this machine, synthetic arrays and 2024 days on disk
-  download_gb: {stage_1: 237.5, stage_2_BTCUSDT: 13.5, stage_3_BTCUSDT: 21.7, stage_4_BTCUSDT: 13.4, stage_2_ETHUSDT: 16.5, stage_2_XRPUSDT: 13.4}  # archives, from the HEAD sums
-  hours_by_stage: {"1": [10, 15], A: [30, 55], B: [1, 2], D_choice_null_A_pbo_dsr: [7, 15], D_null_B: "at most about 247 CPU-hours at 6 ms per cell-day and shift, about 31 h on 8 workers; less if vectorised, measured at stage 0", D_refit: "about 10-20 h: 240 gbm fits 4-9 h, 240 logistic fits, every-row store rebuilt and every test-day row re-predicted per instrument, C re-scored; timed at stage 0", C: [1.8, 5.4], C_at_9_to_27_s: [19, 58], E: [17, 33], D_total: [100, 160], A_also: "network inference on every row of the test days and inner-validation scoring at every epoch, timed at stage 0", D_total_above_ceiling_at_top: true}  # stage 0's projection decides the cuts
+  download_gb: {stage_1: 91.3, stage_2: 13.5, stage_3: 21.7, stage_4: 13.4, all_stages: 139.9, without_P: 126.5}  # archives, from the HEAD sums
+  hours_by_stage: {"1": [4, 6], A: [10, 18], B: "under 1", D_choice_null_A_pbo_dsr: [2, 5], D_null_B: "at most about 82 CPU-hours at 6 ms per cell-day and shift (about 49 million re-pairings), about 10 h on 8 workers; less if vectorised, measured at stage 0", D_refit: "about 3-7 h: 80 gbm fits 1.3-2.9 h, 80 logistic fits, every test-day row re-predicted from the every-row store, C re-scored; timed at stage 0", C: [1.8, 5.4], C_at_9_to_27_s: [19, 58], E: [17, 33], D_total: [48, 85], D_total_with_C_at_9_to_27_s: [65, 138], A_also: "network inference on every row of the test days and inner-validation scoring at every epoch, timed at stage 0", D_total_above_ceiling_at_top: false}  # stage 0's projection decides the cuts
   held_out_reads: {H: "at most about 31,300 cell-days, 7-22 h, one read session of at most 1.5 days", F: "under a day for the measurements, plus about 2 x H per slot taken", P: about 1 x H per slot read}
   launch: nohup caffeinate, log in logs/
   R_reference_set: about 58 split days per candidate, slices of per-day values computed on F; minutes, inside F's read session
   record: null  # measured times and peak memory; frozen by the D amendment
 
 access:
-  development: [W and D book, prints and funding for the three instruments, hourly bars up to 2025-06-30, the ob200 reader-test days]
+  development: [W and D book, prints and funding, hourly bars up to 2025-06-30, the ob200 reader-test days]
   development_refuses: every 2025 day after 2025-06-30 in every plane, including data/bars/BTCUSDT/klines-1d
   ledger: experiments/results/short_horizon_2025_ledger.json
   ledger_guards: [E hourly bars, H, F, P]
@@ -643,13 +643,13 @@ access:
   after_any_read: no finalist re-ranked, no cell re-chosen, no m changed, no regime window retuned, no detector refitted; the D leaderboard never re-run on held-out data
   second_read: raises unless forced; stamped second read; cannot change a status
   earlier_accesses_used: false  # neither round one's nor round two's; pipeline/execution's market-maker path (round one's access_for) not used
-  spent_blocks: "H, F and P are spent for every configuration of this catalogue on the three instruments; a successor, a corrected re-run included, uses blocks after 2025-12-31 and never the reader-test days"
+  spent_blocks: "H, F and P are spent for every configuration of this catalogue; a successor, a corrected re-run included, uses blocks after 2025-12-31 and never the reader-test days"
 
 amendment:
   planned: 1
   before: the read of H
   stage_0: a dated amendment of its own before stage 1 if the projection cuts anything, with the new catalogue sha256, N_max, the configuration's new null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut; the code-freeze note follows it before stage 1
-  records: ["per instrument: excluded days, max_sequence_gaps by its rule, tick and lot, clip, selected features", N, reader-test days' message counts intervals and gaps, "the trial ledger's sha256 and row count, N_trials, N_eff, R_D and the hand-run log", chosen cells with neighbourhoods S and peaks, "every replication of the placebo search: A per stratum under Null A, Null B and the refit, seeds, shifts, quantiles, p-values", "admission decisions with reasons, carry-forward estimates, PBO, DSR, selection premium", S-P's signal, sigma_D and MDEs per slot, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the fold-wise flag lists, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every frozen finalist file's sha256, every threshold, every checkpoint epoch, "the entry point, committed before the stage 1 fetch", "the compute record, with peak memory, worker counts, the device and the stores' sizes", fits that lacked a class with the side, the frozen YAML sha256]
+  records: ["excluded days, max_sequence_gaps by its rule, tick and lot, selected features", N, reader-test days' message counts intervals and gaps, "the trial ledger's sha256 and row count, N_trials, N_eff, R_D and the hand-run log", chosen cells with neighbourhoods S and peaks, "every replication of the placebo search: A per stratum under Null A, Null B and the refit, seeds, shifts, quantiles, p-values", "admission decisions with reasons, carry-forward estimates, PBO, DSR, selection premium", S-P's signal, sigma_D and MDEs per slot, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the fold-wise flag lists, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every frozen finalist file's sha256, every threshold, every checkpoint epoch, "the entry point, committed before the stage 1 fetch", "the compute record, with peak memory, worker counts, the device and the stores' sizes", fits that lacked a class with the side, the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment
 
@@ -661,7 +661,7 @@ artefacts:
   frozen_finalist_files_sha256: null  # {slot: sha256}; checked by the H, F and P gates; frozen by the D amendment
   figures: [the placebo search with p_search, "the finalists on H, then F and P", the S25 page with the edge ladder, the regime map per execution path, the break-detector view 2024-12-01..2025-12-31 when P is opened (else to 2025-11-16), the fill-rule comparison]  # README, both themes through <picture>
   headline_sentences:  # bracketed parts filled by the entry point, never edited
-    search_on_D: "Searched [N] configurations ([axes]) on 150 development days across [instruments]; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)."
+    search_on_D: "Searched [N] configurations ([axes]) on 150 development days of BTCUSDT; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)."
     payoff_on_D: "[No configuration paid the 5.5 bp taker fee on development data / S-[x] was admitted on development data, selected]."
     slot_on_block: "[slot] on [block]: [status]; first kill [K-x] at [value] against [reference]."
     S25: "S25's gross edge was [x] bp of turnover against the 5.5 bp taker fee; break-even [y] bp per side; on H before 2025-08-01: [status]."
