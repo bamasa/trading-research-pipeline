@@ -21,7 +21,9 @@ from trading_research.market_making.quoters import (
 from trading_research.market_making.signal_entry import SignalEntryQuoter
 from trading_research.market_making.simulator import simulate_day
 from trading_research.market_making.synthetic import hand_built_market, random_market
+from trading_research.pipeline import regime
 from trading_research.pipeline.market_making import SignalLean, make_quoter, signal_tapes
+from trading_research.pipeline.regime import RegimePolicy
 from trading_research.pipeline.short_horizon_execution import (
     CLIP_BTC,
     LEANS,
@@ -94,7 +96,7 @@ def test_sigma_ref_is_the_median_volatility_the_rows_read() -> None:
 
 def test_the_lean_plan_wires_s1_the_lean_and_both_guards() -> None:
     config = study_config(0)
-    pulled = lean_plan(config, 3.0, lean=2.0, hold_s=50.0, regime_policy="guard_pull", window_h=4)
+    pulled = lean_plan(config, 3.0, lean=2.0, hold_s=50.0, policy=RegimePolicy.parse("pull_4h"))
     assert pulled.guard_window_min == 240.0
     quoter = make_quoter(pulled)
     assert isinstance(quoter, RegimeGuard) and quoter.action == "pull"
@@ -102,15 +104,18 @@ def test_the_lean_plan_wires_s1_the_lean_and_both_guards() -> None:
     lean = quoter.base
     assert isinstance(lean, SignalLean) and (lean.lam, lean.window_s) == (2.0, 50.0)
     assert lean.base == SkewQuoter(2.0, 0.5, 4.0, 3.0, 2.0)
-    widened = lean_plan(
-        config, 3.0, lean=1.0, hold_s=20.0, regime_policy="guard_widen", window_h=24
-    )
+    widened = lean_plan(config, 3.0, lean=1.0, hold_s=20.0, policy=RegimePolicy.parse("widen_24h"))
     assert make_quoter(widened).action == "widen"
     assert make_quoter(widened).window_min == 1440.0
     plain = lean_plan(config, 3.0, lean=1.0, hold_s=20.0)
     assert isinstance(make_quoter(plain), SignalLean)
+    unguarded = regime.maker_plan(widened, RegimePolicy())
+    assert unguarded.regime_policy == "none" and isinstance(make_quoter(unguarded), SignalLean)
+    assert regime.maker_plan(plain, RegimePolicy.parse("pull_4h")) == lean_plan(
+        config, 3.0, lean=1.0, hold_s=20.0, policy=RegimePolicy.parse("pull_4h")
+    )
     with pytest.raises(ValueError, match="window"):
-        lean_plan(config, 3.0, lean=1.0, hold_s=20.0, regime_policy="guard_pull")
+        RegimePolicy("pull", 0)
     with pytest.raises(ValueError, match="clip_btc"):
         lean_plan(config.with_(clip_btc=None, clip_notional=100.0), 3.0, lean=1.0, hold_s=20.0)
 
@@ -139,10 +144,11 @@ def test_s_m_pulls_its_quotes_inside_the_guard_window_and_keeps_the_hard_limit()
     tapes = flag_tape(np.array([flag_ns, flag_ns]))
     stamps = events.book_ts[::50]
     tapes.update(signal_tapes(stamps, np.where(np.arange(len(stamps)) % 2 == 0, 3.0, -3.0)))
-    for policy in ("guard_pull", "guard_widen"):
-        plan = lean_plan(
-            config, sigma, lean=1.0, hold_s=5.0, regime_policy=policy, window_h=window_s / 3600
-        )
+    for action in ("pull", "widen"):
+        policy = "guard_pull" if action == "pull" else "guard_widen"
+        guard = RegimePolicy(action, window_s / 3600)  # a 15 s window on a minute of books
+        plan = lean_plan(config, sigma, lean=1.0, hold_s=5.0, policy=guard)
+        assert plan.regime_policy == policy
         result = simulate_day(events, make_quoter(plan), config, tapes)
         decided = result.orders["decided_ns"].to_numpy()
         inside = (decided > flag_ns) & (decided <= flag_ns + window_s * 1e9)
@@ -159,7 +165,10 @@ def test_signal_entry_cells_and_flag_tapes() -> None:
     cell = signal_entry_cell("S-P", study_config(0), hold_s=50.0, cancel_on_flag=True)
     first, second = cell.make_quoter(), cell.make_quoter()
     assert isinstance(first, SignalEntryQuoter) and first is not second
-    assert (first.hold_s, first.cancel_on_flag, first.passive_exit) == (50.0, True, False)
+    assert (first.hold_s, first.passive_exit) == (50.0, False)
+    assert cell.config.cancel_entries_on_flag
+    plain = signal_entry_cell("S-P", study_config(0), hold_s=50.0)
+    assert not plain.config.cancel_entries_on_flag
     assert pickle.loads(pickle.dumps(cell.make_quoter))().hold_s == 50.0
     tape = flag_tape(np.array([3_000_000_000, 1_000_000_000, 3_000_000_000]))["flag_s"]
     assert tape.ts.tolist() == [1_000_000_000, 3_000_000_000]

@@ -20,6 +20,10 @@ record can be set beside another archive's.
 
 The clip is fixed per instrument (:data:`CLIP`) and must sit on the venue's lot
 grid (:class:`StudyInstrument`).
+
+Every reader here takes a :class:`~trading_research.data.study_access.StudyAccess`
+and asks it before any file of the day is opened; without one it reads under the
+development access, which refuses every 2025 day after 2025-06-30 in every plane.
 """
 
 from __future__ import annotations
@@ -30,10 +34,15 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+from trading_research.data import study_access as sa
+
+if TYPE_CHECKING:
+    from trading_research.market_making.events import DayEvents
 
 #: Base-currency size of one trade, per instrument.
 CLIP: dict[str, float] = {"BTCUSDT": 0.010}
@@ -175,14 +184,17 @@ def load_book_day(
     max_sequence_gaps: int | None,
     spec_tick: float | None = None,
     depth: int = 10,
+    access: sa.StudyAccess | None = None,
 ) -> BookDay:
     """Read one replayed book day and apply the exclusion rules.
 
     ``max_sequence_gaps`` is None only while it is being computed, on the
     development block itself; the gap count is then recorded but excludes
     nothing. ``spec_tick`` is the venue's tick; a day whose own tick differs
-    from it, or is not a multiple of it, gets a note and is kept.
+    from it, or is not a multiple of it, gets a note and is kept. ``access``
+    must permit the day's book (the development access when None).
     """
+    sa.resolve(access).require(symbol, [day], sa.BOOK, what="load")
     from trading_research.data.study_fetch import book_path
     from trading_research.data.validate import Severity, validate_book
 
@@ -221,3 +233,93 @@ def block_unreadable(excluded_days: int, block_days: int) -> bool:
     if block_days <= 0:
         raise ValueError("a block has at least one day")
     return excluded_days * 4 > block_days
+
+
+# ---------------------------------------------------------------------------
+# The other planes, each read only inside the access
+# ---------------------------------------------------------------------------
+
+
+def load_prints_day(
+    symbol: str, day: date, root: Path | str, *, access: sa.StudyAccess | None = None
+) -> pd.DataFrame:
+    """One day of prints with aggressor side, if ``access`` permits it."""
+    from trading_research.data import bybit_trades
+
+    sa.resolve(access).require(symbol, [day], sa.PRINTS, what="load")
+    return bybit_trades.load_day(symbol, day, root)
+
+
+def load_funding_day(
+    symbol: str, day: date, root: Path | str, *, access: sa.StudyAccess | None = None
+) -> pd.DataFrame:
+    """One day of funding settlements, if ``access`` permits it."""
+    from trading_research.data import bybit_funding
+
+    sa.resolve(access).require(symbol, [day], sa.FUNDING, what="load")
+    return bybit_funding.load_day(symbol, day, root)
+
+
+def bars_path(symbol: str, day: date, root: Path | str, interval: str = "1h") -> Path:
+    """Where one day of Binance futures bars lives (``data/binance.py``'s layout)."""
+    return Path(root) / symbol / f"klines-{interval}" / f"{day.isoformat()}.parquet"
+
+
+def load_bars(
+    symbol: str,
+    days: Sequence[date],
+    root: Path | str,
+    *,
+    interval: str = "1h",
+    access: sa.StudyAccess | None = None,
+) -> pd.DataFrame:
+    """Binance futures bars for ``days``, one daily file each, in time order.
+
+    Refused unless ``access`` permits every day's bars, and refused while a
+    cached monthly archive of the interval runs past the last day of the
+    highest opened block. A day without a file raises ``FileNotFoundError``:
+    the fetch log says why it is missing.
+    """
+    permitted = sa.resolve(access)
+    permitted.require(symbol, days, sa.BARS, what="load")
+    permitted.refuse_monthly_bars(symbol, root, interval)
+    frames = []
+    for day in sorted(set(days)):
+        path = bars_path(symbol, day, root, interval)
+        if not path.exists():
+            raise FileNotFoundError(f"no {interval} bars of {symbol} on {day} under {root}")
+        frames.append(pd.read_parquet(path))
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def load_events_day(
+    symbol: str,
+    day: date,
+    *,
+    book_roots: Sequence[Path],
+    trades_root: Path,
+    funding_root: Path | None,
+    depth: int = 10,
+    access: sa.StudyAccess | None = None,
+) -> DayEvents:
+    """The simulator's merged day (:func:`~trading_research.market_making.events.load_day`),
+    if ``access`` permits the day's book, prints and, when read, its funding.
+
+    The passive strategies call the simulator directly on days loaded here.
+    """
+    from trading_research.market_making.events import load_day
+
+    permitted = sa.resolve(access)
+    planes = (sa.BOOK, sa.PRINTS) + ((sa.FUNDING,) if funding_root is not None else ())
+    for plane in planes:
+        permitted.require(symbol, [day], plane, what="load")
+    return load_day(
+        symbol,
+        day,
+        book_roots=book_roots,
+        trades_root=trades_root,
+        funding_root=funding_root,
+        depth=depth,
+    )

@@ -7,9 +7,12 @@ signal (S-M). The taker slots use :mod:`trading_research.backtest.taker`.
 
 **S-M** is round one's S1 at its frozen values (:data:`S1_FROZEN`) with the
 signal lean of :class:`~trading_research.pipeline.market_making.SignalLean`, a
-fixed clip, a soft limit of one clip, and the regime guard
-(``guard_pull``, or ``guard_widen`` as a measurement) with a window of
-60 x the regime window in hours (:func:`lean_plan`). Its ``sigma_ref`` is the
+fixed clip, a soft limit of one clip, and the regime guard (``pull``, or
+``widen`` as a measurement) at a window of 60 x the regime window in hours
+(:func:`lean_plan`). The guard is set by
+:func:`trading_research.pipeline.regime.maker_plan` alone, from the same
+:class:`~trading_research.pipeline.regime.RegimePolicy` the search's regime
+axis uses, so the market maker's guard has one path. Its ``sigma_ref`` is the
 median of the simulator's own ``vol_bp_1m`` over the warm-up block's rows
 (:func:`sigma_ref_from_days`), fitted once and written to the fitted-values
 file.
@@ -35,12 +38,13 @@ from trading_research.market_making.signal_entry import SignalEntryQuoter
 from trading_research.market_making.signals import SignalTape
 from trading_research.market_making.simulator import Cell, SimConfig, vol_at_rows
 from trading_research.pipeline.market_making import MakerPlan
+from trading_research.pipeline.regime import REGIME_WINDOWS_H, RegimePolicy, maker_plan
 
 #: S1's frozen values from round one (``configs/mm_prereg.yaml``).
 S1_FROZEN: dict[str, float] = {"skew_bp": 2.0, "k": 0.5, "min_edge_bp": 4.0}
 #: S-M's lean neighbourhood (the cell is 1) and the regime windows, hours.
 LEANS: tuple[float, ...] = (0.5, 1.0, 2.0)
-GUARD_WINDOWS_H: tuple[int, ...] = (4, 24, 120)
+GUARD_WINDOWS_H: tuple[int, ...] = REGIME_WINDOWS_H
 CLIP_BTC = 0.010
 
 
@@ -89,24 +93,24 @@ def lean_plan(
     *,
     lean: float,
     hold_s: float,
-    regime_policy: str = "none",
-    window_h: float = 0.0,
+    policy: RegimePolicy | None = None,
 ) -> MakerPlan:
-    """S-M: S1 at its frozen values leaning on the signal, with the regime guard."""
+    """S-M: S1 at its frozen values leaning on the signal, guarded under ``policy``.
+
+    ``policy`` is ``none`` (the default), ``pull_<w>h`` or ``widen_<w>h``;
+    :func:`~trading_research.pipeline.regime.maker_plan` sets the guard.
+    """
     if config.clip_btc is None:
         raise ValueError("S-M runs on a fixed clip_btc")
-    if regime_policy != "none" and not window_h > 0:
-        raise ValueError("a regime guard needs a window")
-    return MakerPlan(
+    base = MakerPlan(
         "S1",
         config,
         dict(S1_FROZEN),
         sigma_ref=float(sigma_ref),
-        regime_policy=regime_policy,
-        guard_window_min=60.0 * window_h if regime_policy != "none" else 15.0,
         lean=float(lean),
         lean_window_s=float(hold_s),
     )
+    return maker_plan(base, policy or RegimePolicy())
 
 
 def signal_entry_cell(
@@ -117,11 +121,15 @@ def signal_entry_cell(
     passive_exit: bool = False,
     cancel_on_flag: bool = False,
 ) -> Cell:
-    """A simulator cell for the signal-entry quoter (a fresh quoter each day)."""
-    make = partial(
-        SignalEntryQuoter, hold_s, passive_exit=passive_exit, cancel_on_flag=cancel_on_flag
-    )
-    return Cell(label, make, config)
+    """A simulator cell for the signal-entry quoter (a fresh quoter each day).
+
+    ``cancel_on_flag`` (a slot with a regime window above 0) makes the simulator
+    cancel a resting entry at the first event after each flag of the cell's
+    ``flag_s`` tape (:func:`flag_tape`); the decisions themselves are guarded
+    upstream (:func:`trading_research.pipeline.regime.guard_decisions`).
+    """
+    make = partial(SignalEntryQuoter, hold_s, passive_exit=passive_exit)
+    return Cell(label, make, config.with_(cancel_entries_on_flag=cancel_on_flag))
 
 
 def flag_tape(alarm_ns: np.ndarray) -> dict[str, SignalTape]:

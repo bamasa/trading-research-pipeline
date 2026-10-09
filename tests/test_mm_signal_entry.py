@@ -155,10 +155,12 @@ def test_a_regime_flag_cancels_a_resting_entry_at_the_first_event_after_it() -> 
     tapes[FLAG_SIGNAL] = SignalTape(
         FLAG_SIGNAL, np.array([round(flag_s * 1e9)]), np.array([flag_s])
     )
-    guarded = SignalEntryQuoter(1.5, cancel_on_flag=True)
-    result = simulate_day(market, guarded, CONFIG, tapes)
+    guarded = SignalEntryQuoter(1.5)
+    config = CONFIG.with_(cancel_entries_on_flag=True)
+    result = simulate_day(market, guarded, config, tapes)
     assert result.orders["cancel_ns"].iloc[0] - market.day_start_ns == 410 * MS
-    assert guarded.counts["entries_pulled_by_flag"] == 1
+    assert result.counters["entries_cancelled_by_flag"] == 1
+    assert guarded.counts["entries_unfilled"] == 1 and len(result.orders) == 1
     unguarded = simulate_day(market, SignalEntryQuoter(1.5), CONFIG, tapes)
     assert unguarded.orders["cancel_ns"].iloc[0] - market.day_start_ns == 1_610 * MS
 

@@ -119,7 +119,7 @@ def policies_for(
     mode: ExecutionMode | str, windows: Sequence[int] = REGIME_WINDOWS_H
 ) -> list[RegimePolicy]:
     """Every policy ``mode`` can carry at ``windows``, ``none`` first."""
-    name = ExecutionMode(mode).value
+    name = ExecutionMode(mode).family
     out = [RegimePolicy()]
     for action in ("pull", "widen"):
         if (name, ACTIONS[action]) in VALID_PAIRS:
