@@ -8,7 +8,7 @@ agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span (W from 2024-12-01 to P to 2025-12-31), to bound the data and the compute |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span, from W's first day, 2024-12-01, to P's last, 2025-12-31, to bound the data and the compute |
 | **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy and holding horizons: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the status rules, the fetch plan, the compute budget and the amendment protocol |
 | **The break detector** | One frozen detector on hourly BTCUSDT returns ([The break detector](#the-break-detector)) has three roles: it **locates the 2025 break** `b`, the first alarm in F, that [R](#r-the-break-conditional) tests; its alarms **drive the [regime-policy axis](#the-regime-break-policy-axis)**, the guard after each alarm that the search chooses over; and its alarms **cut the [regime map](#the-regime-map)**. Its settings are fixed now; inside the search on D its hour profile is fitted fold by fold, so that the guard is causal; it is never refitted after a read |
 | **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
@@ -1911,8 +1911,7 @@ The pull requests that follow this one add, before stage 1:
   streaming-versus-batch parity tests; the depth and flow builders wrapped as
   registered features with declared lookbacks, and prints aligned backward
   ([Labels, features and models](#labels-features-and-models));
-- **the per-instrument loader and clip**; the `ob200` archive name in
-  `data/bybit.py`, proven on a synthetic fixture before stage 1, and on the
+- **the `ob200` archive name** in `data/bybit.py`, proven on a synthetic fixture before stage 1, and on the
   three reader-test days, against D's frozen `max_sequence_gaps`, before H is
   opened ([Data](#data)); and the daily-only fetch of hourly bars in
   `data/binance.py`;
@@ -1947,8 +1946,9 @@ The pull requests that follow this one add, before stage 1:
 - **this study's loader and ledger**, on the pattern of
   `market_making/round2.py`, with block constants of its own (round one's
   `block_of` is not used): the YAML validated against this registration,
-  placeholders hashed as in the earlier rounds, and an access that permits
-  days per block, plane and instrument. The entry point,
+  placeholders hashed as in the earlier rounds, the instrument's tick and lot
+  steps from the venue's specification, and an access that permits days per
+  block and plane. The entry point,
   `experiments/short_horizon_2025.py`, is committed with all study code
   before the stage 1 fetch (the code-freeze note of
   [selection](#selection-on-d-admission-and-the-finalists)) and frozen with
@@ -1957,8 +1957,8 @@ The pull requests that follow this one add, before stage 1:
 
 ### Access
 
-**The development access** permits W and D (book, prints, funding) for the
-three instruments, the hourly bars up to 2025-06-30 and the reader-test days.
+**The development access** permits W and D (book, prints, funding), the
+hourly bars up to 2025-06-30 and the reader-test days.
 It refuses every 2025 day after 2025-06-30 in every plane, including the daily
 bars already on disk (`data/bars/BTCUSDT/klines-1d`); a read of those after
 that date falls under the ledger rule below.
@@ -2025,8 +2025,8 @@ E's bars, H, F and P.
   access is returned; a second read raises unless forced, and everything it
   produces is stamped `second read` and cannot change a status.
 
-**H, F and P are spent** for every configuration of this catalogue on the
-three instruments. A successor
+**H, F and P are spent** for every configuration of this catalogue. A
+successor
 registration, a corrected re-run after a bug included, uses blocks after
 2025-12-31 and never the reader-test days.
 
@@ -2045,8 +2045,8 @@ own, committed before stage 1 with the new catalogue hash, N_max, the
 configuration's new null-placeholder sha256 and S25's and S25-Z's
 neighbourhoods as cut; the code-freeze note follows it, also before stage 1. After the
 development runs, and before H is read, one dated amendment is appended and
-committed: per instrument, the days excluded and the sequence-gap threshold
-(by its formula), the tick and lot steps, the clip and the selected features;
+committed: the days excluded and the sequence-gap threshold (by its
+formula), the tick and lot steps and the selected features;
 the longest feature lookback `N`; the reader-test days' message counts,
 intervals and gaps; the trial ledger's sha256 and row count, N_trials, N_eff,
 R_D and the hand-run log; for each stratum the chosen cell with its neighbourhood, its S and the
@@ -2157,7 +2157,7 @@ point and never edited.
 
 | Outcome | Sentence |
 |---|---|
-| Search on D | "Searched [N] configurations ([axes]) on 150 development days across [instruments]; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)." |
+| Search on D | "Searched [N] configurations ([axes]) on 150 development days of BTCUSDT; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)." |
 | Payoff on D | "[No configuration paid the 5.5 bp taker fee on development data / S-[x] was admitted on development data, selected]." |
 | Each slot on H, F, P | "[slot] on [block]: [status]; first kill [K-x] at [value] against [reference]." |
 | S25 | "S25's gross edge was [x] bp of turnover against the 5.5 bp taker fee; break-even [y] bp per side; on H before 2025-08-01: [status]." |
@@ -2198,9 +2198,9 @@ and is the cluster.
 - **Queue dynamics inside 100 ms.** The book is a 100 ms photograph; queue
   position is a rule, bracketed, and K-queue requires a verdict to survive the
   pessimistic side of the bracket, not the truth.
-- **Anything about capacity.** The clip is 0.01 BTC, or the same notional on
-  the other instruments, and own impact is not modelled.
-- **Anything beyond three instruments, one venue and one year.**
+- **Anything about capacity.** The clip is 0.01 BTC, and own impact is not
+  modelled.
+- **Anything beyond one instrument, one venue and one year.**
 - **A strategy outside the catalogue.** The catalogue is finite and fixed in
   advance; what it does not contain is not looked for.
 - **A passive-only edge without direction information.** The passive-entry and
@@ -2215,8 +2215,6 @@ and is the cluster.
 - **A null calibrated by refitting every model.** The refit replication of the
   placebo search covers the gradient-boosted and logistic models only; the
   network and the bound regressor rest on the fold-level leakage test.
-- **A market-wide break measured per instrument.** BTC's hourly flags guard
-  every instrument.
 - **What a regime-map segment means.** Segments between alarms are
   descriptive; none is a status.
 - **Why a strategy stopped.** R tests a causal stopping policy on a detector
@@ -2277,16 +2275,21 @@ open, or a proposal was not taken, the choice and its reason:
   (a stricter entry) was rejected, and a synthetic null showed no saving from
   it either way. **The hour profiles are fitted fold by fold on D**, because
   one profile fitted on all of D would leak later months into earlier folds'
-  guards. **BTC's flags guard every instrument**, as a market-wide break.
-- **Three instruments, a market gate, a 120 s hold and 25 trades a day** were
+  guards.
+- **BTCUSDT only**, rather than an instrument axis: the author chose one
+  instrument to bound the data and the compute (about 140 GB through the
+  network, a disk peak of 46–53 GB and about 2.0–3.6 days for D), over the
+  whole registered span from W to P; the break detector already reads
+  BTCUSDT, so its flags and the trades are on one instrument.
+- **A market gate, a 120 s hold and 25 trades a day** were
   added to the rigour design's grid; a second boosted hyperparameter set, a
   4 × 4 grid of k and β, take-profit, stop and cooldown exits, and the
   network on the tensor alone were not, each for cost without a prior reason.
 - **A hard budget fixed before any fetch**: the catalogue hash, a 6-day
   ceiling and a reduction order, applied only at stage 0, so that nothing is
   cut once a 2025 file is on disk.
-- **Two float16 feature stores**, rather than one float32 store: three
-  instruments do not fit the disk at float32, and costs, labels and fills
+- **Two float16 feature stores**, rather than one float32 store: half the
+  disk and half the bytes read on every fold, and costs, labels and fills
   come from float64 book prices, never from a store.
 - **The regime map is a measurement**, every segment shown and none selected,
   rather than a status: it is the way to show a period in which a taker or a
@@ -2335,8 +2338,8 @@ Every blocking and minor point was taken in; where a point offered two fixes:
   claim conditional on a zero-fee venue cannot change the finalists' bar.
 - **The passive entry is kept at its first price**, not re-pegged: no
   re-peg cadence is left to choose, and the order keeps its queue place.
-- **The clip is fixed** (`clip_btc`; 0.010 BTC, or the same notional at W's
-  prices on the other instruments), rather than K-cap being measured against
+- **The clip is fixed** (`clip_btc`, 0.010 BTC), rather than K-cap being
+  measured against
   the clip in force at entry: it gives K-cap one meaning.
 - **Three reader-test days in January 2026**, not one: more cadence and gap
   data for the `ob200` replay, all outside every block.
@@ -2359,8 +2362,7 @@ Every blocking and minor point was taken in; where a point offered two fixes:
   would be one clip and Kelly would do nothing. A scaling between the two
   would be a value set without a basis. Without it, stratum R's trade count is
   its gate's, and K-trades counts round trips as for stratum C.
-- **Feature selection, per instrument, ranks by correlation with the
-  forward move at `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
+- **Feature selection ranks by correlation with the forward move at `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
   walked-book label at 0 bp as `y`. The feasibility review proposed the label
   at 5.5 bp; the 0 bp label, fixed after the multiplicity review, is kept.
   Under this ranking the label only marks which rows are usable, and it
