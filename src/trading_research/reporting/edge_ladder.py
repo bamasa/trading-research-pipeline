@@ -8,8 +8,9 @@
 5. S25-Z's net at 0/0, with FILL's fill ratios beside it.
 
 The ladder is filled as the blocks are read: a step whose block has not been
-read yet is written with no value and the note "not read yet", never left
-out, so the table has the same rows at every stage. Values are in bp of
+read yet is written with no value and the note "not read yet", and a step
+whose block was read without giving it a number (no trade) with the note "no
+value"; neither is left out, so the table has the same rows at every stage. Values are in bp of
 traded notional (the slot's ``net_bp_trade`` or ``gross_bp_trade``), the
 break-even in bp per side, and the fill ratios as shares of posted orders.
 """
@@ -46,11 +47,16 @@ CHANGED: dict[int, str] = {
 BP = "bp of traded notional"
 INFORMATION_SET = "inside S25's information set"
 NOT_READ = "not read yet"
+#: A step whose block was read but that has no number (no trade, or not recorded).
+NOT_RECORDED = "no value"
 _RULE_NAMES = {"touch": "on touch", "trade_through": "trade-through", "queue": "queue"}
 
 
 def _value(value: float | None) -> tuple[float, str]:
-    return (float("nan"), NOT_READ) if value is None else (float(value), "")
+    if value is None:
+        return float("nan"), NOT_READ
+    number = float(value)
+    return number, "" if np.isfinite(number) else NOT_RECORDED
 
 
 def _row(

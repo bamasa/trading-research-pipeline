@@ -94,6 +94,10 @@ def test_the_comparison_orders_the_rules_as_their_biases_say() -> None:
     assert ratio["touch"] >= ratio["queue"] >= ratio["trade_through"]
     assert (summary["days"] == 3).all()
     assert summary.loc["touch", "bias"] == "optimistic bound"
+    days_table = comparison.days[~comparison.days["excluded"].astype(bool)]
+    filled = days_table.groupby("rule")["notional_filled"].sum()
+    assert np.allclose(summary["notional_filled"], filled.reindex(summary.index))
+    assert ((summary["notional_filled"] > 0) == (summary["volume_filled"] > 0)).all()
     paths = comparison.markouts.groupby("rule")["path"].apply(set).to_dict()
     assert paths == {
         "touch": {"touch"},

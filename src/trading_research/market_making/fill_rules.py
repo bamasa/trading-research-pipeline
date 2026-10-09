@@ -22,8 +22,8 @@ the question asks: what the same strategy would have been credited with.
 Reported per rule, over the days not excluded from verdicts: the **fill ratio**
 (the share of posted orders with any fill, the convention of ``fill_rate`` in
 :mod:`trading_research.backtest.maker`), filled volume over posted volume,
-gross and net, and volume-weighted markouts by fill path at each of the
-configuration's horizons.
+gross and net with the filled notional they are a share of, and
+volume-weighted markouts by fill path at each of the configuration's horizons.
 """
 
 from __future__ import annotations
@@ -85,6 +85,7 @@ def _day_row(rule: FillRule, result: DayResult) -> dict[str, object]:
         "orders_filled": float((orders["filled"] > 0).sum()),
         "volume_posted": float(orders["size"].sum()),
         "volume_filled": float(orders["filled"].sum()),
+        "notional_filled": float((orders["filled"] * orders["price"]).sum()),
         "gross": float(decomposition["gross"]),
         "fees": float(decomposition["fees"]),
         "net": float(decomposition["net"]),
@@ -110,7 +111,7 @@ def compare_fill_rules(
                 fills.append(maker.assign(rule=rule.value))
     frame = pd.DataFrame(day_rows)
     usable = frame[~frame["excluded"].astype(bool)]
-    totals = ["orders_posted", "orders_filled", "volume_posted", "volume_filled"]
+    totals = ["orders_posted", "orders_filled", "volume_posted", "volume_filled", "notional_filled"]
     totals += ["gross", "fees", "net"]
     summary = usable.groupby("rule", sort=False)[totals].sum()
     summary = summary.reindex([r.value for r in RULES]).fillna(0.0)

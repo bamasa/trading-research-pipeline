@@ -264,6 +264,13 @@ def test_the_passive_sentence_on_d_and_on_h() -> None:
             passive_and_maker(*args)
 
 
+def test_a_number_that_does_not_exist_is_written_n_a() -> None:
+    """A making part without a passive fill, a break-even without a trade."""
+    out = passive_and_maker("S25", "not admitted on D (i)", "not admitted on D (i)", float("nan"))
+    assert out.endswith("the market maker's making part on D was n/a bp per fill.")
+    assert "gross edge was n/a bp" in s25_sentence(float("nan"), float("nan"), "void")
+
+
 def _attribution(difference: float, draws: np.ndarray) -> Attribution:
     return Attribution("pull_4h", difference, float(np.quantile(draws, 0.95)), draws, 7)
 

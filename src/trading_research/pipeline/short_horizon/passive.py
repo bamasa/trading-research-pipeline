@@ -413,7 +413,8 @@ def a0_and_fill(study: Any, inputs: Any) -> dict[str, Any]:
         )
         trades = result.trades
         crossing.append({"day": day.isoformat(), "trades": len(trades), "gross": float(trades["gross"].sum()),
-                         "net": float(trades["net"].sum()), "turnover": float(result.turnover)})  # fmt: skip
+                         "net": float(trades["net"].sum()), "turnover": float(result.turnover),
+                         "notional": float(trades["notional"].sum()), "net_bp": result.day_bp("net")})  # fmt: skip
         ic[day.isoformat()] = rank_ic(
             proba[:, 2] - proba[:, 0], forward_move_bp(book, 50.0).to_numpy()
         )

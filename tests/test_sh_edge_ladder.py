@@ -11,6 +11,7 @@ from trading_research.reporting.edge_ladder import (
     INFORMATION_SET,
     LADDER_COLUMNS,
     NOT_READ,
+    NOT_RECORDED,
     edge_ladder,
 )
 
@@ -67,3 +68,13 @@ def test_an_unknown_rule_is_refused() -> None:
         edge_ladder(a0_zero_fee={"maker": 1.0})
     with pytest.raises(ValueError, match="unknown"):
         edge_ladder(fill_ratios={"crossing": 1.0})
+
+
+def test_a_read_step_without_a_number_says_so_not_unread() -> None:
+    ladder = edge_ladder(s25_d=(float("nan"), -3.0), s25_h_window=float("nan"))
+    by = ladder.set_index(["row", "block"])["label"]
+    gross = str(by[("S25, gross", "D")])
+    assert NOT_RECORDED in gross and NOT_READ not in gross
+    assert NOT_RECORDED not in str(by[("S25, net", "D")])
+    assert by[("S25, net, status window", "H before 2025-08-01")] == NOT_RECORDED
+    assert str(by[("S25, net", "F")]).endswith(NOT_READ)
