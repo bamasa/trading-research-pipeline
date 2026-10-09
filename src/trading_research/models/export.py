@@ -19,6 +19,8 @@ silently disagrees with the model it came from is worse than no export.
 
 from __future__ import annotations
 
+import copy
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -40,6 +42,8 @@ class ExportReport:
     max_absolute_difference: float
     max_decision_difference: int
     tolerance: float
+    #: What ``max_absolute_difference`` is measured in.
+    quantity: str = "probability"
 
     @property
     def ok(self) -> bool:
@@ -48,7 +52,7 @@ class ExportReport:
     def summary(self) -> str:
         return (
             f"{self.path.name}: {self.rows_checked:,} rows checked, "
-            f"largest probability difference {self.max_absolute_difference:.2e}, "
+            f"largest {self.quantity} difference {self.max_absolute_difference:.2e}, "
             f"{self.max_decision_difference} decision(s) changed"
         )
 
@@ -137,6 +141,103 @@ def export_onnx(
         out.unlink(missing_ok=True)
         raise ExportError(
             f"the exported model does not reproduce the original: {report.summary()}. "
+            "The file has been removed rather than left to be deployed."
+        )
+    return report
+
+
+def _bound_side(mu: np.ndarray, log_variance: np.ndarray, cost_bp: float, k: float) -> np.ndarray:
+    """+1, -1 or 0: the side the confidence bound takes at ``cost_bp`` and ``k``."""
+    sigma = np.exp(0.5 * log_variance)
+    return np.where(mu - k * sigma > cost_bp, 1, np.where(mu + k * sigma < -cost_bp, -1, 0))
+
+
+def export_gaussian_onnx(
+    model: Any,
+    sample: pd.DataFrame,
+    path: Path | str,
+    *,
+    tolerance: float = 1e-4,
+    cost_bp: float = 11.0,
+    k: float = 1.0,
+) -> ExportReport:
+    """Export the Gaussian-head network to ONNX and verify it against torch.
+
+    The graph reads raw windows, ``(batch, features, window)`` as the every-row
+    store holds them, and returns ``mu_bp`` and ``log_variance``; the input
+    standardisation, the head's scale and the clamp travel inside it.
+    ``sample`` is a contiguous frame of real every-row inputs, and every row of
+    it with a complete window is checked. ``tolerance`` is in bp (on ``mu``)
+    and in log units (on the variance); a decision is the side the confidence
+    bound takes at ``cost_bp`` and ``k``, and no decision may change.
+    """
+    try:
+        import onnxruntime
+        import torch
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ExportError(
+            "exporting the network needs torch and onnxruntime: uv sync --extra deep --extra export"
+        ) from exc
+    from trading_research.models.windows import Day, WindowDataset
+
+    if getattr(model, "net_", None) is None or not hasattr(model, "predict_days"):
+        raise ExportError(f"{getattr(model, 'name', type(model).__name__)} is not a fitted network")
+
+    values = sample.to_numpy(dtype="float32")
+    day = Day("sample", lambda: values, np.arange(len(values)))
+    batches = WindowDataset([day], window=model.window).inference_batches(4096)
+    windows = [w for _, _, w in batches]
+    if not windows:
+        raise ExportError("no row of the sample has a complete window")
+    inputs = np.concatenate(windows)
+    [(mu, log_variance)] = model.predict_days([day])
+    finite = np.isfinite(mu)
+    mu, log_variance = mu[finite], log_variance[finite]
+
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    net = copy.deepcopy(model.net_).cpu().eval()
+    batch = {0: "batch"}
+    with warnings.catch_warnings():
+        # The TorchScript exporter is the one that needs no extra package; its
+        # deprecation notice says nothing about this graph, and the parity
+        # check below is what decides whether the file is kept.
+        warnings.simplefilter("ignore")
+        torch.onnx.export(
+            net,
+            (torch.from_numpy(inputs[:1]),),
+            str(out),
+            dynamo=False,
+            input_names=["windows"],
+            output_names=["mu_bp", "log_variance"],
+            dynamic_axes={"windows": batch, "mu_bp": batch, "log_variance": batch},
+            opset_version=17,
+        )
+    session = onnxruntime.InferenceSession(out.read_bytes(), providers=["CPUExecutionProvider"])
+    got_mu, got_log_variance = (
+        np.asarray(a, dtype="float64") for a in session.run(None, {"windows": inputs})
+    )
+    difference = float(
+        max(np.max(np.abs(got_mu - mu)), np.max(np.abs(got_log_variance - log_variance)))
+    )
+    changed = int(
+        np.sum(
+            _bound_side(got_mu, got_log_variance, cost_bp, k)
+            != _bound_side(mu, log_variance, cost_bp, k)
+        )
+    )
+    report = ExportReport(
+        path=out,
+        rows_checked=len(mu),
+        max_absolute_difference=difference,
+        max_decision_difference=changed,
+        tolerance=tolerance,
+        quantity="mu (bp) or log-variance",
+    )
+    if not report.ok:
+        out.unlink(missing_ok=True)
+        raise ExportError(
+            f"the exported network does not reproduce the original: {report.summary()}. "
             "The file has been removed rather than left to be deployed."
         )
     return report
