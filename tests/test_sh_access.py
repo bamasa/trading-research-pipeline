@@ -84,6 +84,8 @@ def test_only_the_ledger_issues_an_access_beyond_development() -> None:
         sa.StudyAccess(sa.grants_for(sa.opened_pairs("H")), "first read")
     with pytest.raises(ValueError, match="unknown"):
         sa.StudyAccess(frozenset({("ETHUSDT", "D", sa.BOOK)}), "development")
+    timing_only = sa.StudyAccess(sa.grants_for({(sa.TIMING, sa.BOOK)}), "development")
+    assert timing_only.open_through == date(2024, 11, 30)
 
 
 def test_each_opening_adds_its_block_and_keeps_the_earlier_ones() -> None:

@@ -169,8 +169,11 @@ class StudyAccess:
 
     @property
     def open_through(self) -> date:
-        """The last day of the highest block this access opens in any plane."""
-        return max(BLOCKS[block][1] for _, block, _ in self.grants if block in BLOCKS)
+        """The last day of the highest block this access opens in any plane (the day
+        before W when it opens none)."""
+        before_w = BLOCKS["W"][0] - timedelta(days=1)
+        ends = [BLOCKS[block][1] for _, block, _ in self.grants if block in BLOCKS]
+        return max(ends, default=before_w)
 
     def allows(self, symbol: str, day: date, plane: str) -> bool:
         return (symbol, block_of(day), plane) in self.grants

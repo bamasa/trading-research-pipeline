@@ -370,5 +370,5 @@ def test_the_environment_fingerprint_and_the_trial_ledger_parts(tmp_path: Path) 
 def test_a_process_refuses_frozen_files_that_moved_after_the_open(repo: Path) -> None:
     opened_h(repo)
     write(repo, shl.FINALISTS_DIR / "S25.json", b'{"theta": 0.7}')
-    with pytest.raises(HeldOutLocked, match="S25.json has sha256"):
+    with pytest.raises(HeldOutLocked, match=r"S25\.json has sha256"):
         ledger(repo).session("H")
