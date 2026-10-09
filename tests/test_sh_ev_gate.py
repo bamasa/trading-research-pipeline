@@ -94,7 +94,7 @@ def _reference(sides: np.ndarray, busy: np.ndarray, events: np.ndarray | None) -
         if events is not None and events[row] == used:
             continue
         if busy[row] >= len(sides):
-            break
+            continue
         out.append(row)
         free = busy[row] + 1
         used = -1 if events is None else events[row]

@@ -106,7 +106,7 @@ def thin_entries(
     ``busy_until[r]`` is the row of the snapshot that closes a position decided
     at row ``r`` (``len(sides)`` or more where none follows); the next decision
     may be taken from the row after it. A candidate whose position would not
-    close inside the data is not taken, and nothing after it is. Candidates of
+    close inside the data is not taken. Candidates of
     an event that already entered are skipped, whether the position is still
     open or not; an event that opens while a position is held can still enter
     at its first free row. The loop jumps from one entry's free row to the next
@@ -133,7 +133,8 @@ def thin_entries(
             continue
         close = int(busy_until[row])
         if close >= n:
-            break
+            i += 1
+            continue
         accepted.append(row)
         if events is not None:
             last_event = int(events[row])
