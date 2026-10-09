@@ -138,6 +138,15 @@ common:
     funding: R14
     accounting_identity: R15, turnover equal to the sum of fill notionals
     same_walk_function_as_label: true
+    timing:
+      entry_hours: "00:01 to 23:58 UTC, both ends included"
+      entry_skip_beyond: 1.0e-9  # of the clip: an entry is skipped when the size beyond the visible levels exceeds it
+      exit_decision: "the first row stamped at or after t + hold, t the entry decision (t + hold itself if no row follows), or 23:59 if that comes first"
+      exit_walk: the first row at or after the exit decision + 10 ms, never a row before the entry's
+      next_decision: "at a row stamped at or after the exit's walked snapshot (or the exit's arrival, if later); a decision on the exit's own row may enter"
+      funding_mark: "the mid of the last snapshot strictly before the settlement; an entry filled at its exact stamp not yet held, an exit filled there still held"
+      followed_by: [walk tables, thinning, placebos, null_B]
+      label_exit: "the label keeps its own exit snapshot, the first at or after the entry snapshot + hold; it can differ from the executor's by a snapshot"
   passive_fill:
     simulator: market_making/simulator.py
     rules: [R5, R6, R7]
@@ -162,6 +171,7 @@ common:
     touch_window_s: 3600  # simulator default; not used by the signal-entry quoter
     quoter: "signal-entry quoter (new code): one clip at the touch on the signal's side at decision + 10 ms, kept at its first price, never re-pegged, cancelled unfilled after hold"
     quoter_after_pause: an entry pulled by a pause is not re-posted; its unfilled part counts as unfilled, and a part filled before the pause is exited as any fill
+    quoter_timing: {entry_cancel: "an unfilled entry cancelled at the first snapshot hold after its post, not after the decision", expired_decision: "a decision first seen more than hold after its stamp is not posted (expired_unseen)", partial_fill: "the rest stays at its price until that cancel; the exit hold after the first fill, for the position then held", fill_during_cancel: crossed at the next snapshot}
     exit: reduce-only cross hold after the fill, priced by the taker executor's walk, with its late-snapshot counters
     flatten_slippage_bp: 0
     signal_timing: "the decision reaches the quoter as a tape row stamped at the decision row's stamp t; under the strictly-before rule it is first seen by the event after t and the order is live no earlier than t + 10 ms; unit test: no event at or before t sees it, every post live at or after t + 10 ms"
@@ -288,6 +298,7 @@ search:
   strata:
     C: {models: [gbm, logistic], label: walked_taker, decision: hold_first, ordered_axes: [hold_s, trades_per_day, label_fee_bp, regime], slot: S-C}
     R: {models: [tcn, bound_ridge], label: forward_move, decision: ev_gate, ordered_axes: [hold_s, k, beta_bp, regime], slot: S-R}
+  hold_first_theta: {rows: every row of the inner validation, entries_per_side: "round(trades_per_day / 2 x its UTC days), half to even, at least 1", theta: "the entries-th largest of the side's probability over rows where it is finite and above the other side's; the smallest of them if fewer qualify; no trade on that side if none does"}
   slots: [S25, S-C, S-R, S-P, S-M]  # k = 5, fixed now; see the slots block
   regime_source:
     detector: the detector block (Binance BTCUSDT hourly flags guard the BTCUSDT strategies)
@@ -395,6 +406,9 @@ slots:
     from: search.result_choice R*
     gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + beta_bp, mirrored for shorts"  # beta is the buffer, not the break date b
     one_entry_per_event: true
+    event: a run of rows on which the gate is open on either side; a run that turns from long to short without a closed row is one event
+    event_during_position: an event that opens while a position is held may enter at its first free row; an event that has entered gives no other entry
+    missing_input: "a row without a prediction, or a crossed snapshot (no walk cost), keeps the gate closed"
     sizing: one full clip a trade; no Kelly sizing (strategies/sizing.py FractionalKelly not used)
     admission: search.admission.slot.S-R
     execution: taker in, taker out after hold
@@ -552,6 +566,7 @@ measurements:
   A0: {block: O, what: S25's signal under a short-window protocol (slots.A0), comparison_figure: none, prediction: none, edge_ladder_step: 1}
   FILL:
     stream: A0's passive orders on O; also S25-Z's and S-P's on H
+    same_orders: the same decisions and quoter under each rule; which decisions become orders can differ between rules through the one-position rule
     rules:
       on_touch: fills in full at the first print at or through its price from the hitting side, ignoring the queue  # optimistic bound
       trade_through: fills only on prints strictly through its price, up to their size  # R7 alone

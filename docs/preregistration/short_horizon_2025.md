@@ -428,7 +428,21 @@ quietly favour a result.
   `flatten_stale` and excluded, as in the simulator (R16). Funding (R14) and
   the accounting identity (R15), with turnover equal to the sum of fill
   notionals, hold for it as for the simulator. The label's walks and the
-  executor's call the same function.
+  executor's call the same function. **Its timing in full**: entries are
+  decided from 00:01 to 23:58, both ends included; an entry is skipped when
+  the size beyond the visible levels exceeds 10⁻⁹ of the clip (float noise
+  is not depth); the exit is decided at the first row stamped at or after
+  `t + h`, `t` the entry decision (at `t + h` itself if no row follows), or
+  at 23:59 if that comes first, and walks the first row at or after that
+  decision + 10 ms, never a row before the entry's; the next decision may be
+  taken at a row stamped at or after the exit's walked snapshot (or the
+  exit's arrival, if later), so a decision on the exit's own row may enter.
+  Funding is charged at the mid of the last snapshot strictly before each
+  settlement; an entry filled at a settlement's exact stamp does not yet hold
+  the position, and an exit filled there still does. The walk tables, the
+  thinning and the placebos follow these rules; the label keeps its own exit
+  snapshot (the first at or after the entry snapshot + `h`), which can differ
+  from the executor's by a snapshot.
 - **Passive fills** (S-P, S-M, S25-Z, A0 and FILL) come from round one's event-time simulator
   with these settings: a queue per order joining the tail of the visible size
   (R5), advance and fills only from prints at the price (R6) or through it
@@ -445,7 +459,12 @@ quietly favour a result.
   The entry is a new signal-entry quoter (round one's `SignalExecutor`, which
   re-pegs and exits passively, is not used): one clip posted at the touch on
   the signal's side at decision + 10 ms, **kept at its first price**, never
-  re-pegged, and cancelled if unfilled after `h`. **An entry pulled by a pause
+  re-pegged, and cancelled if unfilled at the first snapshot `h` after its
+  post (not after the decision); a decision first seen more than `h` after
+  its stamp is not posted (`expired_unseen`). After a partial fill the rest
+  stays at its price until that cancel, the exit is `h` after the first
+  fill, for the position then held, and a fill that lands while the entry's
+  cancel is in flight is crossed at the next snapshot. **An entry pulled by a pause
   is not re-posted**: its unfilled part counts as unfilled, and a part filled
   before the pause is exited as any fill. Once filled, the exit is a
   reduce-only cross `h` after the fill, priced by the taker executor's walk
@@ -740,14 +759,24 @@ symmetrically; otherwise hold. `θ_long` and `θ_short` are set on the inner
 validation, without the market gate or the regime guard, so that each side
 would enter half of the target rate of trades a day before the one-position
 rule. The gate and the guard only remove decision rows, so a gated or guarded
-cell trades less than its target rate.
+cell trades less than its target rate. θ is set on every row of the inner
+validation, as decisions are made on every row: with `d` its UTC days, each
+side takes `n` = round(rate / 2 × `d`) entries (half to even, at least one),
+and its θ is the `n`-th largest of its probability over the rows where that
+probability is finite and above the other side's (the smallest of them if
+fewer rows qualify, and no trade on that side if none does).
 
 **The EV gate** (stratum R). With μ and σ the predicted forward move over `h`
 in bp, `c` = 2 × 5.5 bp, `w_t` the cost in bp of walking the current book for
 the clip and back (from the snapshot, in bp of mid), and `β` the buffer in bp
 (not the break date `b`): go long when `μ − kσ > c + w_t + β`, short when
 `−μ − kσ > c + w_t + β`. One entry per event (a run of rows on which the gate
-is open); a new entry needs the gate to close and reopen. Every trade is one
+is open, on either side: a run that turns from long to short without a
+closed row is one event); a new entry needs the gate to close and reopen. An
+event that opens while a position is held may still enter at its first free row; once
+an event has entered it gives no other entry. A missing input (a row without
+a prediction, or a crossed snapshot, which has no walk cost) keeps the gate
+closed. Every trade is one
 full clip: no Kelly sizing is applied (`strategies/sizing.py`'s
 `FractionalKelly` cannot size this gate in either unit; see
 [Choices and their reasons](#choices-and-their-reasons)).
@@ -1669,7 +1698,10 @@ preceding week, 0/0 fees, scored on O); it is the first step of S25's
 figure and no prediction.
 
 **FILL, the fill rule, with a prediction.** A0's passive order stream on O,
-the same orders under three rules:
+the same orders under three rules: the same decisions and the same quoter are
+run under each rule, so which decisions become orders can differ between
+rules through the one-position rule (an order filled earlier frees the
+quoter earlier):
 
 | Rule | A resting order fills | Bias |
 |---|---|---|
@@ -2587,6 +2619,28 @@ each where it applies and with one line here:
   reproducible bit for bit, which the CPU is and MPS is not promised to be;
   one epoch reads every training and inner-validation row a full fit reads,
   at a cost stage 0 can carry.
+- **θ on every row of the inner validation, n = round(rate / 2 × days), the
+  n-th largest probability above the other side's**: the rate is a count of
+  decision rows, and decisions are made on every row.
+- **An event that opens during a position can enter at its first free row**:
+  one entry per event bounds the trades, and an event is not lost to a
+  position it did not cause.
+- **The taker's exit is decided at the first row at or after `t + h` and the
+  next decision may sit on the exit's own row**: the executor's rules, which
+  the walk tables, the thinning and Null B's parity test reproduce; the
+  position is closed at that snapshot.
+- **Entry skipped beyond 10⁻⁹ of the clip**: float noise in the walk is not
+  depth.
+- **Funding at the mid of the last snapshot before a settlement, an entry at
+  its exact stamp not yet held and an exit there still held**: a settlement
+  is charged on the position open just before it, priced by what was known.
+- **The quoter cancels an unfilled entry `h` after its post, drops a decision
+  first seen more than `h` late, exits `h` after the first fill and crosses a
+  fill that lands during a cancel at the next snapshot**: the wait counts
+  from the order's life, a stale decision is not traded, and the position
+  never exceeds one clip.
+- **FILL's "same orders" are the same decisions under each rule**: the
+  one-position rule makes the orders themselves depend on the fills.
 
 ---
 

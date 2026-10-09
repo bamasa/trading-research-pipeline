@@ -18,16 +18,20 @@ import pandas as pd
 import pytest
 import yaml
 
+from trading_research.backtest.taker import TakerBook, execute_day
 from trading_research.data import feature_store as fs
 from trading_research.data import fetch_log, study_fetch, study_loader
 from trading_research.features import REGISTRY, study_set
 from trading_research.features.lob_tensor import fit_tensor_calibration, lob_tensor, register_tensor
 from trading_research.features.micro2025 import REGISTRY_2025
 from trading_research.labels.taker_vwap import WalkedTakerLabel, control_move_bp
+from trading_research.market_making import fill_rules, signal_entry
 from trading_research.models import windows
 from trading_research.models.gbm import GradientBoostedBaseline
 from trading_research.models.linear import LogisticBaseline
 from trading_research.models.tcn import GaussianTCN
+from trading_research.strategies.ev_gate import EVGate, gate_events, thin_entries
+from trading_research.strategies.hold_first import fit_hold_first, side_threshold
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "short_horizon_2025.yaml"
@@ -300,3 +304,75 @@ def test_the_fold_level_test_fits_on_the_reproducible_device() -> None:
     assert one.weights_sha256() == two.weights_sha256()
     assert one.history_ == two.history_ and one.checkpoint_epoch_ == 1
     assert "**The test's fits run on the CPU.**" in _document()
+
+
+# ---------------------------------------------------------------------------
+# Decision rules and execution
+# ---------------------------------------------------------------------------
+
+
+def test_theta_takes_half_the_rate_per_side_on_the_validation_rows() -> None:
+    rule = _registered()["search"]["hold_first_theta"]
+    assert rule["rows"] == "every row of the inner validation"
+    p_long = np.linspace(0.30, 0.90, 200)
+    proba = np.column_stack([np.full(200, 0.05), 1 - p_long - 0.05, p_long])  # SELL, HOLD, BUY
+    fitted = fit_hold_first(proba, days=7, trades_per_day=25)  # 87.5 entries, half to even
+    assert fitted.theta_long == np.sort(p_long)[::-1][88 - 1]
+    assert fitted.theta_short == np.inf  # no row has the short side above the long
+    few = side_threshold(np.array([0.9, 0.2, 0.8]), np.array([0.1, 0.5, 0.1]), 5)
+    assert few == 0.8  # fewer qualifying rows than entries: the smallest of them
+
+
+def test_an_event_that_opens_during_a_position_enters_at_its_first_free_row() -> None:
+    sides = np.array([1, 0, 0, 1, -1, 1, 0, 1, 0, 0])
+    events = gate_events(sides)
+    assert events.tolist() == [0, -1, -1, 1, 1, 1, -1, 2, -1, -1]  # 3..5 is one event
+    busy_until = np.array([3, 9, 9, 9, 6, 9, 9, 8, 9, 9])
+    assert thin_entries(sides, busy_until, events).tolist() == [0, 4, 7]
+    gate = EVGate(k=0.0, beta_bp=0.0)
+    assert gate.sides(np.array([np.nan, 50.0]), np.ones(2), np.array([0.0, np.nan])).tolist() == [
+        0,
+        0,
+    ]
+
+
+def _taker_frame(rows: int = 1200, size: float = 0.002) -> pd.DataFrame:
+    stamps = pd.date_range("2024-02-11 00:05", periods=rows, freq="100ms", tz="UTC")
+    frame: dict[str, object] = {"timestamp": stamps}
+    for i in range(10):
+        frame[f"ask_price_{i}"] = 60_000.1 + 0.1 * i
+        frame[f"bid_price_{i}"] = 60_000.0 - 0.1 * i
+        frame[f"ask_size_{i}"] = size
+        frame[f"bid_size_{i}"] = size
+    return pd.DataFrame(frame)
+
+
+def test_the_taker_exit_and_the_next_decision_are_the_registered_ones() -> None:
+    frame = _taker_frame()
+    book = TakerBook.from_frame(frame, frame["timestamp"].iloc[0].date())
+    stamps = book.ts
+    hold = 1_000_000_000
+    k = 100
+    # Exit decided at row k + 10 (t + 1 s), walked at row k + 11 (+ 10 ms).
+    decisions = np.array([stamps[k], stamps[k + 10], stamps[k + 11]])
+    day = execute_day(book, decisions, np.array([1, -1, 1]), hold)
+    assert day.counters["entries"] == 2 and day.counters["entries_busy"] == 1
+    timing = _registered()["common"]["taker_fill"]["timing"]
+    assert "a decision on the exit's own row may enter" in timing["next_decision"]
+    thin = TakerBook.from_frame(_taker_frame(size=0.0009), book.day)  # 0.009 visible
+    skipped = execute_day(thin, decisions[:1], np.array([1]), hold)
+    assert skipped.counters["entries_skipped"] == 1
+    assert timing["entry_skip_beyond"] == 1e-9
+
+
+def test_the_quoter_and_fill_choices_are_the_code_s() -> None:
+    quoter = signal_entry.__doc__ or ""
+    assert "``hold_s`` after the post" in " ".join(quoter.split())
+    assert "``expired_unseen``" in quoter
+    assert "same decisions, not the same orders" in (fill_rules.__doc__ or "")
+    timing = _registered()["common"]["passive_fill"]["quoter_timing"]
+    assert "after its post, not after the decision" in timing["entry_cancel"]
+    assert "same decisions" in _registered()["measurements"]["FILL"]["same_orders"]
+    choices = _choices()
+    for phrase in ("θ on every row of the inner validation", 'FILL\'s "same orders"'):
+        assert phrase in choices, phrase
