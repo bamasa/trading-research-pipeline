@@ -296,7 +296,7 @@ instead of inside a block. Its consequences:
 
 | Block | Dates (UTC, inclusive) | Days | Book archive | Use | Read |
 |---|---|---:|---|---|---|
-| **W** warm-up | 2024-12-01 to 2024-12-31 | 31 | `ob500` | normalisers, size floors, rolling statistics; never scored | freely |
+| **W** warm-up | 2024-12-01 to 2024-12-31 | 31 | `ob500` | the touch size, the tensor's spread floor and size moments, `sigma_ref`, rolling statistics; never scored | freely |
 | **D** development | 2025-01-01 to 2025-06-30 | 181 | `ob500` | features, models, the whole search and its placebo search, the walk-forward results, σ of daily results, the minimum detectable effects, the detector's alarm rate; A0 and FILL on O | freely, through the development access |
 | O (inside D) | 2025-02-04 to 2025-02-26 | 23 | `ob500` | A0 and FILL, descriptive only | as D |
 | **E** embargo | 2025-07-01 to 2025-07-07 | 7 | `ob500` | a gap, so that H tests transfer rather than continuation | book, prints and funding never fetched; its Binance hourly bars only, for the detector, opened with H |
@@ -306,8 +306,9 @@ instead of inside a block. Its consequences:
 
 Why these blocks.
 
-- **W** exists because the size floors and rolling normalisers must be fitted
-  on data before the first scored day; December 2024 is never scored.
+- **W** exists because the touch size, the tensor's floor and moments and
+  `sigma_ref` must be fitted on data before the first scored day, and rolling
+  statistics need history; December 2024 is never scored.
 - **D** covers the first half of 2025, and with it O, a 23-day window on
   which A0 and FILL are measured. O is development data: the measurements on
   it are descriptive, and nothing on O is held out.
@@ -330,17 +331,17 @@ reads a later block than its access permits. **Two days start cold**:
 nothing of D (not even 2025-06-30), and 2025-08-21, because the archive
 changes on it, so F's read nothing of H. On each, rolling state is rebuilt
 from the block's own rows, and the first `N` minutes from its midnight are
-not scored, `N` being the longest feature lookback (recorded in the
-amendment), whatever days they span; a day stays usable with fewer decision
+not scored, `N` being the longest feature lookback (61 minutes, under
+[Labels, features and models](#labels-features-and-models)), whatever days they span; a day stays usable with fewer decision
 rows. **A day after a hole starts cold the same way**: when the previous
 calendar day has no usable book (missing, unreadable, unfetchable, or excluded
 by the loader), its rolling state and the network's windows read nothing
 before its midnight, so no rolling statistic reads across a day the study does
-not trust. Fitted values (the size floors fitted on W, the frozen models and
+not trust. Fitted values (the values fitted on W, the frozen models and
 thresholds) are not rolling state and are used on every block, never
-refitted at a read. Every fitted value that is not a weight (W's size floors
-and normalisers, the tensor's floors, S1's `sigma_ref`, the raw-size scale
-of the feature stores, any other fitted constant) is written
+refitted at a read. Every fitted value that is not a weight (the tensor's
+spread floor and size moments, S1's `sigma_ref`, the raw-size scale and the
+float32 columns of the feature stores, any other fitted constant) is written
 to one file whose sha256 the amendment records, and the H, F and P gates
 check it beside the weights.
 
@@ -525,9 +526,19 @@ Every label, feature and model below is built on BTCUSDT.
   over ten levels, plus the 2025 set the features pull request adds where the
   registry lacks it (one-second realised volatility, return-sign
   autocorrelation, turn count, run length, inter-trade time, lagged level-0
-  logs). **Winsorising** clips each such feature at the 0.1% and 99.9%
+  logs), at these windows on row stamps: realised volatility and return-sign
+  autocorrelation over 1 s; turn counts over 2, 5 and 10 s; the ask's, bid's
+  and mid's level-0 log changes over 1 and 5 s; the trade run length,
+  inter-trade time and time since the last trade over 60 s.
+  **Winsorising** clips each such feature at the 0.1% and 99.9%
   quantiles of its own trailing 3,600 s on row stamps, never at whole-day
-  quantiles. **A feature in raw size units** (order-flow imbalance such as
+  quantiles: over (s_t − 3,600 s, s_t], the row included, at pandas' linearly
+  interpolated quantiles of the window's finite values. **No rolling
+  normaliser** is applied to any input: the logistic model standardises
+  inside its fit (on the fold's training rows) and the network inside its
+  graph (on the fold's training days), and the boosted model needs no scale,
+  so `features/normalise.RollingNormaliser`, its 2,000-row window and its
+  scale floors have no part in the study. **A feature in raw size units** (order-flow imbalance such as
   the registry's `ofi_1` and `ofi_20`, depth and print-volume sums) is then
   divided by the median touch size on W, written to the
   fitted-values file, before the float16 cast. In this set those are `ofi_1`
@@ -545,7 +556,14 @@ Every label, feature and model below is built on BTCUSDT.
   touch is divided by the larger of σ × mid and a spread floor, σ being the
   standard deviation of the mid's row-to-row log changes over the trailing
   60 s on row stamps, and the floor the median quoted spread on W. Each level's log(1 + size) is z-scored against its mean and standard
-  deviation on W. W's values are written to the fitted-values file.
+  deviation on W. W's values are written to the fitted-values file. Level
+  0's distance is zero on both sides by this definition; its two columns are
+  kept, constant, so that every level has the same layout (the network's
+  standardisation leaves a constant column unscaled). σ is pandas' rolling
+  sample standard deviation, undefined until the window holds two changes,
+  and the distance columns are missing on such a row; the floor is the exact median of
+  ask − bid at level 0, in USDT, over every W row; the size moments are W's
+  mean and population standard deviation.
 - **Prints are aligned backward**: a print belongs to the first row stamped
   at or after it, so row `t` holds the prints in (s_{t−1}, s_t], s being the
   row stamps (`searchsorted(..., side="left")`, the rule of
@@ -564,9 +582,16 @@ Every label, feature and model below is built on BTCUSDT.
   normalised column (K-units).
 - **Lookbacks and `N`**: every rolling window is declared in seconds on row
   stamps, except the network's 64-row window and the control label's 20-row
-  smoothing. `N` is the longest lookback declared in seconds, rounded up to
+  smoothing, and the windows the existing code declares in rows: the
+  registry's book features keep their row lookbacks (the longest 70 rows,
+  `ofi_20_norm`), and the flow builder declares its longest window, 120 rows.
+  `N` is the longest lookback declared in seconds, rounded up to
   whole minutes; on a cold-start day a row is also unscored until the
-  row-declared windows have their rows since that day's midnight.
+  row-declared windows have their rows since that day's midnight. **`N` is
+  61 minutes**, fixed here: over the whole microstructure set and the tensor,
+  whatever the selection keeps, the longest lookback in seconds is a 60 s
+  window plus the 3,600 s of winsorising. It is the `N` of the purge and of
+  the cold starts.
 - **Selection**: `features/selection.py`, once, on January 2025, from the
   microstructure set, on every tenth row
   (31 × 86,400 = 2.68 million rows at most), against one target: the
@@ -650,8 +675,9 @@ D's 150 walk-forward test days ([selection](#selection-on-d-admission-and-the-fi
   cadence;
 - the instrument: BTCUSDT alone ([Choices and their
   reasons](#choices-and-their-reasons));
-- the normaliser window: each value would need a new feature store, about
-  45 GB;
+- the normaliser window: none, since no rolling normaliser is applied
+  ([Labels, features and models](#labels-features-and-models)); a window
+  would need a new feature store, about 45 GB;
 - feature selection: once, on January, at most 40 features;
 - sizing: one clip;
 - holds of 300 s and longer, already negative on the repository's 5 s grid;
@@ -2073,7 +2099,7 @@ neighbourhoods as cut; the code-freeze note follows it, also before stage 1. Aft
 development runs, and before H is read, one dated amendment is appended and
 committed: the days excluded and the sequence-gap threshold (by its
 formula), the tick and lot steps and the selected features;
-the longest feature lookback `N`; the reader-test days' message counts,
+the reader-test days' message counts,
 intervals and gaps; the trial ledger's sha256 and row count, N_trials, N_eff,
 R_D and the hand-run log; for each stratum the chosen cell with its neighbourhood, its S and the
 outright peak; every replication of the placebo search (A per stratum under
@@ -2502,6 +2528,29 @@ each where it applies and with one line here:
   failure, and float32 cannot repair an infinity.
 - **Every tenth row is positions 0, 10, 20, … of each day's rows**: the store
   and the fits' targets take the same rows, by position, whatever the stamps.
+- **The 2025 set's windows are 1 s for volatility and sign autocorrelation,
+  2, 5 and 10 s for turn counts, 1 and 5 s for the level-0 lags and 60 s for
+  the print features**: short windows for the quantities that move within a
+  hold, one minute for prints, which arrive less often than book updates.
+- **Winsorising over (s_t − 3,600 s, s_t], the row included, at pandas'
+  linear quantiles**: the same half-open window as every trailing window
+  here, and the plainest estimator; a row's bounds read nothing after it.
+- **No rolling normaliser on the inputs**: each model that needs a scale
+  fits it on its own training rows, which adds no row-declared window and no
+  second store.
+- **Level 0's tensor distances stay, at zero**: the registered distance from
+  the touch makes them constant, and keeping them gives every level the same
+  layout; information there would need another definition.
+- **The tensor's σ is a sample standard deviation, missing until two changes,
+  its floor the exact median spread in USDT, its size moments population
+  moments**: each is the estimator the definition names at its plainest.
+- **The registry's row lookbacks and the flow builder's 120 rows stay
+  row-declared**: they are the existing code's windows, and the cold-start
+  rule already covers row-declared windows by the rows since midnight.
+- **`N` = 61 minutes over the whole set and the tensor, whatever the
+  selection keeps**: it follows from the declared windows alone, so it is
+  fixed now rather than in the amendment, and it is at least the selected
+  set's.
 
 ---
 
