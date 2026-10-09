@@ -125,8 +125,9 @@ def fill(name: str, *values: str) -> str:
 
 def alternatives(name: str, group: int = 0) -> list[str]:
     """The alternatives a bracket offers, as the template writes them."""
-    start, end = [s for s in _groups(TEMPLATES[name]) if "/" in TEMPLATES[name][s[0] : s[1]]][group]
-    return [part.strip() for part in TEMPLATES[name][start + 1 : end - 1].split(" / ")]
+    template = TEMPLATES[name]
+    start, end = [s for s in _groups(template) if "/" in template[s[0] : s[1]]][group]
+    return [part.strip() for part in template[start + 1 : end - 1].split(" / ")]
 
 
 def pattern(name: str) -> re.Pattern[str]:
