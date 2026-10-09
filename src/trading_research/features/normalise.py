@@ -42,6 +42,20 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+#: The ``attrs`` key under which a frame lists the columns a normaliser rewrote.
+#: Normalising keeps each column's name, so without the tag a z-scored spread
+#: reads exactly like a spread in basis points; a gate or a cost that must take
+#: basis points from prices checks the tag (``strategies.ev_gate``) and refuses.
+NORMALISED_ATTR = "normalised_columns"
+
+
+def normalised_columns(data: pd.DataFrame | pd.Series) -> frozenset[str]:
+    """The columns tagged as normalised; for a Series, its own name if tagged."""
+    tagged = frozenset(str(c) for c in data.attrs.get(NORMALISED_ATTR, ()))
+    if isinstance(data, pd.Series):
+        return tagged & {str(data.name)}
+    return tagged
+
 
 @dataclass(frozen=True)
 class RollingNormaliser:
@@ -150,6 +164,7 @@ class RollingNormaliser:
                 pd.Series(0.0, index=values.index).where(centre.notna())
             )
             out[column] = normalised.clip(-self.clip, self.clip)
+        out.attrs[NORMALISED_ATTR] = sorted(normalised_columns(frame) | set(chosen))
         return out
 
     def describe(self) -> dict[str, object]:
