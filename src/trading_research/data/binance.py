@@ -724,6 +724,9 @@ class DayResult:
     bytes_downloaded: int
     output: Path | None
     skipped: str | None = None
+    #: The HTTP status behind a skipped day, when the venue gave one. Only a
+    #: 404 says the archive does not exist; anything else is a failed transfer.
+    http_status: int | None = None
 
 
 ProgressCallback = "Callable[[DayResult], None]"
@@ -740,6 +743,7 @@ def download_range(
     verify: bool = True,
     overwrite: bool = False,
     on_day: object = None,
+    daily_only: bool = False,
 ) -> list[DayResult]:
     """Download a date range one day at a time, converting as it goes.
 
@@ -751,7 +755,16 @@ def download_range(
 
     Already-converted days are skipped unless ``overwrite``, so re-running after
     a failure costs only the days that are actually missing.
+
+    ``daily_only`` fetches each day from its own daily archive even for kinds
+    whose month is preferred (klines), and neither reads nor writes a monthly
+    archive. A monthly file carries every day of its month, so fetching one to
+    cut out a single day puts the month's later days on disk too; a study that
+    may read a day only once a block is opened must not hold the rest of the
+    month before then.
     """
+    from trading_research.data.failures import http_status
+
     out_dir = Path(output) / spec.symbol / spec.directory
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = Path(output) / "_archives" / spec.symbol / spec.directory
@@ -771,10 +784,17 @@ def download_range(
 
         try:
             payload, downloaded = _payload_for(
-                spec, day, cache_dir, keep_raw=keep_raw, verify=verify
+                spec, day, cache_dir, keep_raw=keep_raw, verify=verify, daily_only=daily_only
             )
         except BinanceArchiveError as exc:
-            result = DayResult(day=day, rows=0, bytes_downloaded=0, output=None, skipped=str(exc))
+            result = DayResult(
+                day=day,
+                rows=0,
+                bytes_downloaded=0,
+                output=None,
+                skipped=str(exc),
+                http_status=http_status(exc),
+            )
             results.append(result)
             _notify(on_day, result)
             continue
@@ -815,6 +835,7 @@ def _payload_for(
     *,
     keep_raw: bool,
     verify: bool,
+    daily_only: bool = False,
 ) -> tuple[bytes, int]:
     """Return the raw archive covering one day, using the cache when present.
 
@@ -824,7 +845,11 @@ def _payload_for(
     the download and the rest read it back.
     """
     frequencies: tuple[Frequency, ...]
-    if spec.kind in MONTHLY_ONLY:
+    if daily_only and spec.kind in MONTHLY_ONLY:
+        raise BinanceArchiveError(f"{spec.kind} is published monthly only; no daily archive")
+    if daily_only:
+        frequencies = ("daily",)
+    elif spec.kind in MONTHLY_ONLY:
         frequencies = ("monthly",)
     elif spec.kind in MONTHLY_PREFERRED:
         frequencies = ("monthly", "daily")
@@ -918,3 +943,26 @@ def _manifest_note(spec: ArchiveSpec) -> str:
             "One row per bar, one file per day."
         )
     return "Aggregated trades: consecutive fills of one aggressing order at one price are one row."
+
+
+def monthly_archives_beyond(spec: ArchiveSpec, output: Path | str, last_day: date) -> list[Path]:
+    """Cached monthly archives of ``spec`` whose month runs past ``last_day``.
+
+    Such a file holds days after ``last_day`` whether or not they were ever cut
+    out of it. A reader permitted days only up to ``last_day`` refuses while any
+    is on disk; :func:`download_range` with ``daily_only`` never writes one.
+    """
+    import calendar
+
+    cache_dir = Path(output) / "_archives" / spec.symbol / spec.directory
+    middle = spec.interval if spec.interval else spec.kind
+    prefix = f"{spec.symbol}-{middle}-"
+    found: list[Path] = []
+    for path in sorted(cache_dir.glob(f"{prefix}*.zip")):
+        stamp = path.name[len(prefix) : -len(".zip")]
+        if len(stamp) != len("2025-01"):
+            continue  # a daily archive: one day, its own
+        year, month = (int(part) for part in stamp.split("-"))
+        if date(year, month, calendar.monthrange(year, month)[1]) > last_day:
+            found.append(path)
+    return found
