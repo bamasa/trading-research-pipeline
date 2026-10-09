@@ -2628,11 +2628,11 @@ each where it applies and with one line here:
 - **A row without a fillable entry or without snapshots has no label**,
   rather than `hold`: a trade the executor would skip says nothing about the
   move, and `hold` would teach the model that it does.
-- **Seed 42 for every fit**: the model classes' default, so one value is the
-  registered seed.
+- **Seed 42 for every fit**: the model classes' default, one value fixed
+  before any fit, so no seed is chosen on an outcome.
 - **The network standardises inside its graph, on its training rows' window
-  ends; a constant column stays unscaled**: weight files and ONNX graphs read
-  raw store rows, and a zero scale would divide by nothing.
+  ends; a constant column stays unscaled**: a weight file then reads raw
+  store rows, and a zero scale would divide by nothing.
 - **Training rows thinned by position over the days in order**: every day
   keeps the same share of its rows, so a long fold does not drop its last
   days.
@@ -2674,8 +2674,9 @@ each where it applies and with one line here:
 - **PBO ranks the in-sample choice among the cells admissible in-sample, a
   logit at or below 0 overfit**: the identical rule, and a median rank counts
   against the choice.
-- **The Newey–West lag counts positions in the daily series**: the series
-  has one value per day with a trade, and the lag is in its own units.
+- **The Newey–West lag counts positions in the daily series**: the series'
+  values are its days (with a trade, or usable for S-P and S-M), and the lag
+  is in its own units.
 - **Null A's signs are 1 − 2 × `default_rng(b).integers(0, 2, size=hours)`
   over the hours in time order**: one draw per replication, reproducible
   from its seed alone.
