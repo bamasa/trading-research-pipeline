@@ -285,6 +285,13 @@ def _per_second(events: DayEvents, config: SimConfig) -> tuple[list[float], list
     return vol.tolist(), median.tolist()
 
 
+def vol_at_rows(events: DayEvents, config: SimConfig) -> np.ndarray:
+    """The ``vol_bp_1m`` a decision at each book row reads (NaN before the first return)."""
+    vol = np.asarray(_per_second(events, config)[0])
+    seconds = (np.asarray(events.book_ts, dtype=np.int64) - events.day_start_ns) // NS_PER_S
+    return vol[np.clip(seconds, 0, len(vol) - 1)]
+
+
 class _Day:
     """The state of one simulated day. Built, run once, then read."""
 
