@@ -63,3 +63,11 @@ def test_reader_test_days_are_short_ob200_archives() -> None:
 
     assert venue.body(bybit.archive_url("BTCUSDT", day)) is not None
     assert venue.body(bybit.archive_url("BTCUSDT", day, "ob500")) is None
+
+
+def test_no_socket_connects_while_the_venue_serves() -> None:
+    import socket
+
+    venue = syn.Venue(syn.SyntheticMarket(frozenset(DAYS)))
+    with syn.serving(venue), pytest.raises(OSError, match="no network"):
+        socket.create_connection(("example.org", 443), timeout=1)

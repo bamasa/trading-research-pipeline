@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass
 from datetime import date
 from functools import partial
 from typing import Any
@@ -291,18 +292,44 @@ def replay_memory(study: Study) -> dict[str, Any]:
             "workers": replay_workers(peak)}  # fmt: skip
 
 
-#: The registered study's sizes the projection multiplies unit costs by.
-FOLDS = 5
-TEST_DAYS = 150
-DEVELOPMENT_DAYS = 212  # W and D
-ROWS_PER_DAY = 864_000
-TRAINING_ROWS = 4_000_000
-MAX_EPOCHS = 20
-INNER_DAYS = 7
-SHIFTS = 137
+#: The registered study's simulator cell-days on D (stage C) and on H's read, on 150 test days.
 SIMULATOR_CELL_DAYS_C = 7_750
 SIMULATOR_CELL_DAYS_H = 31_300
 REPLAY_DAY_S = 150.0  # the registered 2-3 minutes a day, when no archive was timed
+FOLDS = 5
+
+
+@dataclass(frozen=True)
+class Sizes:
+    """What the projection multiplies unit costs by, for the run's scale: 150 test
+    days, 212 days of W and D, 864,000 rows a day and 4 million training rows on
+    the registered study."""
+
+    test_days: int
+    development_days: int
+    rows_per_day: int
+    training_rows: int
+    epochs: int
+    inner_days: int
+    shifts: int
+
+    @classmethod
+    def of(cls, study: Study, rows_per_day: int) -> Sizes:
+        from trading_research.pipeline.short_horizon.plan import walk_forward
+
+        d_days = study.scale.days("D")
+        test = [d for d in d_days if d.month >= 2]
+        development = len(study.scale.days("W")) + len(d_days)
+        inner = max((len(f.inner) for f in walk_forward(d_days)), default=0)
+        epochs = int(study.scale.params("tcn").get("max_epochs", 20))
+        training = min(study.scale.max_training_rows, rows_per_day // 10 * development)
+        return cls(len(test), development, rows_per_day, training, epochs, inner,
+                   len(study.scale.null_b_shifts(len(test))))  # fmt: skip
+
+    @property
+    def share(self) -> float:
+        """The run's test days as a share of the registered 150."""
+        return self.test_days / 150.0
 
 
 def counts(keys: Sequence[str]) -> dict[str, int]:
@@ -320,33 +347,36 @@ def counts(keys: Sequence[str]) -> dict[str, int]:
 
 
 def projection(
-    costs: dict[str, float], n: dict[str, int], workers: int, null_a_draws: int
+    costs: dict[str, float], n: dict[str, int], size: Sizes, workers: int, null_a_draws: int
 ) -> dict[str, float]:
-    """D's wall time in hours per stage, from unit costs and the catalogue's counts."""
+    """D's wall time in hours per stage, from unit costs, the catalogue's counts and sizes."""
     w, sim_w = max(1, workers), max(1, min(6, workers))
-    fit = {m: costs[f"{m}_fit_row_s"] * TRAINING_ROWS for m in ("gbm", "logistic", "bound_ridge")}
-    batches = TRAINING_ROWS / costs["network_batch_size"]
-    inner_rows = INNER_DAYS * ROWS_PER_DAY
-    fit["tcn"] = MAX_EPOCHS * (
+    fit = {
+        m: costs[f"{m}_fit_row_s"] * size.training_rows for m in ("gbm", "logistic", "bound_ridge")
+    }
+    batches = size.training_rows / costs["network_batch_size"]
+    inner_rows = size.inner_days * size.rows_per_day
+    fit["tcn"] = size.epochs * (
         batches * costs["network_batch_s"] + inner_rows * costs["network_inference_row_s"]
     )
     predict = {m: costs[f"{m}_predict_row_s"] for m in ("gbm", "logistic", "bound_ridge")}
     predict["tcn"] = costs["network_inference_row_s"]
-    scored_rows = (TEST_DAYS + FOLDS * INNER_DAYS) * ROWS_PER_DAY
+    scored_rows = (size.test_days + FOLDS * size.inner_days) * size.rows_per_day
     tables_s = costs["walk_table_s"] + n["holds"] * costs["hold_table_s"]
+    cell_days = n["cells"] * size.test_days
     stage = {
-        "1": DEVELOPMENT_DAYS * (costs["replay_day_s"] / costs["replay_workers"] + costs["features_s"] / w),
+        "1": size.development_days * (costs["replay_day_s"] / costs["replay_workers"] + costs["features_s"] / w),
         "A": sum(FOLDS * n[m] * fit[m] + n[m] * scored_rows * predict[m] for m in fit)
-        + DEVELOPMENT_DAYS * n["holds"] * costs["labels_s"],
-        "B": (n["cells"] * TEST_DAYS * costs["cell_day_s"] + TEST_DAYS * tables_s) / w,
+        + size.development_days * n["holds"] * costs["labels_s"],
+        "B": (cell_days * costs["cell_day_s"] + size.test_days * tables_s) / w,
         "D_null_A": null_a_draws * costs["null_a_draw_s"],
-        "D_null_B": (SHIFTS * n["cells"] * TEST_DAYS * costs["null_b_cell_day_s"] + TEST_DAYS * tables_s) / w,
+        "D_null_B": (size.shifts * cell_days * costs["null_b_cell_day_s"] + size.test_days * tables_s) / w,
         "D_refit": FOLDS * (n["gbm"] * fit["gbm"] + n["logistic"] * fit["logistic"])
         + (n["gbm"] * predict["gbm"] + n["logistic"] * predict["logistic"]) * scored_rows
-        + n["C_cells"] * TEST_DAYS * costs["cell_day_s"] / w,
-        "C": SIMULATOR_CELL_DAYS_C * costs["simulator_cell_day_s"] / sim_w,
+        + n["C_cells"] * size.test_days * costs["cell_day_s"] / w,
+        "C": SIMULATOR_CELL_DAYS_C * size.share * costs["simulator_cell_day_s"] / sim_w,
         "E": 12 * max(fit["gbm"], fit["logistic"]) + 3 * fit["bound_ridge"] + 8 * fit["tcn"]
-        + SIMULATOR_CELL_DAYS_H * costs["simulator_cell_day_s"] / sim_w,
+        + SIMULATOR_CELL_DAYS_H * size.share * costs["simulator_cell_day_s"] / sim_w,
     }  # fmt: skip
     hours = {name: seconds / 3600.0 for name, seconds in stage.items()}
     hours["total"] = sum(hours.values())
@@ -354,12 +384,12 @@ def projection(
 
 
 def choose_cuts(
-    keys: Sequence[str], costs: dict[str, float], workers: int, null_a_draws: int
+    keys: Sequence[str], costs: dict[str, float], size: Sizes, workers: int, null_a_draws: int
 ) -> tuple[list[str], dict[str, float]]:
     """The reduction order's prefix that brings D under the ceiling (none if it fits)."""
     for k in range(len(REDUCTION_ORDER) + 1):
         cuts = list(REDUCTION_ORDER[:k])
-        hours = projection(costs, counts(catalogue_after(keys, cuts)), workers, null_a_draws)
+        hours = projection(costs, counts(catalogue_after(keys, cuts)), size, workers, null_a_draws)
         if hours["total"] <= CEILING_HOURS:
             return cuts, hours
     return list(REDUCTION_ORDER), hours
@@ -389,7 +419,7 @@ def run(study: Study) -> dict[str, Any]:
     costs["null_a_draw_s"] = null_a_draw_cost(keys, test_days)
     fit_rows = min(1_000_000, study.scale.max_training_rows)
     costs |= fit_costs(study.scale, fit_rows)
-    params = study.scale.params("tcn") | {"device": study.scale.params("tcn").get("device")}
+    params = study.scale.params("tcn")
     network_rows = min(20_000, study.scale.max_training_rows)
     network = in_fresh_process(network_costs, params, network_rows, 70)
     costs["network_batch_s"] = network["batch_s"]
@@ -398,8 +428,10 @@ def run(study: Study) -> dict[str, Any]:
     memory = replay_memory(study)
     costs["replay_workers"] = float(memory["workers"])
     costs["replay_day_s"] = max(memory["replay_s"].values()) if memory["measured"] else REPLAY_DAY_S
-    cuts, hours = choose_cuts(catalogue.keys, costs, study.workers, study.scale.null_a_draws)
-    uncut = projection(costs, counts(catalogue.keys), study.workers, study.scale.null_a_draws)
+    size = Sizes.of(study, max(len(frame) for frame in frames))
+    draws = study.scale.null_a_draws
+    cuts, hours = choose_cuts(catalogue.keys, costs, size, study.workers, draws)
+    uncut = projection(costs, counts(catalogue.keys), size, study.workers, draws)
     return {
         "scale": study.scale.name,
         "commit": study.commit(),
@@ -409,6 +441,7 @@ def run(study: Study) -> dict[str, Any]:
         "timing_days": [d.isoformat() for d in study.scale.timing_days],
         "workers": study.workers,
         "unit_costs": costs,
+        "sizes": asdict(size),
         "projected_hours": uncut,
         "ceiling_hours": CEILING_HOURS,
         "cuts": cuts,

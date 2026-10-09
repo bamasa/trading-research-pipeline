@@ -83,19 +83,26 @@ def development_plan(study: Study) -> StagePlan:
 
 
 def fetch(study: Study, book_workers: int) -> fl.FetchLog:
-    """Every planned day on disk or terminally excluded, under the development access."""
+    """Every planned day on disk or terminally excluded, under the development access.
+
+    A dry run fetches from its synthetic venue only: the venue is the opener of
+    every archive, and every plane is fetched in this process (no worker
+    process), where the venue also answers ``urlopen`` and sockets are refused."""
     plan = development_plan(study)
-    if study.venue is not None:
-        present = study.venue.market.present()
-        present["ob200"] = present["ob200"] | study.venue.reader_test_days
+    opener = study.venue
+    if opener is not None:
+        present = opener.market.present()
+        present["ob200"] = present["ob200"] | opener.reader_test_days
+        book_workers, print_workers = 1, 1
     else:
         present = head_check_present(study.repo / HEAD_CHECK)
+        print_workers = max(1, study.workers)
     share = len(plan.prints) / (sa.BLOCK_DAYS["W"] + sa.BLOCK_DAYS["D"])
     budget = stage_budget(book_days=len(plan.book), print_archives_gb=STAGE_1_PRINT_GB * share,
                           workers=book_workers)  # fmt: skip
     log = fl.FetchLog(study.dir("1") / "fetch_log.json")
     run_stage(study.symbol, plan, study.roots, log, budget=budget, book_workers=book_workers,
-              print_workers=max(1, study.workers), expected_present=present,
+              print_workers=print_workers, expected_present=present, opener=opener,
               access=sa.development_access())  # fmt: skip
     if not log.complete():
         raise RuntimeError("the fetch returned with days neither on disk nor excluded")
@@ -238,3 +245,64 @@ def build_stores(
     return {"layout": layout.to_dict(), "finiteness": {"overflow": list(finiteness.overflow),
             "infinite_at_source": list(finiteness.infinite_at_source)}, "overflow_after_W": overflow,
             "store_bytes": sizes, "holds_with_targets": holds}  # fmt: skip
+
+
+def select_features(inputs: Any, january: list[date]) -> dict[str, Any]:
+    """Selection on January's every-tenth rows: the walked label and the forward move at 20 s."""
+    import numpy as np
+    import pandas as pd
+
+    from trading_research.features.selection import FeatureSelector
+    from trading_research.pipeline.short_horizon import features as ft
+
+    if not january:
+        raise RuntimeError("January has no usable day to select features on")
+    xs, ys, fs = [], [], []
+    for day in january:
+        targets = inputs.targets(day)
+        xs.append(inputs.features(day, ft.micro_columns(), every_row=False).astype("float64"))
+        ys.append(targets[ft.label_column(20.0, 0.0)])
+        fs.append(targets[ft.forward_column(20.0)])
+    x = pd.concat(xs, ignore_index=True)
+    # A column with no finite value in January has no variance to select on, and
+    # would leave the selector no complete row; it goes before the selector runs.
+    empty = [c for c in x.columns if not np.isfinite(x[c].to_numpy()).any()]
+    x = x.drop(columns=empty)
+    selector = FeatureSelector().fit(
+        x, pd.concat(ys, ignore_index=True), pd.concat(fs, ignore_index=True)
+    )
+    report = selector.report_.to_dict() if selector.report_ is not None else {}
+    report["dropped_without_a_value"] = empty
+    return {"selected": list(selector.selected_), "selection_report": report, "rows": len(x)}
+
+
+def run(study: Study) -> dict[str, Any]:
+    """Stage 1's record; the leakage tests raise and stop the study on a leak."""
+    from trading_research.pipeline.short_horizon import leakage
+    from trading_research.pipeline.short_horizon.inputs import Inputs
+    from trading_research.pipeline.short_horizon.stage0 import require_no_pending_cuts
+    from trading_research.search_engine.catalogue import parse_key
+
+    registration = study.registration
+    catalogue = study.catalogue()
+    record0 = study.record("0")
+    require_no_pending_cuts(record0, catalogue.sha256)
+    freeze = code_freeze(study)
+    log = fetch(study, int(record0["replay_memory"]["workers"]))
+    spec = instrument(study)
+    record: dict[str, Any] = {"commit": study.commit(), "config_sha256": registration.sha256,
+                              "catalogue_sha256": catalogue.sha256, "code_freeze": freeze,
+                              "instrument_spec": {"tick": spec.tick, "lot": spec.lot},
+                              "fetch_counts": {p: dict(log.counts(p)) for p in sa.PLANES}}  # fmt: skip
+    record |= validate(study, log, spec)
+    threshold = int(record["max_sequence_gaps"])
+    usable = [date.fromisoformat(d) for d, e in record["days"].items() if e["usable"]]
+    w_days = [d for d in usable if sa.block_of(d) == "W"]
+    record["fitted"] = fitted_values(study, w_days, threshold)
+    record["stores"] = build_stores(study, usable, record["fitted"], threshold)
+    inputs = Inputs(study, given=record)
+    january = [d for d in inputs.usable("D") if d.month == 1]
+    record |= select_features(inputs, january)
+    network = any(parse_key(k).model == "tcn" for k in study.keys)
+    record["leakage"] = leakage.run(inputs, network)
+    return record

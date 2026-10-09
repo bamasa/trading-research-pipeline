@@ -34,10 +34,12 @@ class Inputs:
 
     study: Study
     access: sa.StudyAccess = field(default_factory=sa.development_access)
+    #: Stage 1's record while stage 1 itself is still running (its leakage tests).
+    given: dict[str, Any] | None = None
 
     @cached_property
     def record(self) -> dict[str, Any]:
-        return self.study.record("1")
+        return self.given if self.given is not None else self.study.record("1")
 
     @property
     def threshold(self) -> int:
@@ -65,7 +67,8 @@ class Inputs:
         return open_stores(self.study.work / "1" / "features", layout)
 
     def usable(self, block: str = "D") -> list[date]:
-        return self.study.usable_days(block)
+        days = self.record["days"]
+        return [d for d in self.study.scale.days(block) if days[d.isoformat()]["usable"]]
 
     def cold(self, day: date) -> bool:
         return bool(self.record["days"][day.isoformat()]["cold"])

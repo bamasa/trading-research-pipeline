@@ -94,7 +94,11 @@ def day_frame(
     reg = registry()
     micro = build_timed(rows, reg.names(), prints=prints, registry=reg)
     tensor = lob_tensor(rows, calibration)
-    frame = pd.concat([micro.reset_index(drop=True), tensor.reset_index(drop=True)], axis=1)
+    parts = [
+        part.drop(columns=[TIME], errors="ignore").reset_index(drop=True)
+        for part in (micro, tensor)
+    ]
+    frame = pd.concat(parts, axis=1)
     frame.insert(0, TIME, rows[TIME].reset_index(drop=True))
     return frame.iloc[head:].reset_index(drop=True)
 

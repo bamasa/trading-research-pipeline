@@ -73,6 +73,12 @@ def fold_flags(close: pd.Series, month: str, directory: Path) -> dict[str, Any]:
     return record
 
 
+def saved_fold_flags(month: str, directory: Path) -> dict[str, Any]:
+    """A month's run as stage A kept it."""
+    loaded: dict[str, Any] = json.loads((directory / f"{month}.json").read_text(encoding="utf-8"))
+    return loaded
+
+
 def guard_flags(record: dict[str, Any]) -> np.ndarray:
     return np.asarray(record["guard_flags_ns"], dtype=np.int64)
 

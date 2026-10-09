@@ -151,10 +151,14 @@ class Scale:
     max_training_rows: int = MAX_TRAINING_ROWS
     #: Constructor arguments per model name, over the repository's defaults.
     model_params: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
-    #: Rows of one W day the feature leakage checks run on.
+    #: Rows of one W day the feature leakage checks run on, and the positions
+    #: (evenly spaced) streaming parity recomputes each feature at.
     leakage_rows: int = 12_000
+    leakage_positions: int = 240
     #: The two 2024 days stage 0 is timed on.
     timing_days: tuple[date, ...] = sa.TIMING_DAYS
+    #: The refit replication's circular shift of the training labels, in days.
+    refit_shift_days: int = 28
 
     @property
     def dry(self) -> bool:
@@ -201,4 +205,6 @@ DRY_RUN = Scale(
         },
     },
     leakage_rows=2_000,
+    leakage_positions=8,
+    refit_shift_days=15,
 )

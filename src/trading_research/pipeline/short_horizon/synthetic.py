@@ -185,7 +185,7 @@ class SyntheticMarket:
 
     def funding_page(self, start_ms: int, end_ms: int, limit: int) -> bytes:
         """Settlements every eight hours in ``[start_ms, end_ms]``, newest first."""
-        first, last = _ms(STREAM_START), _ms(date(2026, 2, 1))
+        first, last = _ms(date(2024, 1, 1)), _ms(date(2026, 2, 1))
         stamps = np.arange(first, last, 8 * 3_600_000, dtype=np.int64)
         inside = stamps[(stamps >= start_ms) & (stamps <= end_ms)][::-1][:limit]
         rows = [{"fundingRateTimestamp": str(t), "fundingRate": "0.0001"} for t in inside]
@@ -274,8 +274,18 @@ class Venue:
         return None
 
 
+def _no_network(*_: object, **__: object) -> None:
+    raise OSError("the dry run has no network: every request goes to the synthetic venue")
+
+
 @contextmanager
 def serving(venue: Venue) -> Iterator[Venue]:
-    """Route every ``urllib.request.urlopen`` to ``venue`` while the block runs."""
-    with mock.patch("urllib.request.urlopen", venue):
+    """Route every ``urllib.request.urlopen`` to ``venue`` and refuse every socket
+    connection in this process while the block runs. A worker process is not
+    covered, so the dry run passes the venue as the opener and fetches in-process."""
+    with (
+        mock.patch("urllib.request.urlopen", venue),
+        mock.patch("socket.socket.connect", _no_network),
+        mock.patch("socket.create_connection", _no_network),
+    ):
         yield venue
