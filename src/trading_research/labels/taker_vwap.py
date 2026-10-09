@@ -7,8 +7,8 @@ first row stamped at or after ``t + x``.
 **The walked-book taker label.** The entry snapshot is the first row at or
 after ``t`` + 10 ms (the order's latency), the exit snapshot the first at or
 after the entry snapshot's stamp + ``h``. Both are walked for the traded clip
-by :func:`trading_research.backtest.walk.walk`, the function the taker executor
-prices with. In basis points of the entry snapshot's mid::
+by :func:`trading_research.backtest.walk.walk`, which walks with ``walk_book``, the
+function the taker executor prices with. In basis points of the entry snapshot's mid::
 
     long  = (bid VWAP at exit  - ask VWAP at entry) / mid * 1e4 - 2 * fee
     short = (bid VWAP at entry - ask VWAP at exit)  / mid * 1e4 - 2 * fee
