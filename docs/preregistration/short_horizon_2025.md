@@ -8,8 +8,9 @@ agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons) |
-| **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT, ETHUSDT and XRPUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy, holding horizons and instruments: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the break detector, the status rules, the fetch plan, the compute budget and the amendment protocol |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span (W from 2024-12-01 to P to 2025-12-31), to bound the data and the compute |
+| **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy and holding horizons: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the status rules, the fetch plan, the compute budget and the amendment protocol |
+| **The break detector** | One frozen detector on hourly BTCUSDT returns ([The break detector](#the-break-detector)) has three roles: it **locates the 2025 break** `b`, the first alarm in F, that [R](#r-the-break-conditional) tests; its alarms **drive the [regime-policy axis](#the-regime-break-policy-axis)**, the guard after each alarm that the search chooses over; and its alarms **cut the [regime map](#the-regime-map)**. Its settings are fixed now; inside the search on D its hour profile is fitted fold by fold, so that the guard is causal; it is never refitted after a read |
 | **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
 | **How it changes** | Only under the [amendment protocol](#amendment-protocol): dated amendments appended at the end. One amendment is planned, after the development-period runs and before the held-out block is read |
 
@@ -24,8 +25,8 @@ are listed under [the code to come](#the-code-to-come).
 
 The repository's earlier directional and market-making studies were all
 killed. This one asks whether a **registered search** over the parts
-of a short-horizon strategy finds one that pays at published fees and survives
-held-out data: the instrument, the features, the label and its fee, the model,
+of a short-horizon strategy on BTCUSDT finds one that pays at published fees
+and survives held-out data: the features, the label and its fee, the model,
 an entry gate, the holding horizon, the decision threshold, a policy for
 regime breaks, and the execution path (taker, passive entry, market maker).
 The search is fixed in advance. Its catalogue of configurations is enumerated
@@ -52,6 +53,9 @@ stopping policy ([R](#r-the-break-conditional): stop at the first alarm),
 tested only for a finalist that has first passed on the held-out block, and as
 a [regime map](#the-regime-map) that cuts every finalist's daily net at the
 detector's alarms and shows every segment, none selected, as a measurement.
+The three forms share one frozen break detector, run on hourly BTCUSDT
+returns: it locates the 2025 break that R tests, it raises the alarms the
+regime-policy axis guards after, and it cuts the regime map.
 
 **The prior is negative**, for reasons written down [below](#expected-outcome-stated-in-advance).
 The study is built so that a negative answer is informative: every verdict
@@ -81,24 +85,24 @@ shaped the design. None of it is a 2025 number computed by this repository.
    to April 2024; the follow-up pull requests parametrise the caveat by
    period, and every caveated number here carries it with 2025's dates.
 4. **Archive metadata, read for this registration.** HTTP `HEAD` requests for
-   Bybit's BTCUSDT, ETHUSDT and XRPUSDT order-book and trade archives on every
-   day from 2024-12-01 to 2025-12-31 returned each file's existence and size and
-   nothing else; no archive was downloaded. The result, which moved two block
-   boundaries, is in [Data](#data). The per-day sizes were seen; they reflect
-   the archives' depth and a day's activity, not prices, spreads or fills, and
-   a file's size is a rough proxy for that day's activity in H, F and P. The
-   per-day tables are committed as
+   Bybit's BTCUSDT order-book and trade archives on every day from 2024-12-01
+   to 2025-12-31 returned each file's existence and size and nothing else; no
+   archive was downloaded. The result, which moved two block boundaries, is in
+   [Data](#data). The per-day sizes were seen; they reflect the archives'
+   depth and a day's activity, not prices, spreads or fills, and a file's size
+   is a rough proxy for that day's activity in H, F and P. The per-day table
+   is committed as
    [`experiments/results/short_horizon_2025_head_check.csv`](../../experiments/results/short_horizon_2025_head_check.csv)
-   (BTCUSDT, sha256
-   `86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0`) and
-   [`experiments/results/short_horizon_2025_head_check_eth_xrp.csv`](../../experiments/results/short_horizon_2025_head_check_eth_xrp.csv)
-   (ETHUSDT and XRPUSDT, sha256 in [Data](#data)).
-   **No value in this registration was set from what they showed, except the
-   H/F boundary the BTCUSDT check moved**; ETHUSDT and XRPUSDT show the same
-   archive change on the same day. The revisions made after the reviews used
-   only that archive change, and the fetch plan's sizes and disk budget use
-   the per-block sums and the largest and median archive of W and D, which
-   set no searched value. Three further `HEAD` requests on the same day found
+   (sha256
+   `86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0`).
+   **No value in this registration was set from what it showed, except the
+   H/F boundary it moved.** The revisions made after the reviews used only
+   that archive change, and the fetch plan's sizes and disk budget use the
+   per-block sums and the largest and median archive of W and D, which set
+   no searched value. Requests of the same kind for two other perpetuals,
+   made while a wider draft of this search was written, showed the same
+   archive change on the same day; nothing in this registration uses them,
+   and their table is not part of the study. Three further `HEAD` requests on the same day found
    the `ob200` book archive, and no `ob500` one, for BTCUSDT on 2026-01-05, 06
    and 07 (225, 205 and 197 MB); these are the reader-test days of
    [Data](#data), outside every block.
@@ -178,11 +182,11 @@ Predictions, one per slot, fixed now:
 
 | Plane | Source | Code | Blocks |
 |---|---|---|---|
-| Ten-level book on a 100 ms grid | Bybit order-book archive, BTCUSDT, ETHUSDT and XRPUSDT linear perpetuals, 500 levels (`ob500`) | `data/bybit.py`, `ARCHIVE_URL` | W, D, H |
+| Ten-level book on a 100 ms grid | Bybit order-book archive, BTCUSDT linear perpetual, 500 levels (`ob500`) | `data/bybit.py`, `ARCHIVE_URL` | W, D, H |
 | the same | the same archive at 200 levels (`ob200`), same path with `ob200` in the name | `data/bybit.py`, a second name to be added | F, P |
 | Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/<symbol>/` | `data/bybit_trades.py`, `ARCHIVE` | all but E |
 | Funding | Bybit public REST endpoint, no credentials | `data/bybit_funding.py` | all but E |
-| Hourly bars for the break detector (BTCUSDT only, for every instrument) | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
+| Hourly bars for the break detector | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
 
 **Coverage, checked by HTTP `HEAD` on 8 October 2026** (existence and size
 only; nothing downloaded). Sizes in MB. The `ob500` and print columns use the
@@ -217,8 +221,7 @@ URL patterns in `data/bybit.py` and `data/bybit_trades.py` as they stand; the
 | 2025-12-01 | **404** | — | 200 | 289 | 200 | 129 |
 | 2025-12-15 | **404** | — | 200 | 243 | 200 | 96 |
 
-The same check on **every day** from 2024-12-01 to 2025-12-31 (396 days), for
-BTCUSDT, and identically for ETHUSDT and XRPUSDT:
+The same check on **every day** from 2024-12-01 to 2025-12-31 (396 days):
 
 | Archive | Present | Absent |
 |---|---|---|
@@ -233,19 +236,12 @@ either, but the two archives may differ in ways the existence check cannot
 show (message cadence, snapshot frequency), and no overlap day exists to
 compare them on. Prints are unaffected.
 
-**ETHUSDT and XRPUSDT** were checked the same way on the same day, every day
-from 2024-12-01 to 2025-12-31
-([`short_horizon_2025_head_check_eth_xrp.csv`](../../experiments/results/short_horizon_2025_head_check_eth_xrp.csv),
-sha256 `6e294fbed3d259a2eafa96472380cbc52fa64abdc45e686ee3157453e3aa3c9e`).
-Their coverage is BTCUSDT's: `ob500` on 263 days to 2025-08-20, `ob200` on 133
-days from 2025-08-21, no day with both, and prints on all 396 days. The
-archive change therefore falls on the same H/F boundary for every instrument.
-Their archive sizes per block, in GB of book and prints:
-
-| Instrument | W and D | H | F | P |
-|---|---:|---:|---:|---:|
-| ETHUSDT | 70.2 + 14.1 | 12.7 + 3.8 | 18.5 + 7.4 | 9.4 + 3.6 |
-| XRPUSDT | 49.6 + 12.3 | 11.1 + 2.3 | 17.3 + 3.3 | 7.0 + 1.3 |
+**Sizes over the whole span**, summed from the same check: 88.1 GB of `ob500`
+archives (263 days), 25.7 GB of `ob200` (133 days) and 27.1 GB of prints (396
+days), 140.9 GB in all. E's book and prints (1.6 GB) are never fetched and
+the three `ob200` reader-test days below (0.6 GB) are, so about 140 GB pass
+through the network if P is opened, 126.5 GB if it is not; per block in the
+[fetch plan](#fetch-plan).
 
 **What the archive change moved.** The plan before the check ended H on
 2025-09-21 and began F on 2025-09-22. H would then have mixed the two archives,
@@ -259,8 +255,8 @@ instead of inside a block. Its consequences:
 
 - the data pull request adds the `ob200` name to `data/bybit.py` for days from
   2025-08-21, with a test on a synthetic `ob200` fixture and on the three
-  **reader-test days, 2026-01-05, 06 and 07** (BTCUSDT; the reader is the
-  same code for every instrument), which lie outside every block
+  **reader-test days, 2026-01-05, 06 and 07** (BTCUSDT), which lie outside
+  every block
   and are used for nothing else but the entry point's dry run (no successor
   study may put them in a block). No `ob200` day from 2025-08-21 to 2025-12-31 is fetched before
   stage 3. The `ob200` replay is proven before H is opened: each reader-test
@@ -337,15 +333,13 @@ amendment), whatever days they span; a day stays usable with fewer decision
 rows. Fitted values (the size floors fitted on W, the frozen models and
 thresholds) are not rolling state and are used on every block, never
 refitted at a read. Every fitted value that is not a weight (W's size floors
-and normalisers, the tensor's floors, each instrument's clip, S1's
-`sigma_ref`, the raw-size scale of the feature stores, any other fitted
-constant) is written
+and normalisers, the tensor's floors, S1's `sigma_ref`, the raw-size scale
+of the feature stores, any other fitted constant) is written
 to one file whose sha256 the amendment records, and the H, F and P gates
 check it beside the weights.
 
-Exclusions are per instrument-day, and a block's unreadability is judged per
-instrument, on the days of the instrument a slot trades. Days excluded from
-every verdict, counted and reported per block and instrument: more book
+Exclusions are per day. Days excluded from every verdict, counted and
+reported per block: more book
 sequence gaps than `max_sequence_gaps`; a non-positive price, found as a
 `positive_prices` error in `validate_book`'s report (the function returns its
 findings and does not raise, so the study's loader excludes the day on that
@@ -369,10 +363,10 @@ plan](#fetch-plan)). Each is counted by reason. **A day flagged
 `flatten_stale` in any run on the block** (on a held-out block, any run of
 its read session: the true strategy, a placebo draw, a neighbour cell, the
 K-latency re-run, a bracket) is excluded from every series of every
-slot on that instrument and block, and is counted once toward unreadability.
+slot on that block, and is counted once toward unreadability.
 **`max_sequence_gaps` is the 95th percentile of D's per-day gap
-counts, rounded up**, per instrument, computed by that formula and recorded in
-the amendment; the same value is used on every block for that instrument. Each verdict is also reported with the
+counts, rounded up**, computed by that formula and recorded in the
+amendment; the same value is used on every block. Each verdict is also reported with the
 gap-excluded days included, as a measurement, so that the exclusion cannot
 quietly favour a result.
 
@@ -380,12 +374,11 @@ quietly favour a result.
 
 ## Common settings
 
-- **Instruments**: Bybit BTCUSDT, ETHUSDT and XRPUSDT linear perpetuals, a
-  categorical axis of the search. Each is fetched, replayed, validated and
-  excluded day by day under the same rules; the loader is per instrument, and
-  its tick and lot steps come from the venue's instrument specification,
-  recorded in the amendment; the off-grid exclusion uses each day's own tick
-  ([Blocks](#blocks)).
+- **Instrument**: Bybit's BTCUSDT linear perpetual, the only instrument of
+  the search. It is fetched, replayed, validated and excluded day by day under
+  the rules of [Blocks](#blocks); its tick and lot steps come from the venue's
+  instrument specification, recorded in the amendment; the off-grid exclusion
+  uses each day's own tick.
 - **Rows and timing**: the 100 ms rows are `data/bybit.reconstruct`'s, at
   `grid_ms=100`: at most one row per 100 ms interval, emitted at the
   interval's first update, stamped with that update's venue time and carrying
@@ -398,12 +391,8 @@ quietly favour a result.
   stamped at or after `t + h`. `data/grid.to_grid` works in whole seconds and
   is used only for the 1 s grid of the book CUSUM, with `label="right"`.
 - **Clip**: 0.010 BTC a trade on BTCUSDT, for every configuration and every
-  execution path, with no Kelly sizing. On ETHUSDT and XRPUSDT the clip in coin
-  units is fixed per instrument at 0.010 × (BTC's mean mid on W) / (the coin's
-  mean mid on W), rounded down to the lot step, and written to the
-  fitted-values file ([Blocks](#blocks)), so that a clip has about the same
-  notional on every instrument. Results are also given per 100 USDT of clip a
-  day, with the clip's notional taken at entry. One position at a time, never more than one clip; for S-M, never more
+  execution path, with no Kelly sizing. Results are also given per 100 USDT
+  of clip a day, with the clip's notional taken at entry. One position at a time, never more than one clip; for S-M, never more
   than the simulator's hard limit of two clips (K-cap).
   In the simulator the clip is the fixed `clip_btc` setting, which replaces
   `clip_notional` and the touch-share cap, so K-cap compares with a constant.
@@ -460,11 +449,11 @@ quietly favour a result.
   `all_ahead`; `pessimistic`) are run for K-queue.
 - **The market maker** (S-M) is round one's S1 with the signal lean, on the
   same simulator settings: S1 at round one's frozen values `skew_bp` 2, `k`
-  0.5 and `min_edge_bp` 4 (`configs/mm_prereg.yaml`), with `sigma_ref` per
-  instrument the median of the simulator's `vol_bp_1m` (its estimator, at
+  0.5 and `min_edge_bp` 4 (`configs/mm_prereg.yaml`), with `sigma_ref` the
+  median of the simulator's `vol_bp_1m` (its estimator, at
   `vol_half_life_s` 60) over W's rows, written to the fitted-values file
   ([Blocks](#blocks)), `soft_limit_clips` 1,
-  `clip_btc` the instrument's clip, the lean λ ∈ {0.5, 1, 2} on its signal's
+  `clip_btc` 0.010, the lean λ ∈ {0.5, 1, 2} on its signal's
   tape (`pipeline/market_making.signal_tapes`: the signal's accepted entry
   decisions, each with a signed strength in bp, μ for a regressor and, for a
   classifier, the side times the median absolute forward move over the hold
@@ -473,8 +462,8 @@ quietly favour a result.
   `pipeline/market_making` (`guard_pull`, or `guard_widen` as a measurement)
   with `guard_window_min` equal to 60 × the window in hours.
 - **Fees for verdicts**: the base tier, 2.0 bp maker and 5.5 bp taker
-  (`BYBIT_BASE`), for every instrument. Other published tiers
-  (`BYBIT_LINEAR_TIERS`, group `g1`, which holds all three instruments, down
+  (`BYBIT_BASE`). Other published tiers
+  (`BYBIT_LINEAR_TIERS`, group `g1`, which holds BTCUSDT, down
   to 0.0 maker and 1.5 taker) and the programme's −1.0 bp maker rebate are
   measurements only, each with `BYBIT_FEE_CAVEAT`. A 0/0 schedule is used for
   A0 and S25-Z only, and labelled; a label fee of 0 bp is a searched value of
@@ -489,8 +478,7 @@ quietly favour a result.
 
 ## Labels, features and models
 
-Every label, feature and model below is built per instrument; nothing is
-pooled across instruments.
+Every label, feature and model below is built on BTCUSDT.
 
 **Labels.**
 
@@ -518,7 +506,7 @@ pooled across instruments.
   horizon is in time, as every horizon here; only its smoothing is in rows.
   It is partly known at decision time and is used only to train the control
   models of K-label: the network on the control label, at the frozen fits
-  only, on R*'s instrument and the holds of R*'s neighbourhood, when R*'s model
+  only, on the holds of R*'s neighbourhood, when R*'s model
   is the network ([selection](#selection-on-d-admission-and-the-finalists)).
 
 **Features.**
@@ -531,15 +519,14 @@ pooled across instruments.
   quantiles of its own trailing 3,600 s on row stamps, never at whole-day
   quantiles. **A feature in raw size units** (order-flow imbalance such as
   the registry's `ofi_1` and `ofi_20`, depth and print-volume sums) is then
-  divided by the instrument's median touch size on W, written to the
+  divided by the median touch size on W, written to the
   fitted-values file, before the float16 cast. A test on W checks that every
   stored column is finite after the cast; a column that fails it is stored at
   float32 on every block, recorded in the amendment.
 - **The ten-level tensor**: 40 columns. Each level's price distance from the
   touch is divided by the larger of σ × mid and a spread floor, σ being the
   standard deviation of the mid's row-to-row log changes over the trailing
-  60 s on row stamps, and the floor the instrument's median quoted spread on
-  W. Each level's log(1 + size) is z-scored against its mean and standard
+  60 s on row stamps, and the floor the median quoted spread on W. Each level's log(1 + size) is z-scored against its mean and standard
   deviation on W. W's values are written to the fitted-values file.
 - **Prints are aligned backward**: a print belongs to the first row stamped
   at or after it, so row `t` holds the prints in (s_{t−1}, s_t], s being the
@@ -562,15 +549,15 @@ pooled across instruments.
   smoothing. `N` is the longest lookback declared in seconds, rounded up to
   whole minutes; on a cold-start day a row is also unscored until the
   row-declared windows have their rows since that day's midnight.
-- **Selection**: `features/selection.py`, once per instrument, on that
-  instrument's January, from the microstructure set, on every tenth row
+- **Selection**: `features/selection.py`, once, on January 2025, from the
+  microstructure set, on every tenth row
   (31 × 86,400 = 2.68 million rows at most), against one target: the
   walked-book label at 0 bp with `h` = 20 s as `y`, and the forward move at
   `h` = 20 s as `forward`. `FeatureSelector` runs at its defaults
   (`score_target="ic"`, at most 40 features, correlation 0.95, variance 1e-6),
   so it ranks by absolute correlation with `forward`, and `y` only marks the
-  rows that have a label. The selected list ("micro-selected") is each
-  instrument's input set for stratum C's micro inputs, for the bound regressor
+  rows that have a label. The selected list ("micro-selected") is the input
+  set for stratum C's micro inputs, for the bound regressor
   and as the network's auxiliary input; it is recorded in the amendment.
 
 **Models.** No hyperparameter of any model is searched; every model uses
