@@ -330,3 +330,15 @@ def test_any_price_series_gives_flags_with_a_profile_before_the_cut() -> None:
     np.testing.assert_allclose(profile, expected.profile)
     after = alarms[alarms["timestamp"] >= FOLD.start]
     assert len(after) >= 1
+
+
+def test_the_mean_channel_is_read_from_the_same_run_once_per_window() -> None:
+    closes = _closes()
+    profile = rf.fit_hour_profile(np.log(closes).diff().dropna(), rf.STREAM_START, FOLD.start)
+    result = rf.run_detector(closes, profile, end="2024-12-10", spec=SMALL)
+    every = rf.mean_channel(result, threshold=-np.inf)
+    assert every["window"].tolist() == sorted(set(result.frame["window"]))
+    first_steps = result.frame.groupby("window").head(1)
+    assert list(every["timestamp"]) == list(pd.to_datetime(first_steps["timestamp"], utc=True))
+    assert rf.mean_channel(result, threshold=np.inf).empty
+    assert rf.MEAN_THRESHOLD == 8.93

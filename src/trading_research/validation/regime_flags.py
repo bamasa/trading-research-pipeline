@@ -44,6 +44,7 @@ import numpy as np
 import pandas as pd
 
 from trading_research.validation.structural_breaks import (
+    RECORDED_THRESHOLDS,
     MonitorResult,
     MonitorSpec,
     detect_breaks,
@@ -202,6 +203,31 @@ def alarm_table(result: MonitorResult) -> pd.DataFrame:
     table = pd.DataFrame(rows, columns=list(ALARM_COLUMNS))
     table["timestamp"] = pd.to_datetime(table["timestamp"], utc=True)
     return table
+
+
+#: The mean channel's recorded level: read and reported, never an alarm.
+MEAN_THRESHOLD: float = RECORDED_THRESHOLDS[(365, 90)]["mean"]
+
+
+def mean_channel(result: MonitorResult, *, threshold: float = MEAN_THRESHOLD) -> pd.DataFrame:
+    """Each window's first step at which the mean channel's log-odds reached ``threshold``.
+
+    The mean family is not among the monitored statistics, so it never
+    re-anchors the walk and never defines an alarm; this is the report of it,
+    from the same run: ``timestamp``, ``window`` and ``odds_mean``.
+    """
+    frame = result.frame
+    over = frame[frame["odds_mean"].to_numpy() >= threshold]
+    first = over.groupby("window", sort=True).head(1)
+    out = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(first["timestamp"], utc=True).to_numpy(),
+            "window": first["window"].to_numpy(dtype=np.int64),
+            "odds_mean": first["odds_mean"].to_numpy(dtype="float64"),
+        }
+    )
+    out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True)
+    return out.reset_index(drop=True)
 
 
 def run_detector(
