@@ -26,7 +26,6 @@ VALUES: dict[tuple[str, ...], Any] = {
     ("data", "excluded_days_D"): [[date(2025, 3, 1), "sequence_gaps"]],
     ("data", "instrument_spec"): {"tick": 0.1, "lot": 0.001},
     ("features", "selected"): ["ofi_1", "spread_bp"],
-    ("features", "longest_lookback_minutes"): 60,
     ("features", "fitted_values_sha256"): "a" * 64,
     ("models", "weights_sha256"): {"gbm_micro_h50_f0": "b" * 64},
     ("models", "checkpoint_epoch"): {"tcn_h20": 7},

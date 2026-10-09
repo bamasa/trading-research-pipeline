@@ -60,7 +60,6 @@ def frozen_values() -> dict[tuple[str, ...], Any]:
         ("data", "excluded_days_D"): [],
         ("data", "instrument_spec"): {"tick": 0.1, "lot": 0.001},
         ("features", "selected"): ["ofi_1"],
-        ("features", "longest_lookback_minutes"): 60,
         ("features", "fitted_values_sha256"): digests[shl.FITTED_VALUES_PATH],
         ("models", "weights_sha256"): {"gbm_h50": digests[shl.WEIGHTS_DIR / "gbm_h50"]},
         ("models", "checkpoint_epoch"): {"tcn_h20": 7},

@@ -56,7 +56,7 @@ RESULTS_PATHS: dict[str, Path] = {
 }
 
 #: The sha256 of the YAML as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d"
+REGISTERED_SHA256 = "1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90"
 #: The registered catalogue's sha256 (``search.catalogue.sha256``).
 REGISTERED_CATALOGUE_SHA256 = "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d"
 #: The break-detector library's locked commit (``detector.library.commit``).
@@ -74,7 +74,6 @@ PLACEHOLDERS: tuple[tuple[str, ...], ...] = (
     ("data", "excluded_days_D"),
     ("data", "instrument_spec"),
     ("features", "selected"),
-    ("features", "longest_lookback_minutes"),
     ("features", "fitted_values_sha256"),
     ("models", "weights_sha256"),
     ("models", "checkpoint_epoch"),
@@ -301,7 +300,6 @@ FROZEN_KINDS: dict[tuple[str, ...], Any] = {
     ("data", "excluded_days_D"): _excluded_days,
     ("data", "instrument_spec"): _instrument_spec,
     ("features", "selected"): _selected,
-    ("features", "longest_lookback_minutes"): _positive_int,
     ("features", "fitted_values_sha256"): lambda v, w: _require(_is_sha256(v), f"{w} is a sha256"),
     ("models", "weights_sha256"): _hashes,
     ("models", "checkpoint_epoch"): _epochs,
