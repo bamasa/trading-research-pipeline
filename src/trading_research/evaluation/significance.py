@@ -50,6 +50,7 @@ able to prove it does not work.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -263,3 +264,26 @@ def newey_west_t(
         return NeweyWestT(n, used, mean, float("nan"), float("nan"))
     se = float(np.sqrt(variance / n))
     return NeweyWestT(n, used, mean, se, mean / se)
+
+
+#: The registered bar on the day-level t, and the normal quantile of 80% power.
+T_BAR = 3.0
+Z_POWER_80 = 0.84
+
+
+def minimum_detectable_effect(sigma: float, n_eff: float, bar: float = T_BAR) -> float:
+    """``(bar + 0.84) * sigma / sqrt(n_eff)``: the mean that a t >= ``bar``
+    test on ``n_eff`` days of dispersion ``sigma`` catches with 80% power."""
+    if n_eff <= 0:
+        return float("nan")
+    return float((bar + Z_POWER_80) * sigma / np.sqrt(n_eff))
+
+
+def power_at_bar(effect: float, sigma: float, n_eff: float, bar: float = T_BAR) -> float:
+    """The probability that a daily series of ``n_eff`` days with this mean and
+    dispersion reaches t >= ``bar``, in the normal approximation:
+    ``Phi(effect * sqrt(n_eff) / sigma - bar)``."""
+    if n_eff <= 0 or not sigma > 0:
+        return float("nan")
+    z = effect * float(np.sqrt(n_eff)) / sigma - bar
+    return float(0.5 * (1.0 + math.erf(z / math.sqrt(2.0))))

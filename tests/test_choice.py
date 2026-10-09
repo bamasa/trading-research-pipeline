@@ -20,6 +20,7 @@ from trading_research.validation.choice import (
     neighbourhood_index,
     neighbourhood_median,
     not_admitted,
+    pbo_of_choice,
     rerun,
     slot_conditions,
     statistic_a,
@@ -274,3 +275,21 @@ def test_slot_conditions_use_the_neighbourhood() -> None:
     out = slot_conditions(cells, DAYS, _line_index(3), 0)
     assert out.s == 0.0 and not out.i  # median of 1 and -1
     assert not_admitted(["i", "iv"]) == "not admitted on D (i, iv)"
+
+
+def test_pbo_of_the_choice_on_a_region_and_on_noise() -> None:
+    rng = np.random.default_rng(6)
+    net = rng.normal(0.0, 2.0, (12, 150))
+    noise = CellDays(np.full(net.shape, 10), net, net)
+    index = _line_index(12)
+    out = pbo_of_choice(noise, np.arange(12), index)
+    assert out.splits == 252 and 0.15 < out.pbo < 0.85
+    planted = net + np.array([0, 0, 0, 0, 0, 1.5, 1.5, 1.5, 0, 0, 0, 0])[:, None]
+    region = CellDays(np.full(net.shape, 10), planted, planted)
+    assert pbo_of_choice(region, np.arange(12), index).pbo < 0.05
+
+
+def test_pbo_skips_splits_without_an_admissible_cell() -> None:
+    cells = _line([1.0, 2.0, 3.0], [1, 1, 1], days=20)
+    out = pbo_of_choice(cells, np.arange(3), _line_index(3))
+    assert out.skipped == 252 and out.splits == 0

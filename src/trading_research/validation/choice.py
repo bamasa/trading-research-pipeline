@@ -15,7 +15,9 @@ function of a cell-by-day matrix, with nothing read from disk and no state:
 * :func:`statistic_a` is the admission statistic: the neighbourhood median of
   each cell's day-level t of G;
 * :func:`carry_forward` re-runs the choice month by month and scores the
-  chosen cell on the next month after an embargo.
+  chosen cell on the next month after an embargo;
+* :func:`pbo_of_choice` puts the same rule through combinatorially symmetric
+  cross-validation.
 
 A cell without a trade scores 0 wherever a cell value enters a median, so a
 sparse corner of the grid cannot drop out of its neighbours' medians.
@@ -29,6 +31,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+from trading_research.evaluation.overfitting import CSCV_BLOCKS, Pbo, cscv_pbo
 
 #: Trades a day a cell must average over the test days to be chosen.
 MIN_TRADES_PER_DAY = 5.0
@@ -384,3 +388,29 @@ def slot_conditions(
 def not_admitted(failed: Sequence[str]) -> str:
     """The status of a slot that fails admission, naming every failed condition."""
     return f"not admitted on D ({', '.join(failed)})"
+
+
+def pbo_of_choice(
+    cells: CellDays,
+    members: np.ndarray | Sequence[int],
+    index: np.ndarray,
+    blocks: int = CSCV_BLOCKS,
+    min_trades_per_day: float = MIN_TRADES_PER_DAY,
+) -> Pbo:
+    """PBO of one stratum's choice by CSCV, with the identical rule.
+
+    In each split the choice is made on the in-sample days among the cells
+    admissible there, and ranked among those same cells by S computed on the
+    out-of-sample days (the neighbourhood median of each cell's mean daily
+    net, a cell without a trade scoring 0).
+    """
+    rows = np.asarray(members, dtype=np.int64)
+
+    def pick(days: np.ndarray) -> tuple[int | None, np.ndarray]:
+        found = choose(cells.on_days(days), rows, index, min_trades_per_day)
+        return found.cell, rows[found.admissible[rows]]
+
+    def score(days: np.ndarray) -> np.ndarray:
+        return neighbourhood_median(cell_means(cells.on_days(days).net_bp), index)
+
+    return cscv_pbo(cells.days, pick, score, blocks)
