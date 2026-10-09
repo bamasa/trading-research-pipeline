@@ -270,3 +270,117 @@ def rerun(
             cell = choose(cells, members, index, min_trades_per_day).cell
         out[name] = StratumOutcome(cell, 0.0 if cell is None else statistic_a(cells, index, cell))
     return out
+
+
+#: The test months the carry-forward scores, and its embargo in days.
+CARRY_FORWARD_MONTHS = ("2025-03", "2025-04", "2025-05", "2025-06")
+CARRY_FORWARD_EMBARGO_DAYS = 5
+#: The test months of condition (ii), and how many must be positive.
+TEST_MONTHS = ("2025-02", *CARRY_FORWARD_MONTHS)
+MONTHS_POSITIVE_REQUIRED = 4
+
+
+def _stamps(dates: Sequence[object], days: int) -> pd.DatetimeIndex:
+    stamps = pd.DatetimeIndex(np.asarray(list(dates), dtype="datetime64[ns]")).normalize()
+    if len(stamps) != days:
+        raise ChoiceError(f"{len(stamps)} dates for {days} days")
+    return stamps
+
+
+def _cell_mean(values: np.ndarray, cell: int, days: np.ndarray) -> float:
+    return float(cell_means(values[cell : cell + 1, days])[0])
+
+
+@dataclass(frozen=True)
+class CarryForward:
+    """Condition (iii): the choice re-run before each month, scored on it.
+
+    A month whose re-run admits no cell, or whose chosen cell has no trade on
+    the scored days, contributes 0 to the mean.
+    """
+
+    months: tuple[str, ...]
+    cells: tuple[int | None, ...]
+    g: tuple[float, ...]
+    net: tuple[float, ...]
+
+    @property
+    def mean_g(self) -> float:
+        return float(np.mean(self.g)) if self.g else float("nan")
+
+    @property
+    def mean_net(self) -> float:
+        return float(np.mean(self.net)) if self.net else float("nan")
+
+    @property
+    def passes(self) -> bool:
+        return bool(self.mean_g > 0)
+
+
+def carry_forward(
+    cells: CellDays,
+    dates: Sequence[object],
+    members: np.ndarray | Sequence[int],
+    index: np.ndarray,
+    months: Sequence[str] = CARRY_FORWARD_MONTHS,
+    embargo_days: int = CARRY_FORWARD_EMBARGO_DAYS,
+    min_trades_per_day: float = MIN_TRADES_PER_DAY,
+) -> CarryForward:
+    """For each month m, the choice on the test days before m, and the chosen
+    cell's mean daily G and net on m's days from ``embargo_days`` after m's
+    first day. ``dates`` gives each column's calendar day."""
+    stamps = _stamps(dates, cells.days)
+    chosen: list[int | None] = []
+    g: list[float] = []
+    net: list[float] = []
+    for month in months:
+        period = pd.Period(month, freq="M")
+        start = period.start_time
+        history = np.flatnonzero(stamps < start)
+        scored = np.flatnonzero(
+            (stamps >= start + np.timedelta64(int(embargo_days), "D")) & (stamps <= period.end_time)
+        )
+        cell = choose(cells.on_days(history), members, index, min_trades_per_day).cell
+        chosen.append(cell)
+        g.append(0.0 if cell is None else _cell_mean(cells.g_bp, cell, scored))
+        net.append(0.0 if cell is None else _cell_mean(cells.net_bp, cell, scored))
+    return CarryForward(tuple(months), tuple(chosen), tuple(g), tuple(net))
+
+
+@dataclass(frozen=True)
+class SlotConditions:
+    """Conditions (i) and (ii) of slot admission for a chosen cell."""
+
+    s: float
+    monthly: tuple[float, ...]
+    months_positive: int
+    i: bool
+    ii: bool
+
+
+def slot_conditions(
+    cells: CellDays,
+    dates: Sequence[object],
+    index: np.ndarray,
+    cell: int,
+    months: Sequence[str] = TEST_MONTHS,
+    required: int = MONTHS_POSITIVE_REQUIRED,
+) -> SlotConditions:
+    """(i) the cell's S over all the days is > 0; (ii) in at least ``required``
+    of ``months``, the neighbourhood median of each cell's mean daily net over
+    that month's days is > 0. Pass the slot's own primary series as
+    ``net_bp`` (with zero rows on days without a fill for a passive slot)."""
+    stamps = _stamps(dates, cells.days)
+    near = index[cell][index[cell] >= 0]
+    s = float(np.median(cell_means(cells.net_bp[near])))
+    monthly = []
+    for month in months:
+        days = np.flatnonzero(stamps.to_period("M") == pd.Period(month, freq="M"))
+        monthly.append(float(np.median(cell_means(cells.net_bp[np.ix_(near, days)]))))
+    positive = int(sum(value > 0 for value in monthly))
+    return SlotConditions(s, tuple(monthly), positive, s > 0, positive >= required)
+
+
+def not_admitted(failed: Sequence[str]) -> str:
+    """The status of a slot that fails admission, naming every failed condition."""
+    return f"not admitted on D ({', '.join(failed)})"

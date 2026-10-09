@@ -10,14 +10,18 @@ import pytest
 
 from trading_research.market_making.verdicts import day_t
 from trading_research.validation.choice import (
+    TEST_MONTHS,
     CellDays,
     ChoiceError,
+    carry_forward,
     cell_day_t,
     cell_means,
     choose,
     neighbourhood_index,
     neighbourhood_median,
+    not_admitted,
     rerun,
+    slot_conditions,
     statistic_a,
 )
 from trading_research.validation.search import neighbourhood_scores
@@ -206,3 +210,67 @@ def test_rerun_chooses_per_stratum_and_keeps_a_fixed_cell() -> None:
     assert fixed["C"].cell == 0 and fixed["R"].cell == 4
     empty = rerun(CellDays(cells.trades * 0, cells.net_bp, cells.g_bp), strata, index)
     assert empty["C"].cell is None and empty["C"].a == 0.0
+
+
+DAYS = pd.date_range("2025-02-01", "2025-06-30", freq="D")
+
+
+def _by_month(values: dict[str, float]) -> np.ndarray:
+    """A daily series taking each month's value."""
+    return np.array([values[str(day.to_period("M"))] for day in DAYS], dtype=float)
+
+
+def _two_cells(first: np.ndarray, second: np.ndarray, trades: int = 10) -> CellDays:
+    net = np.vstack([first, second])
+    return CellDays(np.full(net.shape, trades), net, net.copy())
+
+
+def test_there_are_150_test_days() -> None:
+    assert len(DAYS) == 150
+
+
+def test_carry_forward_rechooses_each_month_and_skips_the_embargo() -> None:
+    first = _by_month({"2025-02": 2, "2025-03": 2, "2025-04": -1, "2025-05": -1, "2025-06": -1})
+    first[(DAYS >= "2025-03-01") & (DAYS <= "2025-03-05")] = -2.0  # inside the embargo
+    second = _by_month({"2025-02": 0, "2025-03": 0, "2025-04": 1, "2025-05": 1, "2025-06": 1})
+    identity = np.arange(2)[:, None]
+    out = carry_forward(_two_cells(first, second), DAYS, [0, 1], identity)
+    assert out.cells == (0, 0, 0, 1)
+    assert out.g == (2.0, -1.0, -1.0, 1.0)
+    assert out.mean_g == pytest.approx(0.25)
+    assert out.mean_net == pytest.approx(0.25)
+    assert out.passes
+
+
+def test_a_month_without_an_admissible_cell_scores_zero() -> None:
+    values = np.ones(len(DAYS))
+    out = carry_forward(_two_cells(values, values, trades=1), DAYS, [0, 1], np.arange(2)[:, None])
+    assert out.cells == (None,) * 4
+    assert out.mean_g == 0.0 and not out.passes
+
+
+def test_the_dates_must_match_the_days() -> None:
+    with pytest.raises(ChoiceError):
+        carry_forward(_two_cells(np.ones(3), np.ones(3)), DAYS, [0, 1], np.arange(2)[:, None])
+
+
+def test_slot_conditions_count_positive_months() -> None:
+    months = {"2025-02": 1, "2025-03": 1, "2025-04": -1, "2025-05": 1, "2025-06": 1}
+    cells = _two_cells(_by_month(months), -_by_month(months))
+    out = slot_conditions(cells, DAYS, np.arange(2)[:, None], 0)
+    assert out.monthly == (1.0, 1.0, -1.0, 1.0, 1.0)
+    assert out.months_positive == 4 and out.i and out.ii
+    worse = slot_conditions(cells, DAYS, np.arange(2)[:, None], 1)
+    assert worse.months_positive == 1 and not worse.i and not worse.ii
+
+
+def test_slot_conditions_use_the_neighbourhood() -> None:
+    good = _by_month(dict.fromkeys(TEST_MONTHS, 1.0))
+    cells = CellDays(
+        np.full((3, len(DAYS)), 10),
+        np.vstack([good, -good, -good]),
+        np.vstack([good, -good, -good]),
+    )
+    out = slot_conditions(cells, DAYS, _line_index(3), 0)
+    assert out.s == 0.0 and not out.i  # median of 1 and -1
+    assert not_admitted(["i", "iv"]) == "not admitted on D (i, iv)"
