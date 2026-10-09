@@ -20,8 +20,9 @@ the registration's stricter protocol (``## Who may read what``):
 
 H opens only with the frozen configuration recorded by the amendment and
 committed, every frozen weight file, finalist file and the fitted-values file
-at the amendment's sha256, the trial ledger and its sidecar committed with the
-amendment's sha256 and row count, the catalogue at its registered (or amended)
+at the amendment's sha256, the trial ledger's manifest committed with the
+amendment's sha256 and row count and every part on disk matching it (the parts
+stay under ``data/``, never committed), the catalogue at its registered (or amended)
 sha256, and no file of H, nor any hourly bar of E, on disk. F and P open only
 after the previous block's results file is committed unchanged, with nothing
 but results, docs outside the registration and the README changed since that
@@ -105,12 +106,11 @@ def library_commit(name: str = shr.LOCKED_LIBRARY) -> str | None:
     return origin[1:]
 
 
-def trial_ledger_paths(repo: Path, trials: Path = shr.TRIALS_PATH) -> list[Path]:
-    """The trial ledger's files: the one file, or its parts ``<stem>.part<k>.parquet``."""
+def trial_ledger_parts(repo: Path, trials: Path = shr.TRIALS_PATH) -> list[Path]:
+    """The trial ledger's files on disk: the one file, or its parts ``<stem>.part<k>.parquet``."""
     single = repo / trials
-    if single.exists():
-        return [single]
-    return sorted(single.parent.glob(f"{single.stem}.part*{single.suffix}"))
+    found = [single] if single.exists() else []
+    return found + sorted(single.parent.glob(f"{single.stem}.part*{single.suffix}"))
 
 
 def trial_ledger_sha256(paths: Sequence[Path]) -> str:
@@ -121,6 +121,13 @@ def trial_ledger_sha256(paths: Sequence[Path]) -> str:
             while chunk := handle.read(1 << 20):
                 digest.update(chunk)
     return digest.hexdigest()
+
+
+def parquet_rows(path: Path) -> int:
+    """A parquet file's row count, from its footer."""
+    import pyarrow.parquet as pq  # type: ignore[import-untyped]
+
+    return int(pq.ParquetFile(path).metadata.num_rows)
 
 
 def _porcelain_paths(text: str) -> list[str]:
@@ -155,7 +162,7 @@ class Ledger:
     document: Path = shr.DOCUMENT_PATH
     ledger: Path = shr.LEDGER_PATH
     trials: Path = shr.TRIALS_PATH
-    trials_sidecar: Path = shr.TRIALS_SIDECAR_PATH
+    trials_manifest: Path = shr.TRIALS_MANIFEST_PATH
     weights_dir: Path = WEIGHTS_DIR
     finalists_dir: Path = FINALISTS_DIR
     fitted_values: Path = FITTED_VALUES_PATH
@@ -277,26 +284,48 @@ class Ledger:
                 )
 
     def verify_trials(self, registration: shr.Registration) -> None:
-        """The trial ledger and its sidecar committed, at the amendment's sha256 and rows."""
+        """The trial ledger's manifest committed unchanged, at the amendment's
+        sha256 and rows and the registered catalogue, and the parts on disk (under
+        ``data/``, never committed) exactly the manifest's: each at its sha256 and
+        row count, in its order, and no other part beside them."""
         result = registration.result_trials
         if result is None:
             raise HeldOutLocked("the amendment records no trial ledger")
-        paths = trial_ledger_paths(self.repo, self.trials)
-        if not paths:
-            raise HeldOutLocked(f"no trial ledger at {self.trials}")
-        for path in [*paths, self.repo / self.trials_sidecar]:
-            self._tracked(path.relative_to(self.repo))
-        digest = trial_ledger_sha256(paths)
-        if digest != result["ledger_sha256"]:
-            raise HeldOutLocked(
-                f"the trial ledger has sha256 {digest}, the amendment records {result['ledger_sha256']}"
-            )
-        sidecar = json.loads((self.repo / self.trials_sidecar).read_text(encoding="utf-8"))
-        recorded = (sidecar.get("sha256"), sidecar.get("rows"), sidecar.get("catalogue_sha256"))
-        wanted = (digest, result["ledger_rows"], registration.catalogue_sha256)
+        relative = self.trials_manifest.as_posix()
+        path = self.repo / self.trials_manifest
+        if not path.is_file():
+            raise HeldOutLocked(f"no trial-ledger manifest at {relative}")
+        self._tracked(self.trials_manifest)
+        text = path.read_text(encoding="utf-8")
+        if _git(self.repo, "show", f"HEAD:{relative}") != text:
+            raise HeldOutLocked(f"{relative} differs from the committed manifest")
+        manifest = json.loads(text)
+        recorded = (manifest.get("sha256"), manifest.get("rows"), manifest.get("catalogue_sha256"))
+        wanted = (result["ledger_sha256"], result["ledger_rows"], registration.catalogue_sha256)
         if recorded != wanted:
             raise HeldOutLocked(
-                f"the sidecar records (sha256, rows, catalogue) {recorded}, not {wanted}"
+                f"the manifest records (sha256, rows, catalogue) {recorded}, the amendment {wanted}"
+            )
+        folder = (self.repo / self.trials).parent
+        parts = [folder / part["file"] for part in manifest.get("parts", [])]
+        if not parts:
+            raise HeldOutLocked("the manifest lists no part of the trial ledger")
+        extra = sorted(set(trial_ledger_parts(self.repo, self.trials)) - set(parts))
+        if extra:
+            raise HeldOutLocked(f"parts on disk the manifest does not list: {extra[:3]}")
+        for part, target in zip(manifest["parts"], parts, strict=True):
+            if not target.is_file():
+                raise HeldOutLocked(f"the trial ledger's part {part['file']} is not on disk")
+            if file_sha256(target) != part["sha256"]:
+                raise HeldOutLocked(f"the part {part['file']} differs from its sha256")
+            if parquet_rows(target) != part["rows"]:
+                raise HeldOutLocked(f"the part {part['file']} holds another row count")
+        total = sum(int(part["rows"]) for part in manifest["parts"])
+        digest = trial_ledger_sha256(parts)
+        if (digest, total) != (manifest["sha256"], manifest["rows"]):
+            raise HeldOutLocked(
+                f"the parts give (sha256, rows) ({digest}, {total}), the manifest "
+                f"({manifest['sha256']}, {manifest['rows']})"
             )
 
     def files_on_disk(self, block: str) -> list[Path]:

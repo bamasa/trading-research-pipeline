@@ -49,14 +49,15 @@ from trading_research.market_making.prereg import (
 CONFIG_PATH = Path("configs/short_horizon_2025.yaml")
 DOCUMENT_PATH = Path("docs/preregistration/short_horizon_2025.md")
 LEDGER_PATH = Path("experiments/results/short_horizon_2025_ledger.json")
-TRIALS_PATH = Path("experiments/results/short_horizon_2025_trials.parquet")
-TRIALS_SIDECAR_PATH = Path("experiments/results/short_horizon_2025_trials.json")
+#: The trial ledger's parts (under ``data/``, never committed) and its committed manifest.
+TRIALS_PATH = Path("data/short_horizon_2025/short_horizon_2025_trials.parquet")
+TRIALS_MANIFEST_PATH = Path("experiments/results/short_horizon_2025_trials.json")
 RESULTS_PATHS: dict[str, Path] = {
     block: Path(f"experiments/results/short_horizon_2025_{block}.json") for block in sa.HELD_OUT
 }
 
 #: The sha256 of the YAML as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90"
+REGISTERED_SHA256 = "d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a"
 #: The registered catalogue's sha256 (``search.catalogue.sha256``).
 REGISTERED_CATALOGUE_SHA256 = "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d"
 #: The break-detector library's locked commit (``detector.library.commit``).
@@ -373,8 +374,8 @@ def _validate_registered(tree: Mapping[str, Any], catalogue_sha256: str) -> None
     trials = _get(tree, ("search", "trial_ledger"))
     _require(trials["file"] == TRIALS_PATH.as_posix(), "the trial ledger's path")
     _require(
-        str(trials["sidecar"]).startswith(TRIALS_SIDECAR_PATH.as_posix() + ":"),
-        "the trial ledger's sidecar path",
+        str(trials["manifest"]).startswith(TRIALS_MANIFEST_PATH.as_posix() + ":"),
+        "the trial ledger's manifest path",
     )
     library = _get(tree, ("detector", "library"))
     _require(

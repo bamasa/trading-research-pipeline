@@ -1,4 +1,4 @@
-"""The trial ledger: zstd parquet parts, the sidecar, N_trials and the hand-run log."""
+"""The trial ledger: zstd parquet parts, the manifest, N_trials and the hand-run log."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from trading_research.search_engine.catalogue import Catalogue
 from trading_research.search_engine.ledger import (
     LEDGER_COLUMNS,
     LEDGER_PATH,
+    MANIFEST_PATH,
     LedgerError,
     TrialLedger,
     file_sha256,
@@ -53,7 +54,7 @@ def _rows(
     )[list(LEDGER_COLUMNS)]
 
 
-def test_rows_round_trip_with_their_sidecar(tmp_path: Path, catalogue: Catalogue) -> None:
+def test_rows_round_trip_with_their_manifest(tmp_path: Path, catalogue: Catalogue) -> None:
     ledger = TrialLedger(tmp_path / LEDGER_PATH.name, catalogue)
     rows = _rows(catalogue, 1)
     record = ledger.append(1, "abc1234", rows)
@@ -66,8 +67,8 @@ def test_rows_round_trip_with_their_sidecar(tmp_path: Path, catalogue: Catalogue
     (part,) = record["parts"]
     assert part["file"] == LEDGER_PATH.name and part["rows"] == 60
     assert part["sha256"] == file_sha256(ledger.path)
-    assert json.loads(ledger.sidecar_path.read_text()) == record
-    assert ledger.sidecar_path.name == "short_horizon_2025_trials.json"
+    assert json.loads(ledger.manifest_path.read_text()) == record
+    assert ledger.manifest_path.name == "short_horizon_2025_trials.json"
 
 
 def test_one_run_pivots_into_cell_days(tmp_path: Path, catalogue: Catalogue) -> None:
@@ -87,7 +88,7 @@ def test_n_trials_counts_every_run_and_stages_append(tmp_path: Path, catalogue: 
     ledger = TrialLedger(tmp_path / "trials.parquet", catalogue)
     ledger.append(1, "abc", _rows(catalogue, 1, days=DAYS[:5]))
     ledger.append(1, "abc", _rows(catalogue, 1, days=DAYS[5:]))
-    assert ledger.n_trials == 6 and ledger.sidecar()["runs"]["1"]["days"] == 10
+    assert ledger.n_trials == 6 and ledger.record()["runs"]["1"]["days"] == 10
     ledger.append(2, "def", _rows(catalogue, 2, keys=8))  # a superseded run 1 stays
     assert ledger.n_trials == 6 + 8 and len(ledger.read()) == 60 + 80
 
@@ -132,23 +133,32 @@ def test_large_ledgers_split_into_parts_under_the_limit(
 
 
 @pytest.mark.parametrize("part_bytes", [100_000_000, 12_000])
-def test_the_sidecar_carries_what_the_study_ledger_checks(
+def test_the_manifest_carries_what_the_study_ledger_checks(
     tmp_path: Path, catalogue: Catalogue, part_bytes: int
 ) -> None:
-    assert shr.TRIALS_PATH == LEDGER_PATH
-    assert LEDGER_PATH.with_suffix(".json") == shr.TRIALS_SIDECAR_PATH
-    ledger = TrialLedger(tmp_path / LEDGER_PATH, catalogue, part_bytes=part_bytes)
+    assert (shr.TRIALS_PATH, shr.TRIALS_MANIFEST_PATH) == (LEDGER_PATH, MANIFEST_PATH)
+    assert LEDGER_PATH.parts[0] == "data" and MANIFEST_PATH.parent == Path("experiments/results")
+    registered = TrialLedger.in_repository(tmp_path, catalogue)
+    assert (registered.path, registered.manifest_path) == (
+        tmp_path / LEDGER_PATH, tmp_path / MANIFEST_PATH
+    )  # fmt: skip
+    ledger = TrialLedger(
+        tmp_path / LEDGER_PATH, catalogue, part_bytes=part_bytes, manifest=tmp_path / MANIFEST_PATH
+    )
     many = [date(2025, 2, 1) + timedelta(days=i) for i in range(150)]
     ledger.append(1, "abc", _rows(catalogue, 1, keys=12, days=many))
     record = ledger.append(2, "def", _rows(catalogue, 2, keys=3, days=many))
-    paths = shl.trial_ledger_paths(tmp_path, LEDGER_PATH)
+    paths = shl.trial_ledger_parts(tmp_path, LEDGER_PATH)
     assert [path.name for path in paths] == [part["file"] for part in record["parts"]]
     assert (len(paths) > 1) == (part_bytes == 12_000)  # one file, or parts beside it
-    sidecar = json.loads((tmp_path / shr.TRIALS_SIDECAR_PATH).read_text())
-    assert sidecar["sha256"] == shl.trial_ledger_sha256(paths)
-    assert sidecar["rows"] == 15 * 150 and sidecar["catalogue_sha256"] == (
+    assert not (tmp_path / LEDGER_PATH).with_suffix(".json").exists()
+    manifest = json.loads((tmp_path / MANIFEST_PATH).read_text())
+    assert manifest == record and manifest["sha256"] == shl.trial_ledger_sha256(paths)
+    assert [shl.parquet_rows(path) for path in paths] == [p["rows"] for p in record["parts"]]
+    assert manifest["rows"] == 15 * 150 and manifest["catalogue_sha256"] == (
         shr.REGISTERED_CATALOGUE_SHA256
     )
+    assert (tmp_path / MANIFEST_PATH).stat().st_size < 1_000_000  # the audit's limit
 
 
 def test_a_changed_part_or_another_catalogue_is_refused(
@@ -159,11 +169,11 @@ def test_a_changed_part_or_another_catalogue_is_refused(
     _rows(catalogue, 1, seed=9).to_parquet(ledger.path)
     with pytest.raises(LedgerError, match="sha256"):
         ledger.read()
-    record = json.loads(ledger.sidecar_path.read_text())
+    record = json.loads(ledger.manifest_path.read_text())
     record["catalogue_sha256"] = "0" * 64
-    ledger.sidecar_path.write_text(json.dumps(record))
+    ledger.manifest_path.write_text(json.dumps(record))
     with pytest.raises(LedgerError, match="catalogue"):
-        ledger.sidecar()
+        ledger.record()
 
 
 def test_hand_runs_are_logged(tmp_path: Path, catalogue: Catalogue) -> None:

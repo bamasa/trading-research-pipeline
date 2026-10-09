@@ -977,13 +977,16 @@ statistics) before any W or D file is fetched, and any change to that code
 before H is read is a correction under the [amendment
 protocol](#amendment-protocol). Every score on a test day of February to June
 comes from the single entry point. It writes the **trial ledger**,
-`experiments/results/short_horizon_2025_trials.parquet` (zstd), one row per
+`data/short_horizon_2025/short_horizon_2025_trials.parquet` (zstd), one row per
 D run, configuration and test day, with the columns `run`, `key`, `day`,
-`net_bp`, `G_bp`, `pnl_long_bp`, `pnl_short_bp`, `trades` and `skips`; the
-catalogue's sha256 and each run's commit go in a sidecar,
-`…_trials.json`, with the file's sha256 and row count, and the file is split
-into parts under 100 MB if it needs to be. The ledger is committed at the end
-of each stage. **N_trials** is the number of distinct (run, key) pairs: every
+`net_bp`, `G_bp`, `pnl_long_bp`, `pnl_short_bp`, `trades` and `skips`, split
+into parts under 100 MB if it needs to be. The parts stay under `data/` and
+are never committed. A small **manifest**,
+`experiments/results/short_horizon_2025_trials.json`, records the
+catalogue's sha256, each run's commit, every part's sha256 and row count, and
+the ledger's sha256 (every part's bytes in order) and row count; the manifest
+is committed at the end of each stage, and H's open checks the parts on disk
+against it. **N_trials** is the number of distinct (run, key) pairs: every
 configuration scored in every complete D run, counted even beyond N_max. It
 is the N quoted on every page and given to N_eff and the deflated Sharpe
 ratio; the rows of a superseded run stay in the ledger and in N_trials.
@@ -993,7 +996,7 @@ computation on a February to June test day outside the entry point (a
 configuration run by hand, or any statistic of a label, a return, a
 prediction or a P&L on those days, a feature's IC included) is a **hand
 run**. Replay, validation, the leakage tests and feature building are not.
-A hand run is logged in the ledger's sidecar with its date, what it computed
+A hand run is logged in the ledger's manifest with its date, what it computed
 and the days it read, and it sets every searched slot (S-C, S-R, and S-P or
 S-M when their signal is C\* or R\*) to `not admitted on D (hand run)`, with
 p = 1 on every block. The rule can only lower statuses, and it leaves the
@@ -2095,8 +2098,10 @@ E's bars, H, F and P.
 - **H** opens only if the amendment records the YAML's sha256, the file on
   disk has it and is committed, the tree is clean, every frozen weight file's
   sha256, every frozen finalist file's and the fitted-values file's sha256
-  equal the amendment's, the trial ledger and its sidecar are committed with
-  the sha256 and the row count the amendment records, the catalogue's sha256 equals the
+  equal the amendment's, the trial ledger's manifest is committed with
+  the sha256 and the row count the amendment records and the parts on disk
+  are exactly the manifest's (each at its sha256 and row count, in its order,
+  and no other part beside them), the catalogue's sha256 equals the
   registered one (or stage 0's amendment's), and no book, print, funding or
   hourly-bar file of H and no hourly bar of E is already on disk (the Binance
   daily bars of item 5 of [what was
@@ -2247,8 +2252,8 @@ slot: F is still read and reported, but nothing is taken to P.
 
 **Files**, written by the entry point:
 
-- `experiments/results/short_horizon_2025_trials.parquet` and its sidecar
-  `…_trials.json`, the trial ledger; N_trials, its distinct (run, key)
+- `experiments/results/short_horizon_2025_trials.json`, the trial ledger's
+  manifest, its parts staying under `data/short_horizon_2025/`; N_trials, its distinct (run, key)
   pairs, is the N quoted on every page, and its sha256 and row count go in
   the amendment;
 - `…_leaderboard.csv`: every configuration with gross, net, G, trades a day,
@@ -2439,9 +2444,14 @@ Every blocking and minor point was taken in; where a point offered two fixes:
 - **Raw-size features are scaled by W's median touch size**, with float32 only
   for a column that still fails the finiteness test, rather than float32 for
   every raw-size column: the disk budget holds.
-- **The trial ledger's catalogue hash and commits go in a sidecar**, rather
-  than a header: a parquet file stays one table, and the sidecar carries its
+- **The trial ledger's catalogue hash and commits go in a manifest**, rather
+  than a header: a parquet file stays one table, and the manifest carries its
   sha256 and row count.
+- **The trial ledger's parts stay under `data/`, and a committed manifest
+  records them**, rather than committing the parquet files: the repository
+  ignores parquet and refuses any file over 1 MB, and the manifest's sha256 of
+  every part, checked against the files on disk when H opens, binds the rows
+  as a commit would; H does not open while a part is missing or differs.
 
 **Earlier choices, kept.**
 
@@ -2698,7 +2708,7 @@ each where it applies and with one line here:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90`.
+`d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2719,7 +2729,9 @@ review of the search, and
 search was narrowed to BTCUSDT, and
 `d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d` before the
 values the study code fixed were written in, `N` among them, which left 24
-placeholders.)
+placeholders, and
+`1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90` before the
+trial ledger's parts were moved under `data/` beside a committed manifest.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the

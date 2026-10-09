@@ -15,7 +15,8 @@ short walked P&L looked up). A day keeps three files, written together:
 A day already scored is not scored again. At the end the day's rows go into the
 trial ledger as one run's rows, with the run's commit; a day an exit found the
 book stale on (``flatten_stale``) is recorded and left out of every series by
-stage D. The registration has the ledger committed at the end of the stage.
+stage D. The registration has the ledger's manifest committed at the end of the
+stage; its parts stay under ``data/``.
 """
 
 from __future__ import annotations
@@ -152,7 +153,7 @@ def day_frames(out: Path, days: Sequence[date], name: str) -> pd.DataFrame:
 def run(study: Any) -> dict[str, Any]:
     """Stage B's record: the days scored, the stale days, the trial ledger's run."""
     from trading_research.pipeline.short_horizon.stage0 import require_parity
-    from trading_research.search_engine.ledger import LEDGER_PATH, TrialLedger
+    from trading_research.search_engine.ledger import TrialLedger
 
     require_parity(study.record("0"))
     inputs = Inputs(study)
@@ -163,23 +164,23 @@ def run(study: Any) -> dict[str, Any]:
     )
     days = sorted(test_folds(inputs))
     rows = day_frames(out, days, "ledger.parquet")
-    ledger = TrialLedger(study.repo / LEDGER_PATH, study.catalogue())
-    written = ledger.sidecar()["runs"].get(str(study.run))
+    ledger = TrialLedger.in_repository(study.repo, study.catalogue())
+    written = ledger.record()["runs"].get(str(study.run))
     if written is None:
         ledger.append(study.run, study.commit(), rows)
     elif written["rows"] != len(rows):
         raise RuntimeError(
             f"run {study.run} is in the trial ledger with {written['rows']} rows, not {len(rows)}"
         )
-    sidecar = ledger.sidecar()
+    manifest = ledger.record()
     return {
         "commit": study.commit(),
         "run": study.run,
         "cells": len(keys),
         "test_days": [d.isoformat() for d in days],
         "stale_days": summary["stale_days"],
-        "ledger_rows": int(sidecar["rows"]),
-        "ledger_sha256": sidecar["sha256"],
-        "n_trials": int(sidecar["n_trials"]),
-        "commit_the_trial_ledger": "the registration commits the ledger and its sidecar at the end of each stage",
+        "ledger_rows": int(manifest["rows"]),
+        "ledger_sha256": manifest["sha256"],
+        "n_trials": int(manifest["n_trials"]),
+        "commit_the_trial_ledger": "the registration commits the ledger's manifest at the end of each stage; its parts stay under data/",
     }

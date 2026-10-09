@@ -14,6 +14,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa  # type: ignore[import-untyped]
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 
 from trading_research.data import study_access as sa
@@ -30,7 +32,15 @@ FROZEN_FILES = {
     shl.FINALISTS_DIR / "S25.json": b"{}",
     shl.FITTED_VALUES_PATH: b'{"touch": 1}',
 }
-TRIALS = b"trial rows"
+
+
+def parquet_bytes(rows: int) -> bytes:
+    sink = pa.BufferOutputStream()
+    pq.write_table(pa.table({"run": list(range(rows))}), sink)
+    return bytes(sink.getvalue().to_pybytes())
+
+
+TRIALS = parquet_bytes(10)
 
 
 def sha(data: bytes) -> str:
@@ -102,12 +112,7 @@ def repo(tmp_path: Path) -> Path:
     for relative, data in FROZEN_FILES.items():
         write(repo, relative, data)
     write(repo, shr.TRIALS_PATH, TRIALS)
-    sidecar = {
-        "sha256": sha(TRIALS),
-        "rows": 10,
-        "catalogue_sha256": shr.REGISTERED_CATALOGUE_SHA256,
-    }
-    write(repo, shr.TRIALS_SIDECAR_PATH, json.dumps(sidecar).encode())
+    write(repo, shr.TRIALS_MANIFEST_PATH, json.dumps(manifest()).encode())
     frozen = shr.freeze_text(TEXT, frozen_values())
     write(repo, shr.CONFIG_PATH, frozen.encode())
     amendment = DOCUMENT.replace("None yet.", shr.frozen_hash_line(frozen))
@@ -115,6 +120,14 @@ def repo(tmp_path: Path) -> Path:
     write(repo, "src/study.py", b"x = 1\n")
     commit(repo, "registered and frozen")
     return repo
+
+
+def manifest(rows: int = 10, digest: str | None = None) -> dict[str, Any]:
+    name = shr.TRIALS_PATH.name
+    digest = digest or sha(TRIALS)
+    part = {"file": name, "sha256": digest, "rows": rows}
+    return {"file": name, "parts": [part], "sha256": digest, "rows": rows,
+            "catalogue_sha256": shr.REGISTERED_CATALOGUE_SHA256}  # fmt: skip
 
 
 def ledger(repo: Path, **changes: Any) -> shl.Ledger:
@@ -166,19 +179,40 @@ def test_h_refuses_frozen_files_that_moved(repo: Path) -> None:
         open_h(repo)
 
 
-def test_h_refuses_a_trial_ledger_unlike_the_amendments(repo: Path) -> None:
-    sidecar = {
-        "sha256": sha(TRIALS),
-        "rows": 11,
-        "catalogue_sha256": shr.REGISTERED_CATALOGUE_SHA256,
-    }
-    write(repo, shr.TRIALS_SIDECAR_PATH, json.dumps(sidecar).encode())
+def test_h_refuses_a_manifest_unlike_the_amendments(repo: Path) -> None:
+    assert not git(repo, "ls-files", shr.TRIALS_PATH.as_posix())  # the parts are never committed
+    write(repo, shr.TRIALS_MANIFEST_PATH, json.dumps(manifest(rows=11)).encode())
     commit(repo, "a row more")
-    with pytest.raises(HeldOutLocked, match="sidecar records"):
+    with pytest.raises(HeldOutLocked, match="manifest records"):
         open_h(repo)
-    write(repo, shr.TRIALS_PATH, b"other rows")
-    commit(repo, "other rows")
-    with pytest.raises(HeldOutLocked, match="trial ledger has sha256"):
+
+
+def test_h_checks_the_parts_on_disk_against_the_committed_manifest(repo: Path) -> None:
+    part = repo / shr.TRIALS_PATH
+    part.write_bytes(parquet_bytes(11))
+    with pytest.raises(HeldOutLocked, match="differs from its sha256"):
+        open_h(repo)
+    part.unlink()
+    with pytest.raises(HeldOutLocked, match="not on disk"):
+        open_h(repo)
+    part.write_bytes(TRIALS)
+    extra = write(repo, part.with_name(f"{part.stem}.part001.parquet"), TRIALS)
+    with pytest.raises(HeldOutLocked, match="does not list"):
+        open_h(repo)
+    extra.unlink()
+    assert open_h(repo)["block"] == "H"
+
+
+def test_h_refuses_a_misrecorded_part_and_a_missing_manifest(repo: Path) -> None:
+    record = manifest()
+    record["parts"][0]["rows"] = 9
+    write(repo, shr.TRIALS_MANIFEST_PATH, json.dumps(record).encode())
+    commit(repo, "a part's rows misrecorded")
+    with pytest.raises(HeldOutLocked, match="another row count"):
+        open_h(repo)
+    (repo / shr.TRIALS_MANIFEST_PATH).unlink()
+    commit(repo, "no manifest")
+    with pytest.raises(HeldOutLocked, match="no trial-ledger manifest"):
         open_h(repo)
 
 
@@ -359,11 +393,12 @@ def test_the_environment_fingerprint_and_the_trial_ledger_parts(tmp_path: Path) 
     assert shl.library_commit("pytest") is None
     assert shl.library_commit("no-such-distribution") is None
     parts = [write(tmp_path, f"t.part{k}.parquet", bytes([k]) * 3) for k in range(3)]
-    found = shl.trial_ledger_paths(tmp_path, Path("t.parquet"))
+    found = shl.trial_ledger_parts(tmp_path, Path("t.parquet"))
     assert found == parts
     assert shl.trial_ledger_sha256(found) == sha(b"".join(p.read_bytes() for p in parts))
     write(tmp_path, "t.parquet", b"one")
-    assert shl.trial_ledger_paths(tmp_path, Path("t.parquet")) == [tmp_path / "t.parquet"]
+    assert shl.trial_ledger_parts(tmp_path, Path("t.parquet")) == [tmp_path / "t.parquet", *parts]
+    assert shl.parquet_rows(write(tmp_path, "r.parquet", TRIALS)) == 10
 
 
 def test_a_process_refuses_frozen_files_that_moved_after_the_open(repo: Path) -> None:
