@@ -19,6 +19,11 @@
   (``short_horizon_registration.freeze_text``) and a dated section appended
   to the registration with the line ``Frozen configuration sha256: `<hash>```.
   Both files are written for review; committing them is the author's act.
+* **The pages** as far as D, C and E fill them (:mod:`.pages`): the search
+  and payoff sentences, the passive sentence when S-P and S-M were not
+  admitted, the S25 page with the ladder's steps 1 and 2, D's part of the
+  regime map, and the figures of the search; a failure there is recorded,
+  never raised after the amendment is written.
 """
 
 from __future__ import annotations
@@ -478,6 +483,7 @@ def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> d
     from trading_research.data import study_access as sa
     from trading_research.pipeline.short_horizon import statuses as st
     from trading_research.pipeline.short_horizon.heldout import Block, compute_block
+    from trading_research.pipeline.short_horizon.page_numbers import block_numbers
     from trading_research.pipeline.short_horizon.stage0 import load_timing_day, parity
 
     holds = sorted({parse_key(k).hold_s for k in study.keys})
@@ -490,10 +496,11 @@ def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> d
     stand_in = Block(study, "H", access, days, values=values, end=end, label="rehearsal_H")
     series, info = compute_block(stand_in)
     found = st.family(series, {slot: s.mask(s.days) for slot, s in series.items()}, "H", {})
+    numbers = block_numbers(stand_in, series, {})
     reader = Block(study, "F", access, study.scale.days(sa.READER_TEST), values=values, end=end,
                    label="rehearsal_F_and_P")  # fmt: skip
-    outputs = {"stand_in_H": {"info": info, "statuses": {k: a.status for k, a in found.items()}},
-               "stand_in_F_and_P": reader.validated}  # fmt: skip
+    outputs = {"stand_in_H": {"info": info, "statuses": {k: a.status for k, a in found.items()},
+                              "pages": numbers}, "stand_in_F_and_P": reader.validated}  # fmt: skip
     save_json(study.dir("E", "rehearsal") / "discarded_outputs.json", outputs)
     return {"ran": True, "parity_repeated_ok": True, "stand_in_H_days": len(days),
             "stand_in_F_and_P_days": len(reader.days_planned), "outputs": "discarded, never reported"}  # fmt: skip
@@ -503,6 +510,7 @@ def run(study: Study) -> dict[str, Any]:
     """Stage E's record: the frozen fits and files, the MDEs, the detector, the amendment."""
     from trading_research.pipeline import short_horizon_registration as shr
     from trading_research.pipeline.short_horizon.inputs import Inputs
+    from trading_research.pipeline.short_horizon.pages import publish_or_note
     from trading_research.pipeline.short_horizon_ledger import FITTED_VALUES_PATH
 
     registration = shr.Registration.load(repo=study.repo)
@@ -526,8 +534,9 @@ def run(study: Study) -> dict[str, Any]:
     values = placeholder_values(study, parts)
     rehearsal = rehearse(study, inputs, values)
     written = write_amendment(study, values)
+    pages = publish_or_note(study)
     return plain({"commit": study.commit(), "fits": len(fits["weights_sha256"]),
                   "weights_sha256": fits["weights_sha256"], "finalists": parts["finalists"],
                   "fitted_values_sha256": fitted_sha, "mde": parts["mdes"], "detector": parts["detector"],
-                  "amendment": written, "dry_run": rehearsal, "next": "review and commit the frozen configuration, the amendment, "
-                  "the trial ledger and the results files; then open H"})  # fmt: skip
+                  "amendment": written, "dry_run": rehearsal, "pages": pages, "next": "review and commit the frozen "
+                  "configuration, the amendment, the trial ledger, the results files and the pages; then open H"})  # fmt: skip

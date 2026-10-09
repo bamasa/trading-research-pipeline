@@ -155,20 +155,37 @@ def read_blocks(study: Study, blocks: Sequence[str] = ("H", "F", "P")) -> dict[s
     return records
 
 
+def changed(repo: Path) -> list[str]:
+    """Files of the temporary repository that differ from its last commit."""
+    done = subprocess.run(["git", "status", "--porcelain"], cwd=repo, check=True,
+                          capture_output=True, text=True)  # fmt: skip
+    return sorted(line[3:] for line in done.stdout.splitlines())
+
+
 def dry_run(
     keep: Path | None = None, workers: int = 1, stages: Sequence[str] = STAGES
 ) -> dict[str, Any]:
-    """The whole dry run; its files are deleted unless ``keep`` is given."""
+    """The whole dry run, the pages written after stage E and after each read,
+    then once more; its files are deleted unless ``keep`` is given."""
+    from trading_research.pipeline.short_horizon.pages import publish
+
     root = keep or Path(tempfile.mkdtemp(prefix="short-horizon-dry-run-"))
     try:
         study = prepare(root, workers=workers)
         records = run(study, stages)
         reads = read_blocks(study)
         statuses = {block: r.get("statuses", r) for block, r in reads.items()}
+        written = publish(study)  # again, as ``pages`` would: the same files from the same results
         assert study.venue is not None
         return {
             "stages": list(records),
             "reads": statuses,
+            "pages": {
+                "written": written["written"],
+                "sentences": written["sentences"],
+                "pending": written["pending"],
+                "changed_on_rewrite": changed(study.repo),
+            },
             "venue": {"requests": len(study.venue.asked), "unknown": len(study.venue.unknown)},
             "work": str(study.work) if keep else "discarded",
         }
