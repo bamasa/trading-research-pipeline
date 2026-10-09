@@ -8,7 +8,7 @@ agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span, from W's first day, 2024-12-01, to P's last, 2025-12-31, to bound the data and the compute |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span, from W's first day, 2024-12-01, to P's last, 2025-12-31, to bound the data and the compute. The values the study code fixed, which the text had left open, were written in on 9 October 2026, still before any data was read ([Choices and their reasons](#choices-and-their-reasons)) |
 | **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy and holding horizons: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the status rules, the fetch plan, the compute budget and the amendment protocol |
 | **The break detector** | One frozen detector on hourly BTCUSDT returns ([The break detector](#the-break-detector)) has three roles: it **locates the 2025 break** `b`, the first alarm in F, that [R](#r-the-break-conditional) tests; its alarms **drive the [regime-policy axis](#the-regime-break-policy-axis)**, the guard after each alarm that the search chooses over; and its alarms **cut the [regime map](#the-regime-map)**. Its settings are fixed now; inside the search on D its hour profile is fitted fold by fold, so that the guard is causal; it is never refitted after a read |
 | **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
@@ -2697,7 +2697,7 @@ each where it applies and with one line here:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d`.
+`1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2715,7 +2715,10 @@ market maker's round trips were defined, and
 `035c4f44d85c3b3926e08016ad94a4c9bb20a51c7ac775514a256ef0af324f71` before the
 review of the search, and
 `77263756c67b48a3cbfbceb0f04cd92162d301615ef0f744d32ee6edff727156` before the
-search was narrowed to BTCUSDT.)
+search was narrowed to BTCUSDT, and
+`d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d` before the
+values the study code fixed were written in, `N` among them, which left 24
+placeholders.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the

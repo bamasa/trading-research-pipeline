@@ -8,8 +8,9 @@
 # multiplicity, feasibility), then recast from fixed hypotheses into a
 # registered strategy search, and the search reviewed for search multiplicity,
 # protocol and executability, still before any data was read; narrowed to
-# BTCUSDT alone on 9 October 2026, still before any data was read. They must
-# agree.
+# BTCUSDT alone on 9 October 2026, still before any data was read; the values
+# the study code fixed were written in the same day, still before any data was
+# read. They must agree.
 #
 # The search block below is generic: its schema (clock, cluster, stages, axes,
 # catalogue, strata, slots, regime source, nulls, admission, budget) is meant

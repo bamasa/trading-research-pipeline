@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import math
+import re
 from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
@@ -29,7 +30,7 @@ from trading_research.features import REGISTRY, study_set
 from trading_research.features.lob_tensor import fit_tensor_calibration, lob_tensor, register_tensor
 from trading_research.features.micro2025 import REGISTRY_2025
 from trading_research.labels.taker_vwap import WalkedTakerLabel, control_move_bp
-from trading_research.market_making import fill_rules, signal_entry
+from trading_research.market_making import fill_rules, prereg, signal_entry
 from trading_research.market_making.verdicts import day_t
 from trading_research.models import windows
 from trading_research.models.gbm import GradientBoostedBaseline
@@ -492,3 +493,31 @@ def test_a_trade_s_null_a_hour_is_its_entry_snapshot_s() -> None:
     assert "entry_snapshot_ns" in TRADE_COLUMNS
     assert _registered()["search"]["nulls"]["null_A_trade_hour"].endswith("entry snapshot")
     assert "A trade belongs to the UTC hour of its entry snapshot" in _document()
+
+
+# ---------------------------------------------------------------------------
+# The registered hash
+# ---------------------------------------------------------------------------
+
+
+def test_the_document_states_the_configuration_s_null_placeholder_hash() -> None:
+    text = CONFIG.read_text(encoding="utf-8")
+    computed = prereg.sha256_bytes(prereg.unfrozen_text(text).encode())
+    stated = re.search(r"with every placeholder `null`, has sha256 `([0-9a-f]{64})`", _document())
+    assert stated is not None and stated.group(1) == computed
+    assert len(prereg.placeholder_lines(text)) == 24
+    assert ("features", "longest_lookback_minutes") not in prereg.placeholder_lines(text)
+
+
+def test_every_new_value_is_fixed_not_a_placeholder() -> None:
+    marked = {".".join(path) for path in prereg.placeholder_lines(CONFIG.read_text("utf-8"))}
+    for key in (
+        "data.max_sequence_gaps_percentile",
+        "features.longest_lookback_minutes",
+        "features.row_declared_windows",
+        "models.seed",
+        "d_procedure.walk_forward.fold_level_leakage_test_fits",
+        "common.taker_fill.timing",
+        "search.hold_first_theta",
+    ):
+        assert key not in marked, key
