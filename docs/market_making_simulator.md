@@ -760,6 +760,45 @@ one-sided t (closed-form for integer degrees of freedom), Holm's procedure, the
 placebo percentile, the shuffled-state shift, the fee break-even on a grid, and
 the status rule.
 
+## Additions for the short-horizon study
+
+The 2025 short-horizon study (`docs/preregistration/short_horizon_2025.md`)
+runs its passive paths through this simulator with five additions. Each is off
+by default, so round one's and round two's runs are unchanged.
+
+* **A fixed clip.** `clip_btc` replaces `clip_notional` and the touch share:
+  the clip is that size, rounded down to the lot, at every decision, so K-cap
+  compares the position with a constant. Exactly one of the two is set.
+* **The shared walk.** Every taker order (flattens, the soft-limit return and a
+  quoter's cross) is priced by `backtest/walk.walk_book`, the function the
+  event-time taker executor (`backtest/taker.py`) and the walked-book label
+  call, with `flatten_slippage_bp` on top (0.5 by default, 0 in the study).
+  The walk is the former loop's arithmetic in the same order, so the prices
+  are the same to the last bit (`test_mm_taker_walk.py`). A taker order whose
+  walked snapshot is stamped more than one second after it arrives is counted
+  as `exit_late_snapshot`, as the executor counts it; nothing is excluded for it.
+* **Fill rules.** `fill_rule` is `queue` (R5-R7, the default), `touch` (in full
+  at the first print at or through the price, whatever is queued ahead: an
+  optimistic bound) or `trade_through` (R7 alone: pessimistic).
+  `market_making/fill_rules.compare_fill_rules` runs one order stream under all
+  three and reports the fill ratio, the volume ratio, gross, net and markouts by
+  path.
+* **The quoter's own orders.** A quoter that defines
+  `observe(own_orders, opened_ns)` is told, before each decision, which of its
+  orders are not done — each marked when its cancel is in flight — and when
+  the current position was opened. A real participant knows both from its
+  acknowledgements; nothing after the snapshot is passed.
+* **The signal-entry quoter** (`market_making/signal_entry.py`): one clip at
+  the touch per decision, kept at its first price, cancelled after the hold, a
+  feed pause or a newer regime flag and never re-posted, with a taker exit a
+  hold after the first fill. An order whose cancel is in flight counts as
+  resting, so a decision arriving meanwhile is skipped and the position never
+  exceeds one clip.
+
+S1 with the signal lean, its `sigma_ref` (the median `vol_bp_1m` over the
+warm-up block's rows, `vol_at_rows`) and the study's settings are in
+`pipeline/short_horizon_execution.py`.
+
 ## Not in this simulator yet
 
 The pipeline stage, the execution axis of the grand search and the

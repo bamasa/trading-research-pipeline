@@ -1286,6 +1286,9 @@ EXTRA_COUNTERS = (
     "clip_over_touch",
     "not_quoted_soft_limit",
     "feed_pauses",
+    "fills_touch",
+    EXIT_LATE,
+    "flatten_beyond_visible_book",
 )
 
 
