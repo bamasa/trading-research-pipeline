@@ -36,7 +36,7 @@ scale for the entire window. The median is unmoved by it.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -107,6 +107,7 @@ class RollingNormaliser:
         columns: Sequence[str] | None = None,
         *,
         floor: pd.Series | None = None,
+        column_floors: Mapping[str, float] | None = None,
     ) -> pd.DataFrame:
         """Normalise the named columns, leaving everything else untouched.
 
@@ -121,6 +122,11 @@ class RollingNormaliser:
         normalised value. Without it the fallback below applies, which is
         weaker — it recovers a usable number but does not know what "too small"
         means for this instrument.
+
+        ``column_floors`` sets a constant minimum scale per column, fitted on a
+        calibration window by :func:`fit_scale_floors`. It is what the size
+        columns need: their own rolling scale collapses in a quiet stretch, and
+        the spread says nothing about sizes.
         """
         chosen = (
             list(columns)
@@ -159,6 +165,8 @@ class RollingNormaliser:
             usable = scale.where(scale > 0, fallback)
             if floor is not None:
                 usable = usable.combine(floor.reindex(values.index), max)
+            if column_floors is not None and column in column_floors:
+                usable = usable.clip(lower=column_floors[column])
             normalised = (values - centre) / usable.where(usable > 0)
             normalised = normalised.where(centre.notna(), np.nan).fillna(
                 pd.Series(0.0, index=values.index).where(centre.notna())
@@ -174,6 +182,40 @@ class RollingNormaliser:
             "clip": self.clip,
             "warmup": self.warmup,
         }
+
+
+def fit_scale_floors(
+    normaliser: RollingNormaliser,
+    calibration: pd.DataFrame,
+    columns: Sequence[str],
+    *,
+    quantile: float = 0.10,
+    share_of_median: float = 0.05,
+    minimum: float = 1e-6,
+) -> dict[str, float]:
+    """Per-column scale floors from the calibration window's rolling scales.
+
+    The normaliser's own rolling scale is computed over ``calibration`` (the
+    warm-up block, never a scored day), and each column's floor is the larger
+    of its ``quantile`` and ``share_of_median`` of its median: low enough to
+    leave ordinary stretches alone, high enough that a quiet one cannot divide
+    by almost nothing. The floors are fitted values, written once and read on
+    every later block.
+    """
+    floors: dict[str, float] = {}
+    for column in columns:
+        rolling = calibration[column].rolling(normaliser.window, min_periods=normaliser.warmup)
+        if normaliser.method == "robust":
+            scale = (rolling.quantile(0.75) - rolling.quantile(0.25)) / 1.349
+        else:
+            scale = rolling.std()
+        values = scale.to_numpy(dtype="float64")
+        values = values[np.isfinite(values)]
+        if len(values) == 0:
+            raise ValueError(f"no rolling scale for {column!r} in the calibration window")
+        low = float(np.quantile(values, quantile))
+        floors[column] = max(low, share_of_median * float(np.median(values)), minimum)
+    return floors
 
 
 def normalise_pooled(
