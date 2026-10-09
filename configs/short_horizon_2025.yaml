@@ -229,18 +229,18 @@ models:
 search:
   clock: {rows: data.book.rows (100 ms), decisions: every row}
   cluster: day  # the unit of every daily series, null and Newey-West lag
-  instruments: [BTCUSDT, ETHUSDT, XRPUSDT]
-  blocks: {sandbox: [W, each instrument's January], scored: "D's walk-forward test days, 2025-02..06 (150)", held_out: [H, F, P]}
+  instruments: [BTCUSDT]
+  blocks: {sandbox: [W, January], scored: "D's walk-forward test days, 2025-02..06 (150)", held_out: [H, F, P]}
   stages:
-    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05, one XRPUSDT day of 2024); D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
-    - {stage: 1, what: "fetch, replay and features for W and D, one instrument at a time; leakage, fold-level leakage and flag-causality tests; selection per instrument on its January"}
-    - {stage: A, what: "600 walk-forward fits; predictions on the test days; candidate-row tapes per signal configuration and test day; daily IC on all decision rows"}
+    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05); D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
+    - {stage: 1, what: "fetch, replay and features for W and D; leakage, fold-level leakage and flag-causality tests; selection on January"}
+    - {stage: A, what: "200 walk-forward fits; predictions on the test days; candidate-row tapes per signal configuration and test day; daily IC on all decision rows"}
     - {stage: B, what: "every taker cell on every test day from walk tables; one trial-ledger row per cell-day"}
     - {stage: D, what: "the choice, admission and the placebo search, with the refit replication"}
     - {stage: C, what: "the simulator: S25-Z, S-P and S-M; A0 and FILL on O"}
     - {stage: E, what: "frozen fits; sigma_D and the MDEs; the detector's alarm rate on D; the dry run; the amendment"}
   axes:
-    instrument: {values: [BTCUSDT, ETHUSDT, XRPUSDT], kind: categorical, stage: A, code: "data/bybit.py, data/bybit_trades.py; per-instrument loader and clip", new: true}
+    instrument: {values: [BTCUSDT], kind: fixed, code: "data/bybit.py, data/bybit_trades.py; this study's loader"}
     stratum: {values: [C, R], kind: slot, C: three-class classifier with the hold-first rule, R: Gaussian regressor with the EV gate}
     model: {values: {C: [gbm, logistic], R: [tcn, bound_ridge]}, kind: categorical, stage: A, code: [models/gbm.py, models/linear.py, models/tcn.py with the Gaussian head (new), models/uncertainty.py]}
     label: {values: {C: walked_taker, R: forward_move}, kind: fixed by stratum, new: true}
@@ -255,18 +255,18 @@ search:
     execution: {values: {taker: [S25, S-C, S-R], signal_entry_quoter: [S-P, S25-Z], s1_with_lean: [S-M]}, kind: slot, chosen: never}
     exit: {value: close by time at hold_s, kind: fixed, measured_only: "passive exit at the touch, crossed after a further hold (S-P, S25-Z)"}
     measured_never_chosen: [fee tier, "fill rule (on_touch, trade_through, queue)", "queue brackets (none, all_ahead, pessimistic)", latency 110 ms]
-  validity: "C: every combination of instrument, model, inputs, gate, hold_s, trades_per_day, label_fee_bp and regime; R: every combination of instrument, model (inputs fixed by the model), gate, hold_s, k, beta_bp and regime"
-  fixed_not_searched: ["hyperparameters and seeds (defaults, one seed per fit)", cooldown 0 beyond the one-position rule, monthly walk-forward cadence, normaliser window, "feature selection (once per instrument, at most 40)", sizing (one clip), holds of 300 s and longer, exits other than the clock, "flag source (BTC's hourly monitor for every instrument)"]
+  validity: "C: every combination of model, inputs, gate, hold_s, trades_per_day, label_fee_bp and regime, on BTCUSDT; R: every combination of model (inputs fixed by the model), gate, hold_s, k, beta_bp and regime, on BTCUSDT"
+  fixed_not_searched: [instrument (BTCUSDT), "hyperparameters and seeds (defaults, one seed per fit)", cooldown 0 beyond the one-position rule, monthly walk-forward cadence, normaliser window, "feature selection (once, on January, at most 40)", sizing (one clip), holds of 300 s and longer, exits other than the clock, "flag source (the hourly monitor on Binance BTCUSDT futures bars)"]
   catalogue:
     key_C: "<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>"
     key_R: "<instrument>|R|<model>|<inputs>|<gate>|hold_s=<h>|k=<k>|beta_bp=<b>|regime=<r>"
     numbers_written_as: [0, 0.5, 1, 2, 5, 5.5, 20, 25, 50, 100, 120, 240]
     serialisation: keys sorted in byte order, each followed by a newline, UTF-8
-    groups: 54  # C 12 and R 6 per instrument
-    taker_cells: 7200  # C 1,536 and R 864 per instrument
-    signal_configurations: 120  # C model x inputs x hold x label fee (32) and R model x hold (8), per instrument
-    walk_forward_fits: 600
-    sha256: 45a32e8ada0401a4f4d225ba5c96197d5833927409b1db0a92e9fc8142aac4b5
+    groups: 18  # C 12 and R 6
+    taker_cells: 2400  # C 1,536 and R 864
+    signal_configurations: 40  # C model x inputs x hold x label fee (32) and R model x hold (8)
+    walk_forward_fits: 200  # gbm 80, logistic 80, tcn 20, bound_ridge 20
+    sha256: dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d
     entry_point: checks the sha256 before stage 1 and refuses any key outside the catalogue
   named:
     S25: "BTCUSDT|C|gbm|micro|open|hold_s=50|trades_per_day=240|label_fee_bp=0|regime=none"
@@ -275,14 +275,14 @@ search:
     R: {models: [tcn, bound_ridge], label: forward_move, decision: ev_gate, ordered_axes: [hold_s, k, beta_bp, regime], slot: S-R}
   slots: [S25, S-C, S-R, S-P, S-M]  # k = 5, fixed now; see the slots block
   regime_source:
-    detector: the detector block (BTC's hourly flags guard every instrument)
+    detector: the detector block (Binance BTCUSDT hourly flags guard the BTCUSDT strategies)
     flags_on_D: "fold-wise: for test month m, the hour profile fitted on the hours from 2024-12-01 to the last hour before m; one detect_breaks call from 2024-12-01 to m's last hour; the guard uses its alarms in [m's start - 120 h, m's end]"
     flags_on_H_F_P: the frozen detector, its profile fitted on all of D; also in the dry run
     windows_h: [4, 24, 120]  # 120 h is the monitor's re-arm time (min_history 121 h)
     flag_causality_test: "on the pattern of validation/leakage.py, in every fold: for every hour tau of test month m, mutating every bar after tau leaves every flag the guard uses at or before tau unchanged; the lead-in flags before m's start may use bars up to m's start, and the test begins at m's first hour; failure is K-flag-leak"
     attribution: {statistic: the slot's mean minus its window-0 twin's, reference: 95th percentile of the same difference under random flag sets, sets: {taker: 200, simulator: 20}, seeds: [0, 199], flags_per_set: "as many as the block has, at hours drawn uniformly over its usable hours", kill: false}
   choice:
-    per: stratum, across every group on all three instruments
+    per: stratum, across every group
     S: "median over the cell's neighbourhood of each cell's mean daily net_bp_trade at the base tier over the 150 test days"
     neighbourhood: "validation/search.neighbourhood_scores' block over the stratum's ordered axes, every cell within one step, diagonals included, at the cell's categorical values; every cell counted whatever its trade rate; a cell without a trade on D scores 0, written by the entry point"
     axes_as_numbers: {hold_s: seconds, trades_per_day: trades a day, k: k, beta_bp: bp, label_fee_bp: bp, regime: "window in hours: none 0, pull_4h 4, pull_24h 24, pull_120h 120"}  # never the catalogue's strings; a test asserts S25's 24-cell neighbourhood
@@ -305,23 +305,23 @@ search:
   nulls:
     statistic: "A = median over the chosen cell's neighbourhood of each cell's day-level t of G (0 for a cell without trades); G = net - (pnl_long_bp + pnl_short_bp) / 2 per trade, which is side x (pnl_long_bp - pnl_short_bp) / 2: costs removed, drift not (controlled by null_B and K-drift); centred under null_A"
     max_over: strata
-    rerun: [per-cell daily series, the 5-trade filter, neighbourhood medians, the choice in and across groups and instruments, the admission statistic]
+    rerun: [per-cell daily series, the 5-trade filter, neighbourhood medians, the choice in and across groups, the admission statistic]
     not_rerun: [fits, theta, checkpoints, feature selection, gate levels, guard flags]  # none reads a test day's outcome (fold-level leakage and flag-causality tests)
-    null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration and instrument in the hour, flipped_trade: "the stored walk of the opposite side, funding included"}
-    null_B: {unit: day, shifts: "every s with 7 <= s <= 143 on the circular calendar order of D's 150 test days (n = 150, 137 shifts)", same_s_for_every_instrument: true, order: "calendar, shared by every instrument", excluded_day: "a pair whose source or target day is excluded for an instrument contributes nothing for that instrument; counted", executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at stage 0, on BTCUSDT 2024-02-11 and 2024-03-05, before any 2025 fetch: at s = 0 the walk-table route equals the executor entry by entry, and ordinary entries from walk tables equal the executor's; a failure blocks stage B until fixed by a dated amendment; repeated in the dry run as a check (a failure there is a bug: amendment and D re-run in full)", fallback: none}
+    null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration in the hour, flipped_trade: "the stored walk of the opposite side, funding included"}
+    null_B: {unit: day, shifts: "every s with 7 <= s <= 143 on the circular calendar order of D's 150 test days (n = 150, 137 shifts)", same_s_for_every_configuration: true, order: calendar, excluded_day: "a pair whose source or target day is excluded contributes nothing; counted", executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at stage 0, on BTCUSDT 2024-02-11 and 2024-03-05, before any 2025 fetch: at s = 0 the walk-table route equals the executor entry by entry, and ordinary entries from walk tables equal the executor's; a failure blocks stage B until fixed by a dated amendment; repeated in the dry run as a check (a failure there is a bug: amendment and D re-run in full)", fallback: none}
     p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications); 999 for null_A, 137 for null_B; the counts computed directly by the entry point"
     bar: max(p_A, p_B) <= 0.05 / R_D  # R_D the number of complete D runs (search.d_runs); unit test at 137 shifts: at R_D 1, at most 5 shifts at or above A_j pass and 6 fail; verdicts.exceeds_placebos not used for (iv)
     refit: {mandatory: true, replications: 1, what: "every fold's training labels circularly shifted by 28 days within its training span; every gbm and logistic fit redone; stratum C's selection re-run, giving A_refit of C's chosen cell", rule: "an added condition for C* only: (iv) holds and A_C* > A_refit, strictly; stratum C against its own refit, the only stratum refitted", not_refitted: [tcn, bound_ridge]}
     diagnostic_only: global sign flip
     S25_against: Null A and Null B applied to its fixed cell, no selection
   reported_not_gating: [N_trials, "N_eff = effective_count(N_trials, mean_pairwise_correlation(daily G panel))", deflated Sharpe ratio of daily G and net per finalist, "selection premium (median null maximum of A, and A minus it)", "PBO by CSCV per stratum (10 blocks of 15 days, 252 splits)", MDE and power at t >= 3 for the carry-forward estimate]  # every D number labelled "selected, biased upward"
-  trial_bound: {N_max: 7255, parts: {taker_cells: 7200, S25-Z: 12, S-P: 30, S-M: 9, A0_and_FILL: 4}, S-P_regime_measurements: "its cell at each regime window other than its signal's own, of none, 4, 24 and 120 h (3)", S-M_regime_measurements: "guard_pull and guard_widen at 4, 24 and 120 h with lean 1 (6)", passive_exit_variant: "held-out blocks only, never on D", beyond_N_max: every ledger row counts in N_trials}
+  trial_bound: {N_max: 2455, parts: {taker_cells: 2400, S25-Z: 12, S-P: 30, S-M: 9, A0_and_FILL: 4}, S-P_regime_measurements: "its cell at each regime window other than its signal's own, of none, 4, 24 and 120 h (3)", S-M_regime_measurements: "guard_pull and guard_widen at 4, 24 and 120 h with lean 1 (6)", passive_exit_variant: "held-out blocks only, never on D", beyond_N_max: every ledger row counts in N_trials}
   trial_ledger: {file: experiments/results/short_horizon_2025_trials.parquet, format: "zstd parquet, split into parts under 100 MB if needed", row: "one per D run, configuration and test day", columns: [run, key, day, net_bp, G_bp, pnl_long_bp, pnl_short_bp, trades, skips], sidecar: "experiments/results/short_horizon_2025_trials.json: the catalogue sha256, each run's commit, the file's sha256 and row count, and the hand-run log", committed: at the end of each stage, N_trials: "distinct (run, key) pairs; the N quoted on every page and given to N_eff and the DSR", superseded_runs: "rows kept, counted in N_trials"}
   hand_runs: {catalogue_after_stage_0: never extended, definition: "a computation on a 2025-02..06 test day outside the entry point: a configuration run by hand, or any statistic of a label, return, prediction or P&L on those days, a feature's IC included; replay, validation, the leakage tests and feature building are not", logged: "in the trial ledger's sidecar with its date, what it computed and the days it read", effect: "every searched slot (S-C, S-R, and S-P or S-M when their signal is C* or R*) not admitted on D (hand run), p = 1 on every block", hash: unchanged}
   code_freeze: {note: docs/short_horizon_2025_code_freeze.md, records: "the commit of all study code (entry point, features, labels, models, executor, quoter, nulls, statistics)", when: before the stage 1 fetch, change_before_H: a correction under the amendment protocol}
   d_runs: {numbered: "every complete D run, from 1", R_D: their number, superseded_rows: kept in the trial ledger and N_trials, alpha_for_iv_and_p_search: 0.05 / R_D (Bonferroni over runs)}
   entry_point: {file: experiments/short_horizon_2025.py, committed: with all study code before the stage 1 fetch (code_freeze), every_test_day_score_from_it: true}
-  budget: {ceiling_days_D: 6, projected_D_hours: [100, 160], projection_includes: "null_B at full size (137 x the catalogue's cell-days) and the refit with its store rebuilds, timed at stage 0", reduction_order: [tcn on ETHUSDT and XRPUSDT, XRPUSDT entirely, hold_s 120, C's micro+tensor inputs, quiet_out gate], cuts_by: "a dated amendment with the new catalogue sha256, N_max, the configuration's new null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut, committed before stage 1; the loader checks the latest such hash", after_a_2025_file_on_disk: nothing cut; a slower run only takes longer}
+  budget: {ceiling_days_D: 6, projected_D_hours: [48, 85], projection_includes: "null_B at full size (137 x the catalogue's cell-days) and the refit, timed at stage 0", reduction_order: [hold_s 120, C's micro+tensor inputs, quiet_out gate], cuts_by: "a dated amendment with the new catalogue sha256, N_max, the configuration's new null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut, committed before stage 1; the loader checks the latest such hash", after_a_2025_file_on_disk: nothing cut; a slower run only takes longer}
   result_trials: null  # {N_trials, N_eff, R_D, trial ledger sha256 and row count, hand-run log}; frozen by the D amendment
   result_choice: null  # {C*: cell, S, neighbourhood with D values, peak; R*: the same}; frozen by the D amendment
   result_admission: null  # per slot: decision and reason, carry-forward G and net, PBO, DSR, selection premium; S-P's signal; frozen by the D amendment
@@ -335,8 +335,8 @@ d_procedure:
     inner_validation_days: 7  # per-side theta from the target rate (reads no outcome) and the network's checkpoint by inner rank IC
     purge: hold plus the longest feature lookback, before the inner validation and before the test month  # experiments/grand_search.py's purge not used
     fold_level_leakage_test: "mutating every price after fold m's cutoff, and every label at a row after it, leaves fold m's weights, theta, gate levels and checkpoint unchanged (sha256); the cutoff is the end of fold m's inner validation plus the hold, inside the purge before test month m; the precondition for nulls without refitting"
-  candidate_tapes: "per signal configuration and test day, the rows at which the loosest cell could enter (theta at 240 a day; k 0 and beta 0; gate open; no guard), with scores, gate and guard states; at most 10 GB"
-  walk_tables: "per instrument-day and hold, the long and short walked P&L at every 100 ms row from the taker executor's walk (10 ms latency, funding included); built in memory one day at a time, never stored"
+  candidate_tapes: "per signal configuration and test day, the rows at which the loosest cell could enter (theta at 240 a day; k 0 and beta 0; gate open; no guard), with scores, gate and guard states; at most 4 GB"
+  walk_tables: "per day and hold, the long and short walked P&L at every 100 ms row from the taker executor's walk (10 ms latency, funding included); built in memory one day at a time, never stored"
   thinning: one position at a time, an event-jump loop over the cell's subset of the tape
   choice: search.choice
   admission: search.admission
