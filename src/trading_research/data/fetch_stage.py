@@ -21,11 +21,14 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 from trading_research.data import fetch_log as fl
+from trading_research.data.disk import StageBudget
+from trading_research.data.failures import Opener
 from trading_research.data.study_fetch import BOOK, DayOutcome, peak_rss_bytes
 
 REPLAY_WORKERS_MAX = 4
@@ -180,3 +183,126 @@ def run_funding(
         for outcome in fetch_span([date.fromisoformat(r.day) for r in pending]):
             _record(log, outcome, frozenset())
     return log
+
+
+@dataclass(frozen=True)
+class StudyRoots:
+    """Where each plane lands; the repository's usual layout by default."""
+
+    book: Path
+    trades: Path
+    bars: Path
+    funding: Path
+    #: Pass-through directory: an archive lives here only until its replay.
+    archives: Path
+
+    @classmethod
+    def under(cls, data_root: Path | str) -> StudyRoots:
+        base = Path(data_root)
+        return cls(
+            book=base / "book",
+            trades=base / "trades",
+            bars=base / "bars",
+            funding=base / "funding",
+            archives=base / "_archives_in_flight",
+        )
+
+
+@dataclass(frozen=True)
+class StagePlan:
+    """The days a stage fetches, per plane (E's bars without its book, say)."""
+
+    book: tuple[date, ...] = ()
+    prints: tuple[date, ...] = ()
+    bars: tuple[date, ...] = ()
+    funding: tuple[date, ...] = ()
+
+
+def head_check_present(path: Path | str) -> dict[str, frozenset[date]]:
+    """Days the existence check found present, per archive (``ob500``, ``ob200``, ``prints``)."""
+    import csv
+
+    present: dict[str, set[date]] = {"ob500": set(), "ob200": set(), "prints": set()}
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            for archive, days in present.items():
+                if row[f"{archive}_status"].strip() == "200":
+                    days.add(date.fromisoformat(row["day"]))
+    return {archive: frozenset(days) for archive, days in present.items()}
+
+
+def files_on_disk(
+    symbol: str, plan: StagePlan, roots: StudyRoots, *, interval: str = "1h"
+) -> list[Path]:
+    """Every file of ``plan`` already on disk: a block opened for fetching has none."""
+    from trading_research.data import bybit_funding, bybit_trades
+    from trading_research.data.study_fetch import book_path
+
+    candidates = [book_path(symbol, d, roots.book) for d in plan.book]
+    candidates += [bybit_trades.day_path(symbol, d, roots.trades) for d in plan.prints]
+    candidates += [roots.bars / symbol / f"klines-{interval}" / f"{d}.parquet" for d in plan.bars]
+    candidates += [bybit_funding.day_path(symbol, d, roots.funding) for d in plan.funding]
+    return [p for p in candidates if p.exists()]
+
+
+def run_stage(
+    symbol: str,
+    plan: StagePlan,
+    roots: StudyRoots,
+    log: fl.FetchLog,
+    *,
+    budget: StageBudget,
+    book_workers: int,
+    print_workers: int = 8,
+    expected_present: dict[str, frozenset[date]] | None = None,
+    opener: Opener | None = None,
+    clock: Callable[[], datetime] = _now,
+    sleep: Callable[[float], None] = time.sleep,
+) -> fl.FetchLog:
+    """Check the disk, clear what an interrupted run left, then fetch every plane.
+
+    ``budget`` is the stage's :class:`trading_research.data.disk.StageBudget`;
+    the stage refuses to start unless free disk exceeds it by the margin.
+    Books run on ``book_workers`` (at most four; :func:`replay_workers` says how
+    many), prints on ``print_workers``, bars one day at a time and funding as
+    one span. ``opener`` serves the book and print archives (a
+    :class:`trading_research.data.failures.DirectoryOpener` replays archives
+    already on disk). Returns when every planned day is on disk or terminally
+    excluded.
+    """
+    import functools
+
+    from trading_research.data import disk
+    from trading_research.data import study_fetch as sf
+
+    disk.check_disk(roots.book, budget)
+    disk.delete_archives(roots.archives)
+    present = expected_present or {}
+    book_present = [d for d in plan.book if d in present.get(_archive_of(d), frozenset())]
+    loop: dict[str, Any] = {"clock": clock, "sleep": sleep}
+    archives: dict[str, Any] = {"archive_dir": roots.archives, "opener": opener}
+    book = functools.partial(sf.fetch_book_day, symbol, root=roots.book, **archives)
+    run_plane(
+        sf.BOOK, plan.book, book, log, workers=book_workers, expected_present=book_present, **loop
+    )
+    prints = functools.partial(sf.fetch_prints_day, symbol, root=roots.trades, **archives)
+    run_plane(
+        sf.PRINTS,
+        plan.prints,
+        prints,
+        log,
+        workers=print_workers,
+        expected_present=[d for d in plan.prints if d in present.get("prints", frozenset())],
+        **loop,
+    )
+    bars = functools.partial(sf.fetch_bars_day, symbol, root=roots.bars)
+    run_plane(sf.BARS, plan.bars, bars, log, workers=1, **loop)
+    funding = functools.partial(sf.fetch_funding_span, symbol, root=roots.funding)
+    run_funding(plan.funding, funding, log, **loop)
+    return log
+
+
+def _archive_of(day: date) -> str:
+    from trading_research.data.bybit import archive_kind
+
+    return archive_kind(day)
