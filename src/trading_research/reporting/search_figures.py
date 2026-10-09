@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from trading_research.market_making.fill_rules import QUEUE_AT_MOST, TOUCH_AT_LEAST
 from trading_research.reporting.leaderboard import SELECTED
 from trading_research.reporting.plots import COLOURS, _pyplot
 
@@ -239,3 +240,117 @@ def marginals_chart(marginals: pd.DataFrame, path: Path | str, *, title: str = "
         ax.set_xlabel("median over cells of mean daily net, bp", fontsize=8)
     title = title or "What each design choice moves: the median cell per axis value"
     return _save(fig, path, title, DEVELOPMENT)
+
+
+def edge_ladder_chart(ladder: pd.DataFrame, path: Path | str, *, title: str = "") -> Path:
+    """S25's edge ladder (``reporting.edge_ladder``): each step's values in bp
+    of traded notional, and the break-even per side against every tier.
+
+    Rows inside S25's information set are hatched, a row not read yet is
+    named and left empty, and the dashed line is a net of 0.
+    """
+    plt = _pyplot()
+    bars = ladder.loc[ladder["unit"] == "bp of traded notional"].reset_index(drop=True)
+    tiers = ladder.loc[ladder["unit"] == "bp per side"].reset_index(drop=True)
+    fig, (left, right) = plt.subplots(
+        1, 2, figsize=(10.5, 0.32 * len(bars) + 1.8), gridspec_kw={"width_ratios": [1.5, 1.0]}
+    )
+    y = np.arange(len(bars))
+    values = bars["value"].to_numpy(dtype=np.float64)
+    inside = bars["label"].str.contains("information set").to_numpy()
+    shown = np.where(np.isfinite(values), values, 0.0)
+    left.barh(y[~inside], shown[~inside], height=0.6, color=COLOURS["signal"])
+    left.barh(
+        y[inside],
+        shown[inside],
+        height=0.6,
+        color="none",
+        edgecolor=COLOURS["signal"],
+        hatch="///",
+        linewidth=0.8,
+        label="inside S25's information set",
+    )
+    for i in np.flatnonzero(~np.isfinite(values)):
+        left.text(0.0, i, " not read yet", va="center", fontsize=7.5, color=COLOURS["neutral"])
+    blocks = bars["block"].str.replace("H before 2025-08-01", "H to 07-31", regex=False)
+    labels = [f"{s}. {r} ({b})" for s, r, b in zip(bars["step"], bars["row"], blocks, strict=True)]
+    left.set_yticks(y, labels, fontsize=7.5)
+    left.invert_yaxis()
+    left.axvline(0.0, color=COLOURS["cost"], linestyle="--", linewidth=1.0)
+    left.set_xlabel("bp of traded notional")
+    if inside.any():
+        left.legend(frameon=False, fontsize=7.5, loc="lower left", bbox_to_anchor=(0.0, 1.0))
+    fees = tiers["reference"].to_numpy(dtype=np.float64)
+    names = [str(r).rsplit(", ", 1)[-1] for r in tiers["row"]]
+    right.scatter(
+        fees,
+        np.arange(len(tiers)),
+        s=24,
+        color=COLOURS["cost"],
+        zorder=3,
+        label="taker fee of the tier",
+    )
+    right.set_yticks(np.arange(len(tiers)), names, fontsize=7.5)
+    right.invert_yaxis()
+    even = tiers["value"].to_numpy(dtype=np.float64)
+    if len(even) and np.isfinite(even[0]):
+        right.axvline(
+            even[0], color=COLOURS["signal"], linewidth=2.0, label=f"S25's break-even {even[0]:.2f}"
+        )
+    elif len(even):
+        right.text(
+            0.98,
+            0.02,
+            "break-even not read yet",
+            transform=right.transAxes,
+            ha="right",
+            fontsize=8,
+            color=COLOURS["neutral"],
+        )
+    right.set_xlabel("bp per side")
+    right.legend(frameon=False, fontsize=7.5, loc="lower left", bbox_to_anchor=(0.0, 1.0))
+    return _save(fig, path, title or "S25's edge ladder: one change at each step")
+
+
+#: How the fill-rule chart names each rule.
+RULE_NAMES = {"touch": "on touch", "trade_through": "trade-through", "queue": "queue"}
+
+
+def fill_rule_chart(streams: dict[str, pd.DataFrame], path: Path | str, *, title: str = "") -> Path:
+    """FILL: the share of posted orders with a fill under each rule, one bar
+    per order stream (A0 on O; S-P and S25-Z on H), each bar labelled with
+    its value, and the registered prediction drawn over its rule.
+
+    Each table is ``market_making.fill_rules.FillComparison.summary``.
+    """
+    plt = _pyplot()
+    rules = list(RULE_NAMES)
+    palette = [COLOURS["signal"], COLOURS["accent"], COLOURS["edge"]]
+    if len(streams) > len(palette):
+        raise ValueError(f"at most {len(palette)} order streams, got {len(streams)}")
+    fig, ax = plt.subplots(figsize=(7.5, 4.0))
+    width = 0.8 / max(len(streams), 1)
+    for k, (name, summary) in enumerate(streams.items()):
+        ratio = summary.set_index("rule")["fill_ratio"].reindex(rules).to_numpy(dtype=np.float64)
+        x = np.arange(len(rules)) - 0.4 + width * (k + 0.5)
+        ax.bar(x, np.nan_to_num(ratio), width=width * 0.9, color=palette[k], label=name)
+        for xi, value in zip(x, ratio, strict=True):
+            text = "n/a" if not math.isfinite(value) else f"{value:.2f}"
+            ax.text(
+                xi, (value if math.isfinite(value) else 0.0) + 0.02, text, ha="center", fontsize=7.5
+            )
+    for i, (bound, words) in ((0, (TOUCH_AT_LEAST, "at least")), (2, (QUEUE_AT_MOST, "at most"))):
+        ax.hlines(bound, i - 0.45, i + 0.45, color=COLOURS["cost"], linestyles="--", linewidth=1.2)
+        ax.text(
+            i,
+            1.05,
+            f"prediction, dashed: {words} {bound:.2f}",
+            ha="center",
+            fontsize=7.5,
+            color=COLOURS["cost"],
+        )
+    ax.set_xticks(np.arange(len(rules)), [RULE_NAMES[r] for r in rules])
+    ax.set_ylim(0.0, 1.1)
+    ax.set_ylabel("fill ratio: share of posted orders with a fill")
+    ax.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, 0.95))
+    return _save(fig, path, title or "The fill rule: the same orders under three rules")
