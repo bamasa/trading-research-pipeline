@@ -23,8 +23,11 @@ from trading_research.data import fetch_log, study_fetch, study_loader
 from trading_research.features import REGISTRY, study_set
 from trading_research.features.lob_tensor import fit_tensor_calibration, lob_tensor, register_tensor
 from trading_research.features.micro2025 import REGISTRY_2025
-from trading_research.labels.taker_vwap import control_move_bp
+from trading_research.labels.taker_vwap import WalkedTakerLabel, control_move_bp
 from trading_research.models import windows
+from trading_research.models.gbm import GradientBoostedBaseline
+from trading_research.models.linear import LogisticBaseline
+from trading_research.models.tcn import GaussianTCN
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "short_horizon_2025.yaml"
@@ -234,3 +237,66 @@ def test_no_rolling_normaliser_reaches_the_study() -> None:
     assert "**No rolling normaliser** is applied to any input" in _document()
     text = " ".join(_registered()["search"]["fixed_not_searched"])
     assert "no rolling normaliser" in text
+
+
+# ---------------------------------------------------------------------------
+# Labels and models
+# ---------------------------------------------------------------------------
+
+
+def test_a_row_without_a_fillable_entry_has_no_label() -> None:
+    rows = _book(200)
+    label = WalkedTakerLabel(hold_s=1.0)
+    assert label(rows).iloc[:150].notna().all()
+    assert label(rows).iloc[-5:].isna().all()  # no exit snapshot: no label
+    thin = rows.copy()
+    for i in range(10):
+        thin[f"ask_size_{i}"] = thin[f"bid_size_{i}"] = 0.0005  # 0.005 visible < 0.010
+    assert label(thin).isna().all()  # every entry would be skipped: none is hold
+    assert "has no label rather than `hold`" in _document()
+
+
+def test_every_fit_has_the_registered_seed() -> None:
+    seed = _registered()["models"]["seed"]
+    for model in (GradientBoostedBaseline, LogisticBaseline, GaussianTCN):
+        assert inspect.signature(model.__init__).parameters["seed"].default == seed == 42
+
+
+def test_training_rows_are_thinned_by_position_over_the_days_in_order() -> None:
+    days = [np.arange(0, 60, 10), np.arange(0, 40, 10), np.arange(0, 50, 10)]  # 6 + 4 + 5
+    kept = windows.thin_evenly(days, 5)
+    positions = np.floor(np.arange(5) * (15 / 5)).astype(int)  # 0, 3, 6, 9, 12
+    flat = np.concatenate(days)
+    assert np.concatenate(kept).tolist() == flat[positions].tolist()
+    assert [len(k) for k in kept] == [2, 2, 1]
+    assert "floor(i x total / 4000000)" in _registered()["models"]["training_rows_kept"]
+
+
+def test_the_network_leaves_a_constant_input_unscaled() -> None:
+    torch_tcn = pytest.importorskip("trading_research.models.tcn")
+    values = np.column_stack([np.arange(100.0), np.zeros(100), np.full(100, 7.0)])
+    day = windows.Day("d", lambda: values.astype(np.float32), windows.every_nth_row(100))
+    mean, scale = torch_tcn._input_moments(windows.WindowDataset([day], window=8))
+    assert scale[1] == scale[2] == 1.0 and mean[2] == 7.0
+    assert scale[0] == pytest.approx(
+        np.std(np.arange(10.0, 100.0, 10.0))
+    )  # population, at window ends
+
+
+def test_the_fold_level_test_fits_on_the_reproducible_device() -> None:
+    pytest.importorskip("torch")
+    rule = _registered()["d_procedure"]["walk_forward"]["fold_level_leakage_test_fits"]
+    assert rule["device"] == "cpu" and "epochs 1" in rule["tcn"]
+    rng = np.random.default_rng(0)
+    x = pd.DataFrame(rng.normal(size=(600, 3)), columns=["a", "b", "c"])
+    y = pd.Series(x["a"].rolling(5).sum().fillna(0.0) + rng.normal(size=600))
+    vx, vy = x.iloc[:200].reset_index(drop=True), y.iloc[:200].reset_index(drop=True)
+    small = {"window": 8, "channels": 4, "levels": 1, "batch_size": 64, "epochs": 1}
+
+    def fit() -> GaussianTCN:
+        return GaussianTCN(**small, device=rule["device"]).fit(x, y, validation=(vx, vy))  # type: ignore[arg-type]
+
+    one, two = fit(), fit()
+    assert one.weights_sha256() == two.weights_sha256()
+    assert one.history_ == two.history_ and one.checkpoint_epoch_ == 1
+    assert "**The test's fits run on the CPU.**" in _document()

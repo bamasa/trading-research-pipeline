@@ -503,7 +503,9 @@ Every label, feature and model below is built on BTCUSDT.
   **label fee** is a searched value, 0 or 5.5 bp, charged on both sides; S25's
   and A0's label is at 0 bp. The label clip is the traded clip and the label
   horizon is the hold, so the label declares `h` and the purge is derived
-  from it.
+  from it. A row whose entry snapshot cannot fill the clip within the ten
+  levels (an entry the executor would skip), or that has no entry or exit
+  snapshot, has no label rather than `hold`, and is not a training row.
 - **The forward move**, stratum R: the mid at the exit snapshot over the mid
   at the entry snapshot, − 1, in bp (a simple return), both snapshots as for
   the walked label; forward-only, unsmoothed. It is new code:
@@ -604,7 +606,9 @@ Every label, feature and model below is built on BTCUSDT.
   and as the network's auxiliary input; it is recorded in the amendment.
 
 **Models.** No hyperparameter of any model is searched; every model uses
-this repository's defaults, with one registered seed per fit.
+this repository's defaults, with one registered seed per fit: **42** for
+every fit, the boosted, logistic and network classes' default (the ridge
+models draw no random numbers).
 
 - **Gradient boosting** (`models/gbm.py`, `gbm` below), three classes. With
   `balance_classes` (its default), a fit (a walk-forward fold or a frozen
@@ -623,7 +627,9 @@ this repository's defaults, with one registered seed per fit.
   log v ± 6. Early stopping (patience 3 epochs) and the checkpoint both read
   the rank correlation of μ with the realised forward move on the inner
   validation; `TCNBaseline`'s internal 15% split is not used. Fits run on the
-  MPS device, one at a time.
+  MPS device, one at a time. Its inputs are standardised inside the graph by
+  their mean and population standard deviation at the training rows' window
+  ends, merged day by day; a constant column is left unscaled.
 - **The bound regressor** (`bound_ridge`, `pipeline/stages.UNCERTAIN`): two
   ridge models (`models/uncertainty.HeteroscedasticRegressor`, at its
   defaults), μ from the first and σ from the second, the cheap baseline of
@@ -635,9 +641,13 @@ this repository's defaults, with one registered seed per fit.
   window dataset (new code) that streams them per day from the every-row
   feature store and never materialises them for a whole fit or day:
   `models/tcn._windowise` copies, and at 4 million rows of about 70 inputs a
-  materialised fit would need about 72 GB.
+  materialised fit would need about 72 GB. A row whose window is incomplete
+  (it reaches before the history the day may read, or holds a missing value)
+  has no prediction, and so no decision.
 - **Training rows**: every fit reads at most 4 million training rows, taken
-  evenly in time from every tenth row.
+  evenly in time from every tenth row: the kept positions are
+  ⌊i × total / 4,000,000⌋ over the training days' every-tenth rows in day
+  order, so every day is thinned alike.
 
 ---
 
@@ -862,6 +872,16 @@ gives each one's time and disk.
    cutoff is the end of fold m's inner validation plus the hold, inside the
    purge before test month m: the inner validation's labels and forward moves
    read prices up to a hold past its end, and nothing fitted reads later.
+   **The test's fits run on the CPU.** In every fold it compares one fit of
+   each model at a hold of 20 s (stratum C's on the micro-selected inputs at
+   a 0 bp label fee), with θ at the four rates and the gate levels; the
+   network is trained for one epoch (`epochs` = 1) with its inner validation
+   scored, and its weights, that epoch's inner rank IC and its checkpoint
+   epoch are compared. The CPU reproduces the network's weights bit for bit
+   from its seed, which a unit test checks; PyTorch does not promise that on
+   MPS, where two fits could differ without a leak and void the study under
+   K-leak. Its cost, about 1 to 1.5 hours a network fit on the CPU, is timed
+   at stage 0 and enters D's projection.
 5. **Stage A: fits.** The 200 walk-forward fits (40 signal configurations ×
    5 folds), the predictions on the test days, and for each signal
    configuration and test day a **candidate-row tape**: the rows at which the
@@ -2551,6 +2571,22 @@ each where it applies and with one line here:
   selection keeps**: it follows from the declared windows alone, so it is
   fixed now rather than in the amendment, and it is at least the selected
   set's.
+- **A row without a fillable entry or without snapshots has no label**,
+  rather than `hold`: a trade the executor would skip says nothing about the
+  move, and `hold` would teach the model that it does.
+- **Seed 42 for every fit**: the model classes' default, so one value is the
+  registered seed.
+- **The network standardises inside its graph, on its training rows' window
+  ends; a constant column stays unscaled**: weight files and ONNX graphs read
+  raw store rows, and a zero scale would divide by nothing.
+- **Training rows thinned by position over the days in order**: every day
+  keeps the same share of its rows, so a long fold does not drop its last
+  days.
+- **The fold-level test fits on the CPU, one fit a model a fold at 20 s, the
+  network for one epoch**: equal sha256 means no leak only where the fit is
+  reproducible bit for bit, which the CPU is and MPS is not promised to be;
+  one epoch reads every training and inner-validation row a full fit reads,
+  at a cost stage 0 can carry.
 
 ---
 

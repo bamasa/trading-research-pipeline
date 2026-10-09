@@ -197,6 +197,7 @@ labels:
     normalised_by: the entry snapshot's mid
     classes: [long, hold, short]  # long if long P&L > 0, short if short P&L > 0, else hold
     label_fee_bp: [0, 5.5]  # a searched axis (search.axes.label_fee_bp), charged on both sides; S25 and A0 at 0
+    no_label: "a row whose entry snapshot cannot fill the clip within ten levels, or without an entry or exit snapshot: no label (not hold), not a training row"
   forward_move: {stratum: R, definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp (a simple return), smoothing: 1, form: time-based (new code; forward_smoothed_move_bp not used)}
   control: {form: "time-based smoothed_move_bp (new code): log of the mean mid over the 20 rows ending at the first row stamped at or after t + hold, over the mean mid over the 20 rows ending at t, x 1e4", smoothing_rows: 20, horizon: hold, horizon_measured_on: row stamps, used_by: "the K-label control networks, at the frozen fits only, on the holds of R*'s neighbourhood, when R*'s model is tcn"}
 
@@ -226,13 +227,16 @@ features:
 
 models:
   hyperparameters: repository defaults; one registered seed per fit; none searched
+  seed: 42  # every fit: gbm, logistic, tcn and the control networks (the classes' default); the ridge models draw no random numbers
   gbm: {code: models/gbm.py, classes: 3, stratum: C, missing_class_in_fit: that side's probability is 0 (_align_columns) and it never trades with that model; reported, cores: "all (n_jobs -1)", fits_at_once: 1}
   logistic: {code: models/linear.py LogisticBaseline, classes: 3, stratum: C, missing_class_in_fit: as gbm}
   tcn: {code: models/tcn.py, stratum: R, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: "gaussian_nll + 0.01 x mean((log_variance - log v)^2), v the variance of the fold's training targets", log_variance_clamp: log v +- 6, early_stopping: {patience_epochs: 3, on: rank IC of mu against the realised forward move on the inner validation}, checkpoint: the same rank IC, internal_validation_split: not used, device: mps, fits_at_once: 1}
+  tcn_inputs: {standardised: "inside the graph, by the mean and population std at the training rows' window ends, merged day by day; a constant column unscaled", incomplete_window: "no prediction and no decision (before the history the day may read, or a missing value in the window)"}
   bound_ridge: {code: "models/uncertainty.py HeteroscedasticRegressor (pipeline/stages.py UNCERTAIN bound_ridge: ridge, ridge)", settings: defaults, stratum: R, mu: the mean model, sigma: the square root of the variance model}
   control_network: same as tcn, trained on the control label
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch, streamed per day from the every-row store (new code)", inference: batched}
   training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
+  training_rows_kept: "positions floor(i x total / 4000000) over the training days' every-tenth rows in day order"
   frozen: {train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30, fits: "every hold and label fee in the neighbourhood of C*, R* (admitted or not) and S25", max_fits: {gbm_and_logistic: 12, bound_ridge: 3, tcn: 4, control: 4}}  # gbm/logistic: 6 for C*'s holds and label fees, 6 for S25's; bound_ridge: R*'s holds
   weights_sha256: null  # {fit key: sha256} for every frozen fit; the only place they are written; frozen by the D amendment
   checkpoint_epoch: null  # {fit key: epoch} for the frozen network and control fits; the only place they are written; frozen by the D amendment
@@ -346,6 +350,7 @@ d_procedure:
     inner_validation_days: 7  # per-side theta from the target rate (reads no outcome) and the network's checkpoint by inner rank IC
     purge: hold plus the longest feature lookback, before the inner validation and before the test month  # experiments/grand_search.py's purge not used
     fold_level_leakage_test: "mutating every price after fold m's cutoff, and every label at a row after it, leaves fold m's weights, theta, gate levels and checkpoint unchanged (sha256); the cutoff is the end of fold m's inner validation plus the hold, inside the purge before test month m; the precondition for nulls without refitting"
+    fold_level_leakage_test_fits: {device: cpu, per_fold: "one fit of each model at hold_s 20 (C on micro inputs at label_fee_bp 0), with theta at the four rates and the gate levels", tcn: "epochs 1 with the inner validation scored; weights, that epoch's inner rank IC and the checkpoint epoch compared", reason: "bit-for-bit reproducible from the seed on the CPU (unit test); MPS promises no bitwise determinism", cost: "about 1 to 1.5 h a network fit on the CPU, timed at stage 0 and in D's projection"}
   candidate_tapes: "per signal configuration and test day, the rows at which the loosest cell could enter (theta at 240 a day; k 0 and beta 0; gate open; no guard), with scores, gate and guard states; at most 4 GB"
   walk_tables: "per day and hold, the long and short walked P&L at every 100 ms row from the taker executor's walk (10 ms latency, funding included); built in memory one day at a time, never stored"
   thinning: one position at a time, an event-jump loop over the cell's subset of the tape
