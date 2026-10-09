@@ -242,6 +242,7 @@ models:
   logistic: {code: models/linear.py LogisticBaseline, classes: 3, stratum: C, missing_class_in_fit: as gbm}
   tcn: {code: models/tcn.py, stratum: R, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: "gaussian_nll + 0.01 x mean((log_variance - log v)^2), v the variance of the fold's training targets", log_variance_clamp: log v +- 6, early_stopping: {patience_epochs: 3, on: rank IC of mu against the realised forward move on the inner validation}, checkpoint: the same rank IC, internal_validation_split: not used, device: mps, fits_at_once: 1}
   tcn_inputs: {standardised: "inside the graph, by the mean and population std at the training rows' window ends, merged day by day; a constant column unscaled", incomplete_window: "no prediction and no decision (before the history the day may read, or a missing value in the window)"}
+  tcn_batches: {days_per_shard: 4, order: "each epoch shuffles the training days into shards of four, read one at a time, and shuffles the windows within each, from the fit's seeded generator"}
   bound_ridge: {code: "models/uncertainty.py HeteroscedasticRegressor (pipeline/stages.py UNCERTAIN bound_ridge: ridge, ridge)", settings: defaults, stratum: R, mu: the mean model, sigma: the square root of the variance model}
   control_network: same as tcn, trained on the control label
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch, streamed per day from the every-row store (new code)", inference: batched}
@@ -307,6 +308,7 @@ search:
     windows_h: [4, 24, 120]  # 120 h is the monitor's re-arm time (min_history 121 h)
     flag_causality_test: "on the pattern of validation/leakage.py, in every fold: for every hour tau of test month m, mutating every bar after tau leaves every flag the guard uses at or before tau unchanged; the lead-in flags before m's start may use bars up to m's start, and the test begins at m's first hour; failure is K-flag-leak"
     attribution: {statistic: the slot's mean minus its window-0 twin's, reference: 95th percentile of the same difference under random flag sets, sets: {taker: 200, simulator: 20}, seeds: [0, 199], flags_per_set: "as many as the block has, at hours drawn uniformly over its usable hours", kill: false}
+    attribution_flag_hours: "drawn without replacement; set k from numpy.random.default_rng(k)"
   choice:
     per: stratum, across every group
     S: "median over the cell's neighbourhood of each cell's mean daily net_bp_trade at the base tier over the 150 test days"
@@ -339,6 +341,7 @@ search:
     not_rerun: [fits, theta, checkpoints, feature selection, gate levels, guard flags]  # none reads a test day's outcome (fold-level leakage and flag-causality tests)
     null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration in the hour, flipped_trade: "the stored walk of the opposite side, funding included"}
     null_A_signs: "1 - 2 x default_rng(b).integers(0, 2, size=hours), the hours in time order; 0 keeps the side, 1 flips it"
+    null_A_trade_hour: the UTC hour of the trade's entry snapshot
     null_B: {unit: day, shifts: "every s with 7 <= s <= 143 on the circular calendar order of D's 150 test days (n = 150, 137 shifts)", same_s_for_every_configuration: true, order: calendar, excluded_day: "a pair whose source or target day is excluded contributes nothing; counted", executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at stage 0, on BTCUSDT 2024-02-11 and 2024-03-05, before any 2025 fetch: at s = 0 the walk-table route equals the executor entry by entry, and ordinary entries from walk tables equal the executor's; a failure blocks stage B until fixed by a dated amendment; repeated in the dry run as a check (a failure there is a bug: amendment and D re-run in full)", fallback: none}
     p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications); 999 for null_A, 137 for null_B; the counts computed directly by the entry point"
     bar: max(p_A, p_B) <= 0.05 / R_D  # R_D the number of complete D runs (search.d_runs); unit test at 137 shifts: at R_D 1, at most 5 shifts at or above A_j pass and 6 fail; verdicts.exceeds_placebos not used for (iv)

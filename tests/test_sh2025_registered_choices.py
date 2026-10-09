@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import math
+from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -18,7 +19,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from trading_research.backtest.taker import TakerBook, execute_day
+from trading_research.backtest.taker import TRADE_COLUMNS, TakerBook, execute_day
 from trading_research.data import feature_store as fs
 from trading_research.data import fetch_log, study_fetch, study_loader
 from trading_research.evaluation.family import slot_p_value
@@ -34,6 +35,7 @@ from trading_research.models import windows
 from trading_research.models.gbm import GradientBoostedBaseline
 from trading_research.models.linear import LogisticBaseline
 from trading_research.models.tcn import GaussianTCN
+from trading_research.pipeline.regime import random_flag_sets, usable_hours
 from trading_research.reporting.regime_map import regime_map
 from trading_research.strategies.ev_gate import EVGate, gate_events, thin_entries
 from trading_research.strategies.hold_first import fit_hold_first, side_threshold
@@ -463,3 +465,30 @@ def test_a_segment_starts_on_the_first_day_after_its_alarm() -> None:
     assert pd.Timestamp(segments["start"].iloc[1]).day == 4
     blocks = {d.date(): ("D" if d.day <= 2 else "H") for d in days}
     assert len(regime_map(daily, [alarm], blocks=blocks)) == 3  # a block change cuts
+
+
+def test_the_network_shuffles_shards_of_four_days() -> None:
+    shards = _registered()["models"]["tcn_batches"]["days_per_shard"]
+    assert inspect.signature(GaussianTCN.__init__).parameters["days_per_shard"].default == shards
+    batches = inspect.signature(windows.WindowDataset.training_batches).parameters
+    assert batches["days_per_shard"].default == shards == 4
+
+
+def test_random_flag_sets_draw_distinct_hours_from_their_own_seed() -> None:
+    days = [date(2025, 7, 8) + timedelta(days=i) for i in range(3)]
+    flag_sets = random_flag_sets(days, 10, sets=3)
+    hours = usable_hours(days)
+    for k, flags in enumerate(flag_sets):
+        assert len(np.unique(flags)) == 10
+        expected = np.sort(np.random.default_rng(k).choice(hours, size=10, replace=False))
+        assert flags.tolist() == expected.tolist()
+    assert (
+        "without replacement"
+        in (_registered()["search"]["regime_source"]["attribution_flag_hours"])
+    )
+
+
+def test_a_trade_s_null_a_hour_is_its_entry_snapshot_s() -> None:
+    assert "entry_snapshot_ns" in TRADE_COLUMNS
+    assert _registered()["search"]["nulls"]["null_A_trade_hour"].endswith("entry snapshot")
+    assert "A trade belongs to the UTC hour of its entry snapshot" in _document()

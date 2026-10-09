@@ -662,7 +662,9 @@ models draw no random numbers).
   `models/tcn._windowise` copies, and at 4 million rows of about 70 inputs a
   materialised fit would need about 72 GB. A row whose window is incomplete
   (it reaches before the history the day may read, or holds a missing value)
-  has no prediction, and so no decision.
+  has no prediction, and so no decision. Each epoch shuffles the training
+  days into shards of four days, read one shard at a time, and shuffles the
+  windows inside each shard, all from the fit's seeded generator.
 - **Training rows**: every fit reads at most 4 million training rows, taken
   evenly in time from every tenth row: the kept positions are
   ⌊i × total / 4,000,000⌋ over the training days' every-tenth rows in day
@@ -846,7 +848,8 @@ in which the monitor cannot alarm again.
 slot's mean minus that of its window-0 twin, against the 95th percentile of
 the same difference under 200 random flag sets, each with as many flags as the
 block has at hours drawn uniformly over its usable hours, seeds 0–199 (20 sets
-for a simulator slot). It is a measurement, not a kill: a strategy that pays is
+for a simulator slot): set `k`'s hours are drawn without replacement by
+`numpy.random.default_rng(k)`, so no hour carries two flags. It is a measurement, not a kill: a strategy that pays is
 not a false positive because its guard adds nothing.
 
 **Relation to R.** [R](#r-the-break-conditional) stays a separate,
@@ -1121,7 +1124,8 @@ maximum.
   size=hours)`, 0 keeping the side and 1 flipping it.
   The sign is shared by every configuration in that hour, so their
   dependence is kept. A flipped trade's P&L, funding included, is the
-  stored walk of the opposite side.
+  stored walk of the opposite side. A trade belongs to the UTC hour of its
+  entry snapshot.
 - **Null B: day re-pairing over every shift** s with 7 ≤ s ≤ 143, on the
   circular calendar order of D's 150 test days (n = 150, 137 shifts), one
   shift for every configuration. The source day's accepted entries (time of
@@ -2682,6 +2686,13 @@ each where it applies and with one line here:
 - **A regime-map segment starts on the first day that begins at or after its
   alarm, and a block boundary also cuts**: a day is not split, the alarm's
   own day began under the old regime, and a block change is visible.
+- **The network's batches shuffle shards of four days and the windows within
+  each**: one shard of the every-row store is in memory at a time, and the
+  shuffle comes from the fit's seed alone.
+- **Random flag sets draw distinct hours, set `k` from `default_rng(k)`**: a
+  real alarm never repeats an hour, and the seed range is the registered one.
+- **A trade's Null A hour is that of its entry snapshot**: the hour in which
+  the position is opened, whatever hour its decision row fell in.
 
 ---
 
