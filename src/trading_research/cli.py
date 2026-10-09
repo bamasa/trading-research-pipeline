@@ -1421,6 +1421,14 @@ def reproduce_cmd(
     trades: Annotated[Path, typer.Option("--trades", help="Prints, for passive entry.")] = Path(
         "data/trades"
     ),
+    regimes: Annotated[
+        str,
+        typer.Option(
+            "--regimes",
+            help="Regime policies the search tries, comma-separated: none (as published), "
+            "pull_4h, pull_24h, pull_120h (no new entry that long after a break alarm).",
+        ),
+    ] = "none",
 ) -> None:
     """Run the whole pipeline on a clean checkout and report what it finds.
 
@@ -1447,12 +1455,22 @@ def reproduce_cmd(
     if execution not in EXECUTIONS:
         err_console.print(f"[red]--execution must be one of {', '.join(EXECUTIONS)}[/red]")
         raise typer.Exit(code=2)
+    from trading_research.pipeline.regime import RegimePolicy
+
+    searched = tuple(name.strip() for name in regimes.split(",") if name.strip()) or ("none",)
+    try:
+        for name in searched:
+            RegimePolicy.parse(name).check("taker" if execution == "taker" else "passive_entry")
+    except ValueError as exc:
+        err_console.print(f"[red]--regimes: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
     result = run(
         book_root=book,
         fetch=fetch,
         report=lambda line: console.print(f"  {line}"),
         execution=execution,
         trades_root=trades,
+        regimes=searched,
     )
 
     if not result.held_out:

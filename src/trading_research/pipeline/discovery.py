@@ -43,6 +43,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -210,6 +211,8 @@ def run(
     report: Reporter | None = None,
     execution: str = "taker",
     trades_root: Path = Path("data/trades"),
+    regimes: Sequence[str] = ("none",),
+    detector: Any = None,
 ) -> Discovery:
     """Run every stage in order and return what each one decided.
 
@@ -218,11 +221,26 @@ def run(
     the instruments with prints under ``trades_root``, the mode chosen on the
     search block, both reported held out) or ``maker`` (the same stage with
     passive entry taken rather than chosen).
+
+    ``regimes`` makes the regime policy an axis of the search: ``none`` (the
+    default, and every run before it) and ``pull_<w>h``, no new entry for
+    ``w`` hours after an alarm of the break detector run on the panel's index
+    (:func:`panel_flags`). Each is checked against ``VALID_PAIRS`` for the
+    modes the run uses; ``detector`` is its ``MonitorSpec``, the registered
+    hourly setting by default.
     """
     if execution not in EXECUTIONS:
         raise ValueError(f"execution must be one of {EXECUTIONS}, got {execution!r}")
     from trading_research.backtest.costs import TakerCosts
     from trading_research.evaluation.significance import assess
+    from trading_research.pipeline.regime import RegimePolicy
+
+    policies = [RegimePolicy.parse(name) for name in dict.fromkeys(regimes)]
+    for policy in policies:
+        policy.check("taker")
+        if execution != "taker":
+            policy.check("passive_entry")
+    searched = any(policy.window_h for policy in policies)
 
     costs = TakerCosts(fee_bp_per_side=5.5, slippage_bp=0.5)
     out = Discovery()
@@ -248,6 +266,22 @@ def run(
         ),
         report,
     )
+
+    guard_for: dict[int, np.ndarray] = {}
+    if searched:
+        flags, alarms = panel_flags(panel, cut, detector)
+        for policy in policies:
+            if policy.window_h:
+                guard_for[policy.window_h] = _guard(panel, flags, policy)
+        out.add(
+            Stage(
+                "regime flags",
+                f"{len(alarms)} alarm(s) on the panel's index",
+                "hour profile from the search block only; one causal run over the whole span",
+                alarms,
+            ),
+            report,
+        )
 
     # --- 2. which source ---------------------------------------------------
     audit = _source_audit(panel, cut)
@@ -275,10 +309,11 @@ def run(
     scored = []
     for lookback in LOOKBACKS:
         for hold in HOLDS:
-            for rate in RATES:
+            for rate, policy in product(RATES, policies):
                 net, _ = _trade_all(
-                    panel, books, values, costs, lookback, hold, rate, slice(0, cut)
-                )
+                    panel, books, values, costs, lookback, hold, rate, slice(0, cut),
+                    guard=guard_for.get(policy.window_h),
+                )  # fmt: skip
                 if net is None or len(net) < 100:
                     continue
                 # Days on which the configuration actually traded, on the
@@ -295,6 +330,7 @@ def run(
                         "trades_per_day": len(net) / (cut / ROWS_PER_DAY),
                         "rows_occupied_per_trade": occupied,
                         "net_per_trade_bp": float(np.mean(net)),
+                        **({"regime_h": float(policy.window_h)} if searched else {}),
                     }
                 )
     table = pd.DataFrame(scored)
@@ -316,11 +352,14 @@ def run(
     best_row = ranked.iloc[-1].to_dict()
     winner = {k: float(v) for k, v in best_row.items()}
     peak = table.loc[table["net_per_trade_bp"].idxmax()].to_dict()
+    window = int(winner.get("regime_h", 0.0))
+    chosen = RegimePolicy("pull", window) if window else RegimePolicy()
+    guard = guard_for.get(chosen.window_h)
     out.add(
         Stage(
             "search",
             f"lookback {winner['lookback_s']:.0f}s, hold {winner['hold_s']:.0f}s, "
-            f"{winner['rate']:.0f} trades/day",
+            f"{winner['rate']:.0f} trades/day" + (f", regime {chosen.name}" if searched else ""),
             f"chosen on the neighbourhood of {len(table)} configurations "
             f"({winner['neighbourhood_bp']:+.2f} bp with its neighbours, "
             f"{winner['net_per_trade_bp']:+.2f} alone); the outright peak was "
@@ -347,6 +386,7 @@ def run(
         slice(cut, len(panel)),
         detailed=True,
         thresholds=thresholds,
+        guard=guard,
     )
     if trades is None or trades.empty:
         raise RuntimeError("the winning configuration took no trades on the held-out block")
@@ -379,7 +419,7 @@ def run(
         out.add(
             execution_stage(
                 panel, books, values, costs, (lookback, hold, rate), cut, thresholds,
-                trades_root, take_passive=execution == "maker",
+                trades_root, take_passive=execution == "maker", guard=guard,
             ),
             report,
         )  # fmt: skip
@@ -423,6 +463,7 @@ def _with_neighbourhood(table: pd.DataFrame) -> pd.DataFrame:
             table["lookback_s"].isin(near_lookback)
             & table["hold_s"].isin(near_hold)
             & (table["rate"] == row["rate"])
+            & (table["regime_h"] == row["regime_h"] if "regime_h" in table else True)
         ]
         return float(block["net_per_trade_bp"].median())
 
@@ -445,6 +486,7 @@ def _trade_all(
     thresholds: dict[str, float] | None = None,
     flows: Mapping[str, Any] | None = None,
     passive: bool = False,
+    guard: np.ndarray | None = None,
 ) -> Any:
     """Trade every instrument over one block with one configuration.
 
@@ -457,6 +499,8 @@ def _trade_all(
     ``passive`` posts each entry at the touch instead of crossing
     (:func:`~trading_research.pipeline.execution.run_passive`); misses are rows
     that earned nothing. Without either, this is the taker run it always was.
+    ``guard`` (one flag per panel row) blanks every entry decision on a row
+    inside a regime guard's window; an open position runs to its exit.
     """
     from trading_research.backtest.execution import ThinningRules, thin
     from trading_research.backtest.maker import MakerCosts, PostingRules
@@ -498,6 +542,8 @@ def _trade_all(
         decision = np.zeros(block.stop - block.start, dtype=int)
         strong = np.isfinite(window) & (np.abs(window) >= threshold)
         decision[strong] = -np.sign(window[strong]).astype(int)
+        if guard is not None:  # no new entry inside a regime guard's window
+            decision[guard[block]] = 0
         block_forward = forward[block]
         decision[~np.isfinite(block_forward)] = 0
 
@@ -543,6 +589,40 @@ def _trade_all(
         frame = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
         return frame, fitted
     return (np.array(net_all) if net_all else None), fitted
+
+
+def panel_flags(panel: pd.DataFrame, cut: int, spec: Any = None) -> tuple[np.ndarray, pd.DataFrame]:
+    """Alarm times (int64 ns) and the alarm table of the break detector on the panel's index.
+
+    The index is the equal-weighted mean of the instruments' log mids, as an
+    hourly price; its hour-of-day profile is fitted on the search block alone
+    (:func:`~trading_research.validation.regime_flags.flags_from_prices`), so
+    the held-out block's alarms come from nothing fitted on its hours.
+    """
+    from trading_research.validation.regime_flags import (
+        DETECTOR_SPEC,
+        FlagError,
+        flag_times,
+        flags_from_prices,
+    )
+    from trading_research.validation.structural_breaks import ChangepointError
+
+    index = pd.Series(np.exp(panel.mean(axis=1).to_numpy()), index=panel.index)
+    try:
+        _, alarms = flags_from_prices(
+            index, profile_end=panel.index[cut], spec=spec or DETECTOR_SPEC
+        )
+    except (ChangepointError, FlagError) as exc:
+        raise RuntimeError(f"the regime detector cannot run on this span: {exc}") from exc
+    return flag_times(alarms), alarms
+
+
+def _guard(panel: pd.DataFrame, flags_ns: np.ndarray, policy: Any) -> np.ndarray:
+    """Per panel row, whether ``policy`` forbids a new entry there."""
+    from trading_research.market_making.events import to_ns
+    from trading_research.pipeline.execution import guarded_rows
+
+    return guarded_rows(to_ns(pd.DatetimeIndex(panel.index)), flags_ns, policy.window_ns)
 
 
 def _regime(level: np.ndarray, lag: int, search: slice, held_out: slice) -> dict[str, float]:
@@ -620,12 +700,14 @@ def execution_stage(
     trades_root: Path,
     *,
     take_passive: bool = False,
+    guard: np.ndarray | None = None,
 ) -> Stage:
     """Taker against passive entry for the chosen configuration, where there are prints.
 
-    Both run the same decisions on the same instruments; the mode is chosen on
-    the search block by net per attempt (or taken as passive when asked), and
-    both are reported on the held-out block, which chooses nothing.
+    Both run the same decisions on the same instruments, under the same regime
+    ``guard`` when the search chose one; the mode is chosen on the search block
+    by net per attempt (or taken as passive when asked), and both are reported
+    on the held-out block, which chooses nothing.
     """
     from trading_research.evaluation.significance import SignificanceError, assess
 
@@ -639,7 +721,7 @@ def execution_stage(
         for name, block in (("search", slice(0, cut)), ("held out", slice(cut, len(panel)))):
             trades, _ = _trade_all(
                 panel, books, values, costs, lookback, hold, rate, block, detailed=True,
-                thresholds=thresholds, flows=flows, passive=mode == "passive_entry",
+                thresholds=thresholds, flows=flows, passive=mode == "passive_entry", guard=guard,
             )  # fmt: skip
             row: dict[str, Any] = {"mode": mode, "block": name, "attempts": len(trades)}
             if len(trades):
