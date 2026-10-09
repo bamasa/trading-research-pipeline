@@ -32,8 +32,10 @@ from datetime import date
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from trading_research.search_engine.catalogue import CellKey
+from trading_research.search_engine.ledger import LEDGER_COLUMNS
 from trading_research.search_engine.tapes import CandidateTape, TapeError
 from trading_research.search_engine.walk_tables import (
     HoldTable,
@@ -176,3 +178,9 @@ def trade_rows(key: str, table: HoldTable, trades: TableTrades) -> dict[str, np.
         "pnl_long_bp": trades.pnl_long_bp,
         "pnl_short_bp": trades.pnl_short_bp,
     }
+
+
+def ledger_frame(run: int, day: date, scored: Mapping[str, TableTrades]) -> pd.DataFrame:
+    """A day's ledger rows for every scored cell, in the ledger's column order."""
+    rows = [ledger_row(run, key, day, trades) for key, trades in scored.items()]
+    return pd.DataFrame(rows, columns=list(LEDGER_COLUMNS))

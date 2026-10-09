@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -11,15 +12,17 @@ import pytest
 from _engine_books import CLIP, DAY, make_book
 from trading_research.backtest.taker import TakerBook
 from trading_research.market_making.events import NS_PER_S
-from trading_research.search_engine.catalogue import parse_key
+from trading_research.search_engine.catalogue import Catalogue, parse_key
 from trading_research.search_engine.cells import (
     cell_sides,
+    ledger_frame,
     ledger_row,
     score_cell,
     score_configuration,
     tape_events,
     trade_rows,
 )
+from trading_research.search_engine.ledger import TrialLedger
 from trading_research.search_engine.tapes import (
     CandidateTape,
     TapeError,
@@ -194,3 +197,16 @@ def test_mismatches_are_refused() -> None:
         score_cell(tape, table, parse_key(c_key().replace("hold_s=5", "hold_s=20")), rules[240.0])
     with pytest.raises(ValueError, match="thresholds"):
         score_cell(tape, table, parse_key(c_key()))
+
+
+def test_a_day_of_scored_cells_enters_the_ledger(tmp_path: Path) -> None:
+    catalogue = Catalogue.load(
+        Path(__file__).resolve().parents[1] / "configs" / "short_horizon_2025.yaml"
+    )
+    _, table, tape, rules = _c_tape(4)
+    keys = [c_key(n, g) for n in RATES for g in ("open", "quiet_out")]
+    scored = score_configuration(tape, table, [parse_key(k) for k in keys], rules)
+    frame = ledger_frame(1, DAY, scored)
+    record = TrialLedger(tmp_path / "trials.parquet", catalogue).append(1, "abc", frame)
+    assert record["rows"] == len(keys) and record["n_trials"] == len(keys)
+    assert frame["trades"].tolist() == [scored[k].trades for k in keys]
