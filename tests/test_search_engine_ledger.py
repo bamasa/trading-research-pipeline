@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from trading_research.pipeline import short_horizon_ledger as shl
+from trading_research.pipeline import short_horizon_registration as shr
 from trading_research.search_engine.catalogue import Catalogue
 from trading_research.search_engine.ledger import (
     LEDGER_COLUMNS,
@@ -127,6 +129,26 @@ def test_large_ledgers_split_into_parts_under_the_limit(
         assert (tmp_path / part["file"]).stat().st_size < 12_000
     assert sum(p["rows"] for p in record["parts"]) == len(rows)
     pd.testing.assert_frame_equal(ledger.read(), rows, check_dtype=False)
+
+
+@pytest.mark.parametrize("part_bytes", [100_000_000, 12_000])
+def test_the_sidecar_carries_what_the_study_ledger_checks(
+    tmp_path: Path, catalogue: Catalogue, part_bytes: int
+) -> None:
+    assert shr.TRIALS_PATH == LEDGER_PATH
+    assert LEDGER_PATH.with_suffix(".json") == shr.TRIALS_SIDECAR_PATH
+    ledger = TrialLedger(tmp_path / LEDGER_PATH, catalogue, part_bytes=part_bytes)
+    many = [date(2025, 2, 1) + timedelta(days=i) for i in range(150)]
+    ledger.append(1, "abc", _rows(catalogue, 1, keys=12, days=many))
+    record = ledger.append(2, "def", _rows(catalogue, 2, keys=3, days=many))
+    paths = shl.trial_ledger_paths(tmp_path, LEDGER_PATH)
+    assert [path.name for path in paths] == [part["file"] for part in record["parts"]]
+    assert (len(paths) > 1) == (part_bytes == 12_000)  # one file, or parts beside it
+    sidecar = json.loads((tmp_path / shr.TRIALS_SIDECAR_PATH).read_text())
+    assert sidecar["sha256"] == shl.trial_ledger_sha256(paths)
+    assert sidecar["rows"] == 15 * 150 and sidecar["catalogue_sha256"] == (
+        shr.REGISTERED_CATALOGUE_SHA256
+    )
 
 
 def test_a_changed_part_or_another_catalogue_is_refused(

@@ -6,7 +6,8 @@ is written here: ``experiments/results/short_horizon_2025_trials.parquet``
 ``pnl_long_bp``, ``pnl_short_bp``, ``trades`` and ``skips``, split into parts
 under 100 MB when it needs to be. The sidecar ``…_trials.json`` holds the
 catalogue's sha256, each run's commit, every part's sha256 and row count, the
-number of trials and the hand-run log.
+sha256 of all the parts' bytes in order with the total row count (what the
+study ledger checks before H opens), the number of trials and the hand-run log.
 
 The ledger only grows: a run's rows are appended once, a superseded run's rows
 stay and count, and **N_trials** is the number of distinct ``(run, key)``
@@ -66,10 +67,17 @@ class LedgerError(ValueError):
 
 
 def file_sha256(path: Path) -> str:
+    return ledger_sha256([path])
+
+
+def ledger_sha256(paths: Iterable[Path]) -> str:
+    """The sha256 of the parts' bytes in part order (one file's own sha256): the
+    ``sha256`` the sidecar records and the D amendment's ``ledger_sha256``."""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
+    for path in paths:
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
     return digest.hexdigest()
 
 
@@ -239,6 +247,7 @@ class TrialLedger:
             self.path.with_name(stale).unlink(missing_ok=True)
         record["parts"] = parts
         record["file"] = self.path.name
+        record["sha256"] = ledger_sha256(self.path.with_name(part["file"]) for part in parts)
         record["rows"] = len(rows)
         record["n_trials"] = n_trials(rows)
         self._write_sidecar(record)
