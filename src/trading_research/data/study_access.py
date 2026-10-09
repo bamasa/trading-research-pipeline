@@ -138,7 +138,7 @@ _ISSUER = _Issuer()
 
 @dataclass(frozen=True)
 class StudyAccess:
-    """Permission to read some planes of some blocks of some instruments.
+    """Which planes of which blocks of which instruments may be read.
 
     ``grants`` are (instrument, block, plane) triples. ``stamp`` travels with
     everything produced under it: ``development``, ``first read`` or ``second
