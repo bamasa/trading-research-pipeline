@@ -208,3 +208,58 @@ def assess(
         effective_per_cluster=effective_count(members, correlation),
         positive_clusters=int((by_cluster > 0).sum()),
     )
+
+
+#: The registered Newey-West lag, in days of the daily series.
+NEWEY_WEST_LAG = 5
+
+
+@dataclass(frozen=True)
+class NeweyWestT:
+    """The mean of a daily series and its t under autocorrelated days."""
+
+    days: int
+    lag: int
+    mean: float
+    #: Heteroscedasticity- and autocorrelation-consistent standard error.
+    se: float
+    t: float
+
+
+def newey_west_t(
+    values: np.ndarray | pd.Series | list[float], lag: int = NEWEY_WEST_LAG
+) -> NeweyWestT:
+    """The t of a daily series' mean with a Newey-West (Bartlett) standard error.
+
+    Consecutive days in one regime are not independent, and the plain day-level
+    t treats them as if they were. The long-run variance of the series is
+
+        gamma_0 + 2 * sum_{l=1}^{L} (1 - l / (L + 1)) * gamma_l
+
+    with ``gamma_l`` the lag-``l`` autocovariance about the mean, divided by
+    ``n`` (not ``n - l``), and the mean's standard error is its square root over
+    ``sqrt(n)``. The Bartlett weights keep the variance non-negative. Lags count
+    positions in the series as given: one row per day, in calendar order.
+    Non-finite days are dropped first; with fewer than two days, or a
+    non-positive variance, the t is NaN. A lag at or beyond the series length
+    is cut to ``n - 1``.
+    """
+    if lag < 0:
+        raise SignificanceError(f"the lag must be non-negative, got {lag}")
+    array = np.asarray(values, dtype=np.float64)
+    array = array[np.isfinite(array)]
+    n = len(array)
+    if n < 2:
+        mean = float(array.mean()) if n else float("nan")
+        return NeweyWestT(n, lag, mean, float("nan"), float("nan"))
+    mean = float(array.mean())
+    centred = array - mean
+    used = min(lag, n - 1)
+    variance = float(centred @ centred) / n
+    for step in range(1, used + 1):
+        weight = 1.0 - step / (used + 1.0)
+        variance += 2.0 * weight * float(centred[step:] @ centred[:-step]) / n
+    if variance <= 0:
+        return NeweyWestT(n, used, mean, float("nan"), float("nan"))
+    se = float(np.sqrt(variance / n))
+    return NeweyWestT(n, used, mean, se, mean / se)
