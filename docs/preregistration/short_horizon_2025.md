@@ -1253,9 +1253,9 @@ numbers on F are reported as measurements even when nothing is taken there.
 comparison from H into F crosses the archive change and is labelled so.
 
 **An unreadable block** (more than a quarter of its days excluded,
-[Blocks](#blocks), judged on the slot's instrument) changes no status. A slot
-whose instrument's H is unreadable is recorded as `not assessed (H
-unreadable)` and is not taken to F; F is still read and reported as
+[Blocks](#blocks)) changes no status. If H is unreadable, every slot is
+recorded as `not assessed (H unreadable)` and none is taken to F; F is still
+read and reported as
 measurements, and H, F and P are spent all the same. If F is unreadable for a
 slot, its status after H stands, marked "F unreadable", and P is not read for
 it. If P is unreadable, each slot read on P keeps its status after F, marked "P unreadable": a candidate that
@@ -1784,16 +1784,19 @@ The print downloader's 120 s timeout (`data/bybit_trades.download_day`)
 bounds each socket read, not the whole file, so a large file does not fail by
 its size; a stalled connection does, and is retried.
 
-| Stage | When | What | Book archives (GB): BTC, ETH, XRP | Print archives (GB): BTC, ETH, XRP |
+| Stage | When | What | Book archives (GB) | Print archives (GB) |
 |---|---|---|---:|---:|
-| 1 | after this registration and the code it names are merged, and after stage 0's amendment if it cuts anything | W and D (212 days, `ob500`) for each instrument, one instrument at a time; funding for W and D only; hourly bars 2024-12-01 to 2025-06-30; the three BTCUSDT `ob200` reader-test days of 2026 | 76.0, 70.2, 49.6 | 15.3, 14.1, 12.3 |
-| 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4, 12.7, 11.1 | 2.1, 3.8, 2.3 |
-| 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8, 18.5, 17.3 | 5.9, 7.4, 3.3 |
-| 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9, 9.4, 7.0 | 3.5, 3.6, 1.3 |
+| 1 | after this registration and the code it names are merged, and after stage 0's amendment if it cuts anything | W and D (212 days, `ob500`); funding for W and D only; hourly bars 2024-12-01 to 2025-06-30; the three `ob200` reader-test days of 2026 (0.6 GB of the book column) | 76.0 | 15.3 |
+| 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4 | 2.1 |
+| 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8 | 5.9 |
+| 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9 | 3.5 |
+| **In all** | | stages 1 to 3 always; stage 4 only if P is opened | **113.1** (about 87 of `ob500`, 26 of `ob200`) | **26.9** |
 
-BTCUSDT's held-out archives are always fetched, for S25. ETHUSDT's and
-XRPUSDT's for H, F and P are fetched only when a slot or a measured row is on
-that instrument, each through the ledger as BTCUSDT's are.
+Totals are sums of the unrounded sizes. About 140 GB pass through the
+network in all, 126.5 GB if P is not opened:
+91.3 GB in stage 1, 13.5 GB in stage 2, 21.7 GB in stage 3 and 13.4 GB in
+stage 4. The held-out archives are always fetched for H and F, for S25 and
+because F is always read, each through the ledger.
 
 **The ledger opens before the fetch.** `open` writes its entry first and
 commits and pushes it, and the block's fetch then runs under that access; the entry records each fetched
@@ -1803,32 +1806,31 @@ also if any hourly bar of E is.
 
 E's book, prints and funding are never fetched; its hourly bars are fetched
 with H's. At most one archive per worker is on disk at once; the largest book
-archive of W and D is 0.92 GB for BTCUSDT and ETHUSDT and 0.95 GB for XRPUSDT
-(BTCUSDT's median 0.34 GB), so under 4 GB with four workers. Archives pass
-through and are deleted after replay. Replayed at ten levels, a BTCUSDT day of
-2024 took 40 MB on average and 60 MB at most, an XRPUSDT day 25 MB, so W and D
-take 25–38 GB for the three instruments. Print parquet is budgeted at 0.13 to
-0.25 of its archive, 7–10 GB for W and D.
+archive of W and D is 0.92 GB (the median 0.34 GB), so under 4 GB with four
+workers. Archives pass through and are deleted after replay. Replayed at ten
+levels, a BTCUSDT day of 2024 took 40 MB on average and 60 MB at most, so W
+and D take 8–13 GB. Print parquet is budgeted at 0.13 to 0.25 of its archive,
+2–4 GB for W and D.
 
 **Disk.** 121 GB were free on the machine when this was registered; with the
 10 GB margin about 111 GB are usable. Features go to **two float16 stores, one
-zstd-compressed parquet file per instrument-day**, holding model inputs only;
-labels, costs, the gate's inputs, the walk tables and every fill are computed
-from the book's float64 prices, never from a store, and the parity tests run
-at float16. The every-tenth-row store holds every instrument; the every-row
-store, which holds the network's inputs, holds one instrument at a time, and
-two every-row stores never coexist. Peak on D:
+zstd-compressed parquet file per day**, holding model inputs only; labels,
+costs, the gate's inputs, the walk tables and every fill are computed from the
+book's float64 prices, never from a store, and the parity tests run at
+float16. The every-tenth-row store holds the inputs the fits train on; the
+every-row store holds the network's inputs and is kept through D, so it is
+never rebuilt. Peak on D:
 
 | Item | GB |
 |---|---:|
-| Replayed books, 3 × 212 days at 40–60 MB | 25–38 |
-| Print parquet | 7–10 |
-| Every-tenth-row store, float16 | 8 |
-| Every-row store, one instrument | 18 |
-| Archives in flight | 3.8 |
-| Candidate tapes and the nulls' hourly sums | ≤ 10 |
+| Replayed books, 212 days at 40–60 MB | 8–13 |
+| Print parquet | 2–4 |
+| Every-tenth-row store, float16 | 3 |
+| Every-row store, float16 | 18 |
+| Archives in flight, 4 × 0.92 GB at most | 3.7 |
+| Candidate tapes and the nulls' hourly sums (40 signal configurations) | ≤ 4 |
 | Models and results | about 7 |
-| **Peak** | **79–95** |
+| **Peak** | **46–53** |
 
 Walk tables are never stored. **W's and D's features are deleted after H's
 results are committed and before stage 3**; no later read uses them (F and P
@@ -1858,22 +1860,22 @@ network fit 22–44 minutes; the event-jump entry loop 6 ms per cell-day; the
 simulator 5.6–10.3 s per BTCUSDT cell-day in one process, 0.85–2.5 s of wall
 time on 6 workers; the normaliser 49 s per day for 28 columns. Null B and
 the refit have no measured unit cost yet: stage 0 measures Null B's
-vectorised cost per cell-day and shift, the refit's per-instrument rebuild of
-the every-row store, the network's inference per test day and its scoring of
+vectorised cost per cell-day and shift, the refit's re-prediction of every
+row of the test days, the network's inference per test day and its scoring of
 the inner validation at every epoch, and projects Null B at 137 × the
 catalogue's cell-days.
 
 | Stage | Size | Estimate |
 |---|---|---|
-| 1: fetch, replay, features, selection | 237 GB of archives; 636 instrument-days replayed at 2–3 minutes on 4 workers; two feature stores | 10–15 hours |
-| A: fits | 600 walk-forward fits (boosted 240 × 1–2.2 minutes, logistic 240, bound regressor 60, network 60 × 22–44 minutes on MPS), predictions, the network's inference on every row of the test days and its inner-validation scoring at every epoch, candidate tapes | 30–55 hours, the network dominating, plus the inference and scoring stage 0 times |
-| B: taker scoring | 7,200 cells × 150 days = 1.08 million cell-days from walk tables | 1–2 hours on 8 workers |
-| D: the choice and Null A | Null A (999 draws on hourly sums), carry-forward, PBO and DSR | 7–15 hours |
-| D: Null B | 137 shifts × 1.08 million cell-days, about 148 million re-pairings, at most the entry loop's 6 ms each | at most about 247 CPU-hours, about 31 hours on 8 workers; less if vectorised, as stage 0 measures |
-| D: the refit | 240 boosted fits (4–9 hours), 240 logistic fits, every row of the 150 test days re-predicted per instrument with that instrument's every-row store rebuilt, stratum C re-scored | about 10–20 hours, timed at stage 0 |
+| 1: fetch, replay, features, selection | 91.3 GB of archives; 212 days replayed at 2–3 minutes on 4 workers (1.8–2.7 hours); two feature stores, each built once | 4–6 hours |
+| A: fits | 200 walk-forward fits (boosted 80 × 1–2.2 minutes, logistic 80, bound regressor 20, network 20 × 22–44 minutes on MPS), predictions, the network's inference on every row of the test days and its inner-validation scoring at every epoch, candidate tapes | 10–18 hours, the network dominating (7.3–14.7 hours), plus the inference and scoring stage 0 times |
+| B: taker scoring | 2,400 cells × 150 days = 360,000 cell-days from walk tables | under 1 hour on 8 workers |
+| D: the choice and Null A | Null A (999 draws on hourly sums), carry-forward, PBO and DSR | 2–5 hours |
+| D: Null B | 137 shifts × 360,000 cell-days, about 49 million re-pairings, at most the entry loop's 6 ms each | at most about 82 CPU-hours, about 10 hours on 8 workers; less if vectorised, as stage 0 measures |
+| D: the refit | 80 boosted fits (1.3–2.9 hours), 80 logistic fits, every row of the 150 test days re-predicted from the every-row store, stratum C re-scored | about 3–7 hours, timed at stage 0 |
 | C: simulator | at most about 7,750 cell-days (S25-Z 1,800; S-P at most 4,500; S-M 1,350; A0 and FILL 92) | 1.8–5.4 hours (19–58 hours at 9–27 s a cell-day, the bound stage 0 tests) |
 | E: freeze | frozen fits, A0 and FILL on O, σ_D and the MDEs, the dry run | 17–33 hours |
-| **D in all** | | **about 100–160 hours, 4.2–6.7 days**; the upper end is above the 6-day (144-hour) ceiling, so stage 0's projection decides whether the reduction order cuts |
+| **D in all** | | **about 48–85 hours, 2.0–3.6 days**, under the 6-day (144-hour) ceiling; with the simulator at 9–27 s a cell-day, about 65–138 hours, still under it. Stage 0's projection decides whether the reduction order cuts |
 | H's read | the taker slots from walk tables; about 237 runs × 44 days for each simulator slot (206 placebo runs, at most 27 neighbours, 3 brackets, 1 latency); measured rows and the regime map | at most about 31,300 cell-days, 7–22 hours, one read session of at most 1.5 days |
 | F's read | every frozen slot once as a measurement; each slot taken to F with its full kills about twice its H cost (88 days) | under a day, plus about 2 × H per slot taken |
 | P's read | each slot read on P | about 1 × H per slot read |
