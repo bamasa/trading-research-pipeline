@@ -169,10 +169,12 @@ def ledger_row(run: int, key: str, day: date, trades: TableTrades) -> dict[str, 
 
 def trade_rows(key: str, table: HoldTable, trades: TableTrades) -> dict[str, np.ndarray]:
     """Per-trade columns Null A sums by hour (``HourCells.from_trades``): ``time``
-    is the decision's stamp in ns (UTC), ``notional`` the entry's in USDT."""
+    is the entry snapshot's stamp in ns (UTC), the executor's ``entry_snapshot_ns``,
+    since a trade belongs to the hour of its entry snapshot; ``notional`` is the
+    entry's in USDT."""
     return {
         "key": np.full(trades.trades, key, dtype=object),
-        "time": table.walk.ts[trades.rows],
+        "time": table.walk.ts[table.entry_row[trades.rows]],
         "side": trades.side,
         "notional": trades.notional,
         "pnl_long_bp": trades.pnl_long_bp,

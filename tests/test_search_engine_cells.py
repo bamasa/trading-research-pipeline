@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from _engine_books import CLIP, DAY, make_book
-from trading_research.backtest.taker import TakerBook
+from trading_research.backtest.taker import TakerBook, execute_day
 from trading_research.market_making.events import NS_PER_S
 from trading_research.search_engine.catalogue import Catalogue, parse_key
 from trading_research.search_engine.cells import (
@@ -185,6 +185,16 @@ def test_trade_rows_feed_null_a_and_agree_with_the_ledger() -> None:
     assert kept.trades[0, 0] == values["trades"]
     assert kept.net_bp[0, 0] == pytest.approx(values["net_bp"], rel=1e-9)
     assert kept.g_bp[0, 0] == pytest.approx(values["G_bp"], rel=1e-9)
+
+
+def test_a_trade_s_null_a_time_is_the_executor_s_entry_snapshot() -> None:
+    book, table, tape, rules = _c_tape(3)
+    trades = score_cell(tape, table, parse_key(c_key()), rules[240.0])
+    times = trade_rows(c_key(), table, trades)["time"]
+    day = execute_day(book, book.ts[trades.rows], trades.side, table.hold_ns, table.settings)
+    assert trades.trades > 0 and len(day.trades) == trades.trades
+    np.testing.assert_array_equal(times, day.trades["entry_snapshot_ns"].to_numpy())
+    assert (times > book.ts[trades.rows]).all()  # the entry lags the decision by the latency
 
 
 def test_mismatches_are_refused() -> None:
