@@ -291,3 +291,47 @@ def test_the_refit_replication_reruns_stratum_c() -> None:
     out = refit_replication(refit, strata["C"], index)
     assert asked == [28]
     assert out == rerun(refitted, {"C": strata["C"]}, index)["C"]
+
+
+def test_trade_rows_sum_into_hours() -> None:
+    trades = pd.DataFrame(
+        {
+            "key": ["a", "a", "b", "a"],
+            "time": pd.to_datetime(
+                ["2025-02-01 00:10", "2025-02-01 00:50", "2025-02-02 13:00", "2025-02-02 23:59"]
+            ),
+            "side": [1, -1, 1, -1],
+            "notional": [1000.0, 1000.0, 2000.0, 1000.0],
+            "pnl_long_bp": [4.0, -2.0, 1.0, 3.0],
+            "pnl_short_bp": [-6.0, 0.0, -3.0, -5.0],
+        }
+    )
+    hours = HourCells.from_trades(trades, ["a", "b"], ["2025-02-01", "2025-02-02"])
+    assert hours.hours == 48 and hours.days == 2
+    assert hours.trades[0, 0] == 2 and hours.trades[1, 24 + 13] == 1 and hours.trades.sum() == 4
+    assert hours.net_kept[0, 0] == pytest.approx((4.0 + 0.0) * 0.1)
+    assert hours.net_flipped[0, 0] == pytest.approx((-6.0 - 2.0) * 0.1)
+    assert hours.g[0, 0] == pytest.approx(5.0 + 1.0)  # the short gains when long loses
+    cells = hours.kept()
+    assert cells.net_bp[0, 0] == pytest.approx(2.0)  # 0.4 USDT over 2000 USDT
+    assert cells.g_bp[0, 1] == pytest.approx(-4.0)  # the short at 23:59
+    assert np.isnan(cells.net_bp[1, 0])
+
+
+def test_trade_times_are_read_in_utc_and_outsiders_refused() -> None:
+    trades = pd.DataFrame(
+        {
+            "key": ["a"],
+            "time": [pd.Timestamp("2025-02-01 02:30", tz="Europe/Moscow")],
+            "side": [1],
+            "notional": [1000.0],
+            "pnl_long_bp": [1.0],
+            "pnl_short_bp": [-1.0],
+        }
+    )
+    hours = HourCells.from_trades(trades, ["a"], ["2025-01-31", "2025-02-01"])
+    assert hours.trades[0, 23] == 1  # 23:30 UTC on 31 January
+    with pytest.raises(ChoiceError):
+        HourCells.from_trades(trades, ["a"], ["2025-02-01"])
+    with pytest.raises(ChoiceError):
+        HourCells.from_trades(trades.assign(side=0), ["a"], ["2025-01-31"])

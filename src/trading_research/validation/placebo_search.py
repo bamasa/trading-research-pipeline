@@ -27,7 +27,7 @@ looks at least as good as what was found:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -112,6 +112,54 @@ class HourCells:
     def kept(self) -> CellDays:
         """The cell-by-day matrix as traded."""
         return self.under_signs(np.ones(self.hours, dtype=np.int64))
+
+    @classmethod
+    def from_trades(
+        cls, trades: pd.DataFrame, keys: Sequence[str], days: Sequence[object]
+    ) -> HourCells:
+        """Sum trade rows into every UTC hour of the given usable days.
+
+        Columns: ``key``, ``time`` (the entry, UTC), ``side`` (+1 long, -1
+        short), ``notional`` (entry notional, USDT), ``pnl_long_bp`` and
+        ``pnl_short_bp`` (the walked net of each side over the same entry and
+        hold, fees and funding included, in bp of the entry notional). A
+        trade's net is the walk of its side, its flipped net the other side's,
+        and its G ``side * (pnl_long_bp - pnl_short_bp) / 2``. A trade outside
+        the days or the keys is refused.
+        """
+        stamps = pd.DatetimeIndex(np.asarray(list(days), dtype="datetime64[ns]")).normalize()
+        hours_per_day = 24
+        row = pd.Index(list(keys)).get_indexer(pd.Index(trades["key"]))
+        entry = pd.DatetimeIndex(trades["time"])
+        if entry.tz is not None:
+            entry = entry.tz_convert("UTC").tz_localize(None)
+        day = stamps.get_indexer(entry.normalize())
+        if (row < 0).any() or (day < 0).any():
+            raise ChoiceError("a trade outside the keys or the usable days")
+        side = trades["side"].to_numpy(dtype=np.float64)
+        if not np.isin(side, (-1.0, 1.0)).all():
+            raise ChoiceError("side must be +1 or -1")
+        long_bp = trades["pnl_long_bp"].to_numpy(dtype=np.float64)
+        short_bp = trades["pnl_short_bp"].to_numpy(dtype=np.float64)
+        notional = trades["notional"].to_numpy(dtype=np.float64)
+        hours = len(stamps) * hours_per_day
+        flat = row * hours + day * hours_per_day + entry.hour.to_numpy()
+        size = len(keys) * hours
+
+        def total(weights: np.ndarray) -> np.ndarray:
+            return np.bincount(flat, weights=weights, minlength=size).reshape(len(keys), hours)
+
+        own = np.where(side > 0, long_bp, short_bp)
+        other = np.where(side > 0, short_bp, long_bp)
+        return cls(
+            hour_day=np.repeat(np.arange(len(stamps)), hours_per_day),
+            days=len(stamps),
+            trades=np.bincount(flat, minlength=size).reshape(len(keys), hours).astype(np.int64),
+            notional=total(notional),
+            net_kept=total(own * notional / 1e4),
+            net_flipped=total(other * notional / 1e4),
+            g=total(side * (long_bp - short_bp) / 2.0),
+        )
 
 
 def null_a_signs(draw: int, hours: int) -> np.ndarray:
