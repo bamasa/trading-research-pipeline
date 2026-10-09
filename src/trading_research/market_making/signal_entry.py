@@ -186,11 +186,15 @@ class SignalEntryQuoter:
     def attempts(self, fills: pd.DataFrame) -> pd.DataFrame:
         """One row per attempt, from the day's fills; funding is in the day's totals only.
 
-        An attempt owns every fill from its post to the next attempt's post (or
-        the day's end, the day-end flatten included): the quoter is flat between
-        attempts. ``filled`` is True for an entry with any fill; ``net`` is
-        the cash of its fills, fees included; ``notional`` is the clip at the
-        posted price.
+        An attempt owns every fill stamped after its post and up to the next
+        attempt's post, that stamp included (the last attempt to the day's end,
+        the day-end flatten included): the quoter is flat between attempts. A
+        fill at the next post's own stamp is this attempt's: the exit walks the
+        snapshot at which the next attempt is posted, and the simulator applies
+        an order only strictly before a later event, so no attempt's own order
+        fills at its post's stamp. ``filled`` is True for an entry with any
+        fill; ``net`` is the cash of its fills, fees included; ``notional`` is
+        the clip at the posted price.
         """
         columns = ["decision_s", "side", "posted_ns", "price", "size", "filled"]
         columns += ["filled_size", "gross", "fees", "net", "notional"]
@@ -210,7 +214,7 @@ class SignalEntryQuoter:
         rows = []
         for k, (decision, side, posted, price, clip) in enumerate(self.log):
             end = starts[k + 1] if k + 1 < len(starts) else np.iinfo(np.int64).max
-            mine = (ts >= posted) & (ts < end)
+            mine = (ts > posted) & (ts <= end)
             entry_size = float(size[mine & maker & (fill_side == side)].sum())
             gross = float(flow[mine].sum())
             fees = float(fee[mine].sum())
