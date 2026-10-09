@@ -1043,7 +1043,7 @@ Documented in [`docs/`](docs/) as it lands:
 | `disclosure_policy.md` | What is public here and why, and what is not |
 | `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
 | [`preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md) | The second market-making round, on eight wide-spread instruments, registered before any of their data is fetched |
-| [`preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md) | A registered search for 2025 short-horizon strategies on Bybit's public BTCUSDT, ETHUSDT and XRPUSDT archives (7,200 taker configurations, passive entry and a market maker, a regime-break policy axis), with the named configuration S25 tested by name; registered before any 2025 data is fetched; predicted negative at published fees |
+| [`preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md) | A registered search for 2025 short-horizon strategies on Bybit's public BTCUSDT archives (2,400 taker configurations, passive entry and a market maker, a regime-break policy axis), with a frozen break detector that locates the 2025 break, drives the regime-policy axis and cuts the regime map, and the named configuration S25 tested by name; registered before any 2025 data is fetched; predicted negative at published fees |
 
 ---
 
@@ -1232,13 +1232,16 @@ any block.
       is quoting into, which the simulator does not model
 
 **The 2025 short-horizon strategy search, registered before any of its data
-is read.** A search over instruments (BTCUSDT, ETHUSDT, XRPUSDT), features,
+is read.** A search on BTCUSDT, over the whole of 2025, over features,
 labels, models (boosted trees, logistic, a Gaussian-head network, a bound
 regressor), entry gates, holds from 5 to 120 s, decision thresholds, a
 regime-break policy driven by the frozen break detector, and three execution
-paths (taker, passive entry, market maker). Its 7,200 taker configurations
-are enumerated and hashed, every one is scored on the same 150 development
-days, and a searched finalist must beat the whole search re-run on placebo
+paths (taker, passive entry, market maker). The detector, on hourly BTCUSDT
+returns, has three roles: it locates the 2025 break that the break test R
+tests, its alarms drive the regime-policy axis, and they cut the regime map.
+Its 2,400 taker configurations are enumerated and hashed, every one is scored
+on the same 150 development days, and a searched finalist must beat the whole
+search re-run on placebo
 targets. Five finalists go to the held-out blocks under Holm with m = 5: the
 named configuration S25 (boosted trees on BTCUSDT, a hold-first rule, a 50 s
 hold), the best classifier and regressor cells, passive entry and a market
@@ -1252,7 +1255,7 @@ basis points against an 11 bp taker round trip at the base tier.
 
 - [x] Pre-registration, with an archive check that moved the held-out block's
       end to 2025-08-20, where Bybit's book archive changes from 500 to 200
-      levels, on BTCUSDT, ETHUSDT and XRPUSDT alike
+      levels
 - [x] Reviewed for peeking, multiplicity and feasibility before any data is
       read, and tightened: no file of a later block on disk before the ledger
       opens it, statuses computed by code and hashed, no code change between
@@ -1271,10 +1274,10 @@ basis points against an 11 bp taker round trip at the base tier.
       a status; prints are aligned backward, and the 2025 daily-bar alarm
       already in this README is listed among what was known
 - [x] Recast, before any data is read, from fixed hypotheses into a
-      registered search: three instruments, four models in two strata, label
+      registered search: four models in two strata, label
       fee, hold (5 to 120 s), decision threshold, market gate and a
       regime-break policy from the frozen detector, causal fold by fold
-      (7,200 taker configurations, hashed); no configuration culled on an
+      (2,400 taker configurations on BTCUSDT, hashed); no configuration culled on an
       outcome; a choice by neighbourhood and two admission levels; a placebo
       search (hour-block sign flips and day re-pairing over the whole search)
       a searched finalist must beat; five finalists, S25 by name, Holm with
@@ -1290,6 +1293,11 @@ basis points against an 11 bp taker round trip at the base tier.
       only on the held-out days before 2025-08-01; the market maker's
       position limit, reference volatility and making part pinned; the null
       replications in the compute budget
+- [x] Narrowed to BTCUSDT alone over the whole registered span, before any
+      data is read, to bound the data and the compute: 2,400 taker
+      configurations and 200 walk-forward fits, about 140 GB of archives
+      through the network, a disk peak of 46 to 53 GB and about 2 to 3.6 days
+      for the development period; a synthetic admission bar of about t = 2.6
 - [ ] The code to come: the search's entry point, trial ledger, candidate
       tapes and walk tables; ten-level tensor, walked-book label, Gaussian
       head with a lazy window dataset, hold-first thresholds and the EV gate;
@@ -1297,8 +1305,8 @@ basis points against an 11 bp taker round trip at the base tier.
       the refit replication, PBO and DSR; an event-time taker executor, a
       signal-entry quoter and S1 with the lean on a fixed clip, fill-rule
       comparison, streaming parity; the 200-level book reader proven on three
-      2026 days outside the study; the study's fetch for three instruments and
-      its float16 feature stores; the leaderboard, regime map and figures
+      2026 days outside the study; the study's fetch and its float16 feature
+      stores; the leaderboard, regime map and figures
 - [ ] Development period: the search, the placebo search and the amendment
       that freezes the finalists
 - [ ] The held-out read, then the boundary block and the break
