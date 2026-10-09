@@ -4,8 +4,9 @@ The registered study runs at :data:`REGISTERED`: every day of every block,
 every hold of the catalogue, 999 Null A draws, 200 random-direction draws and
 the network at its registered size. The dry run (:data:`DRY_RUN`) runs the same
 code on a synthetic venue that serves a few days of each block, scores the
-catalogue's cells at two holds, and draws fewer replications; nothing else
-differs, so a dry run exercises every stage's code path.
+catalogue's cells at the 50 s hold, runs the fold-level and flag-causality tests
+in one fold, and draws fewer replications; nothing else differs, so a dry run
+exercises every stage's code path.
 
 The folds follow the registration's walk-forward over D: for each test month
 from February to June, the inner validation is D's days in the seven calendar
@@ -119,7 +120,7 @@ def _dry_calendar() -> dict[str, tuple[date, ...]]:
     """The dry run's days: a few of each block, so that every fold has training,
     inner-validation and test days, H has days on both sides of 08-01, and F and P
     have days to read; the reader-test days as registered."""
-    d_days = tuple(date(2025, m, d) for m in range(1, 7) for d in (12, 27, 28))
+    d_days = tuple(date(2025, m, d) for m in range(1, 7) for d in (12, 28))
     return {
         "W": (date(2024, 12, 30), date(2024, 12, 31)),
         "D": d_days,
@@ -148,6 +149,8 @@ class Scale:
     simulator_flag_sets: int = 20
     #: Hours of each test month the flag-causality test mutates after (None: every hour).
     causality_hours: int | None = None
+    #: Folds the fold-level and flag-causality tests run in (None: every fold).
+    leakage_folds: int | None = None
     max_training_rows: int = MAX_TRAINING_ROWS
     #: Constructor arguments per model name, over the repository's defaults.
     model_params: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
@@ -184,12 +187,13 @@ REGISTERED = Scale("registered")
 DRY_RUN = Scale(
     "dry run",
     calendar=_dry_calendar(),
-    holds_s=(20.0, 50.0),
+    holds_s=(50.0,),
     null_a_draws=49,
     random_direction_draws=20,
     taker_flag_sets=10,
     simulator_flag_sets=5,
     causality_hours=1,
+    leakage_folds=1,
     max_training_rows=200_000,
     model_params={
         "gbm": {"n_estimators": 25, "max_depth": 3},

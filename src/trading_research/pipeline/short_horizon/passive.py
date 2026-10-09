@@ -140,17 +140,17 @@ def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float)
                  "entries_cancelled_by_flag", "feed_pauses"):  # fmt: skip
         row[name] = float(result.counters.get(name, 0.0))
     if cell.kind == "entry":
+        # The day's money comes from its own decomposition; the attempts table only
+        # counts the entries with a fill and gives their notional (its per-attempt
+        # cash can land a fill on the next attempt when the two share a stamp).
         table = quoter.attempts(fills)
         filled = table[table["filled"]] if len(table) else table
-        notional = filled["notional"].to_numpy(dtype=np.float64) if len(filled) else np.zeros(0)
-        per_100 = float((filled["net"].to_numpy() / notional * 100.0).sum()) if len(filled) else 0.0
-        if len(filled):
-            per_100 += row["funding_usdt"] * 100.0 / float(notional.mean())
-        gross = float(filled["gross"].sum()) if len(filled) else 0.0
-        row |= {"trades": len(filled), "attempts": len(table), "net_per_100": per_100,
-                "gross_bp_trade": gross / notional.sum() * 1e4 if len(filled) else float("nan"),
-                "net_bp_trade": (gross - float(filled["fees"].sum()) + row["funding_usdt"]) / notional.sum() * 1e4
-                if len(filled) else float("nan")}  # fmt: skip
+        notional = float(filled["notional"].sum()) if len(filled) else 0.0
+        per_entry = notional / len(filled) if len(filled) else 0.0
+        row |= {"trades": len(filled), "attempts": len(table),
+                "net_per_100": row["net_usdt"] * 100.0 / per_entry if per_entry > 0 else 0.0,
+                "gross_bp_trade": row["gross_usdt"] / notional * 1e4 if notional > 0 else float("nan"),
+                "net_bp_trade": row["net_usdt"] / notional * 1e4 if notional > 0 else float("nan")}  # fmt: skip
     else:
         row |= {"trades": _flat_returns(fills), "attempts": len(fills),
                 "net_per_100": row["net_usdt"] * 100.0 / (clip * mid) if mid > 0 else 0.0,

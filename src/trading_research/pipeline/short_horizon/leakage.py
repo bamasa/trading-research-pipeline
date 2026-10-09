@@ -200,12 +200,14 @@ def run(inputs: Inputs, network: bool) -> dict[str, Any]:
         )
     except LeakageError as exc:
         raise LeakError(f"K-leak: a feature reads past its cutoff: {exc}") from exc
-    folds = walk_forward(inputs.usable("D"))
-    fold_results = fold_level(inputs, [f for f in folds if f.train and f.inner], network)
+    folds = [f for f in walk_forward(inputs.usable("D")) if f.train and f.inner]
+    fold_results = fold_level(inputs, folds[: study.scale.leakage_folds], network)
     close = flags.hourly_close(
         study.symbol, study.roots.bars, sa.BLOCKS["D"][1], sa.development_access()
     )
-    causality = flags.causality(close, study.scale.causality_hours, study.workers)
+    causality = flags.causality(
+        close, study.scale.causality_hours, study.workers, study.scale.leakage_folds
+    )
     leaking = [c for c in causality if c["leaks"]]
     if leaking:
         raise LeakError(f"K-flag-leak: {[c['detail'] for c in leaking]}")

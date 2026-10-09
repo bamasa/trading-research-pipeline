@@ -50,6 +50,13 @@ class Block:
     access: sa.StudyAccess
     days_planned: tuple[date, ...]
     notes: list[str] = field(default_factory=list)
+    #: The frozen values, when the configuration is not frozen yet (the registered
+    #: dry run of stage E reads them before the amendment writes them).
+    values: dict[tuple[str, ...], Any] | None = None
+    #: The last day the detector's stream runs to (the block's own by default).
+    end: date | None = None
+    #: The folder under ``reads/`` its days are kept in (the block's name by default).
+    label: str | None = None
 
     @cached_property
     def registration(self) -> Any:
@@ -57,9 +64,15 @@ class Block:
 
         return shr.Registration.load(repo=self.study.repo).require_frozen()
 
+    def value(self, path: tuple[str, ...]) -> Any:
+        """A frozen value: the given one, else the frozen configuration's."""
+        if self.values is not None:
+            return self.values[path]
+        return self.registration.value(path)
+
     @property
     def threshold(self) -> int:
-        return int(self.registration.max_sequence_gaps)
+        return int(self.value(("data", "max_sequence_gaps")))
 
     @cached_property
     def fitted(self) -> dict[str, Any]:
@@ -78,7 +91,7 @@ class Block:
 
     @property
     def work(self) -> Path:
-        return self.study.dir("reads", self.name)
+        return self.study.dir("reads", self.label or self.name)
 
     @cached_property
     def validated(self) -> dict[str, Any]:
@@ -131,11 +144,9 @@ class Block:
         """The frozen detector over the stream to the block's last day, with D's profile."""
         from trading_research.pipeline.short_horizon import flags
 
-        end = sa.BLOCKS[self.name][1]
+        end = self.end or sa.BLOCKS[self.name][1]
         close = flags.hourly_close(self.study.symbol, self.study.roots.bars, end, self.access)
-        return flags.frozen(
-            close, end, profile=list(self.registration.value(("detector", "hour_profile")))
-        )
+        return flags.frozen(close, end, profile=list(self.value(("detector", "hour_profile"))))
 
     @property
     def flags_ns(self) -> np.ndarray:
@@ -216,7 +227,7 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
     from trading_research.pipeline.short_horizon.models import load
     from trading_research.pipeline.short_horizon_ledger import WEIGHTS_DIR
 
-    columns = [*block.registration.value(("features", "selected")), *ft.TENSOR]
+    columns = [*block.value(("features", "selected")), *ft.TENSOR]
     for cfg in configs:
         path = block.study.repo / WEIGHTS_DIR / fit_key(cfg)
         out = block.work / "network" / cfg.folder
@@ -284,7 +295,7 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
         gates = gate_states(given, levels[cfg.hold_s])
         x = frame[
             [
-                *block.registration.value(("features", "selected")),
+                *block.value(("features", "selected")),
                 *(ft.TENSOR if "tensor" in cfg.inputs else ()),
             ]
         ]
@@ -600,7 +611,7 @@ def compute_block(block: Block) -> tuple[dict[str, Any], dict[str, Any]]:
     passive = passive_slots(block)
     wanted = {k for t in takers for k in (t.key, *t.neighbours)}
     wanted |= {c.key for p in passive for c in (p.cell, *p.neighbours)}
-    configs = configurations([k for k in block.study.keys if k in wanted])
+    configs = configurations([k for k in block.study.catalogue().keys if k in wanted])
     models = load_models(block, configs)
     networks = [c for c in configs if c.model == "tcn"]
     if networks and days:

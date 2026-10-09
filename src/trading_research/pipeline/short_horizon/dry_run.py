@@ -165,9 +165,11 @@ def dry_run(
         records = run(study, stages)
         reads = read_blocks(study)
         statuses = {block: r.get("statuses", r) for block, r in reads.items()}
+        assert study.venue is not None
         return {
             "stages": list(records),
             "reads": statuses,
+            "venue": {"requests": len(study.venue.asked), "unknown": len(study.venue.unknown)},
             "work": str(study.work) if keep else "discarded",
         }
     finally:

@@ -1298,15 +1298,23 @@ basis points against an 11 bp taker round trip at the base tier.
       configurations and 200 walk-forward fits, about 140 GB of archives
       through the network, a disk peak of 46 to 53 GB and about 2 to 3.6 days
       for the development period; a synthetic admission bar of about t = 2.6
-- [ ] The code to come: the search's entry point, trial ledger, candidate
-      tapes and walk tables; ten-level tensor, walked-book label, Gaussian
-      head with a lazy window dataset, hold-first thresholds and the EV gate;
-      fold-wise detector flags and the flag-causality test; the two nulls,
-      the refit replication, PBO and DSR; an event-time taker executor, a
-      signal-entry quoter and S1 with the lean on a fixed clip, fill-rule
-      comparison, streaming parity; the 200-level book reader proven on three
-      2026 days outside the study; the study's fetch and its float16 feature
-      stores; the leaderboard, regime map and figures
+- [x] The code: candidate tapes and walk tables with executor parity, the
+      trial ledger; ten-level tensor, walked-book label, Gaussian head with a
+      lazy window dataset, hold-first thresholds and the EV gate; fold-wise
+      detector flags and the flag-causality test; the two nulls, the refit
+      replication, PBO and DSR; an event-time taker executor, a signal-entry
+      quoter and S1 with the lean on a fixed clip, fill-rule comparison,
+      streaming parity; the study's fetch and its float16 feature stores; the
+      ledger that opens H, F and P; the leaderboard, regime map and figures
+- [x] The single entry point,
+      [`experiments/short_horizon_2025.py`](experiments/short_horizon_2025.py):
+      stages 0, 1, A, B, D, C and E as subcommands that refuse to run out of
+      order, return a finished stage's record and resume a stopped one, then
+      each block opened and read in one session with every status and kill;
+      `--dry-run` runs all of it on a synthetic venue in a temporary
+      repository, with no request reaching the network, and is a test
+- [ ] Stage 0 on the two 2024 days, the code-freeze note, and the 200-level
+      book reader proven on three 2026 days outside the study
 - [ ] Development period: the search, the placebo search and the amendment
       that freezes the finalists
 - [ ] The held-out read, then the boundary block and the break

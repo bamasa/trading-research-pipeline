@@ -464,6 +464,41 @@ def lean_scales(study: Study, inputs: Any) -> dict[str, float]:
     return out
 
 
+#: The registered dry run's stand-in for H: D's last 44 days.
+STAND_IN_H = (date(2025, 5, 18), date(2025, 6, 30))
+
+
+def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> dict[str, Any]:
+    """The registered dry run, before the amendment: the parity test repeated on the
+    2024 days (a failure is a bug, and D is re-run in full), then the block read's
+    whole computation on D's last 44 days standing in for H and the reader on the
+    three ``ob200`` reader-test days standing in for F and P, under the development
+    access. Its outputs are kept apart and never reported; the record says only
+    that it ran."""
+    from trading_research.data import study_access as sa
+    from trading_research.pipeline.short_horizon import statuses as st
+    from trading_research.pipeline.short_horizon.heldout import Block, compute_block
+    from trading_research.pipeline.short_horizon.stage0 import load_timing_day, parity
+
+    holds = sorted({parse_key(k).hold_s for k in study.keys})
+    gate = parity([load_timing_day(study, d)[1] for d in study.scale.timing_days], holds)
+    if not gate["ok"]:
+        raise RuntimeError("the dry run's repeat of the walk-table parity test failed: a bug under "
+                           "the amendment protocol, and D is re-run in full")  # fmt: skip
+    access, end = sa.development_access(), sa.BLOCKS["D"][1]
+    days = tuple(d for d in inputs.usable("D") if STAND_IN_H[0] <= d <= STAND_IN_H[1])
+    stand_in = Block(study, "H", access, days, values=values, end=end, label="rehearsal_H")
+    series, info = compute_block(stand_in)
+    found = st.family(series, {slot: s.mask(s.days) for slot, s in series.items()}, "H", {})
+    reader = Block(study, "F", access, study.scale.days(sa.READER_TEST), values=values, end=end,
+                   label="rehearsal_F_and_P")  # fmt: skip
+    outputs = {"stand_in_H": {"info": info, "statuses": {k: a.status for k, a in found.items()}},
+               "stand_in_F_and_P": reader.validated}  # fmt: skip
+    save_json(study.dir("E", "rehearsal") / "discarded_outputs.json", outputs)
+    return {"ran": True, "parity_repeated_ok": True, "stand_in_H_days": len(days),
+            "stand_in_F_and_P_days": len(reader.days_planned), "outputs": "discarded, never reported"}  # fmt: skip
+
+
 def run(study: Study) -> dict[str, Any]:
     """Stage E's record: the frozen fits and files, the MDEs, the detector, the amendment."""
     from trading_research.pipeline import short_horizon_registration as shr
@@ -489,9 +524,10 @@ def run(study: Study) -> dict[str, Any]:
         "mdes": slot_mdes(study, record_d, slots), "detector": detector_record(study),
     }  # fmt: skip
     values = placeholder_values(study, parts)
+    rehearsal = rehearse(study, inputs, values)
     written = write_amendment(study, values)
     return plain({"commit": study.commit(), "fits": len(fits["weights_sha256"]),
                   "weights_sha256": fits["weights_sha256"], "finalists": parts["finalists"],
                   "fitted_values_sha256": fitted_sha, "mde": parts["mdes"], "detector": parts["detector"],
-                  "amendment": written, "next": "review and commit the frozen configuration, the amendment, "
+                  "amendment": written, "dry_run": rehearsal, "next": "review and commit the frozen configuration, the amendment, "
                   "the trial ledger and the results files; then open H"})  # fmt: skip

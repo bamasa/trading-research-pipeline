@@ -338,7 +338,7 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
         return head | {"unreadable": True, "excluded": blk.validated["reasons"]} | unreadable_results(
             study, block, "unreadable")  # fmt: skip
     series, info = compute_block(blk)
-    mdes = blk.registration.value(("metrics", "mde", "value")) or {}
+    mdes = blk.value(("metrics", "mde", "value")) or {}
     for slot, s in series.items():
         s.mde = mdes.get(slot)
     found = {"H": lambda: statuses_h(study, series),

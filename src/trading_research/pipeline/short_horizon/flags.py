@@ -101,10 +101,12 @@ def alarms_frame(record: dict[str, Any]) -> pd.DataFrame:
     return _alarms_from(record["alarms"])
 
 
-def causality(close: pd.Series, hours_per_fold: int | None, workers: int) -> list[dict[str, Any]]:
+def causality(
+    close: pd.Series, hours_per_fold: int | None, workers: int, folds: int | None = None
+) -> list[dict[str, Any]]:
     """The flag-causality test in every fold (all hours, or evenly spaced ones)."""
     out = []
-    for fold in rf.walk_forward_months():
+    for fold in rf.walk_forward_months()[:folds]:
         hours = None
         if hours_per_fold is not None:
             every = fold.hours
