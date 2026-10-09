@@ -70,12 +70,19 @@ def test_one_entry_per_event_and_one_position_at_a_time() -> None:
     sides = np.array([1, 1, 1, 0, 1, 1, 0, 0, -1, -1, 0, 1])
     events = gate_events(sides)
     busy = np.arange(len(sides)) + 5
-    # Row 0 enters and holds to row 5; the event of rows 4-5 opened while busy
-    # and enters at its first free row, 6? No: 6 is closed, so it never enters.
+    # Row 0 holds to row 5. The event of rows 4-5 opens and closes while the
+    # position is held, so it never enters; row 8's position would close
+    # beyond the data, so it is not taken.
     assert thin_entries(sides, busy, events).tolist() == [0]
     busy = np.arange(len(sides)) + 2
+    # Row 0 holds to 2, and rows 1-2 belong to its event; row 4 opens a new
+    # event; row 8 another; row 11 would close beyond the data.
     assert thin_entries(sides, busy, events).tolist() == [0, 4, 8]
-    assert thin_entries(sides, busy).tolist() == [0, 4, 8, 11][:3]
+    assert thin_entries(sides, busy).tolist() == [0, 4, 8]
+    busy = np.arange(len(sides)) + 1
+    # Without events, row 2 may follow row 0 once its position closes at 1.
+    assert thin_entries(sides, busy).tolist() == [0, 2, 4, 8]
+    assert thin_entries(sides, busy, events).tolist() == [0, 4, 8]
 
 
 def _reference(sides: np.ndarray, busy: np.ndarray, events: np.ndarray | None) -> list[int]:
