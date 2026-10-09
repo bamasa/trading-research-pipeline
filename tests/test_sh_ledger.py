@@ -39,7 +39,7 @@ def sha(data: bytes) -> str:
 
 def git(repo: Path, *args: str) -> str:
     done = subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=Study", "-c", "user.email=s@example.com", *args],
+        ["git", "-C", str(repo), "-c", "user.name=Study", "-c", "user.email=study", *args],
         check=True,
         capture_output=True,
         text=True,
@@ -365,3 +365,10 @@ def test_the_environment_fingerprint_and_the_trial_ledger_parts(tmp_path: Path) 
     assert shl.trial_ledger_sha256(found) == sha(b"".join(p.read_bytes() for p in parts))
     write(tmp_path, "t.parquet", b"one")
     assert shl.trial_ledger_paths(tmp_path, Path("t.parquet")) == [tmp_path / "t.parquet"]
+
+
+def test_a_process_refuses_frozen_files_that_moved_after_the_open(repo: Path) -> None:
+    opened_h(repo)
+    write(repo, shl.FINALISTS_DIR / "S25.json", b'{"theta": 0.7}')
+    with pytest.raises(HeldOutLocked, match="S25.json has sha256"):
+        ledger(repo).session("H")

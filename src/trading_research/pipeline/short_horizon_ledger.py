@@ -418,7 +418,13 @@ class Ledger:
     # -- a process of a read session ---------------------------------------------
 
     def session(self, block: str, *, workers: int = 1) -> ReadSession:
-        """Start one process of ``block``'s latest read session; return its access."""
+        """Start one process of ``block``'s latest read session; return its access.
+
+        Refused unless the open entry is in HEAD's ledger (and the upstream's),
+        the session is not closed, nothing but the ledger changed since the
+        session's commit, the frozen configuration and files are unchanged, and
+        the environment is H's. The process is recorded with ``workers``.
+        """
         committed = self.committed_entries()
         if not committed.get(block):
             raise HeldOutLocked(f"{block}'s open entry is not in HEAD's ledger: commit it first")
@@ -430,9 +436,10 @@ class Ledger:
         if entry.get("results_sha256"):
             raise HeldOutLocked(f"{block}'s read session is closed: its results file is written")
         self.verify_tree(since=entry["commit"])
-        actual = file_sha256(self.repo / self.config)
-        if actual != entry["config_sha256"]:
+        registration = self.verify_frozen()
+        if registration.sha256 != entry["config_sha256"]:
             raise HeldOutLocked(f"the configuration is not the one {block} was opened with")
+        self.verify_frozen_files(registration)
         environment = self._environment(committed)
         on_disk = self.entries()
         live = on_disk[block][-1]
