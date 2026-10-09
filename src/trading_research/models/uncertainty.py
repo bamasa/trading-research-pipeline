@@ -35,7 +35,7 @@ same reason.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import pandas as pd
@@ -45,6 +45,21 @@ from trading_research.models.base import CLASSES, Model
 BUY_COLUMN = CLASSES.index(1)
 SELL_COLUMN = CLASSES.index(-1)
 HOLD_COLUMN = CLASSES.index(0)
+
+
+@runtime_checkable
+class MeanAndSigma(Protocol):
+    """A fitted model that gives an expected move and its standard deviation in bp.
+
+    What a gate of the form ``mu - k * sigma > cost`` reads, whichever model
+    produced the two: :class:`HeteroscedasticRegressor` (two regressors) or
+    ``models.tcn.GaussianTCN`` (one network with a Gaussian head). Both return
+    one value per row of ``x``; the network returns NaN on rows it cannot score.
+    """
+
+    def predict_mean_bp(self, x: pd.DataFrame) -> np.ndarray: ...
+
+    def predict_sigma_bp(self, x: pd.DataFrame) -> np.ndarray: ...
 
 
 class HeteroscedasticRegressor(Model):
