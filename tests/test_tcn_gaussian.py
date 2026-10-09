@@ -232,3 +232,31 @@ def test_the_network_is_registered_as_a_regression_model() -> None:
     assert isinstance(model, GaussianTCN)
     assert model.scale_bp == 5.0
     assert "tcn_gaussian" in REGRESSION_MODELS
+
+
+def test_both_regressor_families_give_the_gate_mean_and_sigma(fitted, data) -> None:
+    from trading_research.models.uncertainty import MeanAndSigma
+    from trading_research.pipeline.stages import build_model
+
+    ridge = build_model("bound_ridge", cost_bp=1.0).model.fit(data["x"], data["y"])
+    for model in (ridge, fitted):
+        assert isinstance(model, MeanAndSigma)
+        mu, sigma = model.predict_mean_bp(data["vx"]), model.predict_sigma_bp(data["vx"])
+        assert mu.shape == sigma.shape == (len(data["vx"]),)
+        assert np.all(sigma[np.isfinite(sigma)] > 0)
+
+
+def test_input_rows_after_the_last_window_end_do_not_move_the_weights(data) -> None:
+    values = data["x"].to_numpy(dtype="float32")
+    targets = data["y"].to_numpy(dtype="float32")
+    rows = np.arange(0, 2500, 10)
+
+    def fit(inputs: np.ndarray) -> str:
+        day = Day("d", lambda: inputs, rows, targets[rows])
+        return small(epochs=1).fit_days([day]).weights_sha256()
+
+    mutated = values.copy()
+    mutated[rows[-1] + 1 :] = 1e6
+    assert fit(values) == fit(mutated)
+    mutated[rows[-1]] = 1e6
+    assert fit(values) != fit(mutated)
