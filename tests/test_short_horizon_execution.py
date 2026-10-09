@@ -165,7 +165,10 @@ def test_signal_entry_cells_and_flag_tapes() -> None:
     cell = signal_entry_cell("S-P", study_config(0), hold_s=50.0, cancel_on_flag=True)
     first, second = cell.make_quoter(), cell.make_quoter()
     assert isinstance(first, SignalEntryQuoter) and first is not second
-    assert (first.hold_s, first.cancel_on_flag, first.passive_exit) == (50.0, True, False)
+    assert (first.hold_s, first.passive_exit) == (50.0, False)
+    assert cell.config.cancel_entries_on_flag
+    plain = signal_entry_cell("S-P", study_config(0), hold_s=50.0)
+    assert not plain.config.cancel_entries_on_flag
     assert pickle.loads(pickle.dumps(cell.make_quoter))().hold_s == 50.0
     tape = flag_tape(np.array([3_000_000_000, 1_000_000_000, 3_000_000_000]))["flag_s"]
     assert tape.ts.tolist() == [1_000_000_000, 3_000_000_000]

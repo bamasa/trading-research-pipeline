@@ -12,10 +12,10 @@ One attempt, from the post to the return to a flat book:
 * **Entry.** One clip on the signal's side at that snapshot's touch, kept at
   that price and never re-pegged. After a partial fill the rest stays at the
   same price. It is no longer quoted, and so cancelled, at the first snapshot
-  ``hold_s`` after the post; at the first snapshot after a regime flag newer
-  than the post when ``cancel_on_flag``; and as soon as it is done for any
-  other reason (filled, rejected on arrival, or pulled by a feed pause): an
-  entry is never posted twice.
+  ``hold_s`` after the post, and as soon as it is done for any other reason
+  (filled, rejected on arrival, pulled by a feed pause, or cancelled by the
+  simulator at the first event after a regime flag when the configuration's
+  ``cancel_entries_on_flag`` is set): an entry is never posted twice.
 * **Exit.** ``hold_s`` after the position opened (the time of the first fill,
   which the simulator reports), a reduce-only taker order for the position
   held, which the simulator prices by the shared book walk. A fill that lands
@@ -43,7 +43,6 @@ import pandas as pd
 
 from trading_research.market_making.orders import OwnOrder
 from trading_research.market_making.quoters import (
-    FLAG_SIGNAL,
     NO_QUOTE,
     NO_QUOTES,
     MarketView,
@@ -77,7 +76,6 @@ class _Attempt:
     side: int
     price: int
     posted_s: float
-    flag_at_post: float
     entry_open: bool = True
     exit_at: float = math.nan
     exit_price: int | None = None
@@ -90,7 +88,6 @@ class SignalEntryQuoter:
 
     hold_s: float
     passive_exit: bool = False
-    cancel_on_flag: bool = False
     name: str = "signal_entry"
     uses_future: bool = False
     counts: dict[str, int] = field(default_factory=dict, repr=False, compare=False)
@@ -121,7 +118,7 @@ class SignalEntryQuoter:
         if fresh:
             self._acted = decision
         attempt = self._attempt
-        if attempt is not None and self._update(attempt, view, position, now):
+        if attempt is not None and self._update(attempt, position, now):
             self._attempt = attempt = None
         if attempt is not None:
             if fresh:
@@ -137,29 +134,23 @@ class SignalEntryQuoter:
             return NO_QUOTES
         side = 1 if view.signals.get(ENTRY_SIDE_SIGNAL, math.nan) > 0 else -1
         price = view.best_bid if side > 0 else view.best_ask
-        flag = view.signals.get(FLAG_SIGNAL, math.nan)
-        attempt = _Attempt(decision, side, int(price), now, flag)
+        attempt = _Attempt(decision, side, int(price), now)
         self._attempt = attempt
         self._count("attempts")
         self.log.append((decision, side, view.ts, price * view.tick, view.clip))
         return self._quotes(attempt, view, position, now)
 
-    def _update(self, a: _Attempt, view: MarketView, position: float, now: float) -> bool:
+    def _update(self, a: _Attempt, position: float, now: float) -> bool:
         """Close the entry when its time is up or it is done; True when the attempt is over."""
         if a.entry_open:
             alive = any(
                 o.side == a.side and o.price == a.price and not o.cancelling for o in self._own
             )
-            flag = view.signals.get(FLAG_SIGNAL, math.nan)
-            newer = flag == flag and not flag <= a.flag_at_post
             if not alive:
                 a.entry_open = False
             elif now >= a.posted_s + self.hold_s:
                 a.entry_open = False
                 self._count("entries_expired")
-            elif self.cancel_on_flag and newer:
-                a.entry_open = False
-                self._count("entries_pulled_by_flag")
         if position != 0.0 and a.exit_at != a.exit_at:
             a.exit_at = self._opened_ns / 1e9 + self.hold_s
             self._count("entries_filled")

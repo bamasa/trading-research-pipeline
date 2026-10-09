@@ -44,7 +44,12 @@ arrival are enforced here, identically for every quoter:
   is counted (``exit_late_snapshot``);
 * a quote beyond the tenth visible level is not placed, and an order at or
   through the opposite touch, or our own opposite order, when it arrives is
-  rejected.
+  rejected;
+* with ``cancel_entries_on_flag``, a resting entry (an order decided while
+  flat or on its own side, so a fill would open or add to the position) is
+  cancelled at the first event after each regime flag of the ``FLAG_SIGNAL``
+  tape at or after its decision: the rule of
+  :func:`trading_research.pipeline.regime.cancel_times`, applied in event time.
 
 The day
 -------
@@ -113,7 +118,7 @@ from trading_research.market_making.queue import (
     on_print_rule,
     on_snapshot,
 )
-from trading_research.market_making.quoters import MarketView, Quote, Quoter
+from trading_research.market_making.quoters import FLAG_SIGNAL, MarketView, Quote, Quoter
 from trading_research.market_making.signals import SignalTape
 
 _EMPTY_SIGNALS: Mapping[str, float] = MappingProxyType({})
@@ -165,6 +170,10 @@ class SimConfig:
     #: Which prints fill a resting order: the queue rules (R5-R7, the default),
     #: on touch (an optimistic bound) or trade-through only (R7 alone).
     fill_rule: FillRule = FillRule.QUEUE
+    #: Cancel every resting entry at the first event after each regime flag
+    #: (the ``FLAG_SIGNAL`` tape) at or after its decision: a passive entry's
+    #: guard. Exits and orders that reduce the position are left alone.
+    cancel_entries_on_flag: bool = False
 
     def __post_init__(self) -> None:
         clips = [c for c in (self.clip_notional, self.clip_btc) if c is not None]
@@ -328,6 +337,13 @@ class _Day:
             name: tape.strictly_before(events.book_ts).tolist()
             for name, tape in (tapes or {}).items()
         }
+        #: Flag times that cancel resting entries, and the next one due.
+        flags = (tapes or {}).get(FLAG_SIGNAL) if config.cancel_entries_on_flag else None
+        self.flag_times: list[int] = (
+            [] if flags is None else np.unique(np.asarray(flags.ts, dtype=np.int64)).tolist()
+        )
+        self.next_flag = 0
+        self.next_flag_ns: float = self.flag_times[0] if self.flag_times else math.inf
 
         self.account = Account()
         self.clock = _Clock()
@@ -421,6 +437,8 @@ class _Day:
                 self._suspend()
             while heap and heap[0][0] < t:
                 self._pop()
+            if t > self.next_flag_ns:
+                self._cancel_entries(t)
             if t >= self.next_minute:
                 self._minutes(t)
             kind = kinds[k]
@@ -706,6 +724,22 @@ class _Day:
         for side in (1, -1):
             for order in list(self.open[side]):
                 self._send_cancel(order, decided)
+
+    def _cancel_entries(self, t: int) -> None:
+        """At the first event after one or more flags: cancel every resting entry
+        decided at or before the latest of them."""
+        flags = self.flag_times
+        while self.next_flag < len(flags) and flags[self.next_flag] < t:
+            self.next_flag += 1
+        self.next_flag_ns = flags[self.next_flag] if self.next_flag < len(flags) else math.inf
+        latest = flags[self.next_flag - 1]
+        decided = t + self.config.feed_latency_ns
+        for side in (1, -1):
+            for order in list(self.open[side]):
+                entry = side * order.position_at_decision >= 0
+                if entry and order.cancel_ns is None and order.decided_ns <= latest:
+                    self._send_cancel(order, decided)
+                    self.counters.add("entries_cancelled_by_flag")
 
     def _suspend(self) -> None:
         """No snapshot for too long: pull everything until the next one."""
@@ -1309,6 +1343,7 @@ EXTRA_COUNTERS = (
     "time_above_one_clip_s",
     EXIT_LATE,
     "flatten_beyond_visible_book",
+    "entries_cancelled_by_flag",
 )
 
 

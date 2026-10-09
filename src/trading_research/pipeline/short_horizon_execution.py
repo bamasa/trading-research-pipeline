@@ -121,11 +121,15 @@ def signal_entry_cell(
     passive_exit: bool = False,
     cancel_on_flag: bool = False,
 ) -> Cell:
-    """A simulator cell for the signal-entry quoter (a fresh quoter each day)."""
-    make = partial(
-        SignalEntryQuoter, hold_s, passive_exit=passive_exit, cancel_on_flag=cancel_on_flag
-    )
-    return Cell(label, make, config)
+    """A simulator cell for the signal-entry quoter (a fresh quoter each day).
+
+    ``cancel_on_flag`` (a slot with a regime window above 0) makes the simulator
+    cancel a resting entry at the first event after each flag of the cell's
+    ``flag_s`` tape (:func:`flag_tape`); the decisions themselves are guarded
+    upstream (:func:`trading_research.pipeline.regime.guard_decisions`).
+    """
+    make = partial(SignalEntryQuoter, hold_s, passive_exit=passive_exit)
+    return Cell(label, make, config.with_(cancel_entries_on_flag=cancel_on_flag))
 
 
 def flag_tape(alarm_ns: np.ndarray) -> dict[str, SignalTape]:

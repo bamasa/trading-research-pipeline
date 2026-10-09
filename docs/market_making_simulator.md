@@ -763,7 +763,7 @@ the status rule.
 ## Additions for the short-horizon study
 
 The 2025 short-horizon study (`docs/preregistration/short_horizon_2025.md`)
-runs its passive paths through this simulator with five additions. Each is off
+runs its passive paths through this simulator with six additions. Each is off
 by default, so round one's and round two's runs are unchanged.
 
 * **A fixed clip.** `clip_btc` replaces `clip_notional` and the touch share:
@@ -792,10 +792,20 @@ by default, so round one's and round two's runs are unchanged.
   acknowledgements; nothing after the snapshot is passed.
 * **The signal-entry quoter** (`market_making/signal_entry.py`): one clip at
   the touch per decision, kept at its first price, cancelled after the hold, a
-  feed pause or a newer regime flag and never re-posted, with a taker exit a
+  feed pause or a regime flag and never re-posted, with a taker exit a
   hold after the first fill. An order whose cancel is in flight counts as
   resting, so a decision arriving meanwhile is skipped and the position never
   exceeds one clip.
+* **Resting entries cancelled after a regime flag.** With
+  `cancel_entries_on_flag`, the simulator cancels every resting entry (an order
+  decided while flat or on its own side, whose fill would open or add to the
+  position) at the first event after each flag of the `flag_s` tape at or after
+  its decision, whatever the event (a snapshot, a print or a settlement). This
+  is `pipeline/regime.cancel_times` in event time: a fill after the flag would be
+  a new entry inside the guard. Exits are left alone, so an open position runs
+  to its exit. Each cancel is counted (`entries_cancelled_by_flag`). It biases
+  nothing in the strategy's favour: the cancel goes out with the cancel latency,
+  and a print before it lands can still fill the order (`test_sim_flag_cancel.py`).
 
 S1 with the signal lean, its `sigma_ref` (the median `vol_bp_1m` over the
 warm-up block's rows, `vol_at_rows`) and the study's settings are in
