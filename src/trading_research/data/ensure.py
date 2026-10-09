@@ -303,6 +303,7 @@ def ensure_bars(
     market: Market = "futures-um",
     dry_run: bool = False,
     on_progress: Callable[[str], None] | None = print,
+    daily_only: bool = False,
 ) -> FetchPlan:
     """Closed bars at ``interval`` for one instrument, from Binance's archives.
 
@@ -310,6 +311,8 @@ def ensure_bars(
     kilobytes, fetched a month at a time and cut into the same one-file-per-day
     layout as everything else so the plan, resume and skip logic is shared. The
     month Binance has not closed yet falls back to its daily archives.
+    ``daily_only`` uses daily archives alone and never caches a month (see
+    :func:`trading_research.data.binance.download_range`).
     """
     from trading_research.data.binance import ArchiveSpec, download_range
 
@@ -325,7 +328,7 @@ def ensure_bars(
     def fetch(name: str, day: date) -> None:
         # download_range records a missing archive as a skipped day rather than
         # raising; the plan needs the failure to count it as unavailable.
-        results = download_range(spec, day, day, root, keep_raw=True)
+        results = download_range(spec, day, day, root, keep_raw=True, daily_only=daily_only)
         if not results or results[0].output is None:
             raise DataUnavailable(results[0].skipped if results else f"{name} {day}: no result")
 
