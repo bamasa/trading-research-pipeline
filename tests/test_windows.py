@@ -124,3 +124,24 @@ def test_rows_are_thinned_evenly_across_days() -> None:
     assert sum(len(r) for r in kept) == 20
     assert [len(r) for r in kept] == [5, 5, 5, 5]
     assert thin_evenly(rows, 1000)[0].tolist() == rows[0].tolist()
+
+
+def test_training_and_inference_see_the_same_window_for_a_row() -> None:
+    rng = np.random.default_rng(5)
+    parts = [rng.normal(size=(30, 3)).astype(np.float16) for _ in range(3)]
+    rows = np.arange(30)
+    days = [
+        Day(f"d{k}", lambda p=p: p, rows, rows + 100.0 * k, follows_previous=k > 0)
+        for k, p in enumerate(parts)
+    ]
+    trained = {}
+    for w, t in WindowDataset(days, window=8).training_batches(7, np.random.default_rng(0), 2):
+        for window, target in zip(w, t, strict=True):
+            trained[int(target)] = window
+    served = {}
+    for i, positions, w in WindowDataset(days, window=8).inference_batches(5):
+        for p, window in zip(positions, w, strict=True):
+            served[100 * i + int(p)] = window
+    assert trained.keys() == served.keys()
+    for key, window in trained.items():
+        np.testing.assert_array_equal(window, served[key])

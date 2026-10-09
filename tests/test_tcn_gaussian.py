@@ -223,3 +223,12 @@ def test_rank_ic_ignores_missing_rows_and_is_nan_when_undefined() -> None:
     assert rank_ic(a, b) == pytest.approx(1.0)
     assert math.isnan(rank_ic(np.ones(5), np.arange(5.0)))
     assert math.isnan(rank_ic(np.arange(2.0), np.arange(2.0)))
+
+
+def test_the_network_is_registered_as_a_regression_model() -> None:
+    from trading_research.pipeline.stages import REGRESSION_MODELS, build_model
+
+    model = build_model("tcn_gaussian", scale_bp=5.0)
+    assert isinstance(model, GaussianTCN)
+    assert model.scale_bp == 5.0
+    assert "tcn_gaussian" in REGRESSION_MODELS
