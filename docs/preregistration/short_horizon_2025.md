@@ -601,14 +601,14 @@ this repository's defaults, with one registered seed per fit.
 ## The search space
 
 The search is a catalogue of configurations. A configuration's **cell** is
-its full set of values; its **group** is its categorical values (instrument,
-stratum, model, inputs, gate); the ordered values (hold, decision, label fee,
+its full set of values; its **group** is its categorical values (stratum,
+model, inputs, gate); the ordered values (hold, decision, label fee,
 regime window) span the group's grid. Every cell is scored on every one of
 D's 150 walk-forward test days ([selection](#selection-on-d-admission-and-the-finalists)).
 
 | Axis | Values | Kind | Code |
 |---|---|---|---|
-| Instrument | BTCUSDT, ETHUSDT, XRPUSDT | categorical | `data/bybit.py`, `data/bybit_trades.py`; a per-instrument loader and clip (new code) |
+| Instrument | BTCUSDT | fixed | `data/bybit.py`, `data/bybit_trades.py`; this study's loader (new code) |
 | Stratum | C: a three-class classifier with the hold-first rule; R: a Gaussian regressor with the EV gate | one slot each | the hold-first rule and the EV gate (new code) |
 | Model | C: `gbm`, `logistic`; R: `tcn`, `bound_ridge` | categorical | `models/gbm.py`, `models/linear.py`, `models/tcn.py` with the Gaussian head (new code), `models/uncertainty.py` |
 | Label | C: the walked-book taker label; R: the forward move | fixed by stratum | new code |
@@ -630,46 +630,48 @@ D's 150 walk-forward test days ([selection](#selection-on-d-admission-and-the-fi
   per fit;
 - cooldown 0 beyond the one-position rule, and the monthly walk-forward
   cadence;
+- the instrument: BTCUSDT alone ([Choices and their
+  reasons](#choices-and-their-reasons));
 - the normaliser window: each value would need a new feature store, about
-  45 GB per instrument;
-- feature selection: once per instrument on its January, at most 40
-  features;
+  45 GB;
+- feature selection: once, on January, at most 40 features;
 - sizing: one clip;
 - holds of 300 s and longer, already negative on the repository's 5 s grid;
 - exits other than the clock: a take-profit or stop needs a walk along each
   holding path, about 25 times the cost of the clock exit;
-- the flag source: BTC's hourly monitor drives every instrument; the book
-  CUSUM stays a reported second detector.
+- the flag source: the hourly monitor on Binance's BTCUSDT futures bars; the
+  book CUSUM stays a reported second detector.
 
 **Counts.**
 
 | | Categorical groups | Ordered grid per group | Taker cells | Signal configurations (fits per fold) |
 |---|---:|---|---:|---:|
-| C, per instrument | 12 (2 models × 2 inputs × 3 gates) | hold 4 × rate 4 × label fee 2 × regime 4 = 128 | 1,536 | 32 |
-| R, per instrument | 6 (2 models × 3 gates) | hold 4 × k 3 × β 3 × regime 4 = 144 | 864 | 8 |
-| **All three instruments** | **54** | | **7,200** | **120** (600 walk-forward fits) |
+| C | 12 (2 models × 2 inputs × 3 gates) | hold 4 × rate 4 × label fee 2 × regime 4 = 128 | 1,536 | 32 |
+| R | 6 (2 models × 3 gates) | hold 4 × k 3 × β 3 × regime 4 = 144 | 864 | 8 |
+| **In all** | **18** | | **2,400** | **40** (200 walk-forward fits) |
 
 A gate, a regime window and a decision threshold need no fit of their own,
-so 120 signal configurations (C: model × inputs × hold × label fee; R: model
-× hold, per instrument) cover the 7,200 taker cells. The simulator runs on D
+so 40 signal configurations (C: model × inputs × hold × label fee; R: model
+× hold) cover the 2,400 taker cells. The 200 walk-forward fits are 80 boosted,
+80 logistic, 20 network and 20 bound-regressor fits. The simulator runs on D
 are fixed by rule ([selection](#selection-on-d-admission-and-the-finalists)):
 S25-Z's 12 cells, always; S-P's at most 27 cells and 3 regime measurements
 (its cell at each regime window other than its signal's own, of none, 4, 24
 and 120 h); S-M's 3 cells and 6 regime measurements (`guard_pull` and
 `guard_widen` at 4, 24 and 120 h with λ = 1); A0 and FILL's 4 runs on O. The
 passive-exit variant of S-P and S25-Z runs on the held-out blocks only, never
-on D. The **trial bound** is N_max = 7,200 + 12 + 30 + 9 + 4 = **7,255**; the
+on D. The **trial bound** is N_max = 2,400 + 12 + 30 + 9 + 4 = **2,455**; the
 trial ledger records the actual N, and every row counts in N_trials even
 beyond N_max.
 
-**The catalogue** is the 7,200 taker cell keys, written
+**The catalogue** is the 2,400 taker cell keys, written
 `<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>`
 and `<instrument>|R|<model>|<inputs>|<gate>|hold_s=<h>|k=<k>|beta_bp=<β>|regime=<r>`,
-with inputs `micro`, `micro+tensor` or `tensor+micro`, regime `none`,
-`pull_4h`, `pull_24h` or `pull_120h`, and numbers written as in the
-configuration (`0`, `0.5`, `5.5`). Sorted in byte order and joined with a
-newline after each key, they have sha256
-`45a32e8ada0401a4f4d225ba5c96197d5833927409b1db0a92e9fc8142aac4b5`. The
+with instrument `BTCUSDT`, inputs `micro`, `micro+tensor` or `tensor+micro`,
+regime `none`, `pull_4h`, `pull_24h` or `pull_120h`, and numbers written as
+in the configuration (`0`, `0.5`, `5.5`). Sorted in byte order and joined with
+a newline after each key, they have sha256
+`dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d`. The
 single entry point checks this hash before stage 1 and refuses any key
 outside the catalogue. S25 is the key
 `BTCUSDT|C|gbm|micro|open|hold_s=50|trades_per_day=240|label_fee_bp=0|regime=none`.
@@ -723,8 +725,9 @@ detector](#the-break-detector)): hourly Binance BTCUSDT log returns over one
 stream from 2024-12-01, each divided by the root mean square of its UTC hour,
 under `MonitorSpec(history_len=365, online_len=90, min_history=121)` with the
 statistics scale and dependence. A flag is an alarm, effective at the close of
-the hour whose return produced it. BTC's flags guard every instrument, as a
-market-wide break.
+the hour whose return produced it. The flags come from the same instrument the
+search trades, on another venue's bars, which the book archive's change cannot
+move.
 
 **Causal on D, fold by fold.** For test month m of the walk-forward, the
 24-value hour profile is fitted on the hours from 2024-12-01 to the last hour
@@ -779,12 +782,12 @@ gives each one's time and disk.
 0. **Stage 0, before any 2025 fetch: the hard budget.** The entry point
    checks the catalogue's sha256. The code to come is timed on 2024 days
    already on disk (BTCUSDT 2024-02-11, a quiet day, and 2024-03-05, the
-   busiest; one XRPUSDT day of 2024), and D's wall time is projected from
-   those times, Null B at full size (137 × the catalogue's cell-days) and the
-   refit with its store rebuilds included. **The ceiling is 6 days of wall time for D.** Over it, cuts
-   are made in this order until the projection fits: (1) the network on
-   ETHUSDT and XRPUSDT; (2) XRPUSDT entirely; (3) the 120 s hold; (4) stratum
-   C's micro-selected + tensor inputs; (5) the `quiet_out` gate. The cuts, the
+   busiest), and D's wall time is projected from those times, Null B at full
+   size (137 × the catalogue's cell-days) and the refit included. **The
+   ceiling is 6 days of wall time for D**; the budget below projects about
+   2.0–3.6 days. Over the ceiling, cuts are made in this order until the
+   projection fits: (1) the 120 s hold; (2) stratum C's micro-selected +
+   tensor inputs; (3) the `quiet_out` gate. The cuts, the
    new catalogue hash, the new N_max, the configuration's new
    null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut go
    into a dated amendment committed before stage 1. Nothing is cut once a 2025 file is on disk; a run slower
@@ -792,15 +795,15 @@ gives each one's time and disk.
    placebo search](#the-placebo-search) runs here, on the same 2024 days,
    before any 2025 fetch: a failure blocks stage B until it is fixed by a
    dated amendment.
-1. **Stage 1: fetch, replay and features**, W and D, one instrument at a time
+1. **Stage 1: fetch, replay and features**, W and D
    ([fetch plan](#fetch-plan)); no H, F or P file is on disk before the
    amendment. Validate every day; exclusions per the [blocks](#blocks).
-   Features go to two float16 stores: every tenth row, for every instrument;
-   and every row, holding the network's inputs, for one instrument at a time.
+   Features go to two float16 stores: every tenth row; and every row, holding
+   the network's inputs, kept through D.
 2. **Leakage**: every feature through `validation/leakage.py`, the fold-level
    leakage test and the flag-causality test; any failure stops the study
    until fixed by a dated amendment (K-leak, K-flag-leak).
-3. **Selection**, per instrument, on its January.
+3. **Selection**, on January.
 4. **Walk-forward over D** by calendar month: for each test month from
    February to June (150 test days), train on D's days before it except the
    last seven, which are the inner validation; purge the hold plus the
@@ -814,15 +817,15 @@ gives each one's time and disk.
    cutoff is the end of fold m's inner validation plus the hold, inside the
    purge before test month m: the inner validation's labels and forward moves
    read prices up to a hold past its end, and nothing fitted reads later.
-5. **Stage A: fits.** The 600 walk-forward fits (120 signal configurations ×
+5. **Stage A: fits.** The 200 walk-forward fits (40 signal configurations ×
    5 folds), the predictions on the test days, and for each signal
    configuration and test day a **candidate-row tape**: the rows at which the
    loosest cell could enter (θ at 240 trades a day; k = 0 and β = 0; gate
    open; no guard), each with its scores, gate states and guard state. Every
    stricter cell is a subset of these rows. The daily IC is computed on all
    decision rows and stored as one value per day.
-6. **Stage B: taker scoring, every cell on every test day.** Per
-   instrument-day and hold, a **walk table** holds the long and the short
+6. **Stage B: taker scoring, every cell on every test day.** Per day and
+   hold, a **walk table** holds the long and the short
    walked P&L at every 100 ms row, from the taker executor's walk (10 ms
    latency, funding included), built in memory one day at a time and never
    stored. Each cell's entries are thinned from its tape (one position at a
@@ -897,8 +900,8 @@ A hand run is logged in the ledger's sidecar with its date, what it computed
 and the days it read, and it sets every searched slot (S-C, S-R, and S-P or
 S-M when their signal is C\* or R\*) to `not admitted on D (hand run)`, with
 p = 1 on every block. The rule can only lower statuses, and it leaves the
-catalogue and its hash unchanged. W and each instrument's January are the
-sandbox, where nothing is counted.
+catalogue and its hash unchanged. W and January are the sandbox, where
+nothing is counted.
 
 **The choice: one cell per stratum.**
 
@@ -916,7 +919,7 @@ sandbox, where nothing is counted.
   writes (`neighbourhood_scores` drops a missing value). The entry point uses
   a vectorised version of `neighbourhood_scores`, tested equal to it on small
   grids.
-- Across every group of the stratum on all three instruments, the chosen cell
+- Across every group of the stratum, the chosen cell
   (**C\*** or **R\***) is the one with the highest S among cells averaging at
   least 5 trades a day; ties go to the cell's own mean. The 5-trade filter
   only limits which cell may be chosen. The outright peak is reported beside
@@ -997,8 +1000,8 @@ selected".
 
 **What is re-run, and what is not.** Re-run: every step that reads a test
 day's outcome, which is the per-cell daily series, the 5-trade filter, the
-neighbourhood medians, the choice inside each group and across groups and
-instruments, and the admission statistic. Not re-run: fits, θ, checkpoints,
+neighbourhood medians, the choice inside each group and across groups, and
+the admission statistic. Not re-run: fits, θ, checkpoints,
 feature selection, gate levels and guard flags; none of them reads a test
 day's outcome, which the fold-level leakage test and the flag-causality test
 enforce. Since no step culls a configuration on an outcome, re-running these
@@ -1012,17 +1015,16 @@ maximum.
 
 - **Null A: hour-block sign flips, 999 draws.** Each UTC hour of the usable
   test days draws a sign from `numpy.random.default_rng(b)`, b = 0 to 998.
-  The sign is shared by every configuration and instrument in that hour, so
-  their dependence is kept. A flipped trade's P&L, funding included, is the
+  The sign is shared by every configuration in that hour, so their
+  dependence is kept. A flipped trade's P&L, funding included, is the
   stored walk of the opposite side.
 - **Null B: day re-pairing over every shift** s with 7 ≤ s ≤ 143, on the
-  circular calendar order of D's 150 test days (n = 150, 137 shifts), shared
-  by every instrument, so that one shift pairs the same calendar days on
-  every instrument. The source day's accepted entries (time of day and side,
-  after its own guard) are executed on the target day's walk tables; an entry
-  that falls while the mapped previous position is still open is skipped and
-  counted. A pair whose source or target day is excluded for an instrument
-  contributes nothing for that instrument, and is counted. **The parity
+  circular calendar order of D's 150 test days (n = 150, 137 shifts), one
+  shift for every configuration. The source day's accepted entries (time of
+  day and side, after its own guard) are executed on the target day's walk
+  tables; an entry that falls while the mapped previous position is still
+  open is skipped and counted. A pair whose source or target day is excluded
+  contributes nothing, and is counted. **The parity
   test** runs at stage 0, on the 2024 days already on disk (BTCUSDT
   2024-02-11 and 2024-03-05), before any 2025 fetch: at s = 0 the walk-table
   route equals the executor entry by entry, and ordinary entries scored from
@@ -1057,10 +1059,10 @@ the seeds, the shifts, the quantiles and the p-values.
 
 **What the breadth costs.** A synthetic null with no market data, under an
 assumed correlation along each axis, puts the 95th percentile of A at about
-2.2 for a 126-cell catalogue on BTCUSDT, 2.6 for this catalogue on BTCUSDT
-alone and 2.85 for this catalogue on the three instruments; the real nulls
+2.2 for a 126-cell catalogue and about 2.6 for this catalogue of 2,400 cells
+(2.53 to 2.63 over four runs of 500 replications); the real nulls
 decide. A true edge therefore needs a neighbourhood-median t of G of about
-2.85 over 150 days to be admitted. Breadth costs admission power on D; it
+2.6 over 150 days to be admitted. Breadth costs admission power on D; it
 never costs the validity of H, which rests only on H being untouched and m
 being fixed.
 
