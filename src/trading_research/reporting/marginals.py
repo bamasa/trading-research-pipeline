@@ -1,8 +1,8 @@
 """Per-axis marginals of the development-period leaderboard.
 
 For each value of each axis, the median over cells of each cell's mean daily
-gross, net and G, in the form of the grand search's marginals: how far one
-design choice moves the median configuration. Stratum C's and R's axes are
+gross, net and G: how far one design choice moves the median configuration
+(:func:`axis_spread` gives the range per axis). Stratum C's and R's axes are
 reported within their stratum, and the axes both strata share (the stratum
 itself, the gate, the hold and the regime window) also over every cell. The
 regime rows are one per window, in window order (none, 4, 24 and 120 h).
