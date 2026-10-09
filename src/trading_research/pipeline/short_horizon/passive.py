@@ -90,8 +90,8 @@ def _config(cell: SimCell, max_gaps: int, flagged: bool) -> Any:
     return study_config(max_gaps, fees=fees, cancel_entries_on_flag=flagged)
 
 
-def _quoter_and_tapes(
-    cell: SimCell, decided: Decisions, job: DayJob
+def quoter_and_tapes(
+    cell: SimCell, decided: Decisions, flags_ns: np.ndarray, max_gaps: int, sigma_ref: float
 ) -> tuple[Any, Any, dict[str, Any]]:
     """The cell's quoter, its settings and its tapes for the day."""
     from trading_research.market_making.signal_entry import SignalEntryQuoter, entry_tapes
@@ -99,14 +99,14 @@ def _quoter_and_tapes(
     from trading_research.pipeline.regime import RegimePolicy
     from trading_research.pipeline.short_horizon_execution import flag_tape, lean_plan
 
-    flagged = cell.policy != "none" and len(job.flags_ns) > 0
-    tapes: dict[str, Any] = flag_tape(job.flags_ns) if cell.policy != "none" else {}
+    flagged = cell.policy != "none" and len(flags_ns) > 0
+    tapes: dict[str, Any] = flag_tape(flags_ns) if cell.policy != "none" else {}
     if cell.kind == "entry":
-        config = _config(cell, job.max_sequence_gaps, flagged)
+        config = _config(cell, max_gaps, flagged)
         tapes |= entry_tapes(decided.stamps_ns, decided.side)
         return SignalEntryQuoter(cell.hold_s), config, tapes
-    config = _config(cell, job.max_sequence_gaps, False)
-    plan = lean_plan(config, job.sigma_ref, lean=cell.lean, hold_s=cell.hold_s,
+    config = _config(cell, max_gaps, False)
+    plan = lean_plan(config, sigma_ref, lean=cell.lean, hold_s=cell.hold_s,
                      policy=RegimePolicy.parse(cell.policy))  # fmt: skip
     tapes |= signal_tapes(decided.stamps_ns, decided.strength_bp)
     return make_quoter(plan), plan.config, tapes
@@ -172,7 +172,9 @@ def simulate_day(job: DayJob) -> Path:
     clip = sl.clip_for(job.symbol)
     rows = []
     for cell, decided in zip(job.cells, job.decisions, strict=True):
-        quoter, config, tapes = _quoter_and_tapes(cell, decided, job)
+        quoter, config, tapes = quoter_and_tapes(
+            cell, decided, job.flags_ns, job.max_sequence_gaps, job.sigma_ref
+        )
         result = simulate(events, quoter, config, tapes)
         rows.append(day_values(cell, quoter, result, clip, mid) | {"day": job.day.isoformat()})
     target = job.out / f"{job.day}.parquet"

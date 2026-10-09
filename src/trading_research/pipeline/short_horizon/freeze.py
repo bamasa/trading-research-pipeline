@@ -72,8 +72,10 @@ def frozen_configurations(keys: list[str], record_d: dict[str, Any]) -> list[Con
 
 
 def fit_key(cfg: Configuration, *, control: bool = False) -> str:
-    """A frozen fit's name: its configuration, made a file name."""
-    return f"{CONTROL_PREFIX}__{cfg.folder}" if control else cfg.folder
+    """A frozen fit's name, the name of its weight file under ``weights/``: its
+    configuration made a file name, with the file type the model is saved as."""
+    suffix = ".pt" if cfg.model == "tcn" else ".pkl"
+    return f"{CONTROL_PREFIX}__{cfg.folder}{suffix}" if control else f"{cfg.folder}{suffix}"
 
 
 def save_json(path: Path, value: Any) -> str:
@@ -151,7 +153,7 @@ def frozen_fits(study: Study, inputs: Any, record_d: dict[str, Any]) -> dict[str
             continue
         model, entry = fit_main_process(inputs, fold, cfg, data)
         if model is not None:  # a configuration with nothing to fit on has no weights
-            out["weights_sha256"][fit_key(cfg)] = save(model, weights / f"{fit_key(cfg)}.pkl")
+            out["weights_sha256"][fit_key(cfg)] = save(model, weights / fit_key(cfg))
         if cfg.stratum == "C":
             out["thresholds"][cfg.name] = entry["thresholds"]
     for hold in sorted({cfg.hold_s for cfg in configs}):
@@ -175,7 +177,7 @@ def frozen_fits(study: Study, inputs: Any, record_d: dict[str, Any]) -> dict[str
                 if found[cfg.name]["weights_sha256"] is None:
                     continue
                 key = fit_key(cfg, control=kind == "control")
-                target = weights / f"{key}.pt"
+                target = weights / key
                 shutil.copyfile(job.out / cfg.folder / "weights.pt", target)
                 out["weights_sha256"][key] = file_sha256(target)
                 out["checkpoint_epoch"][key] = int(found[cfg.name]["checkpoint_epoch"])
@@ -241,7 +243,7 @@ def finalist_files(study: Study, slots: dict[str, dict[str, Any]], fitted: dict[
         record = entry | {
             "slot": slot,
             "weights_sha256": {k: v for k, v in fitted["weights_sha256"].items()
-                               if any(k.endswith(c.folder) for c in configs)},
+                               if k in {fit_key(c, control=x) for c in configs for x in (False, True)}},
             "thresholds": {k: theta(fitted, k) for k in keys if parse_key(k).stratum == "C"
                            and parse_key(k).configuration in fitted["thresholds"]},
             "gate_levels": {f"{c.hold_s:g}": fitted["gate_levels"][f"{c.hold_s:g}"] for c in configs},
@@ -446,6 +448,22 @@ def write_amendment(study: Study, values: dict[tuple[str, ...], Any]) -> dict[st
     }
 
 
+def lean_scales(study: Study, inputs: Any) -> dict[str, float]:
+    """S-M's lean on a classifier's signal: the median absolute forward move over each
+    hold on the frozen fits' training rows (a fitted value, not refitted at a read)."""
+    from trading_research.pipeline.short_horizon import features as ft
+    from trading_research.pipeline.short_horizon.plan import frozen_fold
+
+    fold = frozen_fold(inputs.usable("D"))
+    out = {}
+    for hold in sorted({parse_key(k).hold_s for k in study.keys}):
+        moves = [inputs.targets(d)[ft.forward_column(hold)].to_numpy() for d in fold.train]
+        values = np.abs(np.concatenate(moves)) if moves else np.zeros(0)
+        values = values[np.isfinite(values)]
+        out[f"{hold:g}"] = float(np.median(values)) if len(values) else 0.0
+    return out
+
+
 def run(study: Study) -> dict[str, Any]:
     """Stage E's record: the frozen fits and files, the MDEs, the detector, the amendment."""
     from trading_research.pipeline import short_horizon_registration as shr
@@ -460,7 +478,8 @@ def run(study: Study) -> dict[str, Any]:
     record1, record_d, record_c = study.record("1"), study.record("D"), study.record("C")
     inputs = Inputs(study)
     fitted_values = {"touch_size": record1["fitted"]["touch_size"], "tensor": record1["fitted"]["tensor"],
-                     "sigma_ref": record1["fitted"]["sigma_ref"], "store_layout": record1["stores"]["layout"]}  # fmt: skip
+                     "sigma_ref": record1["fitted"]["sigma_ref"], "store_layout": record1["stores"]["layout"],
+                     "lean_scale_bp": lean_scales(study, inputs)}  # fmt: skip
     fitted_sha = save_json(study.repo / FITTED_VALUES_PATH, fitted_values)
     fits = frozen_fits(study, inputs, record_d)
     slots = slot_cells(study, record_d, record_c)

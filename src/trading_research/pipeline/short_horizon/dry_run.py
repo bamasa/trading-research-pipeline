@@ -129,6 +129,32 @@ def run(study: Study, stages: Sequence[str] = STAGES) -> dict[str, Any]:
     return records
 
 
+def read_blocks(study: Study, blocks: Sequence[str] = ("H", "F", "P")) -> dict[str, Any]:
+    """Open and read each block as the registration orders it, committing what the
+    author would commit by hand between the steps; P only when a slot qualifies."""
+    from trading_research.pipeline.short_horizon import reads
+
+    assert study.venue is not None
+    records: dict[str, Any] = {}
+    with syn.serving(study.venue):
+        for block in blocks:
+            if block == "P" and not reads.qualifying_for_p(study):
+                records["P"] = {"opened": False, "reason": "no slot passed on F"}
+                break
+            if not study.state.complete(block):
+                if not reads.ledger_for(study).committed_entries().get(block):
+                    reads.open_block(study, block)
+                    commit(study.repo, f"Dry run: {block}'s open entry")
+                reads.read_block(study, block, commit=commit)
+                commit(study.repo, f"Dry run: {block}'s results")
+            records[block] = study.state.record(block)
+    if study.venue.unknown:
+        raise RuntimeError(
+            f"the dry run asked for what the venue does not serve: {study.venue.unknown[:3]}"
+        )
+    return records
+
+
 def dry_run(
     keep: Path | None = None, workers: int = 1, stages: Sequence[str] = STAGES
 ) -> dict[str, Any]:
@@ -137,7 +163,13 @@ def dry_run(
     try:
         study = prepare(root, workers=workers)
         records = run(study, stages)
-        return {"stages": sorted(records), "work": str(study.work) if keep else "discarded"}
+        reads = read_blocks(study)
+        statuses = {block: r.get("statuses", r) for block, r in reads.items()}
+        return {
+            "stages": list(records),
+            "reads": statuses,
+            "work": str(study.work) if keep else "discarded",
+        }
     finally:
         if keep is None:
             shutil.rmtree(root, ignore_errors=True)

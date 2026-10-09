@@ -97,20 +97,27 @@ class StageState:
                 f"stage {stage} cannot run again: stage {later[0]} has started and read its outputs"
             )
 
-    def run(self, stage: str, compute: Callable[[], Mapping[str, Any]]) -> dict[str, Any]:
-        """Run ``stage`` once: its record if complete, else ``compute`` after the checks."""
-        if self.complete(stage):
-            return self.record(stage)
+    def begin(self, stage: str) -> None:
+        """Check the order and count an attempt at ``stage``."""
         self.require_ready(stage)
         entries = self.entries()
         entry = entries.get(stage, {"attempts": 0})
         entry.update(attempts=int(entry.get("attempts", 0)) + 1, started=_utc(), sha256=None)
         self._write({**entries, stage: entry})
-        record = dict(compute())
+
+    def finish(self, stage: str, record: Mapping[str, Any]) -> dict[str, Any]:
+        """Write ``stage``'s record; the stage is complete from now on."""
         path = self.record_path(stage)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_json(record), encoding="utf-8")
+        path.write_text(_json(dict(record)), encoding="utf-8")
         entries = self.entries()
         entries[stage].update(finished=_utc(), sha256=_sha256(path))
         self._write(entries)
         return self.record(stage)
+
+    def run(self, stage: str, compute: Callable[[], Mapping[str, Any]]) -> dict[str, Any]:
+        """Run ``stage`` once: its record if complete, else ``compute`` after the checks."""
+        if self.complete(stage):
+            return self.record(stage)
+        self.begin(stage)
+        return self.finish(stage, compute())

@@ -402,3 +402,22 @@ def r_test(s: SlotDays, days: Sequence[date], split: Split, untestable_declared:
     supported = passes_f_minus and plus <= 0 and p_r <= 0.05
     return {"outcome": "supported" if supported else "not supported", "p_R": p_r, "delta_b": delta_b,
             "mean_F_plus": plus, "reference_days": len(reference)}  # fmt: skip
+
+
+def subset(s: SlotDays, keep: np.ndarray) -> SlotDays:
+    """The same slot on the kept days only (every per-day array sliced alike)."""
+    from dataclasses import replace
+
+    def cut(values: np.ndarray | None) -> np.ndarray | None:
+        if values is None:
+            return None
+        return values[..., keep]
+
+    return replace(
+        s, days=[d for d, k in zip(s.days, keep, strict=True) if k], value=s.value[keep],
+        trades=s.trades[keep], gross=s.gross[keep], turnover=s.turnover[keep], ic=s.ic[keep],
+        random=s.random[:, keep], flipped=s.flipped[keep], shifted=s.shifted[keep],
+        long_only=s.long_only[keep], short_only=s.short_only[keep], neighbours=s.neighbours[:, keep],
+        latency=s.latency[keep], stale=cut(s.stale), brackets={k: v[keep] for k, v in s.brackets.items()},
+        making=cut(s.making), passive_notional=cut(s.passive_notional), second=cut(s.second),
+    )  # fmt: skip
