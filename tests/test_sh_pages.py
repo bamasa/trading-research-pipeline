@@ -114,7 +114,7 @@ NAN = math.nan
 def read_h(series: dict[str, st.SlotDays], preset: dict[str, str]) -> dict[str, Any]:
     """H's results as a read writes them: statuses, kills, the numbers and the map."""
     masks = {slot: s.mask(pn.status_days("H", s)) for slot, s in series.items()}
-    found = {k: a for k, a in st.family(series, masks, "H", preset).items()}
+    found = dict(st.family(series, masks, "H", preset))
     if "S25-Z" in series:
         found["S25-Z"] = st.s25_z(series["S25-Z"], masks["S25-Z"])
     numbers = {}
