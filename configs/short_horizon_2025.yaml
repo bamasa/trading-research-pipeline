@@ -8,8 +8,9 @@
 # multiplicity, feasibility), then recast from fixed hypotheses into a
 # registered strategy search, and the search reviewed for search multiplicity,
 # protocol and executability, still before any data was read; narrowed to
-# BTCUSDT alone on 9 October 2026, still before any data was read. They must
-# agree.
+# BTCUSDT alone on 9 October 2026, still before any data was read; the values
+# the study code fixed were written in the same day, still before any data was
+# read. They must agree.
 #
 # The search block below is generic: its schema (clock, cluster, stages, axes,
 # catalogue, strata, slots, regime source, nulls, admission, budget) is meant
@@ -81,6 +82,7 @@ data:
     ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # BTCUSDT; outside every block; used for nothing else but the entry point's dry run; never in a successor's blocks
     ob200_reader_test: synthetic ob200 fixture and the reader-test days pass before H is opened; no ob200 day of 2025 fetched before stage 3
     ob200_reader_test_pass: "as the loader passes a block day: no positive_prices error in validate_book's report, no off-grid price, sequence gaps at most D's max_sequence_gaps; every other finding by check and severity recorded in the amendment beside D's; a failure is first checked as a reader fault, and a fault found is corrected by amendment before H; a day that fails on its gap count alone once the reader is checked is a property of the archive, recorded, and the study continues (F and P days excluded by the frozen threshold, the unreadable-block rule deciding)"
+    stream_statistics: "a scan of the archive's messages separate from the replay (reconstruct unchanged); gaps counted as reconstruct counts them"
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
   funding: bybit public REST, no credentials
   detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-12-01, frequency_after_2025_06_30: daily archives only, E_bars: "fetched and read when H opens, bars only"}
@@ -98,6 +100,7 @@ data:
   exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day with the day's own tick from events.derive_tick)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every configuration, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
   flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every slot on that block and counted once toward unreadability
   max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up; the same value on every block
+  max_sequence_gaps_percentile: {q: 95, interpolation: linear (numpy), over: "every D day whose book replayed, whatever other exclusion applies", rounding: "to 9 decimals, then up", code: data/study_loader.max_sequence_gaps}
   max_sequence_gaps: null  # one value, by the rule above; frozen by the D amendment
   unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
   gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
@@ -117,6 +120,7 @@ blocks:
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
   cold_start_unscored: the first N minutes from each cold-start day's midnight, whatever days they span, N being features.longest_lookback_minutes
+  cold_after_hole: "a day whose previous calendar day has no usable book (missing, unreadable, unfetchable or excluded by the loader) starts cold as the cold-start days do; nothing rolling reads across the hole"
   spent: H, F and P are spent for every configuration of this catalogue; successors use blocks after 2025-12-31
 
 common:
@@ -135,6 +139,15 @@ common:
     funding: R14
     accounting_identity: R15, turnover equal to the sum of fill notionals
     same_walk_function_as_label: true
+    timing:
+      entry_hours: "00:01 to 23:58 UTC, both ends included"
+      entry_skip_beyond: 1.0e-9  # of the clip: an entry is skipped when the size beyond the visible levels exceeds it
+      exit_decision: "the first row stamped at or after t + hold, t the entry decision (t + hold itself if no row follows), or 23:59 if that comes first"
+      exit_walk: the first row at or after the exit decision + 10 ms, never a row before the entry's
+      next_decision: "at a row stamped at or after the exit's walked snapshot (or the exit's arrival, if later); a decision on the exit's own row may enter"
+      funding_mark: "the mid of the last snapshot strictly before the settlement; an entry filled at its exact stamp not yet held, an exit filled there still held"
+      followed_by: [walk tables, thinning, placebos, null_B]
+      label_exit: "the label keeps its own exit snapshot, the first at or after the entry snapshot + hold; it can differ from the executor's by a snapshot"
   passive_fill:
     simulator: market_making/simulator.py
     rules: [R5, R6, R7]
@@ -159,6 +172,7 @@ common:
     touch_window_s: 3600  # simulator default; not used by the signal-entry quoter
     quoter: "signal-entry quoter (new code): one clip at the touch on the signal's side at decision + 10 ms, kept at its first price, never re-pegged, cancelled unfilled after hold"
     quoter_after_pause: an entry pulled by a pause is not re-posted; its unfilled part counts as unfilled, and a part filled before the pause is exited as any fill
+    quoter_timing: {entry_cancel: "an unfilled entry cancelled at the first snapshot hold after its post, not after the decision", expired_decision: "a decision first seen more than hold after its stamp is not posted (expired_unseen)", partial_fill: "the rest stays at its price until that cancel; the exit hold after the first fill, for the position then held", fill_during_cancel: crossed at the next snapshot}
     exit: reduce-only cross hold after the fill, priced by the taker executor's walk, with its late-snapshot counters
     flatten_slippage_bp: 0
     signal_timing: "the decision reaches the quoter as a tape row stamped at the decision row's stamp t; under the strictly-before rule it is first seen by the event after t and the order is live no earlier than t + 10 ms; unit test: no event at or before t sees it, every post live at or after t + 10 ms"
@@ -194,34 +208,47 @@ labels:
     normalised_by: the entry snapshot's mid
     classes: [long, hold, short]  # long if long P&L > 0, short if short P&L > 0, else hold
     label_fee_bp: [0, 5.5]  # a searched axis (search.axes.label_fee_bp), charged on both sides; S25 and A0 at 0
+    no_label: "a row whose entry snapshot cannot fill the clip within ten levels, or without an entry or exit snapshot: no label (not hold), not a training row"
   forward_move: {stratum: R, definition: mid at the exit snapshot over mid at the entry snapshot minus 1 in bp (a simple return), smoothing: 1, form: time-based (new code; forward_smoothed_move_bp not used)}
   control: {form: "time-based smoothed_move_bp (new code): log of the mean mid over the 20 rows ending at the first row stamped at or after t + hold, over the mean mid over the 20 rows ending at t, x 1e4", smoothing_rows: 20, horizon: hold, horizon_measured_on: row stamps, used_by: "the K-label control networks, at the frozen fits only, on the holds of R*'s neighbourhood, when R*'s model is tcn"}
 
 features:
   microstructure_set: registry book, depth and flow features over ten levels, plus the 2025 set added by the features pull request
   added_2025: [volatility_1s, return_sign_autocorrelation, turn_count, run_length, inter_trade_time, level0_lag_logs]
-  winsorising: {quantiles: [0.001, 0.999], window_s: 3600, on: each feature's own trailing values on row stamps}  # never whole-day quantiles
+  added_2025_windows_s: {volatility_1s: 1, return_sign_autocorrelation: 1, turn_count: [2, 5, 10], level0_lag_logs: [1, 5], run_length: 60, inter_trade_time: 60, time_since_trade: 60}  # level0_lag_logs for the ask, the bid and the mid
+  winsorising: {quantiles: [0.001, 0.999], window_s: 3600, on: each feature's own trailing values on row stamps, window: "(s_t - 3600 s, s_t], the row included", quantile_interpolation: linear (pandas), over: the window's finite values}  # never whole-day quantiles
   tensor: {columns: 40, levels: 10, price: "distance from the touch over max(sigma x mid, spread floor)", sigma: std of the mid's row-to-row log changes over the trailing 60 s on row stamps, spread_floor: the median quoted spread on W, size: "log(1 + size) z-scored against its mean and std on W"}  # W's values in the fitted-values file
+  tensor_details: {level_0_distance: "0 on both sides by the definition; the two columns kept, constant", sigma: "pandas' rolling sample std; missing until the window holds two changes, the distance columns missing on that row", spread_floor: "the exact median of ask_price_0 - bid_price_0, in USDT, over every W row", size_moments: W's mean and population standard deviation}
   leakage_check: "validation/leakage.py, every feature, before any D run; depth and flow builders wrapped as registered features with declared lookbacks (covered by the purge and N); for trade-plane features the prints cut at a time strictly inside a row interval, and streaming parity compared at each decision stamp"
   print_alignment: "backward: a print belongs to the first row stamped at or after it, row t holds prints in (s_t-1, s_t] (side=left, as features/align.py); features/flow.align_to_grid as it stands not used"
   gate_inputs: basis points from prices only
   lookbacks: "declared in seconds on row stamps, except the network's 64-row window and the control label's 20-row smoothing; N = the longest lookback in seconds, rounded up to whole minutes; on a cold-start day a row is also unscored until the row-declared windows have their rows since midnight"
+  row_declared_windows: {network_window: 64, control_smoothing: 20, registry_book_features: "their row lookbacks (the longest 70 rows, ofi_20_norm)", flow_builder: 120}  # covered on a cold-start day by the rows since midnight
+  rolling_normaliser: "not applied: the logistic model standardises inside its fit and the network inside its graph, on the fold's training rows; features/normalise.RollingNormaliser, its window and its scale floors are not used"
   selection: {code: features/selection.py, runs: once, window: 2025-01-01..2025-01-31, rows: every tenth row (at most 2.68 million), target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}, name: micro-selected}
   stores: {dtype: float16, every_tenth_row: the inputs the fits train on, every_row: "the network's inputs, kept through D and never rebuilt", format: one zstd parquet per day, parity_tests_at: float16, raw_size_columns: "order-flow imbalance (ofi_1, ofi_20), depth and print-volume sums divided by the median touch size on W (fitted-values file) before the cast", finiteness_test: "on W, every stored column finite after the float16 cast; a column that fails is stored at float32 on every block, recorded in the amendment"}  # labels, costs, gate inputs, walk tables and fills from the book's float64 prices
+  raw_size_columns: [ofi_1, ofi_20]  # every other depth and flow column is a ratio, a share, a mean count, a log or in bp
+  touch_size: median of bid_size_0 and ask_size_0 pooled over every W row (the mean of the two middle values for an even count)  # data/feature_store.median_touch_size
+  finiteness: {fails: "a value finite at float64 above 65504 in absolute value after the scaling", limit_abs: 65504, missing_value: passes, infinite_before_cast: "reported beside the failures; not widened"}
+  every_tenth_row: positions 0, 10, 20, ... of each day's rows from midnight; the rows the fits take their targets on
   selected: null  # [features], the micro-selected list; frozen by the D amendment
-  longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
-  fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, S1's sigma_ref, the raw-size scale, any other fitted constant), in one file; used on every block, never refitted at a read
+  longest_lookback_minutes: 61  # N, fixed at registration: over the whole set and the tensor, whatever the selection keeps, a 60 s window plus the 3,600 s of winsorising; for the purge and the cold-start days
+  fitted_values: every fitted value that is not a weight (the tensor's spread floor and size moments, S1's sigma_ref, the raw-size scale and the stores' float32 columns, any other fitted constant), in one file; used on every block, never refitted at a read
   fitted_values_sha256: null  # the sha256 of that file; checked by the H, F and P gates beside the weights; frozen by the D amendment
 
 models:
   hyperparameters: repository defaults; one registered seed per fit; none searched
+  seed: 42  # every fit: gbm, logistic, tcn and the control networks (the classes' default); the ridge models draw no random numbers
   gbm: {code: models/gbm.py, classes: 3, stratum: C, missing_class_in_fit: that side's probability is 0 (_align_columns) and it never trades with that model; reported, cores: "all (n_jobs -1)", fits_at_once: 1}
   logistic: {code: models/linear.py LogisticBaseline, classes: 3, stratum: C, missing_class_in_fit: as gbm}
   tcn: {code: models/tcn.py, stratum: R, window_rows: 64, channels: 32, levels: 4, kernel_size: 3, dropout: 0.1, max_epochs: 20, head: [mu, log_variance], loss: "gaussian_nll + 0.01 x mean((log_variance - log v)^2), v the variance of the fold's training targets", log_variance_clamp: log v +- 6, early_stopping: {patience_epochs: 3, on: rank IC of mu against the realised forward move on the inner validation}, checkpoint: the same rank IC, internal_validation_split: not used, device: mps, fits_at_once: 1}
+  tcn_inputs: {standardised: "inside the graph, by the mean and population std at the training rows' window ends, merged day by day; a constant column unscaled", incomplete_window: "no prediction and no decision (before the history the day may read, or a missing value in the window)"}
+  tcn_batches: {days_per_shard: 4, order: "each epoch shuffles the training days into shards of four, read one at a time, and shuffles the windows within each, from the fit's seeded generator"}
   bound_ridge: {code: "models/uncertainty.py HeteroscedasticRegressor (pipeline/stages.py UNCERTAIN bound_ridge: ridge, ridge)", settings: defaults, stratum: R, mu: the mean model, sigma: the square root of the variance model}
   control_network: same as tcn, trained on the control label
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch, streamed per day from the every-row store (new code)", inference: batched}
   training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
+  training_rows_kept: "positions floor(i x total / 4000000) over the training days' every-tenth rows in day order"
   frozen: {train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30, fits: "every hold and label fee in the neighbourhood of C*, R* (admitted or not) and S25", max_fits: {gbm_and_logistic: 12, bound_ridge: 3, tcn: 4, control: 4}}  # gbm/logistic: 6 for C*'s holds and label fees, 6 for S25's; bound_ridge: R*'s holds
   weights_sha256: null  # {fit key: sha256} for every frozen fit; the only place they are written; frozen by the D amendment
   checkpoint_epoch: null  # {fit key: epoch} for the frozen network and control fits; the only place they are written; frozen by the D amendment
@@ -256,7 +283,7 @@ search:
     exit: {value: close by time at hold_s, kind: fixed, measured_only: "passive exit at the touch, crossed after a further hold (S-P, S25-Z)"}
     measured_never_chosen: [fee tier, "fill rule (on_touch, trade_through, queue)", "queue brackets (none, all_ahead, pessimistic)", latency 110 ms]
   validity: "C: every combination of model, inputs, gate, hold_s, trades_per_day, label_fee_bp and regime, on BTCUSDT; R: every combination of model (inputs fixed by the model), gate, hold_s, k, beta_bp and regime, on BTCUSDT"
-  fixed_not_searched: [instrument (BTCUSDT), "hyperparameters and seeds (defaults, one seed per fit)", cooldown 0 beyond the one-position rule, monthly walk-forward cadence, normaliser window, "feature selection (once, on January, at most 40)", sizing (one clip), holds of 300 s and longer, exits other than the clock, "flag source (the hourly monitor on Binance BTCUSDT futures bars)"]
+  fixed_not_searched: [instrument (BTCUSDT), "hyperparameters and seeds (defaults, one seed per fit)", cooldown 0 beyond the one-position rule, monthly walk-forward cadence, "normaliser window (none: no rolling normaliser is applied)", "feature selection (once, on January, at most 40)", sizing (one clip), holds of 300 s and longer, exits other than the clock, "flag source (the hourly monitor on Binance BTCUSDT futures bars)"]
   catalogue:
     key_C: "<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>"
     key_R: "<instrument>|R|<model>|<inputs>|<gate>|hold_s=<h>|k=<k>|beta_bp=<b>|regime=<r>"
@@ -273,6 +300,7 @@ search:
   strata:
     C: {models: [gbm, logistic], label: walked_taker, decision: hold_first, ordered_axes: [hold_s, trades_per_day, label_fee_bp, regime], slot: S-C}
     R: {models: [tcn, bound_ridge], label: forward_move, decision: ev_gate, ordered_axes: [hold_s, k, beta_bp, regime], slot: S-R}
+  hold_first_theta: {rows: every row of the inner validation, entries_per_side: "round(trades_per_day / 2 x its UTC days), half to even, at least 1", theta: "the entries-th largest of the side's probability over rows where it is finite and above the other side's; the smallest of them if fewer qualify; no trade on that side if none does"}
   slots: [S25, S-C, S-R, S-P, S-M]  # k = 5, fixed now; see the slots block
   regime_source:
     detector: the detector block (Binance BTCUSDT hourly flags guard the BTCUSDT strategies)
@@ -281,6 +309,7 @@ search:
     windows_h: [4, 24, 120]  # 120 h is the monitor's re-arm time (min_history 121 h)
     flag_causality_test: "on the pattern of validation/leakage.py, in every fold: for every hour tau of test month m, mutating every bar after tau leaves every flag the guard uses at or before tau unchanged; the lead-in flags before m's start may use bars up to m's start, and the test begins at m's first hour; failure is K-flag-leak"
     attribution: {statistic: the slot's mean minus its window-0 twin's, reference: 95th percentile of the same difference under random flag sets, sets: {taker: 200, simulator: 20}, seeds: [0, 199], flags_per_set: "as many as the block has, at hours drawn uniformly over its usable hours", kill: false}
+    attribution_flag_hours: "drawn without replacement; set k from numpy.random.default_rng(k)"
   choice:
     per: stratum, across every group
     S: "median over the cell's neighbourhood of each cell's mean daily net_bp_trade at the base tier over the 150 test days"
@@ -289,12 +318,15 @@ search:
     vectorised: tested equal to neighbourhood_scores on small grids
     min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
     rule: highest S among admissible cells; ties by the cell's own mean
+    ties_after_own_mean: the key first in the catalogue's byte order
+    peak: the highest S whatever the trade rate
     report_peak: true
     no_admissible_cell: "not run (no admissible cell on D); p = 1; the filter is not relaxed"
   admission:
     signal:  # C* and R*; both must hold
       iii_carry_forward: "for each m in 2025-03..06, the choice re-run on the test months before m and the new cell's G scored on m's days after a 5-day embargo; mean over the four months > 0 (also computed for net: the D estimate used for power on H)"
       iv_placebo_search: max(p_A, p_B) <= 0.05 / R_D  # search.nulls.bar; R_D the number of complete D runs
+      iii_details: {embargo: "m's calendar days 1 to 5 dropped", empty_month: "a month with no admissible cell, or no trade on its scored days, contributes 0"}
     slot:  # failing slots are "not admitted on D (<conditions>)", every failing condition named (e.g. i, iv), p = 1 on every block; a prediction of (i) is scored on (i) alone
       S-C: [signal admitted, "i: the chosen cell's S > 0", "ii: the neighbourhood median of monthly mean net > 0 in at least 4 of the 5 test months"]
       S-R: [signal admitted, i, ii]
@@ -304,10 +336,13 @@ search:
     no_search_null_for: [S25, S-P, S-M]  # fixed, or no choice on a passive outcome
   nulls:
     statistic: "A = median over the chosen cell's neighbourhood of each cell's day-level t of G (0 for a cell without trades); G = net - (pnl_long_bp + pnl_short_bp) / 2 per trade, which is side x (pnl_long_bp - pnl_short_bp) / 2: costs removed, drift not (controlled by null_B and K-drift); centred under null_A"
+    t_of_G_degenerate: 0 for a cell with fewer than two days with a trade or with no dispersion  # the null's statistic must be finite
     max_over: strata
     rerun: [per-cell daily series, the 5-trade filter, neighbourhood medians, the choice in and across groups, the admission statistic]
     not_rerun: [fits, theta, checkpoints, feature selection, gate levels, guard flags]  # none reads a test day's outcome (fold-level leakage and flag-causality tests)
     null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration in the hour, flipped_trade: "the stored walk of the opposite side, funding included"}
+    null_A_signs: "1 - 2 x default_rng(b).integers(0, 2, size=hours), the hours in time order; 0 keeps the side, 1 flips it"
+    null_A_trade_hour: the UTC hour of the trade's entry snapshot
     null_B: {unit: day, shifts: "every s with 7 <= s <= 143 on the circular calendar order of D's 150 test days (n = 150, 137 shifts)", same_s_for_every_configuration: true, order: calendar, excluded_day: "a pair whose source or target day is excluded contributes nothing; counted", executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at stage 0, on BTCUSDT 2024-02-11 and 2024-03-05, before any 2025 fetch: at s = 0 the walk-table route equals the executor entry by entry, and ordinary entries from walk tables equal the executor's; a failure blocks stage B until fixed by a dated amendment; repeated in the dry run as a check (a failure there is a bug: amendment and D re-run in full)", fallback: none}
     p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications); 999 for null_A, 137 for null_B; the counts computed directly by the entry point"
     bar: max(p_A, p_B) <= 0.05 / R_D  # R_D the number of complete D runs (search.d_runs); unit test at 137 shifts: at R_D 1, at most 5 shifts at or above A_j pass and 6 fail; verdicts.exceeds_placebos not used for (iv)
@@ -315,6 +350,7 @@ search:
     diagnostic_only: global sign flip
     S25_against: Null A and Null B applied to its fixed cell, no selection
   reported_not_gating: [N_trials, "N_eff = effective_count(N_trials, mean_pairwise_correlation(daily G panel))", deflated Sharpe ratio of daily G and net per finalist, "selection premium (median null maximum of A, and A minus it)", "PBO by CSCV per stratum (10 blocks of 15 days, 252 splits)", MDE and power at t >= 3 for the carry-forward estimate]  # every D number labelled "selected, biased upward"
+  pbo_rule: the in-sample choice ranked by S on the out-of-sample days among the cells admissible in-sample; a logit at or below 0 counts as overfit
   trial_bound: {N_max: 2455, parts: {taker_cells: 2400, S25-Z: 12, S-P: 30, S-M: 9, A0_and_FILL: 4}, S-P_regime_measurements: "its cell at each regime window other than its signal's own, of none, 4, 24 and 120 h (3)", S-M_regime_measurements: "guard_pull and guard_widen at 4, 24 and 120 h with lean 1 (6)", passive_exit_variant: "held-out blocks only, never on D", beyond_N_max: every ledger row counts in N_trials}
   trial_ledger: {file: experiments/results/short_horizon_2025_trials.parquet, format: "zstd parquet, split into parts under 100 MB if needed", row: "one per D run, configuration and test day", columns: [run, key, day, net_bp, G_bp, pnl_long_bp, pnl_short_bp, trades, skips], sidecar: "experiments/results/short_horizon_2025_trials.json: the catalogue sha256, each run's commit, the file's sha256 and row count, and the hand-run log", committed: at the end of each stage, N_trials: "distinct (run, key) pairs; the N quoted on every page and given to N_eff and the DSR", superseded_runs: "rows kept, counted in N_trials"}
   hand_runs: {catalogue_after_stage_0: never extended, definition: "a computation on a 2025-02..06 test day outside the entry point: a configuration run by hand, or any statistic of a label, return, prediction or P&L on those days, a feature's IC included; replay, validation, the leakage tests and feature building are not", logged: "in the trial ledger's sidecar with its date, what it computed and the days it read", effect: "every searched slot (S-C, S-R, and S-P or S-M when their signal is C* or R*) not admitted on D (hand run), p = 1 on every block", hash: unchanged}
@@ -335,6 +371,7 @@ d_procedure:
     inner_validation_days: 7  # per-side theta from the target rate (reads no outcome) and the network's checkpoint by inner rank IC
     purge: hold plus the longest feature lookback, before the inner validation and before the test month  # experiments/grand_search.py's purge not used
     fold_level_leakage_test: "mutating every price after fold m's cutoff, and every label at a row after it, leaves fold m's weights, theta, gate levels and checkpoint unchanged (sha256); the cutoff is the end of fold m's inner validation plus the hold, inside the purge before test month m; the precondition for nulls without refitting"
+    fold_level_leakage_test_fits: {device: cpu, per_fold: "one fit of each model at hold_s 20 (C on micro inputs at label_fee_bp 0), with theta at the four rates and the gate levels", tcn: "epochs 1 with the inner validation scored; weights, that epoch's inner rank IC and the checkpoint epoch compared", reason: "bit-for-bit reproducible from the seed on the CPU (unit test); MPS promises no bitwise determinism", cost: "about 1 to 1.5 h a network fit on the CPU, timed at stage 0 and in D's projection"}
   candidate_tapes: "per signal configuration and test day, the rows at which the loosest cell could enter (theta at 240 a day; k 0 and beta 0; gate open; no guard), with scores, gate and guard states; at most 4 GB"
   walk_tables: "per day and hold, the long and short walked P&L at every 100 ms row from the taker executor's walk (10 ms latency, funding included); built in memory one day at a time, never stored"
   thinning: one position at a time, an event-jump loop over the cell's subset of the tape
@@ -379,6 +416,9 @@ slots:
     from: search.result_choice R*
     gate: "mu - k*sigma > 2*5.5 + walk_cost_bp + beta_bp, mirrored for shorts"  # beta is the buffer, not the break date b
     one_entry_per_event: true
+    event: a run of rows on which the gate is open on either side; a run that turns from long to short without a closed row is one event
+    event_during_position: an event that opens while a position is held may enter at its first free row; an event that has entered gives no other entry
+    missing_input: "a row without a prediction, or a crossed snapshot (no walk cost), keeps the gate closed"
     sizing: one full clip a trade; no Kelly sizing (strategies/sizing.py FractionalKelly not used)
     admission: search.admission.slot.S-R
     execution: taker in, taker out after hold
@@ -421,8 +461,9 @@ metrics:
            entries_skipped, entry_late_snapshot, exit_late_snapshot, flatten_beyond_visible_book, regime_attribution]
   significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level, fewer_than_two_days: not given to assess; fails the day count; p = 1}  # series=None, one series
   p_value: market_making/verdicts.day_t(daily series).p_one_sided  # Student t at days - 1 through verdicts.t_sf; Holm is verdicts.holm, placebos verdicts.exceeds_placebos
+  p_value_constant_positive_series: 0  # day_t's infinite t; fewer than two days enter with p = 1
   degrees_of_freedom: days in the daily series minus one, per slot and per block
-  newey_west: {kernel: bartlett, lag_days: 5, code: evaluation/significance.py (new)}
+  newey_west: {kernel: bartlett, lag_days: 5, lag_counts: positions in the daily series, code: evaluation/significance.py (new)}
   all_calendar_days_scored: true  # no row filtered or reweighted by label, outcome or model state
   mde:
     formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
@@ -536,6 +577,7 @@ measurements:
   A0: {block: O, what: S25's signal under a short-window protocol (slots.A0), comparison_figure: none, prediction: none, edge_ladder_step: 1}
   FILL:
     stream: A0's passive orders on O; also S25-Z's and S-P's on H
+    same_orders: the same decisions and quoter under each rule; which decisions become orders can differ between rules through the one-position rule
     rules:
       on_touch: fills in full at the first print at or through its price from the hitting side, ignoring the queue  # optimistic bound
       trade_through: fills only on prints strictly through its price, up to their size  # R7 alone
@@ -552,6 +594,7 @@ measurements:
     cut_at: {D: each test month's fold-wise alarms, H_F_P: "the frozen detector's alarms; P only when P is opened for a qualifying slot, in that read session, otherwise the map ends at F's last day"}
     per_segment: [dates, usable days, mean, day-level t, cumulative net]
     min_days_for_t: 10  # a shorter segment is drawn without a t
+    day_assignment: "a segment starts on the first day that begins at or after its alarm (the alarm's own day closes the segment before); a block boundary also cuts a segment, and the table says which opened it"
     charts: one per execution path (taker, passive entry, market maker), cumulative daily net through 2025, alarms marked, blocks shaded
     rule: the detector cuts the segments before any result is computed; every segment shown, none selected; never a status, never in any rule
   leaderboard_regions: slots.regions  # each region's best neighbourhood cell with its S, A and rank
@@ -566,6 +609,7 @@ detector:
   profile_on_H_F_P_and_dry_run: fitted on all of D (hour_profile)
   stream: one continuous stream from 2024-12-01, E's hourly bars included (fetched and read when H opens)
   missing_hour: close carried forward, zero return, counted and reported; no reset
+  first_bar: must be present; nothing to carry forward, and the stream is never started at a later hour
   bars_after_2025_06_30: Binance daily archives only, one day at a time, inside the opened access of their block
   monthly_klines: none for a month after 2025-06 fetched or cached before P's read; the loader refuses a monthly kline file reaching past the highest opened block
   library: {name: structural-break, tag: v0.1.0, commit: 0636813fdd4ccc9f25490d97f62d6fccecb01881}
@@ -594,6 +638,9 @@ fetch:
              unreadable_archive: "downloaded completely at least twice with the same sha256 and still not decompressing, or a replay that raises on a complete archive; likewise prints", unfetchable_day: download still failing after 10 attempts over at least 48 hours,
              terminal_rules_apply_to: [W, D, H, F, P], terminal_exclusions: counted per block by reason and toward the unreadable rule,
              missing_plane: HTTP 404 only, funding_and_bars: same rule; an empty funding history is a missing plane}
+  retry_backoff_s: {after_failure_k: "60 x 3^(k-1)", max: 43200}  # data/fetch_log.backoff_s; the 10-attempt, 48 h rule then ends a day at its eleventh failure
+  timeout_s_per_socket_read: 120  # books and prints; a large file does not time out by its size
+  checksums_before_read: {book: zipfile testzip, prints: the whole gzip decompressed, failure: "a corrupt download, deleted and retried; unreadable only under failures.unreadable_archive"}
   disk:
     free_gb_at_registration: 121
     usable_gb: 111  # 121 free less the 10 GB margin
@@ -649,7 +696,7 @@ amendment:
   planned: 1
   before: the read of H
   stage_0: a dated amendment of its own before stage 1 if the projection cuts anything, with the new catalogue sha256, N_max, the configuration's new null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut; the code-freeze note follows it before stage 1
-  records: ["excluded days, max_sequence_gaps by its rule, tick and lot, selected features", N, reader-test days' message counts intervals and gaps, "the trial ledger's sha256 and row count, N_trials, N_eff, R_D and the hand-run log", chosen cells with neighbourhoods S and peaks, "every replication of the placebo search: A per stratum under Null A, Null B and the refit, seeds, shifts, quantiles, p-values", "admission decisions with reasons, carry-forward estimates, PBO, DSR, selection premium", S-P's signal, sigma_D and MDEs per slot, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the fold-wise flag lists, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every frozen finalist file's sha256, every threshold, every checkpoint epoch, "the entry point, committed before the stage 1 fetch", "the compute record, with peak memory, worker counts, the device and the stores' sizes", fits that lacked a class with the side, the frozen YAML sha256]
+  records: ["excluded days, max_sequence_gaps by its rule, tick and lot, selected features", reader-test days' message counts intervals and gaps, "the trial ledger's sha256 and row count, N_trials, N_eff, R_D and the hand-run log", chosen cells with neighbourhoods S and peaks, "every replication of the placebo search: A per stratum under Null A, Null B and the refit, seeds, shifts, quantiles, p-values", "admission decisions with reasons, carry-forward estimates, PBO, DSR, selection premium", S-P's signal, sigma_D and MDEs per slot, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the fold-wise flag lists, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every frozen finalist file's sha256, every threshold, every checkpoint epoch, "the entry point, committed before the stage 1 fetch", "the compute record, with peak memory, worker counts, the device and the stores' sizes", fits that lacked a class with the side, the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment
 
