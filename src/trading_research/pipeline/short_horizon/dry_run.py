@@ -119,6 +119,9 @@ def run(study: Study, stages: Sequence[str] = STAGES) -> dict[str, Any]:
     with syn.serving(study.venue):
         for stage in stages:
             records[stage] = run_one(study, stage)
+            commit(
+                study.repo, f"Dry run: stage {stage}"
+            )  # the registration commits each stage's files
     if study.venue.unknown:
         raise RuntimeError(
             f"the dry run asked for what the venue does not serve: {study.venue.unknown[:3]}"

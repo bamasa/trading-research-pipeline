@@ -165,3 +165,14 @@ def test_each_placeholder_refuses_a_value_of_the_wrong_kind(
     with pytest.raises(PreRegistrationError):
         shr.FROZEN_KINDS[path](bad, ".".join(path))
     shr.FROZEN_KINDS[path](VALUES[path], ".".join(path))
+
+
+def test_nothing_of_a_kind_frozen_is_an_empty_mapping() -> None:
+    """No network is frozen when R* is the bound regressor, and stratum C may have no
+    C*: the epochs and S-C's thresholds are then empty mappings, not missing values."""
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    shr.FROZEN_KINDS[("models", "checkpoint_epoch")]({}, "models.checkpoint_epoch")
+    shr.FROZEN_KINDS[("slots", "S-C", "thresholds")]({}, "slots.S-C.thresholds")
+    with pytest.raises(shr.PreRegistrationError):
+        shr.FROZEN_KINDS[("models", "checkpoint_epoch")]([], "models.checkpoint_epoch")

@@ -197,9 +197,11 @@ def window_days(
     target: str | None,
     before_ns: int | None,
     max_rows: int,
+    target_dir: Path | None = None,
 ) -> list[Any]:
     """Days of the every-row store for the network: windows end at the every-tenth
-    rows with a target (training, validation) or at every row (inference)."""
+    rows with a target (training, validation) or at every row (inference).
+    ``target_dir`` holds targets stage 1 did not keep (the control label)."""
     from trading_research.models.windows import Day, thin_evenly
 
     store = inputs.stores["every_row"]
@@ -210,7 +212,11 @@ def window_days(
             picked.append(np.arange(store_rows(inputs, day), dtype=np.int64))
             targets.append(None)
             continue
-        frame = inputs.targets(day)
+        frame = (
+            inputs.targets(day)
+            if target_dir is None
+            else pd.read_parquet(target_dir / f"{day}.parquet")
+        )
         ok = np.isfinite(frame[target].to_numpy())
         if before_ns is not None:
             ok &= frame[ft.TIME].to_numpy() < before_ns
@@ -250,6 +256,8 @@ class NetworkJob:
     configurations: tuple[Configuration, ...]
     out: Path
     epochs: int | None = None
+    #: Train on the control label kept here, rather than on the configuration's own.
+    control_dir: Path | None = None
 
 
 def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
@@ -267,11 +275,23 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
             found[cfg.name] = json.loads(record_path.read_text(encoding="utf-8"))
             continue
         columns = inputs.columns(cfg.inputs)
-        train = window_days(inputs, fold.train, columns, cfg.target, fold.train_end_ns(cfg.hold_s),
-                            scale.max_training_rows)  # fmt: skip
+        target = cfg.target if job.control_dir is None else f"control_{cfg.hold_s:g}"
+        train = window_days(inputs, fold.train, columns, target, fold.train_end_ns(cfg.hold_s),
+                            scale.max_training_rows, job.control_dir)  # fmt: skip
         inner = window_days(inputs, fold.inner, columns, ft.forward_column(cfg.hold_s),
                             fold.inner_end_ns(cfg.hold_s), scale.max_training_rows)  # fmt: skip
         changes = {} if job.epochs is None else {"epochs": job.epochs}
+        known = sum(int(np.isfinite(d.targets).sum()) for d in train if d.targets is not None)
+        if known < 100:  # too few targets to fit on: no score, no decision this fold
+            folder.mkdir(parents=True, exist_ok=True)
+            for day in fold.test:
+                empty = np.full(store_rows(inputs, day), np.nan)
+                np.savez(folder / f"{day}.npz", mu=empty, log_variance=empty)
+            record: dict[str, Any] = {"weights_sha256": None, "checkpoint_epoch": None,
+                                      "note": f"{known} targets"}  # fmt: skip
+            save_json(record_path, record)
+            found[cfg.name] = record
+            continue
         model = network(scale, **changes).fit_days(train, inner or None)
         sha = save(model, folder / "weights.pt")
         for day, (mu, log_variance) in zip(
@@ -281,7 +301,7 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
         ):
             np.savez(folder / f"{day}.npz", mu=mu, log_variance=log_variance)
         record = {"weights_sha256": sha, "checkpoint_epoch": int(model.checkpoint_epoch_ or 0),
-                  "history": [list(map(float, h)) for h in getattr(model, "history_", [])]}  # fmt: skip
+                  "history": [{k: float(v) for k, v in h.items()} for h in getattr(model, "history_", [])]}  # fmt: skip
         save_json(record_path, record)
         found[cfg.name] = record
     return found
@@ -327,15 +347,22 @@ def fit_main_process(
         data.x.iloc[rows][columns].astype(np.float64).reset_index(drop=True),
         pd.Series(labels[rows]),
     )
+    never = {rate: HoldFirstRule(float("inf"), float("inf")) for rate in RATES}
+    enough = y.nunique() >= 2 if cfg.stratum == "C" else len(y) >= 2
+    if not enough:  # nothing to fit on: the configuration makes no decision this fold
+        empty: dict[str, Any] = {
+            "rows": len(y),
+            "weights_digest": None,
+            "note": "too few rows or classes",
+        }
+        return None, empty | ({"thresholds": rules_record(never)} if cfg.stratum == "C" else {})
     model = classifier(cfg.model, scale) if cfg.stratum == "C" else bound_ridge(scale)
     model.fit(x, y)
     entry: dict[str, Any] = {"rows": len(rows), "weights_digest": digest(model)}
     if cfg.stratum == "C":
         proba = inner_proba(inputs, model, columns, fold.inner, fold.inner_end_ns(cfg.hold_s))
-        if len(proba):
-            rules = thresholds(proba, len(fold.inner))
-        else:  # no inner-validation row: the configuration cannot trade this fold
-            rules = {rate: HoldFirstRule(float("inf"), float("inf")) for rate in RATES}
+        # without an inner-validation row the configuration cannot trade this fold
+        rules = thresholds(proba, len(fold.inner)) if len(proba) else never
         entry["thresholds"] = rules_record(rules)
         entry["classes_present"] = sorted(int(c) for c in pd.unique(y.dropna()))
     return model, entry
@@ -352,6 +379,13 @@ def predictions(
     """One configuration's scores on every row of a test day (NaN where unscored)."""
     stamps = ft.stamps_ns(frame)
     unscored = stamps < inputs.scored_from(day)
+    if model is None and cfg.model != "tcn":  # the fold had nothing to fit on
+        empty = np.full(len(frame), np.nan)
+        return (
+            {"proba": np.full((len(frame), 3), np.nan)}
+            if cfg.stratum == "C"
+            else {"mu": empty, "sigma": empty}
+        )
     if cfg.model == "tcn":
         mu, sigma = network_prediction(network_out, cfg, day)
         mu, sigma = mu.astype(np.float64), sigma.astype(np.float64)

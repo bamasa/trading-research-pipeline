@@ -72,7 +72,7 @@ def fold_frame(inputs: Inputs, fold: Fold) -> pd.DataFrame:
     parts = []
     for day in (*fold.train, *fold.inner):
         targets = inputs.targets(day)
-        x = inputs.features(day, inputs.columns("micro"), every_row=False).astype(np.float64)
+        x = inputs.features(day, inputs.columns("tensor+micro"), every_row=False).astype(np.float64)
         book = inputs.book(day).iloc[targets["row"].to_numpy()]
         frame = pd.concat([targets.reset_index(drop=True), x.reset_index(drop=True)], axis=1)
         for column in PRICES:
@@ -98,7 +98,7 @@ def network_fold(path: Path, columns: list[str], spans: tuple[int, int, int],
     model = GaussianTCN(**{**params, "epochs": 1, "device": "cpu"})
     model.fit(frame.loc[train, columns], frame.loc[train, FORWARD],
               validation=(frame.loc[inner, columns], frame.loc[inner, FORWARD]))  # fmt: skip
-    history = [list(map(float, h)) for h in getattr(model, "history_", [])]
+    history = [{k: float(v) for k, v in h.items()} for h in getattr(model, "history_", [])]
     return {"weights": model.weights_sha256(), "history": history,
             "checkpoint": int(model.checkpoint_epoch_ or 0)}  # fmt: skip
 
@@ -148,7 +148,7 @@ def fold_fit(inputs: Inputs, fold: Fold, scratch: Path, network: bool) -> Any:
             frame.loc[:, [ft.TIME, FORWARD, *wide]].to_parquet(path, index=False)
             params = scale.params("tcn")
             out["tcn"] = in_fresh_process(network_fold, path, wide, spans, params)
-            out["tcn_inner_ic"] = [h[-1] for h in out["tcn"]["history"]]
+            out["tcn_inner_ic"] = [h.get("validation_ic") for h in out["tcn"]["history"]]
         return out
 
     return fit

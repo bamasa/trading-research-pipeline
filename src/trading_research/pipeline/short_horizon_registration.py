@@ -227,8 +227,15 @@ def _selected(value: Any, where: str) -> None:
     )
 
 
+def _possibly_empty(value: Any, where: str) -> Mapping[str, Any]:
+    """A mapping that may be empty: nothing of its kind was frozen (no network fit
+    when R* is the bound regressor, no C* when stratum C has no admissible cell)."""
+    _require(isinstance(value, Mapping), f"{where} must be a mapping")
+    return value
+
+
 def _epochs(value: Any, where: str) -> None:
-    for key, epoch in _mapping(value, where).items():
+    for key, epoch in _possibly_empty(value, where).items():
         _require(_is_int(epoch) and 0 <= epoch <= 20, f"{where}.{key} is an epoch from 0 to 20")
 
 
@@ -244,7 +251,7 @@ def _result_trials(value: Any, where: str) -> None:
 
 
 def _thresholds(value: Any, where: str) -> None:
-    for cell, theta in _mapping(value, where).items():
+    for cell, theta in _possibly_empty(value, where).items():
         _require(
             isinstance(theta, Mapping)
             and set(theta) == {"theta_long", "theta_short"}
