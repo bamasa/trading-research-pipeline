@@ -2447,11 +2447,6 @@ Every blocking and minor point was taken in; where a point offered two fixes:
 - **The trial ledger's catalogue hash and commits go in a manifest**, rather
   than a header: a parquet file stays one table, and the manifest carries its
   sha256 and row count.
-- **The trial ledger's parts stay under `data/`, and a committed manifest
-  records them**, rather than committing the parquet files: the repository
-  ignores parquet and refuses any file over 1 MB, and the manifest's sha256 of
-  every part, checked against the files on disk when H opens, binds the rows
-  as a commit would; H does not open while a part is missing or differs.
 
 **Earlier choices, kept.**
 
@@ -2704,6 +2699,37 @@ each where it applies and with one line here:
   real alarm never repeats an hour, and the seed range is the registered one.
 - **A trade's Null A hour is that of its entry snapshot**: the hour in which
   the position is opened, whatever hour its decision row fell in.
+
+**Choices the entry point made.** Writing the single entry point needed a few
+more values the text above left open. They were written in on 9 October 2026,
+before any data was read, one line each:
+
+- **The trial ledger's parts stay under `data/`, and a committed manifest
+  records them**, rather than committing the parquet files: the repository
+  ignores parquet and refuses any file over 1 MB, and the manifest's sha256 of
+  every part, checked against the files on disk when H opens, binds the rows
+  as a commit would; H does not open while a part is missing or differs.
+- **The refit's shifted labels are matched by time**, not by exact stamp: a
+  training row takes the label of the last training row at or before its
+  stamp less the shift, within twice the rows' median spacing, else none,
+  since event-time rows never repeat a stamp a whole number of days apart.
+- **A row with a missing input is dropped from a fit and not scored**, as a
+  warm-up row is, rather than imputed: an imputed value is a guess the model
+  would learn from.
+- **A column with no value in January is dropped before selection**: it has
+  no variance to select on and would leave the selector no complete row.
+- **S-M's failure on its making part is named "(i)"**, the payoff condition
+  it adds to: the registered statuses list only (i) to (iv).
+- **A side with no candidate row has its threshold written as 2**: a
+  probability never reaches it, so the side never trades, and the loader
+  needs a finite number.
+- **The amendment's epoch and S-C threshold mappings may be empty**: no
+  epoch is frozen when R\* is not the network, and no S-C threshold when C\*
+  does not exist.
+- **`net_per_100_clip_day` takes each signal-entry attempt's net over its own
+  entry's notional and the day's funding over the mean of those notionals**:
+  the simulator settles funding on the day, not on an attempt, and every entry
+  is one clip, so the notionals differ only with the price.
 
 ---
 
