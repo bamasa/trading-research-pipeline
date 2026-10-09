@@ -280,7 +280,9 @@ instead of inside a block. Its consequences:
   follows for H, F and P);
 - the downloader records each F and P day's message count, median interval
   and sequence gaps only inside that block's opened access, as it records
-  row counts;
+  row counts; they come from a scan of the archive's messages separate from
+  the replay, its gaps counted as `reconstruct` counts them, so the replay
+  stays unchanged;
 - every comparison across the H/F boundary (a strategy's persistence from H
   into F) is labelled as crossing an archive change;
 - R compares days before and after the break **within F**, on one archive,
@@ -330,7 +332,11 @@ changes on it, so F's read nothing of H. On each, rolling state is rebuilt
 from the block's own rows, and the first `N` minutes from its midnight are
 not scored, `N` being the longest feature lookback (recorded in the
 amendment), whatever days they span; a day stays usable with fewer decision
-rows. Fitted values (the size floors fitted on W, the frozen models and
+rows. **A day after a hole starts cold the same way**: when the previous
+calendar day has no usable book (missing, unreadable, unfetchable, or excluded
+by the loader), its rolling state and the network's windows read nothing
+before its midnight, so no rolling statistic reads across a day the study does
+not trust. Fitted values (the size floors fitted on W, the frozen models and
 thresholds) are not rolling state and are used on every block, never
 refitted at a read. Every fitted value that is not a weight (W's size floors
 and normalisers, the tensor's floors, S1's `sigma_ref`, the raw-size scale
@@ -366,7 +372,11 @@ K-latency re-run, a bracket) is excluded from every series of every
 slot on that block, and is counted once toward unreadability.
 **`max_sequence_gaps` is the 95th percentile of D's per-day gap
 counts, rounded up**, computed by that formula and recorded in the
-amendment; the same value is used on every block. Each verdict is also reported with the
+amendment; the same value is used on every block. The percentile is numpy's
+linear interpolation over the gap counts of every D day whose book replayed (a
+day excluded for another reason still contributes its count), rounded to nine
+decimals before it is rounded up, so that float noise in the interpolation
+cannot add a gap. Each verdict is also reported with the
 gap-excluded days included, as a measurement, so that the exclusion cannot
 quietly favour a result.
 
@@ -520,9 +530,17 @@ Every label, feature and model below is built on BTCUSDT.
   quantiles. **A feature in raw size units** (order-flow imbalance such as
   the registry's `ofi_1` and `ofi_20`, depth and print-volume sums) is then
   divided by the median touch size on W, written to the
-  fitted-values file, before the float16 cast. A test on W checks that every
+  fitted-values file, before the float16 cast. In this set those are `ofi_1`
+  and `ofi_20` alone: every depth and flow column is a ratio, a share, a mean
+  count, a log or in bp. The touch size is the median of the level-0 sizes of
+  both sides pooled over every row of W (the mean of the two middle values
+  when their number is even). A test on W checks that every
   stored column is finite after the cast; a column that fails it is stored at
-  float32 on every block, recorded in the amendment.
+  float32 on every block, recorded in the amendment. A column fails when a
+  value finite at float64 exceeds 65,504 (float16's largest) in absolute
+  value after the scaling; a missing value passes, and a column already
+  infinite before the cast is reported beside the failures and not widened,
+  since float32 would not make it finite.
 - **The ten-level tensor**: 40 columns. Each level's price distance from the
   touch is divided by the larger of σ × mid and a spread floor, σ being the
   standard deviation of the mid's row-to-row log changes over the trailing
@@ -798,8 +816,9 @@ gives each one's time and disk.
 1. **Stage 1: fetch, replay and features**, W and D
    ([fetch plan](#fetch-plan)); no H, F or P file is on disk before the
    amendment. Validate every day; exclusions per the [blocks](#blocks).
-   Features go to two float16 stores: every tenth row; and every row, holding
-   the network's inputs, kept through D.
+   Features go to two float16 stores: every tenth row (positions 0, 10, 20,
+   … of each day's rows from its midnight, the rows the fits take their
+   targets on); and every row, holding the network's inputs, kept through D.
 2. **Leakage**: every feature through `validation/leakage.py`, the fold-level
    leakage test and the flag-causality test; any failure stops the study
    until fixed by a dated amendment (K-leak, K-flag-leak).
@@ -1766,7 +1785,8 @@ be excluded as a missing plane and tilt D and H toward calm days. In this
 study's fetch, **every day the `HEAD` check lists as present must be
 fetched**: any failure other than an HTTP 404 (a timeout, a dropped or reset
 connection, another HTTP status, an archive that does not decompress) deletes
-the partial file and is retried with backoff until the day is on disk, and a
+the partial file and is retried with backoff (60 s × 3^(k−1) after the k-th
+failure, at most 12 hours) until the day is on disk, and a
 stage is not complete, and nothing is computed on its block, until every such
 day is on disk or excluded by one of two terminal rules, on every block, W
 and D included. An **unreadable archive**: a day whose archive was downloaded
@@ -1782,7 +1802,13 @@ same rule: a failed request is retried, and only the venue's answer that it
 has no data (an HTTP 404, or an empty funding history) is a missing plane.
 The print downloader's 120 s timeout (`data/bybit_trades.download_day`)
 bounds each socket read, not the whole file, so a large file does not fail by
-its size; a stalled connection does, and is retried.
+its size; a stalled connection does, and is retried. The study's book
+download uses the same 120 s per socket read. Each complete archive's
+checksums are checked before it is read (the book zip's CRC by
+`zipfile.testzip`, the prints' gzip by decompressing it whole); a failure is a
+corrupt download, deleted and retried, and only the identical-sha256 rule
+above makes it unreadable, so a damaged transfer is never taken for a bad
+archive.
 
 | Stage | When | What | Book archives (GB) | Print archives (GB) |
 |---|---|---|---:|---:|
@@ -2445,6 +2471,37 @@ Every blocking and minor point was taken in; where a point offered two fixes:
   count toward the unreadable rule, so neither can quietly thin a block.
 - **The open entry is pushed as well as committed**: a local commit can be
   reset without trace, a pushed one cannot.
+
+**Values the study code fixed.** Writing the code named under [the code to
+come](#the-code-to-come) needed values the text above left open. They were
+written into this registration on 9 October 2026, before any data was read,
+each where it applies and with one line here:
+
+- **`max_sequence_gaps` by numpy's linear percentile over every D day whose
+  book replayed, rounded to nine decimals before it is rounded up**: the
+  formula needs an interpolation and a set of days, and float noise must not
+  add a gap.
+- **A day after a hole starts cold**, rather than reading rolling state
+  across it: a day the study excludes is not trusted for history either.
+- **Retries back off 60 s × 3^(k−1), at most 12 hours**: the 10-attempt,
+  48-hour rule then ends a day only at its eleventh failure, about 54 hours
+  after the first, and the cap keeps an outage from stretching a stage.
+- **120 s per socket read for books as for prints**: a large archive does not
+  time out by its size, and a stalled connection does.
+- **Checksums before an archive is read** (`testzip`, the whole gzip): a
+  damaged transfer is retried as corrupt rather than taken for unreadable.
+- **Stream statistics from a scan separate from the replay**: `reconstruct`,
+  which wrote the 2024 books, stays unchanged.
+- **The touch size pools both sides' level-0 sizes over every W row**: one
+  scale serves every raw-size column, whichever side it measures.
+- **Only `ofi_1` and `ofi_20` are raw-size columns**: every other depth and
+  flow column is already a ratio, a share, a mean count, a log or in bp.
+- **The finiteness test fails a value above 65,504 in absolute value after
+  scaling; a missing value passes; an infinity at source is reported and not
+  widened**: float16's limit is the test, a lookback's first rows are not a
+  failure, and float32 cannot repair an infinity.
+- **Every tenth row is positions 0, 10, 20, … of each day's rows**: the store
+  and the fits' targets take the same rows, by position, whatever the stamps.
 
 ---
 

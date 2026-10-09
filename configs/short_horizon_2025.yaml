@@ -81,6 +81,7 @@ data:
     ob200_reader_test_days: [2026-01-05, 2026-01-06, 2026-01-07]  # BTCUSDT; outside every block; used for nothing else but the entry point's dry run; never in a successor's blocks
     ob200_reader_test: synthetic ob200 fixture and the reader-test days pass before H is opened; no ob200 day of 2025 fetched before stage 3
     ob200_reader_test_pass: "as the loader passes a block day: no positive_prices error in validate_book's report, no off-grid price, sequence gaps at most D's max_sequence_gaps; every other finding by check and severity recorded in the amendment beside D's; a failure is first checked as a reader fault, and a fault found is corrected by amendment before H; a day that fails on its gap count alone once the reader is checked is a property of the archive, recorded, and the study continues (F and P days excluded by the frozen threshold, the unreadable-block rule deciding)"
+    stream_statistics: "a scan of the archive's messages separate from the replay (reconstruct unchanged); gaps counted as reconstruct counts them"
   prints: {url: "https://public.bybit.com/trading/{symbol}/{symbol}{day}.csv.gz", present: [2024-12-01, 2025-12-31]}
   funding: bybit public REST, no credentials
   detector_bars: {venue: binance, market: futures-um, interval: 1h, from: 2024-12-01, frequency_after_2025_06_30: daily archives only, E_bars: "fetched and read when H opens, bars only"}
@@ -98,6 +99,7 @@ data:
   exclusions: [more book sequence gaps than max_sequence_gaps, "non-positive price (a positive_prices error in validate_book's report; the function does not raise)", "off-grid price (the events.load_day check, R16, applied to every day with the day's own tick from events.derive_tick)", missing plane (HTTP 404 only), missing funding, "flatten_stale (R16): a taker order walked a snapshot more than 5 s older than itself because the book ended", "any day market_making/events.load_day refuses (DayUnavailable, whatever the reason), for every configuration, taker included", unreadable archive (fetch.failures), unfetchable day (fetch.failures)]  # each counted by reason
   flatten_stale_scope: a day flagged in any run on the block (on a held-out block, any run of its read session) is excluded from every series of every slot on that block and counted once toward unreadability
   max_sequence_gaps_rule: 95th percentile of D's per-day gap counts, rounded up; the same value on every block
+  max_sequence_gaps_percentile: {q: 95, interpolation: linear (numpy), over: "every D day whose book replayed, whatever other exclusion applies", rounding: "to 9 decimals, then up", code: data/study_loader.max_sequence_gaps}
   max_sequence_gaps: null  # one value, by the rule above; frozen by the D amendment
   unreadable_block: more than a quarter of a held-out block's days excluded; reported unreadable, nothing retuned, no status changes on it (statuses.unreadable)
   gap_days_included_reported: true  # each verdict also with the gap-excluded days put back, as a measurement
@@ -117,6 +119,7 @@ blocks:
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
   cold_start_unscored: the first N minutes from each cold-start day's midnight, whatever days they span, N being features.longest_lookback_minutes
+  cold_after_hole: "a day whose previous calendar day has no usable book (missing, unreadable, unfetchable or excluded by the loader) starts cold as the cold-start days do; nothing rolling reads across the hole"
   spent: H, F and P are spent for every configuration of this catalogue; successors use blocks after 2025-12-31
 
 common:
@@ -208,6 +211,10 @@ features:
   lookbacks: "declared in seconds on row stamps, except the network's 64-row window and the control label's 20-row smoothing; N = the longest lookback in seconds, rounded up to whole minutes; on a cold-start day a row is also unscored until the row-declared windows have their rows since midnight"
   selection: {code: features/selection.py, runs: once, window: 2025-01-01..2025-01-31, rows: every tenth row (at most 2.68 million), target: walked_taker at 0 bp, hold_s: 20, forward: forward_move at hold_s 20, selector: {class: FeatureSelector, settings: defaults, score_target: ic, max_features: 40, correlation_threshold: 0.95, variance_threshold: 1.0e-6}, name: micro-selected}
   stores: {dtype: float16, every_tenth_row: the inputs the fits train on, every_row: "the network's inputs, kept through D and never rebuilt", format: one zstd parquet per day, parity_tests_at: float16, raw_size_columns: "order-flow imbalance (ofi_1, ofi_20), depth and print-volume sums divided by the median touch size on W (fitted-values file) before the cast", finiteness_test: "on W, every stored column finite after the float16 cast; a column that fails is stored at float32 on every block, recorded in the amendment"}  # labels, costs, gate inputs, walk tables and fills from the book's float64 prices
+  raw_size_columns: [ofi_1, ofi_20]  # every other depth and flow column is a ratio, a share, a mean count, a log or in bp
+  touch_size: median of bid_size_0 and ask_size_0 pooled over every W row (the mean of the two middle values for an even count)  # data/feature_store.median_touch_size
+  finiteness: {fails: "a value finite at float64 above 65504 in absolute value after the scaling", limit_abs: 65504, missing_value: passes, infinite_before_cast: "reported beside the failures; not widened"}
+  every_tenth_row: positions 0, 10, 20, ... of each day's rows from midnight; the rows the fits take their targets on
   selected: null  # [features], the micro-selected list; frozen by the D amendment
   longest_lookback_minutes: null  # N for the cold-start days; frozen by the D amendment
   fitted_values: every fitted value that is not a weight (W's size floors and normalisers, the tensor's floors, S1's sigma_ref, the raw-size scale, any other fitted constant), in one file; used on every block, never refitted at a read
@@ -594,6 +601,9 @@ fetch:
              unreadable_archive: "downloaded completely at least twice with the same sha256 and still not decompressing, or a replay that raises on a complete archive; likewise prints", unfetchable_day: download still failing after 10 attempts over at least 48 hours,
              terminal_rules_apply_to: [W, D, H, F, P], terminal_exclusions: counted per block by reason and toward the unreadable rule,
              missing_plane: HTTP 404 only, funding_and_bars: same rule; an empty funding history is a missing plane}
+  retry_backoff_s: {after_failure_k: "60 x 3^(k-1)", max: 43200}  # data/fetch_log.backoff_s; the 10-attempt, 48 h rule then ends a day at its eleventh failure
+  timeout_s_per_socket_read: 120  # books and prints; a large file does not time out by its size
+  checksums_before_read: {book: zipfile testzip, prints: the whole gzip decompressed, failure: "a corrupt download, deleted and retried; unreadable only under failures.unreadable_archive"}
   disk:
     free_gb_at_registration: 121
     usable_gb: 111  # 121 free less the 10 GB margin
