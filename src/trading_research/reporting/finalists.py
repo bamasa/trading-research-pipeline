@@ -153,3 +153,20 @@ def markdown_table(frame: pd.DataFrame, digits: int = 2) -> str:
         "| " + " | ".join(cell(v) for v in row) + " |" for row in frame.itertuples(index=False)
     ]
     return "\n".join(lines)
+
+
+def s25_page(ladder: pd.DataFrame, regions: pd.DataFrame, rank: tuple[int, int]) -> str:
+    """The S25 page: its rank r of N on the D leaderboard, the edge ladder
+    (``edge_ladder.edge_ladder``) and the T1 and T2 rows
+    (``leaderboard.region_rows``), every D number labelled."""
+    r, n = rank
+    steps = ladder[["step", "row", "block", "value", "unit", "reference", "label"]]
+    return "\n\n".join(
+        [
+            f"S25 ranks {r} of {n} on the D leaderboard (on development data, selected, "
+            "biased upward; S25 itself was fixed before D).",
+            markdown_table(steps),
+            "The leaderboard regions, measurements with no slot (on development data):",
+            markdown_table(regions),
+        ]
+    )

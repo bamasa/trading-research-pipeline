@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from trading_research.backtest.costs import tiers_for
@@ -16,6 +17,7 @@ from trading_research.reporting.finalists import (
     FinalistInputs,
     finalists_table,
     markdown_table,
+    s25_page,
     tiers_paying,
 )
 from trading_research.reporting.headlines import HeadlineError
@@ -98,3 +100,13 @@ def test_each_row_carries_its_registered_sentence() -> None:
     )
     with pytest.raises(HeadlineError):
         finalists_table([FinalistInputs("S-C", "H", "killed", DAILY, 120)])
+
+
+def test_the_s25_page() -> None:
+    from trading_research.reporting.edge_ladder import edge_ladder
+
+    regions = pd.DataFrame({"region": ["T1", "T2"], "cells": [16, 36], "S": [-3.1, -2.9]})
+    page = s25_page(edge_ladder(s25_d=(3.0, -8.0)), regions, (1459, 2400))
+    assert page.startswith("S25 ranks 1459 of 2400 on the D leaderboard")
+    assert "| 2 | S25, net | D | -8.00 | bp of traded notional |" in page
+    assert "| T2 | 36 | -2.90 |" in page
