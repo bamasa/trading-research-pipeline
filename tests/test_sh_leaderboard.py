@@ -114,8 +114,10 @@ def test_the_file_round_trips_with_its_header(board: pd.DataFrame, tmp_path: Pat
     path = write_leaderboard(board, tmp_path / "lb.csv", planned=2400, scored=2400, skipped=0)
     assert path.read_text().startswith("# N planned: 2400\n# N scored: 2400\n# N skipped: 0\n")
     assert "selected, biased upward" in path.read_text().splitlines()[3]
+    assert read_leaderboard(path)[0] == {"planned": 2400, "scored": 2400, "skipped": 0}
+    path = write_leaderboard(board, path, planned=2400, scored=2400, skipped=0, n_trials=2455)
     counts, back = read_leaderboard(path)
-    assert counts == {"planned": 2400, "scored": 2400, "skipped": 0}
+    assert counts == {"planned": 2400, "scored": 2400, "skipped": 0, "trials": 2455}
     assert list(back["key"]) == list(board["key"])
     assert list(back["region"]) == list(board["region"])
     assert list(back["S25_badge"]) == list(board["S25_badge"])

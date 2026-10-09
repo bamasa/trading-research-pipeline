@@ -164,18 +164,25 @@ def s25_rank(board: pd.DataFrame) -> tuple[int, int]:
 
 
 def write_leaderboard(
-    board: pd.DataFrame, path: Path | str, *, planned: int, scored: int, skipped: int
+    board: pd.DataFrame,
+    path: Path | str,
+    *,
+    planned: int,
+    scored: int,
+    skipped: int,
+    n_trials: int | None = None,
 ) -> Path:
-    """The leaderboard file: a header with N planned, scored and skipped and
-    the D label, then the registered columns."""
+    """The leaderboard file: a header with N planned, scored and skipped (and
+    N_trials, the N quoted on every page, when given) and the D label, then
+    the registered columns."""
     if planned != scored + skipped:
         raise ChoiceError(f"planned {planned} is not scored {scored} plus skipped {skipped}")
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    header = (
-        f"# N planned: {planned}\n# N scored: {scored}\n# N skipped: {skipped}\n"
-        f"# every number: on development data, {SELECTED}; never quoted as a result\n"
-    )
+    header = f"# N planned: {planned}\n# N scored: {scored}\n# N skipped: {skipped}\n"
+    if n_trials is not None:
+        header += f"# N trials: {n_trials}\n"
+    header += f"# every number: on development data, {SELECTED}; never quoted as a result\n"
     with target.open("w", encoding="utf-8", newline="") as handle:
         handle.write(header)
         board.loc[:, list(LEADERBOARD_COLUMNS)].to_csv(handle, index=False, float_format="%.6g")
