@@ -30,6 +30,8 @@ AXES_BY_SCOPE: dict[str, tuple[str, ...]] = {
 }
 MARGINAL_COLUMNS: tuple[str, ...] = ("scope", "axis", "value", "cells", "gross", "net", "G")
 _NUMBERS = ("gross", "net", "G")
+#: Where the entry point writes it (``artefacts.files``).
+MARGINALS_FILE = "experiments/results/short_horizon_2025_marginals.csv"
 
 
 def _median(values: pd.Series) -> float:

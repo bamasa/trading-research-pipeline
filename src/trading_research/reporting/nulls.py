@@ -54,6 +54,8 @@ NULLS_COLUMNS: tuple[str, ...] = (
     "runs",
 )
 NULL_QUANTILES: tuple[float, ...] = (0.5, 0.9, 0.95, 0.99)
+#: Where the entry point writes it (``artefacts.files``).
+NULLS_FILE = "experiments/results/short_horizon_2025_nulls.csv"
 _NAN = float("nan")
 
 

@@ -51,6 +51,8 @@ LEADERBOARD_COLUMNS: tuple[str, ...] = (
     "S25_badge",
 )
 SELECTED = "selected, biased upward"
+#: Where the entry point writes it (``artefacts.files``).
+LEADERBOARD_FILE = "experiments/results/short_horizon_2025_leaderboard.csv"
 
 
 def day_level_t(values: np.ndarray) -> np.ndarray:
