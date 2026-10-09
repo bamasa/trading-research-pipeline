@@ -116,3 +116,42 @@ def download_to(
         raise
     partial.replace(path)
     return Download(path=path, sha256=digest.hexdigest(), size=size, expected=expected)
+
+
+class _FileResponse:
+    """A local file answering like a response: ``read``, ``headers``, a context."""
+
+    def __init__(self, path: Path) -> None:
+        self._handle = path.open("rb")
+        self.headers = {"Content-Length": str(path.stat().st_size)}
+
+    def read(self, size: int = -1) -> bytes:
+        return self._handle.read(size)
+
+    def __enter__(self) -> _FileResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._handle.close()
+
+
+class DirectoryOpener:
+    """An opener that serves archives from a local directory by their file name.
+
+    For replaying archives already on disk through the same path a download
+    takes, and for tests: a URL whose last segment is not in ``directory``
+    answers 404, as the venue would. Picklable, so it crosses into workers.
+    """
+
+    def __init__(self, directory: Path | str) -> None:
+        self.directory = Path(directory)
+
+    def __call__(self, url: str, timeout: float | None = None) -> _FileResponse:
+        import io
+        from email.message import Message
+
+        del timeout  # a local read has no socket to time out
+        path = self.directory / url.rsplit("/", 1)[-1]
+        if not path.is_file():
+            raise urllib.error.HTTPError(url, MISSING_STATUS, "Not Found", Message(), io.BytesIO())
+        return _FileResponse(path)
