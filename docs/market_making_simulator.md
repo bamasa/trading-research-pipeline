@@ -768,7 +768,9 @@ by default, so round one's and round two's runs are unchanged.
 
 * **A fixed clip.** `clip_btc` replaces `clip_notional` and the touch share:
   the clip is that size, rounded down to the lot, at every decision, so K-cap
-  compares the position with a constant. Exactly one of the two is set.
+  compares the position with a constant. Exactly one of the two is set. The
+  time spent with the position above one clip is reported
+  (`time_above_one_clip_s`), beside the soft-limit returns (`flattens_soft_limit`).
 * **The shared walk.** Every taker order (flattens, the soft-limit return and a
   quoter's cross) is priced by `backtest/walk.walk_book`, the function the
   event-time taker executor (`backtest/taker.py`) and the walked-book label

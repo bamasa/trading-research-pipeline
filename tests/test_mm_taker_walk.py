@@ -144,3 +144,28 @@ def test_a_fixed_clip_replaces_the_notional_and_touch_caps() -> None:
         SimConfig(clip_notional=1.0, clip_btc=1.0)
     with pytest.raises(ValueError, match="positive"):
         SimConfig(clip_btc=0.0)
+
+
+def test_time_above_one_clip_is_reported() -> None:
+    """A replace leaves the old bid in flight; one sweep at 120 ms fills both and
+    the position is two clips until the taker order back to the soft limit
+    walks the 200 ms snapshot: 80 ms above one clip."""
+    before, after = _book(100, 102), _book(97, 102)
+    market = hand_built_market(
+        [(0.0, *before), (100.0, *before), (200.0, *after), (300.0, *after)],
+        [(120.0, 98, 5.0, -1)],
+    )
+
+    @dataclass(frozen=True)
+    class MovesDown:
+        name: str = "moves-down"
+        uses_future: bool = False
+
+        def quotes(self, view: MarketView, position: float) -> Quotes:
+            bid = 100 if view.ts == market.book_ts[0] else 99
+            return Quotes(Quote(bid, view.clip), NO_QUOTE)
+
+    config = SimConfig(clip_btc=1.0, warmup_s=0.0, soft_limit_clips=1.0, cancel_latency_ns=50 * MS)
+    result = simulate_day(market, MovesDown(), config)
+    assert result.counters["max_abs_position"] == 2.0
+    assert result.counters["time_above_one_clip_s"] == pytest.approx(0.08)

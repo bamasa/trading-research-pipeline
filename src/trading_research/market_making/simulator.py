@@ -361,6 +361,10 @@ class _Day:
         self.clip_over_touch_n = 0
         #: When the position last left zero (-1 before the first fill).
         self.opened_ns = -1
+        #: Since when |position| has exceeded one clip (-1 when it does not),
+        #: and the time spent above it so far.
+        self.above_since = -1
+        self.time_above_ns = 0
         #: A quoter may define ``observe(own_orders, opened_ns)``: it is told,
         #: before each decision, which of its orders are not done (a cancel in
         #: flight included) and when the current position was opened.
@@ -777,6 +781,7 @@ class _Day:
         account.check_identity(self.mid)
         if before == 0.0 and account.position != 0.0:
             self.opened_ns = t
+        self._track_above(t)
         if order.remaining <= self.lot * 1e-6:
             order.remaining = 0.0
             self._finish(order, t, FILLED)
@@ -851,6 +856,7 @@ class _Day:
         account = self.account
         fee = account.fill(side, price, size, self.config.fees.taker_bp, maker=False)
         account.check_identity(mid)
+        self._track_above(t)
         self.max_abs_position = max(self.max_abs_position, abs(account.position))
         self.fill_rows.append(
             (
@@ -871,6 +877,15 @@ class _Day:
         )
         self.counters.add("flattens")
         self.counters.add(f"flattens_{taker.reason}")
+
+    def _track_above(self, t: int) -> None:
+        """Time with |position| above one clip, for the report beside K-cap."""
+        above = abs(self.account.position) > self.clock.clip * (1.0 + 1e-9)
+        if above and self.above_since < 0:
+            self.above_since = t
+        elif not above and self.above_since >= 0:
+            self.time_above_ns += t - self.above_since
+            self.above_since = -1
 
     # -- bookkeeping ----------------------------------------------------------
 
@@ -1031,6 +1046,10 @@ class _Day:
         counters["sequence_gaps"] = float(events.sequence_gaps)
         counters["has_funding"] = float(events.has_funding)
         counters["max_abs_position"] = self.max_abs_position
+        above = self.time_above_ns
+        if self.above_since >= 0:
+            above += max(0, int(self.now) - self.above_since)
+        counters["time_above_one_clip_s"] = above / NS_PER_S
         counters["maker_turnover"] = account.maker_turnover
         counters["taker_turnover"] = account.taker_turnover
         counters["fills"] = float(len(fills))
@@ -1287,6 +1306,7 @@ EXTRA_COUNTERS = (
     "not_quoted_soft_limit",
     "feed_pauses",
     "fills_touch",
+    "time_above_one_clip_s",
     EXIT_LATE,
     "flatten_beyond_visible_book",
 )
