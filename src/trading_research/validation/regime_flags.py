@@ -329,6 +329,32 @@ def frozen_flags(
     return profile, alarm_table(run_detector(close, profile, end=end, spec=spec))
 
 
+def hourly_closes(prices: pd.Series) -> pd.Series:
+    """The last price of each hour of a finer series, labelled by the hour's close."""
+    stamps = pd.DatetimeIndex(pd.to_datetime(prices.index, utc=True))
+    values = pd.Series(prices.to_numpy(dtype="float64"), index=stamps).sort_index()
+    labels = pd.DatetimeIndex(values.index).ceil("h")
+    return values.groupby(labels).last().rename("close")
+
+
+def flags_from_prices(
+    prices: pd.Series, *, profile_end: pd.Timestamp | str, spec: MonitorSpec = DETECTOR_SPEC
+) -> tuple[np.ndarray, pd.DataFrame]:
+    """The detector on any price series: hourly closes, a profile fitted before ``profile_end``.
+
+    For a search outside the registered study: the profile is fitted on the
+    hours before ``profile_end`` (the end of the block the search may see),
+    one run covers the whole series, and the alarms after ``profile_end`` were
+    computed with nothing fitted on their hours.
+    """
+    closes = hourly_closes(prices)
+    first = closes.index[0] - HOUR
+    stream = hourly_stream(closes, start=first, end=closes.index[-1])
+    profile = fit_hour_profile(log_returns(stream.close), first, profile_end)
+    result = run_detector(stream.close, profile, end=stream.close.index[-1], spec=spec)
+    return profile, alarm_table(result)
+
+
 # ---------------------------------------------------------------------------
 # The flag-causality test
 # ---------------------------------------------------------------------------

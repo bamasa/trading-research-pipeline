@@ -317,3 +317,16 @@ def test_the_two_flag_lists_are_compared_month_by_month() -> None:
     assert table.to_dict("records") == [
         {"month": "2025-03", "both": 1, "foldwise_only": 1, "frozen_only": 1}
     ]
+
+
+def test_any_price_series_gives_flags_with_a_profile_before_the_cut() -> None:
+    closes = _closes()
+    fine = closes.reindex(pd.date_range(closes.index[0], closes.index[-1], freq="15min")).ffill()
+    hourly = rf.hourly_closes(fine)
+    assert hourly.index[0] == closes.index[0]
+    pd.testing.assert_series_equal(hourly, closes, check_names=False, check_freq=False)
+    profile, alarms = rf.flags_from_prices(fine, profile_end=FOLD.start, spec=SMALL)
+    expected = rf.fold_flags(closes, FOLD, spec=SMALL)
+    np.testing.assert_allclose(profile, expected.profile)
+    after = alarms[alarms["timestamp"] >= FOLD.start]
+    assert len(after) >= 1
