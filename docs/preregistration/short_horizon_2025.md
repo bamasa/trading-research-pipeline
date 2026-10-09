@@ -1015,8 +1015,10 @@ nothing is counted.
   grids.
 - Across every group of the stratum, the chosen cell
   (**C\*** or **R\***) is the one with the highest S among cells averaging at
-  least 5 trades a day; ties go to the cell's own mean. The 5-trade filter
-  only limits which cell may be chosen. The outright peak is reported beside
+  least 5 trades a day; ties go to the cell's own mean, and then to the key
+  first in the catalogue's byte order. The 5-trade filter
+  only limits which cell may be chosen. The outright peak, the highest S
+  whatever the trade rate, is reported beside
   it. If no cell qualifies, the stratum's slot is `not run (no admissible cell
   on D)`; the filter is not relaxed.
 
@@ -1025,7 +1027,9 @@ hold:
 
 - **(iii) carry-forward**: for each test month m in March to June, the choice
   is re-run on the test months before m, and the newly chosen cell's G is
-  scored on m's days after a 5-day embargo. The mean over the four months must
+  scored on m's days after a 5-day embargo (m's calendar days 1 to 5 are
+  dropped); a month with no admissible cell, or with no trade on its scored
+  days, contributes 0. The mean over the four months must
   be > 0. This mean, computed for net too, is the D estimate of the effect
   that the power on H is computed from;
 - **(iv) the placebo search**: max(p_A, p_B) ≤ 0.05 ([below](#the-placebo-search)).
@@ -1064,7 +1068,9 @@ N_eff = `effective_count(N_trials, mean_pairwise_correlation(daily G panel))`
 daily G and net; the selection premium (the median of the null maximum of A,
 and A minus it); the probability of backtest overfitting by combinatorially
 symmetric cross-validation per stratum (10 blocks of 15 days, 252 splits, the
-identical rule); and the minimum detectable effect and the power at t ≥ 3 for
+identical rule: the in-sample choice is ranked by S on the out-of-sample days
+among the cells admissible in-sample, and a logit at or below 0 counts as
+overfit); and the minimum detectable effect and the power at t ≥ 3 for
 the carry-forward estimate.
 
 **The finalists are fixed now: k = 5**, four searched slots (S-C, S-R, S-P,
@@ -1102,13 +1108,17 @@ enforce. Since no step culls a configuration on an outcome, re-running these
 steps is the whole search re-run on placebo targets.
 
 **The statistic.** A = the median, over the chosen cell's neighbourhood, of
-each cell's day-level t of G, a cell without trades scoring 0. G is centred at
+each cell's day-level t of G, a cell without trades scoring 0, as does a
+cell with fewer than two days with a trade or with no dispersion (the
+statistic must be finite). G is centred at
 zero for every fee and execution path; the t keeps the scale when a null
 pairing has another volatility; the neighbourhood median lowers the null
 maximum.
 
 - **Null A: hour-block sign flips, 999 draws.** Each UTC hour of the usable
-  test days draws a sign from `numpy.random.default_rng(b)`, b = 0 to 998.
+  test days draws a sign from `numpy.random.default_rng(b)`, b = 0 to 998:
+  the hours in time order take 1 − 2 × `default_rng(b).integers(0, 2,
+  size=hours)`, 0 keeping the side and 1 flipping it.
   The sign is shared by every configuration in that hour, so their
   dependence is kept. A flipped trade's P&L, funding included, is the
   stored walk of the opposite side.
@@ -1223,7 +1233,9 @@ being fixed.
   and the placebo comparison `verdicts.exceeds_placebos`. Beside every
   verdict, the **Newey–West t** of the daily mean (Bartlett weights, lag 5
   days; new code in `evaluation/significance.py`), because consecutive days in
-  one regime are not independent.
+  one regime are not independent; its lag counts positions in the daily
+  series, not calendar days. A series of constant positive days has an
+  infinite day-level t and p = 0.
 - **Minimum detectable effect**, recorded in the amendment for each slot
   and for S25-Z: `(3 + 0.84) × σ_D / √n_eff`, the mean that the t ≥ 3 bar would
   catch with 80% power, with `σ_D` the standard deviation of the daily series
@@ -1755,6 +1767,9 @@ A measurement for every slot and every measured row, never a status.
   in that read session; otherwise the map ends at F's last day).
 - Each segment is reported with its dates, usable days, mean, day-level t and
   cumulative net; a segment under 10 usable days is drawn but carries no t.
+  A segment starts on the first day that begins at or after its alarm, so the
+  alarm's own day closes the segment before it; a block boundary also cuts a
+  segment, and the table says which of the two opened it.
 - One chart per execution path (taker, passive entry, market maker) shows the
   cumulative daily net through 2025, with the alarms marked and the blocks
   shaded.
@@ -1784,7 +1799,10 @@ Fixed now, run as the ledger opens each block.
   ledger opens H (bars only; E's book, prints and funding are never fetched),
   so no return spans the embargo. **A missing hour** has its close carried
   forward and a zero return, and is counted and reported; the walk continues
-  without a reset, and the move over the gap enters the next return.
+  without a reset, and the move over the gap enters the next return. The
+  stream's first bar must be present: it has nothing to carry forward, and
+  the stream is never started at a later hour, so a missing first bar stops
+  the detector until it is fetched.
 - **Bars for E, H, F and P come from Binance's daily archives only**, one day
   at a time, inside the opened access of their block. No monthly kline
   archive for a month after 2025-06 is fetched or cached before P's read (the
@@ -2641,6 +2659,29 @@ each where it applies and with one line here:
   never exceeds one clip.
 - **FILL's "same orders" are the same decisions under each rule**: the
   one-position rule makes the orders themselves depend on the fills.
+- **Ties after the own mean go to the first key in byte order; the peak is
+  the highest S whatever the rate**: a rule that needs no outcome, and the
+  peak shows what the filter removed.
+- **A cell with fewer than two days or no dispersion has a t of G of 0**:
+  the null's maximum must be finite, and such a cell has no evidence.
+- **The carry-forward drops m's days 1 to 5; a month with no admissible cell
+  or no trade scores 0**: the embargo is in calendar days, and a month the
+  rule cannot score has earned nothing.
+- **PBO ranks the in-sample choice among the cells admissible in-sample, a
+  logit at or below 0 overfit**: the identical rule, and a median rank counts
+  against the choice.
+- **The Newey–West lag counts positions in the daily series**: the series
+  has one value per day with a trade, and the lag is in its own units.
+- **Null A's signs are 1 − 2 × `default_rng(b).integers(0, 2, size=hours)`
+  over the hours in time order**: one draw per replication, reproducible
+  from its seed alone.
+- **A constant positive daily series has p = 0**: `day_t`'s infinite t, kept
+  rather than special-cased.
+- **The stream's first bar must be present**: there is nothing to carry
+  forward, and starting the stream later would move its windows.
+- **A regime-map segment starts on the first day that begins at or after its
+  alarm, and a block boundary also cuts**: a day is not split, the alarm's
+  own day began under the old regime, and a block change is visible.
 
 ---
 

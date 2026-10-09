@@ -315,12 +315,15 @@ search:
     vectorised: tested equal to neighbourhood_scores on small grids
     min_trades_per_day: 5  # limits which cell may be chosen, not which cells are neighbours
     rule: highest S among admissible cells; ties by the cell's own mean
+    ties_after_own_mean: the key first in the catalogue's byte order
+    peak: the highest S whatever the trade rate
     report_peak: true
     no_admissible_cell: "not run (no admissible cell on D); p = 1; the filter is not relaxed"
   admission:
     signal:  # C* and R*; both must hold
       iii_carry_forward: "for each m in 2025-03..06, the choice re-run on the test months before m and the new cell's G scored on m's days after a 5-day embargo; mean over the four months > 0 (also computed for net: the D estimate used for power on H)"
       iv_placebo_search: max(p_A, p_B) <= 0.05 / R_D  # search.nulls.bar; R_D the number of complete D runs
+      iii_details: {embargo: "m's calendar days 1 to 5 dropped", empty_month: "a month with no admissible cell, or no trade on its scored days, contributes 0"}
     slot:  # failing slots are "not admitted on D (<conditions>)", every failing condition named (e.g. i, iv), p = 1 on every block; a prediction of (i) is scored on (i) alone
       S-C: [signal admitted, "i: the chosen cell's S > 0", "ii: the neighbourhood median of monthly mean net > 0 in at least 4 of the 5 test months"]
       S-R: [signal admitted, i, ii]
@@ -330,10 +333,12 @@ search:
     no_search_null_for: [S25, S-P, S-M]  # fixed, or no choice on a passive outcome
   nulls:
     statistic: "A = median over the chosen cell's neighbourhood of each cell's day-level t of G (0 for a cell without trades); G = net - (pnl_long_bp + pnl_short_bp) / 2 per trade, which is side x (pnl_long_bp - pnl_short_bp) / 2: costs removed, drift not (controlled by null_B and K-drift); centred under null_A"
+    t_of_G_degenerate: 0 for a cell with fewer than two days with a trade or with no dispersion  # the null's statistic must be finite
     max_over: strata
     rerun: [per-cell daily series, the 5-trade filter, neighbourhood medians, the choice in and across groups, the admission statistic]
     not_rerun: [fits, theta, checkpoints, feature selection, gate levels, guard flags]  # none reads a test day's outcome (fold-level leakage and flag-causality tests)
     null_A: {unit: UTC hour of the usable test days, draws: 999, seeds: [0, 998], rng: "numpy.random.default_rng(b)", shared_by: every configuration in the hour, flipped_trade: "the stored walk of the opposite side, funding included"}
+    null_A_signs: "1 - 2 x default_rng(b).integers(0, 2, size=hours), the hours in time order; 0 keeps the side, 1 flips it"
     null_B: {unit: day, shifts: "every s with 7 <= s <= 143 on the circular calendar order of D's 150 test days (n = 150, 137 shifts)", same_s_for_every_configuration: true, order: calendar, excluded_day: "a pair whose source or target day is excluded contributes nothing; counted", executes: "the source day's accepted entries (time of day and side, after its own guard) on the target day's walk tables", busy_entry: skipped and counted, parity_test: "at stage 0, on BTCUSDT 2024-02-11 and 2024-03-05, before any 2025 fetch: at s = 0 the walk-table route equals the executor entry by entry, and ordinary entries from walk tables equal the executor's; a failure blocks stage B until fixed by a dated amendment; repeated in the dry run as a check (a failure there is a bug: amendment and D re-run in full)", fallback: none}
     p_value: "(1 + #{replications with max over strata of A >= A_j}) / (1 + replications); 999 for null_A, 137 for null_B; the counts computed directly by the entry point"
     bar: max(p_A, p_B) <= 0.05 / R_D  # R_D the number of complete D runs (search.d_runs); unit test at 137 shifts: at R_D 1, at most 5 shifts at or above A_j pass and 6 fail; verdicts.exceeds_placebos not used for (iv)
@@ -341,6 +346,7 @@ search:
     diagnostic_only: global sign flip
     S25_against: Null A and Null B applied to its fixed cell, no selection
   reported_not_gating: [N_trials, "N_eff = effective_count(N_trials, mean_pairwise_correlation(daily G panel))", deflated Sharpe ratio of daily G and net per finalist, "selection premium (median null maximum of A, and A minus it)", "PBO by CSCV per stratum (10 blocks of 15 days, 252 splits)", MDE and power at t >= 3 for the carry-forward estimate]  # every D number labelled "selected, biased upward"
+  pbo_rule: the in-sample choice ranked by S on the out-of-sample days among the cells admissible in-sample; a logit at or below 0 counts as overfit
   trial_bound: {N_max: 2455, parts: {taker_cells: 2400, S25-Z: 12, S-P: 30, S-M: 9, A0_and_FILL: 4}, S-P_regime_measurements: "its cell at each regime window other than its signal's own, of none, 4, 24 and 120 h (3)", S-M_regime_measurements: "guard_pull and guard_widen at 4, 24 and 120 h with lean 1 (6)", passive_exit_variant: "held-out blocks only, never on D", beyond_N_max: every ledger row counts in N_trials}
   trial_ledger: {file: experiments/results/short_horizon_2025_trials.parquet, format: "zstd parquet, split into parts under 100 MB if needed", row: "one per D run, configuration and test day", columns: [run, key, day, net_bp, G_bp, pnl_long_bp, pnl_short_bp, trades, skips], sidecar: "experiments/results/short_horizon_2025_trials.json: the catalogue sha256, each run's commit, the file's sha256 and row count, and the hand-run log", committed: at the end of each stage, N_trials: "distinct (run, key) pairs; the N quoted on every page and given to N_eff and the DSR", superseded_runs: "rows kept, counted in N_trials"}
   hand_runs: {catalogue_after_stage_0: never extended, definition: "a computation on a 2025-02..06 test day outside the entry point: a configuration run by hand, or any statistic of a label, return, prediction or P&L on those days, a feature's IC included; replay, validation, the leakage tests and feature building are not", logged: "in the trial ledger's sidecar with its date, what it computed and the days it read", effect: "every searched slot (S-C, S-R, and S-P or S-M when their signal is C* or R*) not admitted on D (hand run), p = 1 on every block", hash: unchanged}
@@ -451,8 +457,9 @@ metrics:
            entries_skipped, entry_late_snapshot, exit_late_snapshot, flatten_beyond_visible_book, regime_attribution]
   significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, series: none, decides: day level, fewer_than_two_days: not given to assess; fails the day count; p = 1}  # series=None, one series
   p_value: market_making/verdicts.day_t(daily series).p_one_sided  # Student t at days - 1 through verdicts.t_sf; Holm is verdicts.holm, placebos verdicts.exceeds_placebos
+  p_value_constant_positive_series: 0  # day_t's infinite t; fewer than two days enter with p = 1
   degrees_of_freedom: days in the daily series minus one, per slot and per block
-  newey_west: {kernel: bartlett, lag_days: 5, code: evaluation/significance.py (new)}
+  newey_west: {kernel: bartlett, lag_days: 5, lag_counts: positions in the daily series, code: evaluation/significance.py (new)}
   all_calendar_days_scored: true  # no row filtered or reweighted by label, outcome or model state
   mde:
     formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
@@ -583,6 +590,7 @@ measurements:
     cut_at: {D: each test month's fold-wise alarms, H_F_P: "the frozen detector's alarms; P only when P is opened for a qualifying slot, in that read session, otherwise the map ends at F's last day"}
     per_segment: [dates, usable days, mean, day-level t, cumulative net]
     min_days_for_t: 10  # a shorter segment is drawn without a t
+    day_assignment: "a segment starts on the first day that begins at or after its alarm (the alarm's own day closes the segment before); a block boundary also cuts a segment, and the table says which opened it"
     charts: one per execution path (taker, passive entry, market maker), cumulative daily net through 2025, alarms marked, blocks shaded
     rule: the detector cuts the segments before any result is computed; every segment shown, none selected; never a status, never in any rule
   leaderboard_regions: slots.regions  # each region's best neighbourhood cell with its S, A and rank
@@ -597,6 +605,7 @@ detector:
   profile_on_H_F_P_and_dry_run: fitted on all of D (hour_profile)
   stream: one continuous stream from 2024-12-01, E's hourly bars included (fetched and read when H opens)
   missing_hour: close carried forward, zero return, counted and reported; no reset
+  first_bar: must be present; nothing to carry forward, and the stream is never started at a later hour
   bars_after_2025_06_30: Binance daily archives only, one day at a time, inside the opened access of their block
   monthly_klines: none for a month after 2025-06 fetched or cached before P's read; the loader refuses a monthly kline file reaching past the highest opened block
   library: {name: structural-break, tag: v0.1.0, commit: 0636813fdd4ccc9f25490d97f62d6fccecb01881}

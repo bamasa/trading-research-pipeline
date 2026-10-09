@@ -21,17 +21,30 @@ import yaml
 from trading_research.backtest.taker import TakerBook, execute_day
 from trading_research.data import feature_store as fs
 from trading_research.data import fetch_log, study_fetch, study_loader
+from trading_research.evaluation.family import slot_p_value
+from trading_research.evaluation.overfitting import relative_rank_logit
+from trading_research.evaluation.significance import NEWEY_WEST_LAG
 from trading_research.features import REGISTRY, study_set
 from trading_research.features.lob_tensor import fit_tensor_calibration, lob_tensor, register_tensor
 from trading_research.features.micro2025 import REGISTRY_2025
 from trading_research.labels.taker_vwap import WalkedTakerLabel, control_move_bp
 from trading_research.market_making import fill_rules, signal_entry
+from trading_research.market_making.verdicts import day_t
 from trading_research.models import windows
 from trading_research.models.gbm import GradientBoostedBaseline
 from trading_research.models.linear import LogisticBaseline
 from trading_research.models.tcn import GaussianTCN
+from trading_research.reporting.regime_map import regime_map
 from trading_research.strategies.ev_gate import EVGate, gate_events, thin_entries
 from trading_research.strategies.hold_first import fit_hold_first, side_threshold
+from trading_research.validation.choice import (
+    CARRY_FORWARD_EMBARGO_DAYS,
+    CellDays,
+    cell_day_t,
+    choose,
+)
+from trading_research.validation.placebo_search import null_a_signs
+from trading_research.validation.regime_flags import STREAM_START, FlagError, hourly_stream
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "short_horizon_2025.yaml"
@@ -376,3 +389,77 @@ def test_the_quoter_and_fill_choices_are_the_code_s() -> None:
     choices = _choices()
     for phrase in ("θ on every row of the inner validation", 'FILL\'s "same orders"'):
         assert phrase in choices, phrase
+
+
+# ---------------------------------------------------------------------------
+# Statistics and the regime layer
+# ---------------------------------------------------------------------------
+
+
+def test_a_degenerate_cell_has_a_t_of_g_of_zero() -> None:
+    values = np.array(
+        [[1.0, np.nan, np.nan], [2.0, 2.0, 2.0], [1.0, 2.0, 3.0]],
+    )
+    t = cell_day_t(values)
+    assert t[0] == 0.0 and t[1] == 0.0  # one day; no dispersion
+    assert t[2] == pytest.approx(day_t([1.0, 2.0, 3.0]).t)
+    assert "fewer than two days" in _registered()["search"]["nulls"]["t_of_G_degenerate"]
+
+
+def test_ties_after_the_own_mean_go_to_the_first_key() -> None:
+    days = 4
+    net = np.ones((3, days))
+    cells = CellDays(np.full((3, days), 6.0), net, net.copy())
+    index = np.arange(3).reshape(3, 1)  # each cell its own neighbourhood
+    assert choose(cells, [0, 1, 2], index).cell == 0
+    assert choose(cells, [2, 1], index).cell == 1  # the earlier row of the table
+    assert _registered()["search"]["choice"]["ties_after_own_mean"].startswith("the key first")
+
+
+def test_the_carry_forward_embargo_and_the_lag_are_registered() -> None:
+    assert CARRY_FORWARD_EMBARGO_DAYS == 5
+    assert "days 1 to 5" in _registered()["search"]["admission"]["signal"]["iii_details"]["embargo"]
+    newey_west = _registered()["metrics"]["newey_west"]
+    assert NEWEY_WEST_LAG == newey_west["lag_days"] == 5
+    assert newey_west["lag_counts"] == "positions in the daily series"
+
+
+def test_a_median_choice_counts_as_overfit() -> None:
+    assert relative_rank_logit(1, np.array([1.0, 2.0, 3.0])) == 0.0  # at the median
+    assert relative_rank_logit(2, np.array([1.0, 2.0, 3.0])) > 0
+    assert "at or below 0 counts as overfit" in _registered()["search"]["pbo_rule"]
+
+
+def test_null_a_signs_are_the_registered_draw() -> None:
+    for draw in (0, 7, 998):
+        expected = 1 - 2 * np.random.default_rng(draw).integers(0, 2, size=50)
+        assert null_a_signs(draw, 50).tolist() == expected.tolist()
+
+
+def test_a_constant_positive_series_has_p_zero_and_a_single_day_p_one() -> None:
+    assert slot_p_value([2.0, 2.0, 2.0]) == 0.0
+    assert slot_p_value([2.0]) == 1.0
+    assert _registered()["metrics"]["p_value_constant_positive_series"] == 0
+
+
+def test_the_stream_needs_its_first_bar() -> None:
+    closes = pd.date_range("2024-12-01 01:00", periods=6, freq="h", tz="UTC")
+    assert closes[0].floor("D") == STREAM_START  # the first bar closes an hour in
+    bars = pd.DataFrame({"timestamp": closes, "close": np.arange(100.0, 106.0)})
+    end = closes[-1]
+    assert len(hourly_stream(bars.drop(index=2), end=end).missing) == 1  # carried
+    with pytest.raises(FlagError, match="first bar"):
+        hourly_stream(bars.drop(index=0), end=end)
+    assert "must be present" in _registered()["detector"]["first_bar"]
+
+
+def test_a_segment_starts_on_the_first_day_after_its_alarm() -> None:
+    days = pd.date_range("2025-02-01", periods=6, freq="D", tz="UTC")
+    daily = pd.Series(np.arange(1.0, 7.0), index=days)
+    alarm = pd.Timestamp("2025-02-03 12:00", tz="UTC")
+    segments = regime_map(daily, [alarm])
+    assert len(segments) == 2
+    assert pd.Timestamp(segments["end"].iloc[0]).day == 3  # the alarm's own day
+    assert pd.Timestamp(segments["start"].iloc[1]).day == 4
+    blocks = {d.date(): ("D" if d.day <= 2 else "H") for d in days}
+    assert len(regime_map(daily, [alarm], blocks=blocks)) == 3  # a block change cuts
