@@ -102,8 +102,17 @@ class CrossedPolicy(StrEnum):
     ASSUME_FILLED = "assume_filled"  # fill in full: a diagnostic, never a result
 
 
+class FillRule(StrEnum):
+    """Which prints fill a resting order, for the fill-rule comparison."""
+
+    QUEUE = "queue"  # the rules above: the queue ahead first (R5, R6), or through (R7)
+    TOUCH = "touch"  # in full at the first print at or through it: an optimistic bound
+    THROUGH = "trade_through"  # prints strictly through it only, up to their size (R7)
+
+
 #: Fill paths.
 QUEUE, THROUGH, CROSSED, FLATTEN = "queue", "through", "crossed", "flatten"
+TOUCH = "touch"
 
 
 def on_arrival(
@@ -240,3 +249,37 @@ def on_snapshot(
     order.level_at_last_snapshot = level_size
     order.traded_at_price_since_snapshot = carried
     order.in_arrival_interval = False
+
+
+def on_print_rule(
+    order: Order,
+    price: int,
+    size: float,
+    aggressor: int,
+    *,
+    rule: FillRule,
+    ts: int,
+    growth: ArrivalGrowth,
+) -> tuple[float, str]:
+    """:func:`on_print` under a fill rule; the queue rule is :func:`on_print` itself.
+
+    ``touch`` fills what remains of the order at the first print at or through
+    its price from the side that hits it, whatever the print's size and
+    whatever is queued ahead. ``trade_through`` fills only on prints strictly
+    through the price, up to their size, and ignores prints at it.
+    """
+    if rule is FillRule.QUEUE:
+        return on_print(order, price, size, aggressor, ts=ts, growth=growth)
+    if aggressor != -order.side or size <= 0.0:
+        return 0.0, ""
+    beyond = (order.price - price) * order.side
+    if beyond < 0 or (beyond == 0 and rule is FillRule.THROUGH):
+        return 0.0, ""
+    if rule is FillRule.TOUCH:
+        filled = order.remaining
+        order.remaining = 0.0
+        return filled, TOUCH
+    order.queue_ahead = 0.0
+    filled = min(order.remaining, size)
+    order.remaining -= filled
+    return filled, THROUGH
