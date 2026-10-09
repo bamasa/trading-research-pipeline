@@ -124,8 +124,8 @@ def _book_archive(path: Path, day: date) -> None:
     start = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000)
 
     def message(kind: str, ts: int, bids: list, asks: list, update: int) -> str:
-        data = {"s": "TESTUSDT", "b": bids, "a": asks, "u": update, "seq": update}
-        return json.dumps({"topic": "orderbook.500.TESTUSDT", "type": kind, "ts": ts, "data": data})
+        data = {"s": "BTCUSDT", "b": bids, "a": asks, "u": update, "seq": update}
+        return json.dumps({"topic": "orderbook.500.BTCUSDT", "type": kind, "ts": ts, "data": data})
 
     bids = [[f"{100.0 - 0.1 * i:.1f}", "2"] for i in range(12)]
     asks = [[f"{100.1 + 0.1 * i:.1f}", "2"] for i in range(12)]
@@ -144,10 +144,10 @@ def test_four_workers_replay_real_archives_and_report_their_peaks(tmp_path: Path
     served = tmp_path / "served"
     served.mkdir()
     for day in DAYS[:4]:  # the fifth day answers 404
-        _book_archive(served / bybit.archive_url("TESTUSDT", day).rsplit("/", 1)[-1], day)
+        _book_archive(served / bybit.archive_url("BTCUSDT", day).rsplit("/", 1)[-1], day)
     fetch = functools.partial(
         sf.fetch_book_day,
-        "TESTUSDT",
+        "BTCUSDT",
         root=tmp_path / "book",
         archive_dir=tmp_path / "archives",
         opener=DirectoryOpener(served),
@@ -156,14 +156,14 @@ def test_four_workers_replay_real_archives_and_report_their_peaks(tmp_path: Path
     assert [log.get(sf.BOOK, d).status for d in DAYS] == [fl.ON_DISK] * 4 + [fl.MISSING_PLANE]
     peaks = [log.get(sf.BOOK, d).stats["peak_rss_bytes"] for d in DAYS[:4]]
     assert min(peaks) > 0
-    assert len(pd.read_parquet(sf.book_path("TESTUSDT", DAYS[0], tmp_path / "book"))) == 50
+    assert len(pd.read_parquet(sf.book_path("BTCUSDT", DAYS[0], tmp_path / "book"))) == 50
     assert not list((tmp_path / "archives").glob("*"))  # no archive outlives its replay
 
 
 def test_the_replay_peak_of_one_archive_is_measured(tmp_path: Path) -> None:
     archive = tmp_path / "day.zip"
     _book_archive(archive, DAYS[0])
-    assert fs.replay_peak_rss(archive, symbol="TESTUSDT") > 10_000_000
+    assert fs.replay_peak_rss(archive, symbol="BTCUSDT") > 10_000_000
 
 
 def test_funding_retries_the_span_until_every_day_is_resolved(tmp_path: Path) -> None:

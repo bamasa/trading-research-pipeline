@@ -37,8 +37,8 @@ def book_archive(
     """A venue-shaped zip: a snapshot and ``deltas`` deltas 100 ms apart."""
 
     def message(kind: str, ts: int, bids: list, asks: list, update: int) -> dict:
-        data = {"s": "TESTUSDT", "b": bids, "a": asks, "u": update, "seq": update}
-        return {"topic": "orderbook.500.TESTUSDT", "type": kind, "ts": ts, "data": data}
+        data = {"s": "BTCUSDT", "b": bids, "a": asks, "u": update, "seq": update}
+        return {"topic": "orderbook.500.BTCUSDT", "type": kind, "ts": ts, "data": data}
 
     bids = [[f"{100.0 - 0.1 * i:.1f}", "2"] for i in range(depth)]
     asks = [[f"{100.1 + 0.1 * i:.1f}", "2"] for i in range(depth)]
@@ -51,15 +51,14 @@ def book_archive(
         lines.insert(3, '{"type": "delta", "ts": 17')
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"{day}_TESTUSDT_ob500.data", "\n".join(lines) + "\n")
+        archive.writestr(f"{day}_BTCUSDT_ob500.data", "\n".join(lines) + "\n")
     return buffer.getvalue()
 
 
 def prints_archive() -> bytes:
     rows = ["timestamp,symbol,side,size,price,trdMatchID"]
     rows += [
-        f"{START / 1000 + i},TESTUSDT,{'Buy' if i % 2 else 'Sell'},0.01,100.0,m{i}"
-        for i in range(5)
+        f"{START / 1000 + i},BTCUSDT,{'Buy' if i % 2 else 'Sell'},0.01,100.0,m{i}" for i in range(5)
     ]
     return gzip.compress(("\n".join(rows) + "\n").encode())
 
@@ -85,7 +84,7 @@ def serving(answer: bytes | BaseException) -> Callable[..., Any]:
 
 def run_book(tmp_path: Path, answer: bytes | BaseException) -> sf.DayOutcome:
     return sf.fetch_book_day(
-        "TESTUSDT", DAY, tmp_path / "book", tmp_path / "archives", opener=serving(answer)
+        "BTCUSDT", DAY, tmp_path / "book", tmp_path / "archives", opener=serving(answer)
     )
 
 
@@ -94,7 +93,7 @@ def test_a_book_day_is_replayed_written_and_its_archive_deleted(tmp_path: Path) 
     result = run_book(tmp_path, body)
     assert result.outcome == fl.OK
     assert result.sha256 == sha256(body).hexdigest() and result.size == len(body)
-    frame = pd.read_parquet(sf.book_path("TESTUSDT", DAY, tmp_path / "book"))
+    frame = pd.read_parquet(sf.book_path("BTCUSDT", DAY, tmp_path / "book"))
     assert len(frame) == result.stats["rows"] == 21
     assert set(frame["source"]) == {"bybit-linear-ob500"}
     assert result.stats["messages"] == 21 and result.stats["sequence_gaps"] == 0
@@ -151,17 +150,17 @@ def test_a_day_after_the_change_asks_for_the_ob200_archive(tmp_path: Path) -> No
         return Response(book_archive())
 
     day = date(2026, 1, 6)
-    result = sf.fetch_book_day("TESTUSDT", day, tmp_path, tmp_path / "a", opener=opener)
-    assert asked == [bybit.archive_url("TESTUSDT", day, "ob200")]
+    result = sf.fetch_book_day("BTCUSDT", day, tmp_path, tmp_path / "a", opener=opener)
+    assert asked == [bybit.archive_url("BTCUSDT", day, "ob200")]
     assert result.stats["archive"] == "ob200"
 
 
 def test_a_print_day_is_parsed_and_written(tmp_path: Path) -> None:
     result = sf.fetch_prints_day(
-        "TESTUSDT", DAY, tmp_path / "trades", tmp_path / "a", opener=serving(prints_archive())
+        "BTCUSDT", DAY, tmp_path / "trades", tmp_path / "a", opener=serving(prints_archive())
     )
     assert result.outcome == fl.OK and result.stats == {"rows": 5}
-    prints = bybit_trades.load_day("TESTUSDT", DAY, tmp_path / "trades")
+    prints = bybit_trades.load_day("BTCUSDT", DAY, tmp_path / "trades")
     assert sorted(prints["aggressor"].unique()) == [-1, 1]
     assert not list((tmp_path / "a").glob("*"))
 
@@ -177,7 +176,7 @@ def test_a_print_day_is_parsed_and_written(tmp_path: Path) -> None:
 )
 def test_print_failures_are_classified(tmp_path: Path, answer: Any, outcome: str) -> None:
     result = sf.fetch_prints_day(
-        "TESTUSDT", DAY, tmp_path / "trades", tmp_path / "a", opener=serving(answer)
+        "BTCUSDT", DAY, tmp_path / "trades", tmp_path / "a", opener=serving(answer)
     )
     assert result.outcome == outcome
     assert not (tmp_path / "trades").exists()
@@ -220,7 +219,7 @@ def test_bars_come_from_the_day_alone_and_only_a_404_is_missing(
         return _klines(DAY)
 
     monkeypatch.setattr(binance, "fetch_archive", fetch)
-    result = sf.fetch_bars_day("TESTUSDT", DAY, tmp_path)
+    result = sf.fetch_bars_day("BTCUSDT", DAY, tmp_path)
     assert result.outcome == outcome
     assert all("/daily/" in url for url in asked) and len(asked) == 1
     if code is None:
@@ -247,7 +246,7 @@ def _funding_payload(days: list[date]) -> bytes:
 def test_funding_days_without_a_settlement_are_missing(tmp_path: Path) -> None:
     days = [date(2024, 12, 3), date(2024, 12, 4), date(2024, 12, 5)]
     opener = serving(_funding_payload([days[0], days[2]]))
-    results = sf.fetch_funding_span("TESTUSDT", days, tmp_path, opener=opener)
+    results = sf.fetch_funding_span("BTCUSDT", days, tmp_path, opener=opener)
     assert [r.outcome for r in results] == [fl.OK, fl.MISSING, fl.OK]
     assert results[0].stats == {"rows": 3} and results[0].sha256 is not None
 
@@ -257,6 +256,6 @@ def test_a_failed_funding_request_applies_to_every_day(
     tmp_path: Path, code: int, outcome: str
 ) -> None:
     days = [date(2024, 12, 3), date(2024, 12, 4)]
-    results = sf.fetch_funding_span("TESTUSDT", days, tmp_path, opener=serving(http_error(code)))
+    results = sf.fetch_funding_span("BTCUSDT", days, tmp_path, opener=serving(http_error(code)))
     assert [r.outcome for r in results] == [outcome, outcome]
-    assert sf.fetch_funding_span("TESTUSDT", [], tmp_path) == []
+    assert sf.fetch_funding_span("BTCUSDT", [], tmp_path) == []

@@ -29,6 +29,7 @@ from typing import Any
 from trading_research.data import fetch_log as fl
 from trading_research.data.disk import StageBudget
 from trading_research.data.failures import Opener
+from trading_research.data.study_access import StudyAccess
 from trading_research.data.study_fetch import BOOK, DayOutcome, peak_rss_bytes
 
 REPLAY_WORKERS_MAX = 4
@@ -256,6 +257,7 @@ def run_stage(
     print_workers: int = 8,
     expected_present: dict[str, frozenset[date]] | None = None,
     opener: Opener | None = None,
+    access: StudyAccess | None = None,
     clock: Callable[[], datetime] = _now,
     sleep: Callable[[float], None] = time.sleep,
 ) -> fl.FetchLog:
@@ -267,20 +269,26 @@ def run_stage(
     many), prints on ``print_workers``, bars one day at a time and funding as
     one span. ``opener`` serves the book and print archives (a
     :class:`trading_research.data.failures.DirectoryOpener` replays archives
-    already on disk). Returns when every planned day is on disk or terminally
-    excluded.
+    already on disk). ``access`` is the read session's (the development access
+    when None); the whole plan is checked against it before the disk is, and
+    every fetcher asks it again before its request. Returns when every planned day is on
+    disk or terminally excluded.
     """
     import functools
 
     from trading_research.data import disk
     from trading_research.data import study_fetch as sf
+    from trading_research.data.study_access import resolve
 
+    permitted = resolve(access)
+    for plane in (sf.BOOK, sf.PRINTS, sf.BARS, sf.FUNDING):
+        permitted.require(symbol, getattr(plan, plane), plane, what="fetch")
     disk.check_disk(roots.book, budget)
     disk.delete_archives(roots.archives)
     present = expected_present or {}
     book_present = [d for d in plan.book if d in present.get(_archive_of(d), frozenset())]
     loop: dict[str, Any] = {"clock": clock, "sleep": sleep}
-    archives: dict[str, Any] = {"archive_dir": roots.archives, "opener": opener}
+    archives: dict[str, Any] = {"archive_dir": roots.archives, "opener": opener, "access": access}
     book = functools.partial(sf.fetch_book_day, symbol, root=roots.book, **archives)
     run_plane(
         sf.BOOK, plan.book, book, log, workers=book_workers, expected_present=book_present, **loop
@@ -295,9 +303,9 @@ def run_stage(
         expected_present=[d for d in plan.prints if d in present.get("prints", frozenset())],
         **loop,
     )
-    bars = functools.partial(sf.fetch_bars_day, symbol, root=roots.bars)
+    bars = functools.partial(sf.fetch_bars_day, symbol, root=roots.bars, access=access)
     run_plane(sf.BARS, plan.bars, bars, log, workers=1, **loop)
-    funding = functools.partial(sf.fetch_funding_span, symbol, root=roots.funding)
+    funding = functools.partial(sf.fetch_funding_span, symbol, root=roots.funding, access=access)
     run_funding(plan.funding, funding, log, **loop)
     return log
 

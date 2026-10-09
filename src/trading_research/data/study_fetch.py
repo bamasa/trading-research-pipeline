@@ -16,6 +16,11 @@ The functions here fetch one plane of one day and return what happened; they
 never raise for a failed transfer, a missing day or a bad archive. Anything
 else (a full disk, a bug) propagates and stops the stage, whose log keeps every
 attempt so far.
+
+Each fetcher first asks its :class:`~trading_research.data.study_access.StudyAccess`
+(the development access when none is given) and raises
+:class:`~trading_research.market_making.prereg.HeldOutLocked` for a day it does
+not permit, before any request is made.
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ import traceback
 import zipfile
 import zlib
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -36,12 +41,13 @@ import pandas as pd
 
 from trading_research.data import bybit, bybit_trades
 from trading_research.data import fetch_log as fl
+from trading_research.data import study_access as sa
 from trading_research.data.failures import Download, Opener, download_to, is_missing_plane
 
-BOOK = "book"
-PRINTS = "prints"
-BARS = "bars"
-FUNDING = "funding"
+BOOK = sa.BOOK
+PRINTS = sa.PRINTS
+BARS = sa.BARS
+FUNDING = sa.FUNDING
 
 #: Exceptions that say an archive which arrived does not decompress.
 _UNREADABLE_ARCHIVE = (zipfile.BadZipFile, zlib.error, EOFError, OSError)
@@ -131,6 +137,7 @@ def fetch_book_day(
     grid_ms: int = 100,
     timeout: float = 120.0,
     opener: Opener | None = None,
+    access: sa.StudyAccess | None = None,
 ) -> DayOutcome:
     """Fetch, check, replay and write one book day; delete its archive whatever happens.
 
@@ -144,6 +151,7 @@ def fetch_book_day(
     """
     import urllib.request
 
+    sa.resolve(access).require(symbol, [day], BOOK, what="fetch")
     kind = bybit.archive_kind(day)
     archive = Path(archive_dir) / f"{symbol}-{day.isoformat()}-{kind}.zip"
     url = bybit.archive_url(symbol, day, kind)
@@ -187,10 +195,12 @@ def fetch_prints_day(
     *,
     timeout: float = 120.0,
     opener: Opener | None = None,
+    access: sa.StudyAccess | None = None,
 ) -> DayOutcome:
     """Fetch, check, parse and write one day of prints; delete the archive after."""
     import urllib.request
 
+    sa.resolve(access).require(symbol, [day], PRINTS, what="fetch")
     archive = Path(archive_dir) / f"{symbol}{day.isoformat()}.csv.gz"
     url = bybit_trades.archive_url(symbol, day)
     download, failed = _fetched(
@@ -224,15 +234,20 @@ def fetch_bars_day(
     root: Path | str,
     *,
     interval: str = "1h",
+    access: sa.StudyAccess | None = None,
 ) -> DayOutcome:
     """One day of Binance USDT-M futures bars, from that day's own archive only.
 
     Through :func:`binance.download_range` with ``daily_only``, so no monthly
     archive is asked for, read or cached. Bars follow the books' rule: only a
-    404 is a missing plane, and any other failure is retried.
+    404 is a missing plane, and any other failure is retried. Refused while a
+    cached monthly archive runs past the highest block ``access`` opens.
     """
     from trading_research.data.binance import ArchiveSpec, download_range
 
+    permitted = sa.resolve(access)
+    permitted.require(symbol, [day], BARS, what="fetch")
+    permitted.refuse_monthly_bars(symbol, root, interval)
     spec = ArchiveSpec(market="futures-um", kind="klines", symbol=symbol, interval=interval)
     try:
         result = download_range(spec, day, day, root, keep_raw=False, daily_only=True)[0]
@@ -253,13 +268,16 @@ def fetch_funding_span(
     root: Path | str,
     *,
     opener: Opener | None = None,
+    access: sa.StudyAccess | None = None,
 ) -> list[DayOutcome]:
     """Funding for ``days``, fetched as one span from the first to the last.
 
     The venue serves funding from a REST endpoint, not as daily archives, so one
     request covers the span and each day gets the same outcome when it fails.
     A day the answered history has no settlement for is a missing plane, as is
-    every day when the venue answers 404; any other failure is retried.
+    every day when the venue answers 404; any other failure is retried. The
+    request covers every day from the first to the last, so ``access`` must
+    permit each of them.
     """
     import urllib.request
 
@@ -268,6 +286,8 @@ def fetch_funding_span(
     if not days:
         return []
     first, last = min(days), max(days)
+    span = [first + timedelta(days=i) for i in range((last - first).days + 1)]
+    sa.resolve(access).require(symbol, span, FUNDING, what="fetch")
     try:
         written = bybit_funding.download_range(
             symbol, first, last, root, opener=opener or urllib.request.urlopen

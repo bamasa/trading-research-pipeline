@@ -34,7 +34,7 @@ def _zip(name: str, text: str) -> bytes:
 
 def _book(day: date) -> bytes:
     def message(kind: str, ts: int, bids: list, asks: list, update: int) -> str:
-        data = {"s": "TESTUSDT", "b": bids, "a": asks, "u": update, "seq": update}
+        data = {"s": "BTCUSDT", "b": bids, "a": asks, "u": update, "seq": update}
         return json.dumps({"type": kind, "ts": ts, "data": data})
 
     bids = [[f"{100.0 - 0.1 * i:.1f}", "2"] for i in range(12)]
@@ -50,7 +50,7 @@ def _prints(day: date) -> bytes:
     import gzip
 
     rows = ["timestamp,symbol,side,size,price"]
-    rows += [f"{_ms(day) / 1000 + i},TESTUSDT,Buy,0.01,100.0" for i in range(4)]
+    rows += [f"{_ms(day) / 1000 + i},BTCUSDT,Buy,0.01,100.0" for i in range(4)]
     return gzip.compress(("\n".join(rows) + "\n").encode())
 
 
@@ -115,7 +115,7 @@ def test_a_stage_fetches_every_plane_and_resolves_every_day(tmp_path: Path, venu
     log = fl.FetchLog(tmp_path / "log.json")
     present = {"ob500": frozenset(DAYS), "ob200": frozenset(), "prints": frozenset(DAYS[:2])}
     fs.run_stage(
-        "TESTUSDT",
+        "BTCUSDT",
         PLAN,
         roots,
         log,
@@ -133,7 +133,7 @@ def test_a_stage_fetches_every_plane_and_resolves_every_day(tmp_path: Path, venu
     assert "note" not in log.get(sf.PRINTS, DAYS[2]).stats  # not listed present
     assert not [u for u in venue.asked if "/monthly/" in u]
     assert not list(roots.archives.glob("*"))
-    assert len(fs.files_on_disk("TESTUSDT", PLAN, roots)) == 2 + 2 + 3 + 3
+    assert len(fs.files_on_disk("BTCUSDT", PLAN, roots)) == 2 + 2 + 3 + 3
     assert log.complete()
 
 
@@ -144,7 +144,7 @@ def test_a_stage_refuses_before_fetching_when_the_disk_is_short(
     roots = fs.StudyRoots.under(tmp_path)
     with pytest.raises(InsufficientDisk):
         fs.run_stage(
-            "TESTUSDT", PLAN, roots, fl.FetchLog(tmp_path / "l.json"), budget=huge, book_workers=1
+            "BTCUSDT", PLAN, roots, fl.FetchLog(tmp_path / "l.json"), budget=huge, book_workers=1
         )
     assert venue.asked == []
 
@@ -152,10 +152,10 @@ def test_a_stage_refuses_before_fetching_when_the_disk_is_short(
 def test_leftovers_of_an_interrupted_run_are_cleared_first(tmp_path: Path, venue: Venue) -> None:
     roots = fs.StudyRoots.under(tmp_path)
     roots.archives.mkdir(parents=True)
-    (roots.archives / "TESTUSDT-2024-12-01-ob500.zip").write_bytes(b"left over")
+    (roots.archives / "BTCUSDT-2024-12-01-ob500.zip").write_bytes(b"left over")
     plan = fs.StagePlan(book=DAYS[:1])
     fs.run_stage(
-        "TESTUSDT", plan, roots, fl.FetchLog(tmp_path / "l.json"), budget=SMALL, book_workers=1
+        "BTCUSDT", plan, roots, fl.FetchLog(tmp_path / "l.json"), budget=SMALL, book_workers=1
     )
     assert not list(roots.archives.glob("*"))
 
