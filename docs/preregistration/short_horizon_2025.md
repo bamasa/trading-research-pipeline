@@ -2449,7 +2449,7 @@ Every blocking and minor point was taken in; where a point offered two fixes:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`77263756c67b48a3cbfbceb0f04cd92162d301615ef0f744d32ee6edff727156`.
+`d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2465,7 +2465,9 @@ recast into a search, and
 `3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f` before the
 market maker's round trips were defined, and
 `035c4f44d85c3b3926e08016ad94a4c9bb20a51c7ac775514a256ef0af324f71` before the
-review of the search.)
+review of the search, and
+`77263756c67b48a3cbfbceb0f04cd92162d301615ef0f744d32ee6edff727156` before the
+search was narrowed to BTCUSDT.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the
