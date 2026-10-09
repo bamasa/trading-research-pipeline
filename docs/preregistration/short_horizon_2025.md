@@ -1795,8 +1795,8 @@ its size; a stalled connection does, and is retried.
 Totals are sums of the unrounded sizes. About 140 GB pass through the
 network in all, 126.5 GB if P is not opened:
 91.3 GB in stage 1, 13.5 GB in stage 2, 21.7 GB in stage 3 and 13.4 GB in
-stage 4. The held-out archives are always fetched for H and F, for S25 and
-because F is always read, each through the ledger.
+stage 4. H's and F's archives are always fetched (H's for S25, F's because F
+is always read), and P's only when P is opened, each through the ledger.
 
 **The ledger opens before the fetch.** `open` writes its entry first and
 commits and pushes it, and the block's fetch then runs under that access; the entry records each fetched
