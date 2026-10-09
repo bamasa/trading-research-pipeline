@@ -727,6 +727,8 @@ class DayResult:
     #: The HTTP status behind a skipped day, when the venue gave one. Only a
     #: 404 says the archive does not exist; anything else is a failed transfer.
     http_status: int | None = None
+    #: sha256 of the archive the day was cut from.
+    sha256: str | None = None
 
 
 ProgressCallback = "Callable[[DayResult], None]"
@@ -799,6 +801,7 @@ def download_range(
             _notify(on_day, result)
             continue
 
+        digest = hashlib.sha256(payload).hexdigest()
         frame = PARSERS[spec.kind](payload, spec)
         del payload
         if spec.kind in MONTHLY_ONLY or spec.kind in MONTHLY_PREFERRED:
@@ -807,7 +810,9 @@ def download_range(
             frame = resample_book(frame, grid)
 
         frame.to_parquet(target, compression="zstd", index=False)
-        result = DayResult(day=day, rows=len(frame), bytes_downloaded=downloaded, output=target)
+        result = DayResult(
+            day=day, rows=len(frame), bytes_downloaded=downloaded, output=target, sha256=digest
+        )
         results.append(result)
         _notify(on_day, result)
         del frame
