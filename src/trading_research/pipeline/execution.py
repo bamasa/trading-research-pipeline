@@ -21,6 +21,21 @@ separate choice, and this project has built three answers to it:
     quoter is one of the pre-registered S0 to S3 (:mod:`.market_making`), or,
     when a signal is given, S1 leaning on the signal's strength.
 
+Two event-time modes serve the 2025 short-horizon study, on days its own
+loader read (they read nothing themselves):
+
+``event_taker``
+    The event-time taker executor, :func:`trading_research.backtest.taker.execute_day`:
+    the clip walked across the visible book at decision + latency and walked
+    back after the hold, funding settled on the position held. Paired with a
+    regime policy as ``taker``.
+``signal_entry``
+    The signal-entry quoter, :class:`trading_research.market_making.signal_entry.SignalEntryQuoter`,
+    in the event-time simulator: one clip at the touch per decision, a taker
+    exit a hold after the fill. Paired as ``passive_entry``; under
+    ``guard_pull`` the simulator also cancels a resting entry at the first
+    event after each flag.
+
 Every mode returns the same table, ``attempts`` (symbol, day, ts, filled,
 gross_bp, cost_bp, net_bp, path), which is the shape
 :func:`~trading_research.evaluation.significance.assess` reads. A mode cannot
@@ -53,9 +68,18 @@ import pandas as pd
 from trading_research.backtest.costs import TakerCosts
 from trading_research.backtest.execution import ThinningRules, thin
 from trading_research.backtest.maker import MakerCosts, PostingRules, simulate
+from trading_research.backtest.taker import TakerBook, TakerDay, TakerSettings, execute_day
+from trading_research.market_making.events import DayEvents
 from trading_research.market_making.prereg import Access
 from trading_research.market_making.quoters import FLAG_SIGNAL
+from trading_research.market_making.signal_entry import SignalEntryQuoter, entry_tapes
 from trading_research.market_making.signals import SignalTape
+from trading_research.market_making.simulator import (
+    EXTRA_COUNTERS,
+    SimConfig,
+    _summary,
+    simulate_day,
+)
 from trading_research.pipeline import market_making as mm
 
 NS_PER_S = 1_000_000_000
@@ -66,6 +90,17 @@ class ExecutionMode(StrEnum):
     TAKER = "taker"
     PASSIVE_ENTRY = "passive_entry"
     MARKET_MAKER = "market_maker"
+    EVENT_TAKER = "event_taker"
+    SIGNAL_ENTRY = "signal_entry"
+
+    @property
+    def family(self) -> str:
+        """The execution a regime policy pairs with (:data:`VALID_PAIRS`): the
+        event-time taker is a taker, the signal-entry quoter a passive entry."""
+        return _FAMILY.get(self.value, self.value)
+
+
+_FAMILY: dict[str, str] = {"event_taker": "taker", "signal_entry": "passive_entry"}
 
 
 #: What a run does after a regime-break flag.
@@ -100,7 +135,7 @@ def check_pair(mode: ExecutionMode | str, regime_policy: str) -> ExecutionMode:
     mode = ExecutionMode(mode)
     if regime_policy not in REGIME_POLICIES:
         raise ValueError(f"regime policy must be one of {REGIME_POLICIES}, got {regime_policy!r}")
-    if (mode.value, regime_policy) not in VALID_PAIRS:
+    if (mode.family, regime_policy) not in VALID_PAIRS:
         raise ValueError(
             f"{mode.value} has no spread of its own to widen; "
             f"use guard_pull or none (valid pairs: {VALID_PAIRS})"
@@ -444,8 +479,21 @@ def execute(
     sources: mm.MakerSources | None = None,
     access: Access | None = None,
     workers: int = 1,
+    books: Sequence[TakerBook] = (),
+    taker_settings: TakerSettings | None = None,
+    events: Sequence[DayEvents] = (),
+    sim_config: SimConfig | None = None,
+    passive_exit: bool = False,
 ) -> ExecutionResult:
     """Execute ``signals`` in ``mode`` and return the attempts and their summary.
+
+    The event-time modes read days already loaded by the study's loader:
+    ``event_taker`` one :class:`~trading_research.backtest.taker.TakerBook` per
+    day in ``books`` (``taker_settings`` defaults to the registered ones);
+    ``signal_entry`` one :class:`~trading_research.market_making.events.DayEvents`
+    per day in ``events`` under ``sim_config``. A decision on a day without
+    one is not executed. Their ``days`` table holds one row per day, funding,
+    counters and flags included.
 
     The grid modes read ``market`` and map each signal to the first grid row
     at or after it. The market maker reads ``days`` of event-time data from
@@ -455,6 +503,14 @@ def execute(
     the market maker and is refused for the grid modes.
     """
     mode = check_pair(mode, regime_policy)
+    if mode in (ExecutionMode.EVENT_TAKER, ExecutionMode.SIGNAL_ENTRY):
+        if signals is None:
+            raise ValueError(f"{mode.value} executes a signal: give signals")
+        ts, side = _decisions(signals, regime_policy, flags_ns, guard_window_min)
+        if mode is ExecutionMode.EVENT_TAKER:
+            return _event_taker(signals, ts, side, books, taker_settings)
+        guarded = regime_policy == "guard_pull"
+        return _signal_entry(signals, ts, side, events, sim_config, guarded, flags_ns, passive_exit)
     if mode is ExecutionMode.MARKET_MAKER:
         return _market_maker(
             signals, symbol, days, regime_policy, flags_ns, guard_window_min,
@@ -525,3 +581,165 @@ def _market_maker(
     attempts = mm.attempts(frame)
     summary = {**summarise(attempts), **mm.decomposition(frame)}
     return ExecutionResult(attempts, summary, ExecutionMode.MARKET_MAKER, frame)
+
+
+# ---------------------------------------------------------------------------
+# The event-time modes: the taker executor and the signal-entry quoter
+# ---------------------------------------------------------------------------
+
+
+def taker_attempts(symbol: str, day: TakerDay) -> pd.DataFrame:
+    """One row per round trip of the event-time executor, in the attempts' shape.
+
+    ``ts`` is the decision's stamp; ``cost_bp`` is the fees less the funding
+    received, so ``net_bp`` = ``gross_bp`` - ``cost_bp``; ``path`` is the
+    exit's reason (``hold`` or ``day_end``). Every entry the executor made
+    filled; a skipped entry is a counter, not an attempt.
+    """
+    trades = day.trades
+    notional = trades["notional"].to_numpy(dtype=np.float64)
+    fees_bp = trades["fees"].to_numpy(dtype=np.float64) / notional * 1e4
+    funding_bp = trades["funding"].to_numpy(dtype=np.float64) / notional * 1e4
+    frame = pd.DataFrame(
+        {
+            "symbol": symbol,
+            "day": day.day.isoformat(),
+            "ts": trades["decision_ns"].to_numpy(dtype=np.int64),
+            "filled": np.ones(len(trades), dtype=bool),
+            "gross_bp": trades["gross_bp"].to_numpy(dtype=np.float64),
+            "cost_bp": fees_bp - funding_bp,
+            "net_bp": trades["net_bp"].to_numpy(dtype=np.float64),
+            "path": trades["exit_reason"].astype(str).to_numpy(),
+            "direction": trades["side"].to_numpy(dtype=np.int64),
+            "notional": notional,
+            "fees_bp": fees_bp,
+            "funding_bp": funding_bp,
+        }
+    )
+    return frame[[*ATTEMPT_COLUMNS, *EVENT_EXTRA_COLUMNS]]
+
+
+def signal_entry_attempts(
+    symbol: str, day: date, table: pd.DataFrame, decision_ns: np.ndarray
+) -> pd.DataFrame:
+    """One row per posted entry of the signal-entry quoter (its :meth:`attempts`).
+
+    An entry without a fill is an attempt that earned nothing (``unfilled``);
+    a filled one is ``round_trip``. Funding is not in the attempts: the quoter
+    leaves it in the day's totals (the result's ``days`` table). ``ts`` is the
+    decision's stamp, recovered exactly from the tape's seconds.
+    """
+    stamps = np.asarray(decision_ns, dtype=np.int64)
+    exact = dict(zip((stamps / 1e9).tolist(), stamps.tolist(), strict=True))
+    notional = table["notional"].to_numpy(dtype=np.float64)
+    fees_bp = table["fees"].to_numpy(dtype=np.float64) / notional * 1e4
+    filled = table["filled"].to_numpy(dtype=bool)
+    frame = pd.DataFrame(
+        {
+            "symbol": symbol,
+            "day": day.isoformat(),
+            "ts": np.array([exact[s] for s in table["decision_s"]], dtype=np.int64),
+            "filled": filled,
+            "gross_bp": table["gross"].to_numpy(dtype=np.float64) / notional * 1e4,
+            "cost_bp": fees_bp,
+            "net_bp": table["net"].to_numpy(dtype=np.float64) / notional * 1e4,
+            "path": np.where(filled, "round_trip", "unfilled"),
+            "direction": table["side"].to_numpy(dtype=np.int64),
+            "notional": notional,
+            "fees_bp": fees_bp,
+            "funding_bp": np.zeros(len(table)),
+        }
+    )
+    return frame[[*ATTEMPT_COLUMNS, *EVENT_EXTRA_COLUMNS]]
+
+
+#: Columns the event-time modes' attempts carry after :data:`ATTEMPT_COLUMNS`.
+EVENT_EXTRA_COLUMNS: tuple[str, ...] = ("direction", "notional", "fees_bp", "funding_bp")
+
+
+def _decisions(
+    signals: SignalStream, regime_policy: str, flags_ns: np.ndarray | None, guard_window_min: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """The stream's entry decisions (stamps, sides), the guarded ones removed."""
+    ts = np.asarray(signals.ts, dtype=np.int64)
+    side = np.asarray(signals.direction, dtype=np.int64)
+    keep = side != 0
+    if regime_policy == "guard_pull":
+        if flags_ns is None:
+            raise ValueError("a guard policy needs the flag times")
+        keep &= ~guarded_rows(ts, flags_ns, int(guard_window_min * 60 * NS_PER_S))
+    return ts[keep], side[keep]
+
+
+def _on_day(ts: np.ndarray, day: date) -> np.ndarray:
+    start = int(pd.Timestamp(day).value)
+    return (ts >= start) & (ts < start + NS_PER_DAY)
+
+
+def _event_taker(
+    signals: SignalStream,
+    ts: np.ndarray,
+    side: np.ndarray,
+    books: Sequence[TakerBook],
+    settings: TakerSettings | None,
+) -> ExecutionResult:
+    attempts, days = [], []
+    for book in sorted(books, key=lambda b: b.day):
+        mine = _on_day(ts, book.day)
+        day = execute_day(book, ts[mine], side[mine], signals.hold_ns, settings)
+        attempts.append(taker_attempts(signals.symbol, day))
+        days.append(
+            {
+                "symbol": signals.symbol,
+                "day": book.day.isoformat(),
+                "trades": float(len(day.trades)),
+                "net_usdt": day.net,
+                "turnover": day.turnover,
+                "net_bp_day": day.day_bp(),
+                "flags": ",".join(day.flags),
+                **day.counters,
+            }
+        )
+    return _event_result(attempts, days, ExecutionMode.EVENT_TAKER)
+
+
+def _signal_entry(
+    signals: SignalStream,
+    ts: np.ndarray,
+    side: np.ndarray,
+    events: Sequence[DayEvents],
+    config: SimConfig | None,
+    guarded: bool,
+    flags_ns: np.ndarray | None,
+    passive_exit: bool,
+) -> ExecutionResult:
+    if config is None:
+        raise ValueError("the signal-entry quoter needs the simulator's settings")
+    if guarded:
+        config = config.with_(cancel_entries_on_flag=True)
+    flags = np.unique(np.asarray(flags_ns if flags_ns is not None else [], dtype=np.int64))
+    attempts, days = [], []
+    for day_events in sorted(events, key=lambda e: e.day):
+        mine = _on_day(ts, day_events.day)
+        tapes = entry_tapes(ts[mine], side[mine]) if mine.any() else {}
+        today = flags[_on_day(flags, day_events.day)]
+        if guarded and len(today):
+            tapes[FLAG_SIGNAL] = SignalTape(FLAG_SIGNAL, today, today / 1e9)
+        quoter = SignalEntryQuoter(signals.hold_ns / NS_PER_S, passive_exit=passive_exit)
+        result = simulate_day(day_events, quoter, config, tapes or None)
+        table = quoter.attempts(result.fills)
+        attempts.append(signal_entry_attempts(signals.symbol, day_events.day, table, ts[mine]))
+        row = {"symbol": signals.symbol, **_summary(result, quoter.name)}
+        row.update({f"quoter_{k}": float(v) for k, v in sorted(quoter.counts.items())})
+        row.update({k: float(result.counters.get(k, 0.0)) for k in EXTRA_COUNTERS})
+        days.append(row)
+    return _event_result(attempts, days, ExecutionMode.SIGNAL_ENTRY)
+
+
+def _event_result(
+    attempts: list[pd.DataFrame], days: list[dict[str, object]], mode: ExecutionMode
+) -> ExecutionResult:
+    columns = [*ATTEMPT_COLUMNS, *EVENT_EXTRA_COLUMNS]
+    frames = [frame for frame in attempts if len(frame)]
+    table = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=columns)
+    return ExecutionResult(table, summarise(table), mode, pd.DataFrame(days))
