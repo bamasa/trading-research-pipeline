@@ -118,14 +118,15 @@ def a0_fold(days: Sequence[date]) -> Fold:
 
 def _dry_calendar() -> dict[str, tuple[date, ...]]:
     """The dry run's days: a few of each block, so that every fold has training,
-    inner-validation and test days, H has days on both sides of 08-01, and F and P
-    have days to read; the reader-test days as registered."""
+    inner-validation and test days, H has days on both sides of 08-01, F and P
+    have days to read (one of F's, 09-16, the venue's day with sequence gaps, put
+    back as a measurement); the reader-test days as registered."""
     d_days = tuple(date(2025, m, d) for m in range(1, 7) for d in (12, 28))
     return {
         "W": (date(2024, 12, 30), date(2024, 12, 31)),
         "D": d_days,
         "H": (date(2025, 7, 8), date(2025, 7, 21), date(2025, 8, 11)),
-        "F": (date(2025, 8, 21), date(2025, 9, 15), date(2025, 10, 20)),
+        "F": (date(2025, 8, 21), date(2025, 9, 15), date(2025, 9, 16), date(2025, 10, 20)),
         "P": (date(2025, 11, 17), date(2025, 12, 15)),
         sa.READER_TEST: sa.READER_TEST_DAYS,
     }
@@ -198,7 +199,9 @@ DRY_RUN = Scale(
     model_params={
         "gbm": {"n_estimators": 25, "max_depth": 3},
         "logistic": {"max_iter": 100},
+        "bound_ridge": {"alpha": 1e9},
         "tcn": {
+            "learning_rate": 1e-2,
             "window": 16,
             "channels": 8,
             "levels": 2,

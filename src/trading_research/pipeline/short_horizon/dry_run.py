@@ -73,6 +73,22 @@ def make_repository(source: Path, target: Path) -> Path:
     return target
 
 
+#: The venue's market for the dry run: trend episodes a model can learn, so that
+#: stratum R has an admissible cell; detector bursts on two test days of D, one
+#: of H and one of F, the book's spread wide from each burst to the day's end,
+#: so the regime guard has something to pull and H's random flag sets fall on
+#: usable hours; and one F day with sequence gaps, excluded and put back. The
+#: scale's ridge is held at its intercept, so R* is the network and its control
+#: fits and held-out scores run.
+BURST_DAYS = frozenset({date(2025, 3, 12), date(2025, 5, 12), date(2025, 7, 21), date(2025, 9, 15)})
+GAP_DAYS = frozenset({date(2025, 9, 16)})
+
+
+def market(scale: Scale) -> syn.SyntheticMarket:
+    return syn.SyntheticMarket(market_days(scale), gap_days=GAP_DAYS, episodes_per_day=48,
+                               burst_days=BURST_DAYS, burst_hours=(2, 8))  # fmt: skip
+
+
 def market_days(scale: Scale) -> frozenset[date]:
     """Every day the synthetic venue has a book and prints for."""
     blocks = ("W", "D", "H", "F", "P")
@@ -101,9 +117,7 @@ def place_timing_days(study: Study) -> None:
 def prepare(root: Path, *, source: Path = REPO, scale: Scale = DRY_RUN, workers: int = 1) -> Study:
     """A temporary repository and a study on it, with the venue the run reads."""
     repo = make_repository(source, root / "repo")
-    venue = syn.Venue(
-        syn.SyntheticMarket(market_days(scale)), frozenset(scale.days(sa.READER_TEST))
-    )
+    venue = syn.Venue(market(scale), frozenset(scale.days(sa.READER_TEST)))
     study = Study(repo, scale, workers=workers, venue=venue)
     with syn.serving(venue):
         place_timing_days(study)
