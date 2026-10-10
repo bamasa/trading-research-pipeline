@@ -10,7 +10,10 @@ On the two 2024 days already on disk (BTCUSDT 2024-02-11, a quiet day, and
    executor, the simulator's signal-entry quoter, a Null A draw of the whole
    choice at the catalogue's size, and the boosted, logistic and ridge fits.
    The network is timed in a process of its own (it does not share a process
-   with XGBoost).
+   with XGBoost): a training batch and inference per row, each over as many
+   rows as the busier timing day holds, as D trains on whole days streamed
+   from the store and scores whole test days; a sample's figures are kept
+   beside them.
 2. **The projection** of D's wall time (:func:`projection`), Null B at full size
    and the refit included, against the six-day ceiling; over it, the
    registered reduction order cuts the 120 s hold, then stratum C's
@@ -19,8 +22,10 @@ On the two 2024 days already on disk (BTCUSDT 2024-02-11, a quiet day, and
    sha256, which a dated amendment must register before stage 1 runs.
 3. **The walk-table parity test** (``search_engine.null_b.stage0_parity``) on
    both days at every hold; a failure blocks stage B.
-4. **The replay's peak memory**, when a 2024 book archive is on disk, and the
-   replay worker count it allows.
+4. **The replay's peak memory and seconds**, each 2024 book archive under
+   ``data/timing_archives/`` replayed alone in a fresh process, and the replay
+   worker count the largest peak allows; the slower archive's seconds stand
+   for a day in the projection, in place of the registered 2-3 minutes.
 """
 
 from __future__ import annotations
@@ -256,22 +261,44 @@ def fit_costs(scale: Any, rows: int) -> dict[str, float]:
     return out
 
 
-def network_costs(params: dict[str, Any], rows: int, width: int) -> dict[str, float]:
-    """The network's training batch and inference per row; run in a fresh process."""
+def network_costs(params: dict[str, Any], rows: int, width: int, day_rows: int) -> dict[str, float]:
+    """The network's training batch and its inference per row, each over a whole
+    day of ``day_rows`` rows (one epoch of a fit on them, then a prediction of
+    them), as D trains on days streamed from the store and scores whole test
+    days; the same two on a ``rows`` sample are kept beside them, since a
+    sample's time per batch or per row also carries the device's start-up and
+    the first kernels, which a day's rows spread thin. Run in a fresh process.
+    The cost does not depend on the values, and random inputs leave every window
+    complete, so every row is trained on and scored: an upper bound for a day
+    with warm-up or missing inputs."""
     from trading_research.models.tcn import GaussianTCN
 
     rng = np.random.default_rng(0)
-    x = pd.DataFrame(rng.normal(size=(rows, width)), columns=[f"f{i}" for i in range(width)])
-    y = pd.Series(rng.normal(size=rows))
-    model = GaussianTCN(**{**params, "epochs": 1})
-    fit_s, _ = timed(lambda: model.fit(x, y))
-    batches = max(1, -(-rows // int(model.batch_size)))
-    predict_s, _ = timed(lambda: model.predict_gaussian(x))
-    return {"batch_s": fit_s / batches, "inference_row_s": predict_s / rows}
+    columns = [f"f{i}" for i in range(width)]
+    out: dict[str, float] = {}
+    for name, n in (("sample", rows), ("day", day_rows)):
+        x = pd.DataFrame(rng.normal(size=(n, width)).astype(np.float32), columns=columns)
+        y = pd.Series(rng.normal(size=n))
+        model = GaussianTCN(**{**params, "epochs": 1})
+        fit_s, _ = timed(partial(model.fit, x, y))
+        predict_s, _ = timed(partial(model.predict_gaussian, x))
+        out[f"batch_{name}_s"] = fit_s / max(1, -(-n // int(model.batch_size)))
+        out[f"inference_{name}_row_s"] = predict_s / n
+        out[f"inference_{name}_s"] = predict_s
+    return {
+        "batch_s": out["batch_day_s"],
+        "inference_row_s": out["inference_day_row_s"],
+        "inference_day_s": out["inference_day_s"],
+        "batch_sample_s": out["batch_sample_s"],
+        "inference_sample_row_s": out["inference_sample_row_s"],
+    }
 
 
 def replay_memory(study: Study) -> dict[str, Any]:
-    """The replay's peak memory on a 2024 archive on disk, and the workers it allows."""
+    """The replay's peak memory and seconds on each 2024 archive on disk, and the
+    workers the largest peak allows. The seconds are ``reconstruct`` alone in a
+    fresh process (the fetch's zip test, message scan and parquet write are not
+    in them), the peak that process's resident memory after the day."""
     from trading_research.data.fetch_stage import replay_peak_rss, replay_workers
 
     folder = study.roots.archives.parent / "timing_archives"
@@ -421,9 +448,15 @@ def run(study: Study) -> dict[str, Any]:
     costs |= fit_costs(study.scale, fit_rows)
     params = study.scale.params("tcn")
     network_rows = min(20_000, study.scale.max_training_rows)
-    network = in_fresh_process(network_costs, params, network_rows, 70)
+    day_rows = max(len(frame) for frame in frames)  # the busier timing day, whole
+    network = in_fresh_process(network_costs, params, network_rows, 70, day_rows)
     costs["network_batch_s"] = network["batch_s"]
     costs["network_inference_row_s"] = network["inference_row_s"]
+    costs["network_day_rows"] = float(day_rows)
+    costs["network_inference_day_s"] = network["inference_day_s"]
+    costs["network_sample_rows"] = float(network_rows)
+    costs["network_batch_sample_s"] = network["batch_sample_s"]
+    costs["network_inference_sample_row_s"] = network["inference_sample_row_s"]
     costs["network_batch_size"] = float(params.get("batch_size", 512))
     memory = replay_memory(study)
     costs["replay_workers"] = float(memory["workers"])

@@ -260,7 +260,7 @@ search:
   instruments: [BTCUSDT]
   blocks: {sandbox: [W, January], scored: "D's walk-forward test days, 2025-02..06 (150)", held_out: [H, F, P]}
   stages:
-    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05); D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
+    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05), the network's training batch and inference over a whole day's rows (a sample's figures kept beside them) and the replay's seconds and peak RSS on the two days' ob500 archives under data/timing_archives/; D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
     - {stage: 1, what: "fetch, replay and features for W and D; leakage, fold-level leakage and flag-causality tests; selection on January"}
     - {stage: A, what: "200 walk-forward fits; predictions on the test days; candidate-row tapes per signal configuration and test day; daily IC on all decision rows"}
     - {stage: B, what: "every taker cell on every test day from walk tables; one trial-ledger row per cell-day"}
@@ -634,7 +634,7 @@ detector:
 
 fetch:
   via: this study's fetch (new code, on data/ensure.py's pattern)  # only missing days; archives not kept after the replay
-  replay: {code: data/bybit.reconstruct, unchanged: true, workers_max: 4, workers_rule: "fewer if 4 x the peak RSS of one replayed day exceeds 24 GB", peak_rss_measured: before stage 1 on a 2024 day already replayed by the repository, recorded_in: the amendment}
+  replay: {code: data/bybit.reconstruct, unchanged: true, workers_max: 4, workers_rule: "fewer if 4 x the peak RSS of one replayed day exceeds 24 GB", peak_rss_measured: "at stage 0, before stage 1, on the two timing days' ob500 archives under data/timing_archives/, each replayed alone in a fresh process, with the replay's seconds beside it; the larger peak sets the workers", recorded_in: stage 0's record and the amendment}
   failures: {every_day_present_in_head_check: fetched, other_than_http_404: partial file deleted and retried with backoff until on disk or excluded by a terminal rule, stage_complete: only when every such day is on disk or excluded by a terminal rule,
              unreadable_archive: "downloaded completely at least twice with the same sha256 and still not decompressing, or a replay that raises on a complete archive; likewise prints", unfetchable_day: download still failing after 10 attempts over at least 48 hours,
              terminal_rules_apply_to: [W, D, H, F, P], terminal_exclusions: counted per block by reason and toward the unreadable rule,

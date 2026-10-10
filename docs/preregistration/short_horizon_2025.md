@@ -1876,9 +1876,12 @@ archive is kept after its replay).
 most 864,000 rows (one per 100 ms) of about 5.5 KB each, so 5–6 GB per worker
 at peak. The fetch therefore replays books with **at most 4 worker
 processes**, fewer if four times the peak resident memory of one replayed day
-exceeds 24 GB. That peak is measured before stage 1 on a 2024 day the
-repository has already replayed (a day's row count, not its archive's size,
-sets it) and recorded in the amendment. The replay itself is unchanged.
+exceeds 24 GB. That peak is measured at stage 0, before stage 1, on the two
+timing days' `ob500` archives kept under `data/timing_archives/` (2024-02-11
+and 2024-03-05, the busiest; a day's row count, not its archive's size, sets
+it), each replayed alone in a fresh process, with the replay's seconds beside
+it; the larger peak sets the workers, and both go into stage 0's record and
+the amendment. The replay itself is unchanged.
 
 **A failed download is not an exclusion.** `data/ensure._fetch_days` reports
 any exception as an unavailable day, and `data/bybit._one_day` turns any
@@ -1990,9 +1993,16 @@ simulator 5.6–10.3 s per BTCUSDT cell-day in one process, 0.85–2.5 s of wall
 time on 6 workers; the normaliser 49 s per day for 28 columns. Null B and
 the refit have no measured unit cost yet: stage 0 measures Null B's
 vectorised cost per cell-day and shift, the refit's re-prediction of every
-row of the test days, the network's inference per test day and its scoring of
-the inner validation at every epoch, and projects Null B at 137 × the
-catalogue's cell-days.
+row of the test days, the network's training batch and its inference per row
+(each timed over a whole day's rows, the busier timing day's, since a sample's
+time per batch or per row carries the device's start-up; the sample's figures
+are kept beside the day's), the network's inference per test day and its
+scoring of the inner validation at every epoch, and the replay's seconds and
+peak resident memory on the two timing days' `ob500` archives kept under
+`data/timing_archives/`, each replayed alone in a fresh process: the slower
+archive's seconds stand for a day in place of the 2–3 minutes above, and the
+larger peak sets the replay workers. It projects Null B at 137 × the
+catalogue's cell-days, and its record holds every figure it measured.
 
 | Stage | Size | Estimate |
 |---|---|---|
@@ -2701,8 +2711,8 @@ each where it applies and with one line here:
   the position is opened, whatever hour its decision row fell in.
 
 **Choices the entry point made.** Writing the single entry point needed a few
-more values the text above left open. They were written in on 9 October 2026,
-before any data was read, one line each:
+more values the text above left open. They were written in on 9 and 10
+October 2026, before any data was read, one line each:
 
 - **The trial ledger's parts stay under `data/`, and a committed manifest
   records them**, rather than committing the parquet files: the repository
@@ -2730,11 +2740,18 @@ before any data was read, one line each:
   entry's notional and the day's funding over the mean of those notionals**:
   the simulator settles funding on the day, not on an attempt, and every entry
   is one clip, so the notionals differ only with the price.
+- **Stage 0 times the network over a whole day's rows and the replay on the
+  two timing days' archives**: a training batch or a row's inference timed on
+  a sample carries the device's start-up, which a day's rows spread thin, so
+  the projection takes the day's figures (the sample's kept beside them); the
+  replay's seconds and peak memory, measured on the `ob500` archives of
+  2024-02-11 and 2024-03-05 under `data/timing_archives/`, stand for a day's
+  replay and set its workers, in place of the 2–3 minutes a day.
 
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a`.
+`3cd428257e46e0772229c18d1feadb9dba5efe48af83cbf7284588efd37e4c12`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2757,7 +2774,10 @@ search was narrowed to BTCUSDT, and
 values the study code fixed were written in, `N` among them, which left 24
 placeholders, and
 `1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90` before the
-trial ledger's parts were moved under `data/` beside a committed manifest.)
+trial ledger's parts were moved under `data/` beside a committed manifest, and
+`d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a` before
+stage 0's timing of the network over a whole day's rows and of the replay on
+the two timing days' archives was written in.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the
