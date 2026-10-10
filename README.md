@@ -1311,8 +1311,13 @@ basis points against an 11 bp taker round trip at the base tier.
       stages 0, 1, A, B, D, C and E as subcommands that refuse to run out of
       order, return a finished stage's record and resume a stopped one, then
       each block opened and read in one session with every status and kill;
-      `--dry-run` runs all of it on a synthetic venue in a temporary
-      repository, with no request reaching the network, and is a test
+      the pages written after stage E and after each read (every registered
+      headline sentence from computed results, the finalists page, the S25
+      page with the edge ladder, the regime map's file and the figures in
+      both themes) and again on demand with `pages`; `--dry-run` runs all of
+      it on a synthetic venue in a temporary repository, with no request
+      reaching the network, and is a test that checks every artefact is
+      written
 - [ ] Stage 0 on the two 2024 days, the code-freeze note, and the 200-level
       book reader proven on three 2026 days outside the study
 - [ ] Development period: the search, the placebo search and the amendment

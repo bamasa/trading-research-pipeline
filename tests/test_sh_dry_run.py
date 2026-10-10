@@ -137,3 +137,74 @@ def test_each_read_closes_its_session_with_registered_statuses(dry: dict[str, An
         for status in results["statuses"].values():
             check_status(status)
         assert results["stamp"] == "first read" and results["sentences"]
+
+
+#: Every registered figure, each written in both themes.
+FIGURES = ("placebo_search", "placebo_s25", "leaderboard", "marginals", "edge_ladder", "fill_rules",
+           "regime_map_taker", "regime_map_entry", "regime_map_maker", "break_view")  # fmt: skip
+#: The sentences the dry run can fill (the regime-axis one needs a slot with a window above 0).
+SENTENCES = ("search_on_D", "payoff_on_D", "slot_on_block", "S25", "passive_and_maker",
+             "regime_map", "break")  # fmt: skip
+
+
+def test_the_pages_the_regime_map_and_every_figure_are_written(dry: dict[str, Any]) -> None:
+    from trading_research.pipeline.short_horizon.page_figures import IMAGES, PREFIX
+    from trading_research.pipeline.short_horizon.pages import PAGES_FILE, REGIME_MAP_FILE
+    from trading_research.reporting import headlines as hl
+
+    study, pages = dry["study"], dry["report"]["pages"]
+    written = set(pages["written"])
+    for name in (PAGES_FILE, REGIME_MAP_FILE):
+        assert study.results(name).relative_to(study.repo).as_posix() in written
+    for name in FIGURES:
+        for theme in ("light", "dark"):
+            path = f"{IMAGES.as_posix()}/{PREFIX}{name}_{theme}.png"
+            assert path in written and (study.repo / path).exists(), path
+    assert pages["pending"] == [] and pages["changed_on_rewrite"] == []
+    assert set(SENTENCES) <= set(pages["sentences"])
+    for name, rows in pages["sentences"].items():
+        assert rows and all(hl.pattern(name).fullmatch(s) for s in rows), name
+    assert {p.relative_to(study.repo).as_posix() for p in (study.repo / IMAGES).glob("*.png")} <= tracked(study.repo)  # fmt: skip
+
+
+def test_the_pages_file_and_the_regime_map_carry_what_was_registered(dry: dict[str, Any]) -> None:
+    import pandas as pd
+
+    from trading_research.pipeline.short_horizon.pages import PAGES_FILE, REGIME_MAP_FILE
+    from trading_research.reporting.regime_map import SEGMENT_COLUMNS
+
+    study = dry["study"]
+    text = study.results(PAGES_FILE).read_text(encoding="utf-8")
+    for heading in ("## Headline sentences", "## The finalists on H, then F and P", "## S25",
+                    "## The regime map", "## The break detector", "## The fill rule",
+                    "## Rows for docs/findings.md", "## The README summary"):  # fmt: skip
+        assert heading in text, heading
+    assert "S25 ranks" in text and "on development data, selected" in text
+    assert text.count("<picture>") == 2 * len(
+        FIGURES
+    )  # as the pages file and the README reach them
+    assert 'src="../../docs/images/' in text and 'src="docs/images/' in text
+    segments = pd.read_csv(study.results(REGIME_MAP_FILE), comment="#")
+    assert list(segments.columns) == list(SEGMENT_COLUMNS)
+    assert {"D", "H", "F"} <= set(segments["block"]) and segments["slot"].str.startswith("S").all()
+
+
+def test_each_read_keeps_the_numbers_the_pages_show(dry: dict[str, Any]) -> None:
+    from trading_research.pipeline.short_horizon.page_numbers import close_path
+    from trading_research.pipeline.short_horizon.reads import read_results
+
+    study = dry["study"]
+    for block in ("H", "F"):
+        results = read_results(study, block)
+        numbers = results["pages"]
+        assert "S25" in numbers["slots"] and set(numbers["slots"]) <= set(results["statuses"])
+        for slot, found in numbers["slots"].items():
+            assert len(found["values"]) == found["status_days"] and "break_even_per_side" in found
+            assert len(found["daily"]["days"]) == len(found["daily"]["value"])
+            assert (block == "H") == ("h_before_0801_mean" in found), slot
+        assert close_path(study, block).exists()
+        fill = numbers["fill_rules"]
+        assert set(fill) == {"S-P", "S25-Z"}
+        for rows in fill.values():
+            assert [r["rule"] for r in rows] == ["touch", "trade_through", "queue"]
+            assert all(r["orders_posted"] >= r["orders_filled"] >= 0 for r in rows)

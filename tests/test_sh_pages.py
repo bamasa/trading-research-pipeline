@@ -357,3 +357,27 @@ def test_fill_on_the_block_pools_the_passive_day_files(tmp_path: Any) -> None:
     assert by["queue"]["fill_ratio"] == pytest.approx(0.6) and by["touch"]["fill_ratio"] == 0.9
     assert by["trade_through"]["net"] == 1.0 and by["touch"]["bias"] == "optimistic bound"
     assert pn.fill_rule_summary(SimpleNamespace(work=tmp_path / "none")) == {}
+
+
+def test_the_rows_for_the_register_and_the_readme_summary() -> None:
+    from trading_research.pipeline.short_horizon.page_figures import FROM_PAGES
+    from trading_research.reporting.search_figures import picture
+
+    h = read_h(h_series(), PRESET)
+    c = computed(d=record_d(), c=record_c(), read={"H": h})
+    out = pages.sentences(c)
+    rows = pages.register_rows(c, out)
+    assert rows.startswith(pages.REGISTER_HEADING) and "**Status: read through H**" in rows
+    slots = [line.split(" on H")[0][2:] for line in rows.splitlines() if line.startswith("- ")]
+    assert slots == ["S25", "S-C", "S-R", "S-P", "S-M", "S25-Z"]
+    assert "pre-registered, no block read" in pages.register_rows(computed(), pages.Written())
+    figures = {
+        "edge_ladder": picture("short_horizon_2025_edge_ladder", "ladder", images=FROM_PAGES)
+    }
+    summary = pages.readme_summary(out, figures)
+    assert summary.startswith(out.plain()["search_on_D"][0]) and out.plain()["S25"][0] in summary
+    assert not any(s in summary for s in out.plain()["slot_on_block"])
+    assert 'src="docs/images/short_horizon_2025_edge_ladder_light.png"' in summary
+    assert FROM_PAGES not in summary
+    text = pages.markdown(c, out, None, None, figures)
+    assert "## Rows for docs/findings.md" in text and "## The README summary" in text

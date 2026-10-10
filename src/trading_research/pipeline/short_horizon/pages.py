@@ -8,7 +8,9 @@ after each block's read, and on demand (the ``pages`` subcommand), and writes:
 
 * ``experiments/results/short_horizon_2025_pages.md``: the headline sentences
   in the registration's order, the finalists on H, then F and P, the S25 page
-  (its rank r of N, the edge ladder, the T1 and T2 rows) and every figure;
+  (its rank r of N, the edge ladder, the T1 and T2 rows), every figure, the
+  rows for ``docs/findings.md`` and the README summary (the sentences and the
+  figures' ``<picture>`` blocks as the README reaches them), to paste;
 * ``experiments/results/short_horizon_2025_regime_map.csv``: every segment
   between alarms, per slot and block;
 * the figures, under ``docs/images`` in a light and a dark theme
@@ -573,6 +575,41 @@ def _bullets(rows: list[str]) -> str:
     return "\n".join(f"- {row}" for row in rows) if rows else "- none yet"
 
 
+REGISTER_HEADING = "### The 2025 short-horizon search on BTCUSDT"
+
+
+def register_rows(c: Computed, written: Written) -> str:
+    """The rows for ``docs/findings.md``: the study's entry, pre-registered until a
+    block is read, then each slot's latest registered sentence (its status on
+    the last block it was assessed on, with the first kill there)."""
+    from trading_research.reporting.finalists import ROW_ORDER
+
+    latest = {row["about"].split(" on ")[0]: row["sentence"]
+              for row in written.sentences.get("slot_on_block", [])}  # fmt: skip
+    read = ", ".join(c.read) or "none"
+    status = f"read through {list(c.read)[-1]}" if c.read else "pre-registered, no block read"
+    head = (f"**Status: {status}** (blocks read: {read}). Every status is computed by the entry "
+            "point and quoted from `experiments/results/short_horizon_2025_pages.md`; a D number "
+            "is never one.")  # fmt: skip
+    rows = [latest[slot] for slot in ROW_ORDER if slot in latest]
+    return "\n\n".join([REGISTER_HEADING, head, _bullets(rows)])
+
+
+def readme_summary(written: Written, figures: dict[str, str]) -> str:
+    """The README's summary: the headline sentences beyond the per-slot ones, in
+    the registration's order, then every figure's ``<picture>`` block with the
+    images as the README reaches them."""
+    from trading_research.pipeline.short_horizon.page_figures import FROM_PAGES, IMAGES
+    from trading_research.reporting.headlines import TEMPLATES
+
+    sentences = [row["sentence"] for name in TEMPLATES if name != "slot_on_block"
+                 for row in written.sentences.get(name, [])]  # fmt: skip
+    pictures = [
+        block.replace(f"{FROM_PAGES}/", f"{IMAGES.as_posix()}/") for block in figures.values()
+    ]
+    return "\n\n".join([" ".join(sentences) or "No sentence written yet.", *pictures])
+
+
 def markdown(c: Computed, written: Written, finalists: pd.DataFrame | None,
              page: str | None, figures: dict[str, str]) -> str:  # fmt: skip
     """The pages file: sentences, finalists, the S25 page and every figure."""
@@ -614,6 +651,8 @@ def markdown(c: Computed, written: Written, finalists: pd.DataFrame | None,
     ]
     parts += ["## The break detector", figures.get("break_view", "Drawn once H is read.")]
     parts += ["## The fill rule", figures.get("fill_rules", "Drawn once stage C is complete.")]
+    parts += ["## Rows for docs/findings.md", register_rows(c, written),
+              "## The README summary", readme_summary(written, figures)]  # fmt: skip
     return "\n\n".join(parts) + "\n"
 
 
