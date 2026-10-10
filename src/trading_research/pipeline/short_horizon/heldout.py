@@ -468,7 +468,9 @@ class TakerSlot:
         """The per-day measurements beside the status (``SlotDays.extra``)."""
         out: dict[str, np.ndarray] = {}
         if self.window_h > 0:
-            out |= {"guarded": self.guarded, "twin": self.twin, "flagsets": self.flagsets}
+            out |= {"guarded": self.guarded, "twin": self.twin}
+            if self.flag_sets:  # the gap days' pass draws none; merge fills their rows with NaN
+                out["flagsets"] = self.flagsets
         if self.has_control:
             out |= {"control_ic_label": self.control_label, "control_ic_move": self.control_move}
         return out
