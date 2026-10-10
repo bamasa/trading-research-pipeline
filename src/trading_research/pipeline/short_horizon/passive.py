@@ -17,6 +17,11 @@ day is simulated for every cell at once (the day's events loaded once), in
 worker processes, and kept on disk so a stopped stage resumes. S-P and S-M
 are then admitted on (i) and (ii) of ``net_per_100_clip_day``, and S-M also on
 a positive making part.
+
+Every simulated cell, the measured ones included, and A0 and FILL's four runs
+are trials of the registered bound (N_max = 2,400 + 12 + 30 + 9 + 4): their
+cell-days go into the trial ledger as simulator trials
+(``search_engine.ledger``), so that N_trials counts them.
 """
 
 from __future__ import annotations
@@ -50,12 +55,17 @@ class SimCell:
     lean: float = 0.0
     policy: str = "none"
     measured: bool = False
+    #: The passive-exit variant (held-out blocks only): the exit posted at the touch
+    #: a hold after the fill, crossed if still open a further hold later.
+    passive_exit: bool = False
 
     @property
     def label(self) -> str:
         parts = [self.slot, self.key, self.kind, f"fees={self.fees}"]
         if self.kind == "maker":
             parts += [f"lean={self.lean:g}", f"policy={self.policy}"]
+        if self.passive_exit:
+            parts.append("exit=passive")
         return "|".join(parts)
 
 
@@ -104,7 +114,7 @@ def quoter_and_tapes(
     if cell.kind == "entry":
         config = _config(cell, max_gaps, flagged)
         tapes |= entry_tapes(decided.stamps_ns, decided.side)
-        return SignalEntryQuoter(cell.hold_s), config, tapes
+        return SignalEntryQuoter(cell.hold_s, passive_exit=cell.passive_exit), config, tapes
     config = _config(cell, max_gaps, False)
     plan = lean_plan(config, sigma_ref, lean=cell.lean, hold_s=cell.hold_s,
                      policy=RegimePolicy.parse(cell.policy))  # fmt: skip
@@ -359,9 +369,10 @@ def admit(rows: pd.DataFrame, cells: list[SimCell], days: list[date], slot: str,
             "making_bp_per_fill": making, "status_on_D": status}  # fmt: skip
 
 
-def a0_and_fill(study: Any, inputs: Any) -> dict[str, Any]:
+def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """A0 on O (S25's signal under the short-window protocol) crossing at 0/0, and
-    FILL: the same decisions posted under the three fill rules. Descriptive only."""
+    FILL: the same decisions posted under the three fill rules. Descriptive only;
+    beside the record, its four runs' rows for the trial ledger."""
     from functools import partial
 
     from trading_research.backtest.taker import TakerSettings, execute_day
@@ -386,7 +397,10 @@ def a0_and_fill(study: Any, inputs: Any) -> dict[str, Any]:
 
     fold = a0_fold(inputs.usable("D"))
     if not (fold.train and fold.inner and fold.test):
-        return {"run": False, "note": "O, its training or its threshold days have no usable day"}
+        return {
+            "run": False,
+            "note": "O, its training or its threshold days have no usable day",
+        }, []
     cfg = configurations([S25_KEY])[0]
     model, entry = fit_main_process(
         inputs, fold, cfg, FoldData.load(inputs, fold.train, inputs.columns("micro"))
@@ -427,10 +441,60 @@ def a0_and_fill(study: Any, inputs: Any) -> dict[str, Any]:
     tapes = entry_tapes(np.concatenate(stamps_all), np.concatenate(sides_all))
     config = study_config(inputs.threshold, fees=ZERO_FEES)
     fill = compare_fill_rules(events, partial(SignalEntryQuoter, 50.0), config, tapes)
+    mids = {e.day.isoformat(): float(np.mean(e.bid_px[:, 0] + e.ask_px[:, 0]) / 2.0 * e.spec.tick)
+            for e in events}  # fmt: skip
+    trials = [{"key": "A0|crossing|fees=zero", "day": c["day"], "trades": c["trades"],
+               "net_bp": c["net"] / (c["turnover"] / 2.0) * 1e4 if c["turnover"] > 0 else 0.0}
+              for c in crossing]  # fmt: skip
+    for r in fill.days[~fill.days["excluded"].astype(bool)].to_dict("records"):
+        notional = float(r["volume_filled"]) * mids[str(r["day"])]
+        trials.append({"key": f"FILL|{r['rule']}|fees=zero", "day": str(r["day"]),
+                       "trades": int(r["orders_filled"]),
+                       "net_bp": float(r["net"]) / notional * 1e4 if notional > 0 else 0.0})  # fmt: skip
     return {"run": True, "days": [d.isoformat() for d in fold.test], "thresholds": entry["thresholds"],
             "crossing": crossing, "gross_bp_turnover": gross / turnover * 1e4 if turnover else float("nan"),
             "ic": ic, "fill_summary": fill.summary.reset_index().to_dict("records"),
-            "fill_prediction": fill.prediction()}  # fmt: skip
+            "fill_prediction": fill.prediction()}, trials  # fmt: skip
+
+
+def trial_rows(rows: pd.DataFrame, run: int, measured: list[dict[str, Any]]) -> pd.DataFrame:
+    """Stage C's simulator trials in the trial ledger's form: every simulated cell on
+    every day it was not excluded, its net in bp of its filled notional (0 without a
+    fill), and A0 and FILL's runs on O (``search_engine.ledger``)."""
+    from trading_research.search_engine.ledger import LEDGER_COLUMNS
+
+    kept = rows[~rows["excluded"].astype(bool)]
+    entry = kept["label"].str.contains("|entry|", regex=False).to_numpy()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        maker = (
+            kept["net_usdt"].to_numpy(dtype=np.float64)
+            / kept["passive_notional"].to_numpy(dtype=np.float64)
+            * 1e4
+        )
+    net = np.where(entry, kept["net_bp_trade"].to_numpy(dtype=np.float64), maker)
+    frame = pd.DataFrame({"key": kept["label"].to_numpy(), "day": kept["day"].to_numpy(),
+                          "net_bp": net, "trades": kept["trades"].to_numpy()})  # fmt: skip
+    frame = pd.concat([frame, pd.DataFrame(measured, columns=["key", "day", "net_bp", "trades"])])
+    frame["net_bp"] = np.nan_to_num(frame["net_bp"].to_numpy(dtype=np.float64), nan=0.0,
+                                    posinf=0.0, neginf=0.0)  # fmt: skip
+    frame["day"] = [date.fromisoformat(str(d)) for d in frame["day"]]
+    frame["trades"] = frame["trades"].astype(np.int64)
+    frame = frame.assign(run=run, G_bp=0.0, pnl_long_bp=0.0, pnl_short_bp=0.0, skips=0)
+    frame["skips"] = frame["skips"].astype(np.int64)
+    return frame[list(LEDGER_COLUMNS)].reset_index(drop=True)
+
+
+def record_trials(study: Any, frame: pd.DataFrame) -> dict[str, Any]:
+    """Append the run's simulator trials to the trial ledger once (a resumed stage C
+    finds them there); the sidecar's counts after them."""
+    from trading_research.search_engine.ledger import LEDGER_PATH, TrialLedger
+
+    ledger = TrialLedger(study.repo / LEDGER_PATH, study.catalogue())
+    sidecar = ledger.sidecar()
+    if "simulator" not in sidecar["runs"].get(str(study.run), {}):
+        sidecar = ledger.append_simulator(study.run, study.commit(), frame)
+    return {"n_trials": int(sidecar["n_trials"]), "n_trials_simulator": int(sidecar["n_trials_simulator"]),
+            "ledger_rows": int(sidecar["rows"]), "ledger_sha256": sidecar["sha256"]}  # fmt: skip
 
 
 def run(study: Any) -> dict[str, Any]:
@@ -447,6 +511,7 @@ def run(study: Any) -> dict[str, Any]:
     summary = rows[~rows["excluded"]].groupby("label").agg(
         days=("day", "count"), mean_net_per_100=("net_per_100", "mean"), trades=("trades", "sum"),
         gross_bp_trade=("gross_bp_trade", "mean"))  # fmt: skip
+    measured, trials = a0_and_fill(study, inputs)
     return {
         "commit": study.commit(),
         "cells": [asdict(c) | {"label": c.label} for c in cells],
@@ -454,5 +519,6 @@ def run(study: Any) -> dict[str, Any]:
         "excluded_cell_days": int(rows["excluded"].sum()),
         "admission": admission,
         "summary": summary.reset_index().to_dict("records"),
-        "a0_and_fill": a0_and_fill(study, inputs),
+        "a0_and_fill": measured,
+        "trials": record_trials(study, trial_rows(rows, study.run, trials)),
     }
