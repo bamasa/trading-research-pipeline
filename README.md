@@ -1310,9 +1310,15 @@ basis points against an 11 bp taker round trip at the base tier.
       [`experiments/short_horizon_2025.py`](experiments/short_horizon_2025.py):
       stages 0, 1, A, B, D, C and E as subcommands that refuse to run out of
       order, return a finished stage's record and resume a stopped one, then
-      each block opened and read in one session with every status and kill;
-      `--dry-run` runs all of it on a synthetic venue in a temporary
-      repository, with no request reaching the network, and is a test
+      each block opened and read in one session with every status and kill
+      and, beside them, the registered measurements: the regime attribution
+      against random flag sets, S-P's and S-M's regime variants, the passive
+      exit, FILL on H, the control network's IC, and each verdict with the
+      gap-excluded days put back; the simulator's runs on D are trials of
+      the ledger, so N_trials counts them; `--dry-run` runs all of it on a
+      synthetic venue (trend episodes, detector bursts, a day with sequence
+      gaps) in a temporary repository, with no request reaching the network,
+      and is a test
 - [ ] Stage 0 on the two 2024 days, the code-freeze note, and the 200-level
       book reader proven on three 2026 days outside the study
 - [ ] Development period: the search, the placebo search and the amendment

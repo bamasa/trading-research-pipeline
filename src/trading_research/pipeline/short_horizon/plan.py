@@ -118,10 +118,14 @@ def a0_fold(days: Sequence[date]) -> Fold:
 
 def _dry_calendar() -> dict[str, tuple[date, ...]]:
     """The dry run's days: a few of each block, so that every fold has training,
-    inner-validation and test days, H has days on both sides of 08-01, F and P
-    have days to read (one of F's, 09-16, the venue's day with sequence gaps, put
-    back as a measurement); the reader-test days as registered."""
-    d_days = tuple(date(2025, m, d) for m in range(1, 7) for d in (12, 28))
+    inner-validation and test days; 25 test days on D, so that Null B has the 21
+    shifts a count p-value of at most 0.05 needs and a cell can be admitted; H
+    has days on both sides of 08-01, one of them the venue's burst day the frozen
+    detector alarms on, so the regime attribution has a flag to match; F and P
+    have days to read (one of F's, 09-16, the venue's day with sequence gaps,
+    put back as a measurement); the reader-test days as registered."""
+    january = (date(2025, 1, 6), date(2025, 1, 12), date(2025, 1, 20), date(2025, 1, 28))
+    d_days = january + tuple(date(2025, m, d) for m in range(2, 7) for d in (4, 10, 16, 22, 28))
     return {
         "W": (date(2024, 12, 30), date(2024, 12, 31)),
         "D": d_days,

@@ -122,6 +122,14 @@ def test_a_burst_day_has_louder_hourly_returns_and_a_wider_spread(tmp_path: Path
     gap = (book["ask_price_0"] - book["bid_price_0"]).round(1)
     hour = pd.DatetimeIndex(book["timestamp"]).hour
     assert (gap[hour < 2] == 0.1).all() and (gap[hour >= 2] == 0.8).all()
+    inverted = syn.SyntheticMarket(frozenset(DAYS), step_ms=60_000, episodes_per_day=40,
+                                   burst_days=frozenset({day}), burst_hours=(12, 18))  # fmt: skip
+    p = inverted.path(day)
+    assert p.signal is not None
+    moves, shown = np.diff(p.bid0), p.signal[:-1]
+    after = p.stamps_ms[:-1] >= syn._ms(day, 12)
+    assert moves[~after & (shown == 1)].mean() > 1.0 > -1.0 > moves[after & (shown == 1)].mean()
+    assert moves[~after & (shown == -1)].mean() < -1.0 < 1.0 < moves[after & (shown == -1)].mean()
 
 
 def test_a_gap_day_skips_three_sequence_numbers(tmp_path: Path) -> None:

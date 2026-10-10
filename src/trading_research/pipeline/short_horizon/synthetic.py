@@ -88,10 +88,12 @@ class SyntheticMarket:
     the price ``drift_ticks`` a message for ``episode_steps`` messages, and while it
     lasts the touch on its side shows ``signal_size``, so a model can learn it.
     ``burst_days`` give the hourly bars ten times their volatility over
-    ``burst_hours``, which the break detector alarms on, and widen the book's
-    spread to ``burst_spread_ticks`` from the burst's first hour to the day's
-    end, so trading after the alarm costs more; ``gap_days`` skip three
-    sequence numbers in the book.
+    ``burst_hours``, which the break detector alarms on, and from the burst's
+    first hour to the day's end widen the book's spread to
+    ``burst_spread_ticks`` and show each episode's signal on the wrong side of
+    the touch, so trading on the signal after the alarm costs more and loses:
+    a guard after an alarm pays, and a cell with a regime window can win the
+    choice. ``gap_days`` skip three sequence numbers in the book.
     """
 
     days: frozenset[date]
@@ -125,8 +127,10 @@ class SyntheticMarket:
                 signal[start : start + self.episode_steps] = side
             moves[1:] += self.drift_ticks * signal[:-1].astype(np.int64)
         spread = np.ones(n, dtype=np.int64)
-        if day in self.burst_days:
-            spread[stamps >= _ms(day, self.burst_hours[0])] = self.burst_spread_ticks
+        if day in self.burst_days:  # the drift keeps the episode's side; the touch shows the other
+            after = stamps >= _ms(day, self.burst_hours[0])
+            spread[after] = self.burst_spread_ticks
+            signal[after] *= -1
         return DayPath(stamps, level + np.cumsum(moves), seed, signal, spread)
 
     def book_lines(self, day: date, *, hours: int | None = None) -> list[str]:
