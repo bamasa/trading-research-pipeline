@@ -73,6 +73,11 @@ class SlotDays:
     on_s25_signal: bool = False
     window_h: int = 0
     mde: float | None = None
+    #: Per-day measurements beside the status, each with days last (one value per
+    #: day, or a row per draw): the window-0 twin (``twin``) and the random flag sets
+    #: (``flagsets``) of the regime attribution, the control network's IC, the
+    #: regime measurements, the passive exit. No rule reads them.
+    extra: dict[str, np.ndarray] = field(default_factory=dict)
 
     def mask(self, days: Sequence[date]) -> np.ndarray:
         wanted = set(days)
@@ -420,4 +425,43 @@ def subset(s: SlotDays, keep: np.ndarray) -> SlotDays:
         long_only=s.long_only[keep], short_only=s.short_only[keep], neighbours=s.neighbours[:, keep],
         latency=s.latency[keep], stale=cut(s.stale), brackets={k: v[keep] for k, v in s.brackets.items()},
         making=cut(s.making), passive_notional=cut(s.passive_notional), second=cut(s.second),
+        extra={name: values[..., keep] for name, values in s.extra.items()},
+    )  # fmt: skip
+
+
+def merge(a: SlotDays, b: SlotDays) -> SlotDays:
+    """One slot on two sets of days as one, in day order: the days excluded for
+    sequence gaps put back beside the usable days. An array one side lacks is NaN
+    on that side's days; the void conditions are the union."""
+    from dataclasses import replace
+
+    days = [*a.days, *b.days]
+    if len(set(days)) != len(days):
+        raise ValueError("the two sets of days overlap")
+    order = np.argsort([d.toordinal() for d in days], kind="stable")
+    n_a, n_b = len(a.days), len(b.days)
+
+    def cat(x: np.ndarray | None, y: np.ndarray | None) -> Any:
+        if x is None and y is None:
+            return None
+        if x is None:
+            assert y is not None
+            x = np.full((*y.shape[:-1], n_a), np.nan)
+        if y is None:
+            y = np.full((*x.shape[:-1], n_b), np.nan)
+        return np.concatenate([x, y], axis=-1)[..., order]
+
+    names = {*a.brackets, *b.brackets}
+    keys = {*a.extra, *b.extra}
+    return replace(
+        a, days=[days[i] for i in order], value=cat(a.value, b.value), trades=cat(a.trades, b.trades),
+        gross=cat(a.gross, b.gross), turnover=cat(a.turnover, b.turnover), ic=cat(a.ic, b.ic),
+        random=cat(a.random, b.random), flipped=cat(a.flipped, b.flipped),
+        shifted=cat(a.shifted, b.shifted), long_only=cat(a.long_only, b.long_only),
+        short_only=cat(a.short_only, b.short_only), neighbours=cat(a.neighbours, b.neighbours),
+        latency=cat(a.latency, b.latency), stale=cat(a.stale, b.stale),
+        brackets={k: cat(a.brackets.get(k), b.brackets.get(k)) for k in sorted(names)},
+        making=cat(a.making, b.making), passive_notional=cat(a.passive_notional, b.passive_notional),
+        second=cat(a.second, b.second), void=tuple(sorted({*a.void, *b.void})),
+        extra={k: cat(a.extra.get(k), b.extra.get(k)) for k in sorted(keys)},
     )  # fmt: skip
