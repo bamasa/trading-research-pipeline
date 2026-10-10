@@ -139,6 +139,13 @@ def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float)
     for name in ("exit_late_snapshot", "flatten_beyond_visible_book", "time_above_one_clip_s",
                  "entries_cancelled_by_flag", "feed_pauses"):  # fmt: skip
         row[name] = float(result.counters.get(name, 0.0))
+    orders = result.orders  # what FILL reads: the posted orders and their fills
+    posted = len(orders)
+    row |= {"orders_posted": float(posted),
+            "orders_filled": float((orders["filled"] > 0).sum()) if posted else 0.0,
+            "volume_posted": float(orders["size"].sum()) if posted else 0.0,
+            "volume_filled": float(orders["filled"].sum()) if posted else 0.0,
+            "notional_filled": float((orders["filled"] * orders["price"]).sum()) if posted else 0.0}  # fmt: skip
     if cell.kind == "entry":
         # The day's money comes from its own decomposition; the attempts table only
         # counts the entries with a fill and gives their notional (its per-attempt

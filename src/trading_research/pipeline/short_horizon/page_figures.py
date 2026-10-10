@@ -3,9 +3,10 @@
 Every chart is one of :mod:`trading_research.reporting`'s, drawn from what has
 been computed: the placebo search and S25 against its own nulls from the nulls
 file, the leaderboard and the marginals from theirs, S25's edge ladder, the
-fill-rule comparison (A0 on O, and S-P and S25-Z on H when H's read records
-their order streams), the regime map per execution path, and the
-break-detector view once a block is read. Each is written as
+fill-rule comparison (A0 on O, and S-P and S25-Z on H from the FILL summary
+H's read records), the regime map per execution path, and the break-detector
+view once a block is read, its 1 s CUSUM restarts the registered ones (H's
+first day and F's) for the blocks read. Each is written as
 ``docs/images/short_horizon_2025_<name>_light.png`` and ``..._dark.png``
 (``plots.both_themes``); a figure whose input is missing is listed as pending.
 """
@@ -69,7 +70,7 @@ def _fill_rules(c: Any, drawn: dict[str, tuple[Draw, str]], written: Any) -> Non
     streams = {"A0 on O": pd.DataFrame(found["fill_summary"])}
     h = c.read.get("H")
     if h is not None:
-        on_h = h.get("fill_rules") or {}
+        on_h = (h.get("pages") or {}).get("fill_rules") or {}
         if not on_h:
             written.wait("the fill-rule figure", "S-P's and S25-Z's streams are not in H's results")
         for name, rows in list(on_h.items())[:2]:
@@ -130,7 +131,9 @@ def _regime_maps(c: Any, drawn: dict[str, tuple[Draw, str]], written: Any) -> No
 
 def _break_view(c: Any, drawn: dict[str, tuple[Draw, str]], written: Any) -> None:
     """The stream from 2024-12-01 to the last block read, with every alarm, b,
-    F- and F+, and each guarded slot's guard windows."""
+    F- and F+, each guarded slot's guard windows, and the 1 s CUSUM's restarts
+    (registered: H's first day, because E's book is never fetched, and F's,
+    the archive change) for the blocks read."""
     from trading_research.data import study_access as sa
     from trading_research.pipeline.short_horizon.page_numbers import close_path
     from trading_research.reporting.break_view import break_view_chart
@@ -148,11 +151,12 @@ def _break_view(c: Any, drawn: dict[str, tuple[Draw, str]], written: Any) -> Non
     guards = {slot: int(n["window_h"]) for slot, n in h.items() if int(n.get("window_h", 0)) > 0}
     b = ((c.read.get("F") or {}).get("split") or {}).get("b")
     spans = {name: sa.BLOCKS[name] for name in ("W", "D", "H", "F", "P")}
-    written.wait("the break-detector view's 1 s CUSUM restarts", "no read records them")
+    restarts = [pd.Timestamp(sa.BLOCKS[name][0], tz="UTC") for name in ("H", "F") if name in c.read]
     drawn["break_view"] = (
         lambda p: break_view_chart(close, alarms, p, blocks=spans, p_opened="P" in c.read, b=b,
-                                   guards=guards),
-        "BTCUSDT's hourly close with the frozen detector's alarms, b and the guard windows",
+                                   guards=guards, cusum_restarts=restarts),
+        "BTCUSDT's hourly close with the frozen detector's alarms, b, the guard windows and "
+        "the 1 s CUSUM's restarts",
     )  # fmt: skip
 
 

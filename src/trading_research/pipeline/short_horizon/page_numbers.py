@@ -8,9 +8,11 @@ all of P. :func:`block_numbers` adds, for every slot, on those same days, what
 the finalists page and the S25 page show beside the status: the daily series,
 its trades, the fee break-even per side, the placebo percentile, the K-nbhd
 median, S25-Z's net at 0/0, S-M's making part, and, on H, the mean before
-2025-08-01. It keeps the frozen detector's alarms over the whole stream, and
-writes the hourly close, read under the session's access, for the
-break-detector view. Nothing here decides a status.
+2025-08-01. It keeps the frozen detector's alarms over the whole stream,
+summarises S-P's and S25-Z's orders under the three fill rules (FILL on the
+block, from the passive runs' day files), and writes the hourly close, read
+under the session's access, for the break-detector view. Nothing here decides
+a status.
 
 :func:`d_daily` and :func:`d_alarms` give the development period's part of the
 regime map: each slot's walk-forward daily series on D's usable test days, cut
@@ -105,9 +107,45 @@ def save_close(block: Any) -> Path:
     return path
 
 
+def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
+    """FILL on the block: S-P's and S25-Z's orders under the three rules, every
+    usable day pooled, one table per slot in the form of
+    ``fill_rules.FillComparison.summary`` (the fill ratio is the share of posted
+    orders with a fill). Read from the passive runs' day files; nothing when the
+    block ran no passive slot."""
+    from trading_research.market_making.fill_rules import BIAS, RULES
+    from trading_research.market_making.queue import FillRule
+
+    files = sorted((block.work / "passive").glob("*.parquet"))
+    if not files:
+        return {}
+    rows = pd.concat([pd.read_parquet(p) for p in files], ignore_index=True)
+    if "orders_posted" not in rows:
+        return {}
+    totals = ["orders_posted", "orders_filled", "volume_posted", "volume_filled", "notional_filled",
+              "gross_usdt", "fees_usdt", "net_usdt"]  # fmt: skip
+    out: dict[str, list[dict[str, Any]]] = {}
+    for slot in ("S-P", "S25-Z"):
+        mine = rows[(rows["run_slot"] == slot) & ~rows["excluded"].astype(bool)]
+        summary = []
+        for rule in RULES:
+            variant = "true" if rule is FillRule.QUEUE else f"fill/{rule.value}"
+            part = mine[mine["variant"] == variant]
+            sums = {k.removesuffix("_usdt"): float(part[k].sum()) for k in totals}
+            posted, volume = sums["orders_posted"], sums["volume_posted"]
+            summary.append({"rule": rule.value, "days": len(part), **sums,
+                            "fill_ratio": sums["orders_filled"] / posted if posted else NAN,
+                            "volume_ratio": sums["volume_filled"] / volume if volume else NAN,
+                            "bias": BIAS[rule]})  # fmt: skip
+        if any(s["days"] for s in summary):
+            out[slot] = summary
+    return out
+
+
 def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]) -> dict[str, Any]:
     """Every slot's numbers on its status days, its whole daily series, the
-    frozen detector's alarms, and (written beside, not returned) the hourly close."""
+    frozen detector's alarms, FILL for S-P's and S25-Z's streams, and (written
+    beside, not returned) the hourly close."""
     split = found.get("split")
     slots: dict[str, Any] = {}
     for slot, s in series.items():
@@ -120,7 +158,8 @@ def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]
             numbers["h_before_0801_mean"] = slot_numbers(s, early)["mean"]
         slots[slot] = numbers
     save_close(block)
-    return {"slots": slots, "alarms": list(block.detector["alarms"])}
+    return {"slots": slots, "alarms": list(block.detector["alarms"]),
+            "fill_rules": fill_rule_summary(block)}  # fmt: skip
 
 
 def _d_days(study: Study) -> list[date]:

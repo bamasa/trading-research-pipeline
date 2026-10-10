@@ -336,3 +336,24 @@ def test_the_entry_point_has_a_pages_subcommand() -> None:
     from experiments.short_horizon_2025 import parser
 
     assert parser().parse_args(["pages"]).command == "pages"
+
+
+def test_fill_on_the_block_pools_the_passive_day_files(tmp_path: Any) -> None:
+    rows = []
+    for day, excluded in (("2025-07-08", False), ("2025-07-09", False), ("2025-07-10", True)):
+        for variant, posted, filled in (("true", 10.0, 6.0), ("fill/touch", 10.0, 9.0),
+                                        ("fill/trade_through", 10.0, 2.0), ("flipped", 10.0, 1.0)):  # fmt: skip
+            rows.append({"day": day, "run_slot": "S-P", "variant": variant, "excluded": excluded,
+                         "orders_posted": posted, "orders_filled": filled, "volume_posted": 2 * posted,
+                         "volume_filled": 2 * filled, "notional_filled": 100.0 * filled,
+                         "gross_usdt": 1.0, "fees_usdt": -0.5, "net_usdt": 0.5})  # fmt: skip
+    (tmp_path / "passive").mkdir()
+    pd.DataFrame(rows).to_parquet(tmp_path / "passive" / "days.parquet", index=False)
+    found = pn.fill_rule_summary(SimpleNamespace(work=tmp_path))
+    assert list(found) == ["S-P"]  # S25-Z ran no day
+    by = {row["rule"]: row for row in found["S-P"]}
+    assert list(by) == ["touch", "trade_through", "queue"]
+    assert by["queue"]["days"] == 2 and by["queue"]["orders_posted"] == 20.0
+    assert by["queue"]["fill_ratio"] == pytest.approx(0.6) and by["touch"]["fill_ratio"] == 0.9
+    assert by["trade_through"]["net"] == 1.0 and by["touch"]["bias"] == "optimistic bound"
+    assert pn.fill_rule_summary(SimpleNamespace(work=tmp_path / "none")) == {}
