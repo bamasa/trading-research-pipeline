@@ -221,10 +221,13 @@ class SignalEntryQuoter:
         an order only strictly before a later event, so no attempt's own order
         fills at its post's stamp. ``filled`` is True for an entry with any
         fill; ``net`` is the cash of its fills, fees included; ``notional`` is
-        the clip at the posted price.
+        the clip at the posted price; ``entry_notional`` the entry's own fills
+        (passive, on its side) at their prices; ``maker_notional`` and
+        ``taker_notional`` every fill of the attempt by kind.
         """
         columns = ["decision_s", "side", "posted_ns", "price", "size", "filled"]
         columns += ["filled_size", "gross", "fees", "net", "notional"]
+        columns += ["entry_notional", "maker_notional", "taker_notional"]
         if not self.log:
             return pd.DataFrame(columns=columns)
         ts = fills["ts"].to_numpy(dtype=np.int64)
@@ -237,12 +240,14 @@ class SignalEntryQuoter:
         maker = fills["maker"].to_numpy(dtype=bool)
         size = fills["size"].to_numpy(dtype=np.float64)
         fill_side = fills["side"].to_numpy(dtype=np.int64)
+        paid = fills["price"].to_numpy(dtype=np.float64) * size
         starts = [entry[2] for entry in self.log]
         rows = []
         for k, (decision, side, posted, price, clip) in enumerate(self.log):
             end = starts[k + 1] if k + 1 < len(starts) else np.iinfo(np.int64).max
             mine = (ts > posted) & (ts <= end)
-            entry_size = float(size[mine & maker & (fill_side == side)].sum())
+            entry = mine & maker & (fill_side == side)
+            entry_size = float(size[entry].sum())
             gross = float(flow[mine].sum())
             fees = float(fee[mine].sum())
             rows.append(
@@ -258,6 +263,9 @@ class SignalEntryQuoter:
                     fees,
                     gross - fees,
                     price * clip,
+                    float(paid[entry].sum()),
+                    float(paid[mine & maker].sum()),
+                    float(paid[mine & ~maker].sum()),
                 )
             )
         return pd.DataFrame(rows, columns=columns)

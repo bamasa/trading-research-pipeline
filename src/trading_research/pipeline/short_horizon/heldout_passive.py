@@ -111,7 +111,6 @@ def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_seque
     """Every run of one loaded day, each under its own flags and changes."""
     from trading_research.market_making.simulator import simulate_day
 
-    mid = float(np.mean((events.bid_px[:, 0] + events.ask_px[:, 0]) / 2.0) * events.spec.tick)
     rows = []
     for run in runs:
         flags = flags_ns if run.flags_ns is None else run.flags_ns
@@ -120,7 +119,7 @@ def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_seque
         if run.changes:
             config = config.with_(**run.changes)
         result = simulate_day(events, quoter, config, tapes)
-        row = day_values(run.cell, quoter, result, clip, mid)
+        row = day_values(run.cell, quoter, result, clip)
         if run.cell.kind == "entry":
             row |= fill_values(result)
         rows.append(
