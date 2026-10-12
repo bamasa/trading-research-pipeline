@@ -40,7 +40,7 @@ from trading_research.search_engine.catalogue import (
     axes_table,
     parse_key,
 )
-from trading_research.search_engine.ledger import LEDGER_PATH, TrialLedger
+from trading_research.search_engine.ledger import TrialLedger
 from trading_research.validation.choice import CellDays, neighbourhood_index
 
 SLOT_OF = {"C": "S-C", "R": "S-R"}
@@ -101,7 +101,7 @@ class Calendar:
 
 def observed_cells(study: Study, grid: Grid, calendar: Calendar) -> CellDays:
     """The run's ledger rows on the usable test days, as the choice reads them."""
-    rows = TrialLedger(study.repo / LEDGER_PATH, study.catalogue()).run_rows(study.run)
+    rows = TrialLedger.in_repository(study.repo, study.catalogue()).run_rows(study.run)
     days = calendar.usable_days
     rows = rows[rows["day"].isin(days) & rows["key"].isin(grid.keys)].reset_index(drop=True)
     return CellDays.from_ledger(rows, grid.keys, days)
@@ -313,9 +313,9 @@ def run(study: Study) -> dict[str, Any]:
             None if found is None else ch.slot_conditions(cells, days, grid.index, found)
         )
     flip = ps.global_flip(hours, grid.strata, grid.index)
-    ledger = TrialLedger(study.repo / LEDGER_PATH, study.catalogue())
-    sidecar, hand = ledger.sidecar(), ledger.hand_runs
-    n_trials = int(sidecar["n_trials"])
+    ledger = TrialLedger.in_repository(study.repo, study.catalogue())
+    manifest, hand = ledger.record(), ledger.hand_runs
+    n_trials = int(manifest["n_trials"])
     tables = [nulls_table(results, a_null, b_null, grid.keys, runs=runs, shifts=list(route.shifts),
                           global_flip=flip)]  # fmt: skip
     s25 = grid.position(S25_KEY)
@@ -357,6 +357,6 @@ def run(study: Study) -> dict[str, Any]:
         "selection_premium": {s: {"A": list(ps.selection_premium(r.a, a_null.maximum)),
                                   "B": list(ps.selection_premium(r.a, b_null.maximum))} for s, r in results.items()},
         "overfitting": overfitting(grid, cells, {s: o.cell for s, o in observed.items()}, n_trials),
-        "N_trials": n_trials, "ledger_sha256": sidecar["sha256"], "ledger_rows": int(sidecar["rows"]),
+        "N_trials": n_trials, "ledger_sha256": manifest["sha256"], "ledger_rows": int(manifest["rows"]),
         "hand_runs": hand, "S25": s25_record, "files_sha256": files,
     }  # fmt: skip

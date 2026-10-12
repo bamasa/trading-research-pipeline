@@ -189,3 +189,23 @@ def test_a_decision_seen_after_its_hold_is_not_posted_and_bad_tapes_are_refused(
         entry_tapes(np.array([1, 2]), np.array([1, 0]))
     with pytest.raises(ValueError, match="hold"):
         SignalEntryQuoter(0.0)
+
+
+def test_an_exit_walked_where_the_next_attempt_posts_stays_with_its_own_attempt() -> None:
+    """The exit is decided at 700 ms and walks the 800 ms snapshot, where the
+    decision of 750 ms is posted: the exit's fill shares the new post's stamp
+    and belongs to the first attempt, which is flat again only after it."""
+    market = _market(20, [(150.0, 99, 5.0, -1)], bids=[100] * 8 + [103] * 12)
+    quoter = SignalEntryQuoter(0.5)
+    result = simulate_day(market, quoter, CONFIG, _tapes(market, [0, 750], [1, 1]))
+    fills = result.fills
+    start = market.day_start_ns
+    assert (fills["ts"] - start).tolist() == [150 * MS, 800 * MS]
+    assert [posted - start for _, _, posted, _, _ in quoter.log] == [100 * MS, 800 * MS]
+    table = quoter.attempts(fills)
+    assert table["filled"].tolist() == [True, False]
+    assert table["gross"].tolist() == pytest.approx([0.03, 0.0])
+    assert table["net"].tolist() == pytest.approx([0.03 - fills["fee"].sum(), 0.0])
+    d = result.decomposition
+    assert table["net"].sum() == pytest.approx(d["gross"] - d["fees"])
+    assert quoter.counts["round_trips"] == 1 and quoter.counts["attempts"] == 2

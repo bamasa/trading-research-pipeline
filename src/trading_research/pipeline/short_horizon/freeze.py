@@ -93,9 +93,9 @@ def utc_today() -> date:
 
 def d_series(study: Study, key: str, days: list[date]) -> pd.Series:
     """A taker cell's daily ``net_bp`` over D's usable test days (NaN without a trade)."""
-    from trading_research.search_engine.ledger import LEDGER_PATH, TrialLedger
+    from trading_research.search_engine.ledger import TrialLedger
 
-    rows = TrialLedger(study.repo / LEDGER_PATH, study.catalogue()).run_rows(study.run)
+    rows = TrialLedger.in_repository(study.repo, study.catalogue()).run_rows(study.run)
     mine = rows[(rows["key"] == key) & rows["day"].isin(days)].set_index("day")
     values = mine["net_bp"].where(mine["trades"] > 0)
     return values.reindex(days)

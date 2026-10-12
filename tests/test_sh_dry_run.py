@@ -87,18 +87,20 @@ def test_stage_0_timed_the_code_and_passed_the_parity_gate(dry: dict[str, Any]) 
     assert record["projected_hours"]["total"] > 0 and record["replay_memory"]["measured"]
 
 
-def test_the_trial_ledger_is_committed_with_its_sidecar(dry: dict[str, Any]) -> None:
+def test_the_trial_ledger_manifest_is_committed_and_its_parts_are_not(dry: dict[str, Any]) -> None:
     from trading_research.pipeline.short_horizon_ledger import (
-        trial_ledger_paths,
+        trial_ledger_parts,
         trial_ledger_sha256,
     )
 
     study = dry["study"]
-    paths = trial_ledger_paths(study.repo)
-    sidecar = json.loads((study.repo / shr.TRIALS_SIDECAR_PATH).read_text(encoding="utf-8"))
-    assert sidecar["sha256"] == trial_ledger_sha256(paths) == study.record("D")["ledger_sha256"]
-    assert sidecar["n_trials"] == len(study.keys)
-    assert {p.relative_to(study.repo).as_posix() for p in paths} <= tracked(study.repo)
+    paths = trial_ledger_parts(study.repo)
+    manifest = json.loads((study.repo / shr.TRIALS_MANIFEST_PATH).read_text(encoding="utf-8"))
+    assert manifest["sha256"] == trial_ledger_sha256(paths) == study.record("D")["ledger_sha256"]
+    assert [p.name for p in paths] == [part["file"] for part in manifest["parts"]]
+    assert manifest["n_trials"] == len(study.keys)
+    assert shr.TRIALS_MANIFEST_PATH.as_posix() in tracked(study.repo)
+    assert not {p.relative_to(study.repo).as_posix() for p in paths} & tracked(study.repo)
 
 
 def test_stage_d_chose_admitted_and_wrote_its_files(dry: dict[str, Any]) -> None:

@@ -1,19 +1,21 @@
-"""The trial ledger: one row per D run, cell and test day, with its sidecar.
+"""The trial ledger: one row per D run, cell and test day, with its manifest.
 
 Every score on a test day of February to June comes from the entry point and
-is written here: ``experiments/results/short_horizon_2025_trials.parquet``
+is written here: ``data/short_horizon_2025/short_horizon_2025_trials.parquet``
 (zstd), columns ``run``, ``key``, ``day``, ``net_bp``, ``G_bp``,
 ``pnl_long_bp``, ``pnl_short_bp``, ``trades`` and ``skips``, split into parts
-under 100 MB when it needs to be. The sidecar ``…_trials.json`` holds the
-catalogue's sha256, each run's commit, every part's sha256 and row count, the
-sha256 of all the parts' bytes in order with the total row count (what the
-study ledger checks before H opens), the number of trials and the hand-run log.
+under 100 MB when it needs to be. The parts stay under ``data/`` and are never
+committed. The manifest ``experiments/results/short_horizon_2025_trials.json``,
+small and committed, holds the catalogue's sha256, each run's commit, every
+part's sha256 and row count, the sha256 of all the parts' bytes in order with
+the total row count (what the study ledger checks the parts on disk against
+before H opens), the number of trials and the hand-run log.
 
 The ledger only grows: a run's rows are appended once, a superseded run's rows
 stay and count, and **N_trials** is the number of distinct ``(run, key)``
 pairs, counted even beyond N_max. Rows whose key is outside the catalogue are
-refused, as is a ledger whose sidecar names another catalogue. Reading checks
-every part against the sidecar's sha256 and row count.
+refused, as is a ledger whose manifest names another catalogue. Reading checks
+every part against the manifest's sha256 and row count.
 ``validation.choice.CellDays.from_ledger`` reads one run's rows.
 """
 
@@ -34,8 +36,9 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from trading_research.search_engine.catalogue import Catalogue
 
-#: The registered ledger, relative to the repository root.
-LEDGER_PATH = Path("experiments/results/short_horizon_2025_trials.parquet")
+#: The registered ledger's parts and its committed manifest, relative to the repository root.
+LEDGER_PATH = Path("data/short_horizon_2025/short_horizon_2025_trials.parquet")
+MANIFEST_PATH = Path("experiments/results/short_horizon_2025_trials.json")
 LEDGER_COLUMNS: tuple[str, ...] = (
     "run",
     "key",
@@ -63,7 +66,7 @@ SCHEMA = pa.schema(
 
 
 class LedgerError(ValueError):
-    """Rows that cannot enter the ledger, or a ledger that fails its sidecar."""
+    """Rows that cannot enter the ledger, or a ledger that fails its manifest."""
 
 
 def file_sha256(path: Path) -> str:
@@ -72,7 +75,7 @@ def file_sha256(path: Path) -> str:
 
 def ledger_sha256(paths: Iterable[Path]) -> str:
     """The sha256 of the parts' bytes in part order (one file's own sha256): the
-    ``sha256`` the sidecar records and the D amendment's ``ledger_sha256``."""
+    ``sha256`` the manifest records and the D amendment's ``ledger_sha256``."""
     digest = hashlib.sha256()
     for path in paths:
         with path.open("rb") as handle:
@@ -150,22 +153,29 @@ def _part_name(path: Path, index: int) -> Path:
 
 @dataclass(frozen=True)
 class TrialLedger:
-    """The ledger at ``path`` (its sidecar beside it) for one catalogue."""
+    """The ledger's parts at ``path`` for one catalogue, with its manifest at
+    ``manifest`` (beside the parts when not given)."""
 
     path: Path
     catalogue: Catalogue
     part_bytes: int = PART_BYTES
+    manifest: Path | None = None
+
+    @classmethod
+    def in_repository(cls, repo: Path, catalogue: Catalogue) -> TrialLedger:
+        """The registered ledger of ``repo``: parts under ``data/``, manifest committed."""
+        return cls(repo / LEDGER_PATH, catalogue, manifest=repo / MANIFEST_PATH)
 
     @property
-    def sidecar_path(self) -> Path:
-        return self.path.with_suffix(".json")
+    def manifest_path(self) -> Path:
+        return self.manifest or self.path.with_suffix(".json")
 
-    def sidecar(self) -> dict[str, Any]:
-        """The sidecar as committed, or a fresh one before the first write."""
-        if not self.sidecar_path.exists():
+    def record(self) -> dict[str, Any]:
+        """The manifest as written, or a fresh one before the first write."""
+        if not self.manifest_path.exists():
             empty: dict[str, Any] = {"catalogue_sha256": self.catalogue.sha256, "parts": []}
             return empty | {"rows": 0, "n_trials": 0, "runs": {}, "hand_runs": []}
-        record: dict[str, Any] = json.loads(self.sidecar_path.read_text(encoding="utf-8"))
+        record: dict[str, Any] = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         if record.get("catalogue_sha256") != self.catalogue.sha256:
             raise LedgerError(
                 f"the ledger was written for catalogue {record.get('catalogue_sha256')}, "
@@ -174,9 +184,9 @@ class TrialLedger:
         return record
 
     def read(self) -> pd.DataFrame:
-        """Every row, each part checked against the sidecar's sha256 and row count."""
+        """Every row, each part checked against the manifest's sha256 and row count."""
         frames = []
-        for part in self.sidecar()["parts"]:
+        for part in self.record()["parts"]:
             target = self.path.with_name(part["file"])
             if not target.exists() or file_sha256(target) != part["sha256"]:
                 raise LedgerError(f"{part['file']} is missing or differs from its sha256")
@@ -191,7 +201,7 @@ class TrialLedger:
 
     @property
     def n_trials(self) -> int:
-        return int(self.sidecar()["n_trials"])
+        return int(self.record()["n_trials"])
 
     def run_rows(self, run: int) -> pd.DataFrame:
         """One run's rows, as ``CellDays.from_ledger`` reads them."""
@@ -202,7 +212,7 @@ class TrialLedger:
         """Add one run's rows (a stage's worth), refused if any (run, key, day)
         is already in the ledger or the run was written at another commit."""
         self.catalogue.verify()
-        record = self.sidecar()
+        record = self.record()
         new = check_rows(rows, self.catalogue)
         if set(new["run"]) != {run}:
             raise LedgerError(f"every row appended for run {run} must carry run {run}")
@@ -230,15 +240,15 @@ class TrialLedger:
         entry point's to apply (every searched slot not admitted on D)."""
         if not computed.strip():
             raise LedgerError("a hand run names what it computed")
-        record = self.sidecar()
+        record = self.record()
         entry = {"date": when.isoformat(), "computed": computed}
         record["hand_runs"].append(entry | {"days": sorted(d.isoformat() for d in days)})
-        self._write_sidecar(record)
+        self._write_manifest(record)
         return record
 
     @property
     def hand_runs(self) -> list[dict[str, Any]]:
-        return list(self.sidecar()["hand_runs"])
+        return list(self.record()["hand_runs"])
 
     def _commit(self, rows: pd.DataFrame, record: dict[str, Any]) -> dict[str, Any]:
         before = {part["file"] for part in record["parts"]}
@@ -250,11 +260,13 @@ class TrialLedger:
         record["sha256"] = ledger_sha256(self.path.with_name(part["file"]) for part in parts)
         record["rows"] = len(rows)
         record["n_trials"] = n_trials(rows)
-        self._write_sidecar(record)
+        self._write_manifest(record)
         return record
 
-    def _write_sidecar(self, record: dict[str, Any]) -> None:
+    def _write_manifest(self, record: dict[str, Any]) -> None:
         text = json.dumps(record, indent=2, sort_keys=True) + "\n"
-        temporary = self.sidecar_path.with_name(self.sidecar_path.name + ".writing")
+        target = self.manifest_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".writing")
         temporary.write_text(text, encoding="utf-8")
-        temporary.replace(self.sidecar_path)
+        temporary.replace(target)

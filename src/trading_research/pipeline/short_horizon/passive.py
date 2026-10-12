@@ -121,6 +121,18 @@ def _flat_returns(fills: pd.DataFrame) -> int:
     return int(((np.abs(position) < 1e-12) & (np.abs(before) >= 1e-12)).sum())
 
 
+def per_100_clip(filled: pd.DataFrame, funding: float) -> float:
+    """``net_per_100_clip_day`` of the signal-entry quoter: each filled attempt's
+    net in USDT x 100 over its own entry's clip notional, summed, and 0 without
+    a fill. The day's funding, which the simulator settles on the day and not on
+    an attempt, is taken over the mean notional of the day's filled entries."""
+    if not len(filled):
+        return 0.0
+    notional = filled["notional"].to_numpy(dtype=np.float64)
+    net = filled["net"].to_numpy(dtype=np.float64)
+    return float((net / notional * 100.0).sum() + funding * 100.0 / notional.mean())
+
+
 def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float) -> dict[str, Any]:
     """One cell-day: ``net_per_100_clip_day`` and what the kills read beside it."""
     d = result.decomposition
@@ -140,17 +152,20 @@ def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float)
                  "entries_cancelled_by_flag", "feed_pauses"):  # fmt: skip
         row[name] = float(result.counters.get(name, 0.0))
     if cell.kind == "entry":
-        # The day's money comes from its own decomposition; the attempts table only
-        # counts the entries with a fill and gives their notional (its per-attempt
-        # cash can land a fill on the next attempt when the two share a stamp).
         table = quoter.attempts(fills)
         filled = table[table["filled"]] if len(table) else table
         notional = float(filled["notional"].sum()) if len(filled) else 0.0
-        per_entry = notional / len(filled) if len(filled) else 0.0
         row |= {"trades": len(filled), "attempts": len(table),
-                "net_per_100": row["net_usdt"] * 100.0 / per_entry if per_entry > 0 else 0.0,
+                "net_per_100": per_100_clip(filled, row["funding_usdt"]),
                 "gross_bp_trade": row["gross_usdt"] / notional * 1e4 if notional > 0 else float("nan"),
                 "net_bp_trade": row["net_usdt"] / notional * 1e4 if notional > 0 else float("nan")}  # fmt: skip
+        flat = fills.empty or abs(float(fills["position_after"].iloc[-1])) < 1e-12
+        cash = float(filled["net"].sum()) if len(filled) else 0.0
+        expected = row["gross_usdt"] - row["fees_usdt"]
+        if flat and abs(cash - expected) > 1e-9 * max(1.0, notional):
+            raise RuntimeError(
+                f"{cell.label}: the filled attempts' cash {cash!r} is not the day's {expected!r}"
+            )
     else:
         row |= {"trades": _flat_returns(fills), "attempts": len(fills),
                 "net_per_100": row["net_usdt"] * 100.0 / (clip * mid) if mid > 0 else 0.0,

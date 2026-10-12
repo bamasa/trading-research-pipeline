@@ -977,13 +977,16 @@ statistics) before any W or D file is fetched, and any change to that code
 before H is read is a correction under the [amendment
 protocol](#amendment-protocol). Every score on a test day of February to June
 comes from the single entry point. It writes the **trial ledger**,
-`experiments/results/short_horizon_2025_trials.parquet` (zstd), one row per
+`data/short_horizon_2025/short_horizon_2025_trials.parquet` (zstd), one row per
 D run, configuration and test day, with the columns `run`, `key`, `day`,
-`net_bp`, `G_bp`, `pnl_long_bp`, `pnl_short_bp`, `trades` and `skips`; the
-catalogue's sha256 and each run's commit go in a sidecar,
-`…_trials.json`, with the file's sha256 and row count, and the file is split
-into parts under 100 MB if it needs to be. The ledger is committed at the end
-of each stage. **N_trials** is the number of distinct (run, key) pairs: every
+`net_bp`, `G_bp`, `pnl_long_bp`, `pnl_short_bp`, `trades` and `skips`, split
+into parts under 100 MB if it needs to be. The parts stay under `data/` and
+are never committed. A small **manifest**,
+`experiments/results/short_horizon_2025_trials.json`, records the
+catalogue's sha256, each run's commit, every part's sha256 and row count, and
+the ledger's sha256 (every part's bytes in order) and row count; the manifest
+is committed at the end of each stage, and H's open checks the parts on disk
+against it. **N_trials** is the number of distinct (run, key) pairs: every
 configuration scored in every complete D run, counted even beyond N_max. It
 is the N quoted on every page and given to N_eff and the deflated Sharpe
 ratio; the rows of a superseded run stay in the ledger and in N_trials.
@@ -993,7 +996,7 @@ computation on a February to June test day outside the entry point (a
 configuration run by hand, or any statistic of a label, a return, a
 prediction or a P&L on those days, a feature's IC included) is a **hand
 run**. Replay, validation, the leakage tests and feature building are not.
-A hand run is logged in the ledger's sidecar with its date, what it computed
+A hand run is logged in the ledger's manifest with its date, what it computed
 and the days it read, and it sets every searched slot (S-C, S-R, and S-P or
 S-M when their signal is C\* or R\*) to `not admitted on D (hand run)`, with
 p = 1 on every block. The rule can only lower statuses, and it leaves the
@@ -1873,9 +1876,12 @@ archive is kept after its replay).
 most 864,000 rows (one per 100 ms) of about 5.5 KB each, so 5–6 GB per worker
 at peak. The fetch therefore replays books with **at most 4 worker
 processes**, fewer if four times the peak resident memory of one replayed day
-exceeds 24 GB. That peak is measured before stage 1 on a 2024 day the
-repository has already replayed (a day's row count, not its archive's size,
-sets it) and recorded in the amendment. The replay itself is unchanged.
+exceeds 24 GB. That peak is measured at stage 0, before stage 1, on the two
+timing days' `ob500` archives kept under `data/timing_archives/` (2024-02-11
+and 2024-03-05, the busiest; a day's row count, not its archive's size, sets
+it), each replayed alone in a fresh process, with the replay's seconds beside
+it; the larger peak sets the workers, and both go into stage 0's record and
+the amendment. The replay itself is unchanged.
 
 **A failed download is not an exclusion.** `data/ensure._fetch_days` reports
 any exception as an unavailable day, and `data/bybit._one_day` turns any
@@ -1987,9 +1993,16 @@ simulator 5.6–10.3 s per BTCUSDT cell-day in one process, 0.85–2.5 s of wall
 time on 6 workers; the normaliser 49 s per day for 28 columns. Null B and
 the refit have no measured unit cost yet: stage 0 measures Null B's
 vectorised cost per cell-day and shift, the refit's re-prediction of every
-row of the test days, the network's inference per test day and its scoring of
-the inner validation at every epoch, and projects Null B at 137 × the
-catalogue's cell-days.
+row of the test days, the network's training batch and its inference per row
+(each timed over a whole day's rows, the busier timing day's, since a sample's
+time per batch or per row carries the device's start-up; the sample's figures
+are kept beside the day's), the network's inference per test day and its
+scoring of the inner validation at every epoch, and the replay's seconds and
+peak resident memory on the two timing days' `ob500` archives kept under
+`data/timing_archives/`, each replayed alone in a fresh process: the slower
+archive's seconds stand for a day in place of the 2–3 minutes above, and the
+larger peak sets the replay workers. It projects Null B at 137 × the
+catalogue's cell-days, and its record holds every figure it measured.
 
 | Stage | Size | Estimate |
 |---|---|---|
@@ -2095,8 +2108,10 @@ E's bars, H, F and P.
 - **H** opens only if the amendment records the YAML's sha256, the file on
   disk has it and is committed, the tree is clean, every frozen weight file's
   sha256, every frozen finalist file's and the fitted-values file's sha256
-  equal the amendment's, the trial ledger and its sidecar are committed with
-  the sha256 and the row count the amendment records, the catalogue's sha256 equals the
+  equal the amendment's, the trial ledger's manifest is committed with
+  the sha256 and the row count the amendment records and the parts on disk
+  are exactly the manifest's (each at its sha256 and row count, in its order,
+  and no other part beside them), the catalogue's sha256 equals the
   registered one (or stage 0's amendment's), and no book, print, funding or
   hourly-bar file of H and no hourly bar of E is already on disk (the Binance
   daily bars of item 5 of [what was
@@ -2247,8 +2262,8 @@ slot: F is still read and reported, but nothing is taken to P.
 
 **Files**, written by the entry point:
 
-- `experiments/results/short_horizon_2025_trials.parquet` and its sidecar
-  `…_trials.json`, the trial ledger; N_trials, its distinct (run, key)
+- `experiments/results/short_horizon_2025_trials.json`, the trial ledger's
+  manifest, its parts staying under `data/short_horizon_2025/`; N_trials, its distinct (run, key)
   pairs, is the N quoted on every page, and its sha256 and row count go in
   the amendment;
 - `…_leaderboard.csv`: every configuration with gross, net, G, trades a day,
@@ -2439,8 +2454,8 @@ Every blocking and minor point was taken in; where a point offered two fixes:
 - **Raw-size features are scaled by W's median touch size**, with float32 only
   for a column that still fails the finiteness test, rather than float32 for
   every raw-size column: the disk budget holds.
-- **The trial ledger's catalogue hash and commits go in a sidecar**, rather
-  than a header: a parquet file stays one table, and the sidecar carries its
+- **The trial ledger's catalogue hash and commits go in a manifest**, rather
+  than a header: a parquet file stays one table, and the manifest carries its
   sha256 and row count.
 
 **Earlier choices, kept.**
@@ -2695,10 +2710,48 @@ each where it applies and with one line here:
 - **A trade's Null A hour is that of its entry snapshot**: the hour in which
   the position is opened, whatever hour its decision row fell in.
 
+**Choices the entry point made.** Writing the single entry point needed a few
+more values the text above left open. They were written in on 9 and 10
+October 2026, before any data was read, one line each:
+
+- **The trial ledger's parts stay under `data/`, and a committed manifest
+  records them**, rather than committing the parquet files: the repository
+  ignores parquet and refuses any file over 1 MB, and the manifest's sha256 of
+  every part, checked against the files on disk when H opens, binds the rows
+  as a commit would; H does not open while a part is missing or differs.
+- **The refit's shifted labels are matched by time**, not by exact stamp: a
+  training row takes the label of the last training row at or before its
+  stamp less the shift, within twice the rows' median spacing, else none,
+  since event-time rows never repeat a stamp a whole number of days apart.
+- **A row with a missing input is dropped from a fit and not scored**, as a
+  warm-up row is, rather than imputed: an imputed value is a guess the model
+  would learn from.
+- **A column with no value in January is dropped before selection**: it has
+  no variance to select on and would leave the selector no complete row.
+- **S-M's failure on its making part is named "(i)"**, the payoff condition
+  it adds to: the registered statuses list only (i) to (iv).
+- **A side with no candidate row has its threshold written as 2**: a
+  probability never reaches it, so the side never trades, and the loader
+  needs a finite number.
+- **The amendment's epoch and S-C threshold mappings may be empty**: no
+  epoch is frozen when R\* is not the network, and no S-C threshold when C\*
+  does not exist.
+- **`net_per_100_clip_day` takes each signal-entry attempt's net over its own
+  entry's notional and the day's funding over the mean of those notionals**:
+  the simulator settles funding on the day, not on an attempt, and every entry
+  is one clip, so the notionals differ only with the price.
+- **Stage 0 times the network over a whole day's rows and the replay on the
+  two timing days' archives**: a training batch or a row's inference timed on
+  a sample carries the device's start-up, which a day's rows spread thin, so
+  the projection takes the day's figures (the sample's kept beside them); the
+  replay's seconds and peak memory, measured on the `ob500` archives of
+  2024-02-11 and 2024-03-05 under `data/timing_archives/`, stand for a day's
+  replay and set its workers, in place of the 2–3 minutes a day.
+
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90`.
+`3cd428257e46e0772229c18d1feadb9dba5efe48af83cbf7284588efd37e4c12`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2719,7 +2772,12 @@ review of the search, and
 search was narrowed to BTCUSDT, and
 `d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d` before the
 values the study code fixed were written in, `N` among them, which left 24
-placeholders.)
+placeholders, and
+`1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90` before the
+trial ledger's parts were moved under `data/` beside a committed manifest, and
+`d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a` before
+stage 0's timing of the network over a whole day's rows and of the replay on
+the two timing days' archives was written in.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the
