@@ -84,7 +84,8 @@ def test_a_read_runs_the_detector_over_its_own_days_p_after_f(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """P's span runs on from F (F's days first); a stand-in for H (the rehearsal) reads
-    only its own planned days, never H's."""
+    only its own planned days, never H's, and a stand-in for P on days outside P (the
+    reader-test days) reads its own days, never F's."""
     from trading_research.pipeline.short_horizon import flags
 
     read: list[date] = []
@@ -105,3 +106,6 @@ def test_a_read_runs_the_detector_over_its_own_days_p_after_f(
     read.clear()
     sd.beside_r(block("H", (date(2025, 6, 29), date(2025, 6, 30))))
     assert read == [date(2025, 6, 29), date(2025, 6, 30)]
+    read.clear()
+    found = sd.beside_r(block("P", (date(2026, 1, 5), date(2026, 1, 6))))
+    assert read == [date(2026, 1, 5), date(2026, 1, 6)] and found["second_detector"]["days"] == 2

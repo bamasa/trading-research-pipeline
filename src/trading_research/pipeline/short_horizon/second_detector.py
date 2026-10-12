@@ -137,7 +137,8 @@ def mean_channel(close: pd.Series, end: date, profile: Sequence[float]) -> list[
 
 def beside_r(block: Any) -> dict[str, Any]:
     """What a block's read reports beside R: its span of the second detector over the
-    block's planned days (P's after F's, its span running on from F), and the frozen
+    block's planned days (P's after F's, its span running on from F; a stand-in for
+    P on days outside P, the rehearsal's, reads its own days only), and the frozen
     detector's mean channel over the stream to the block's end."""
     from trading_research.pipeline.short_horizon import flags
 
@@ -146,7 +147,7 @@ def beside_r(block: Any) -> dict[str, Any]:
     profile = list(block.value(("detector", "hour_profile")))
     span = SPAN_OF_BLOCK.get(block.name)
     days = list(block.days_planned)
-    if block.name == "P":
+    if block.name == "P" and days and sa.block_of(days[0]) == "P":
         days = [*block.study.scale.days("F"), *days]
     found = None if span is None else run_days(block.study, days, block.access, span)
     return {"second_detector": found, "mean_channel": mean_channel(close, end, profile)}
