@@ -55,12 +55,14 @@ The day
 -------
 Every day starts flat, quotes nothing before ``warmup_s`` or from
 ``stop_quoting_at``, and is flattened by a costed taker order sent at
-``flatten_at``. If no snapshot arrives for ``suspend_after_pause_s``, every
+``flatten_at``. Between the two, while a position is held, the quoter is still
+asked at each snapshot and only its taker order (``Quotes.cross``) is honoured,
+so an exit due before the flatten is not held to it. If no snapshot arrives for ``suspend_after_pause_s``, every
 order is pulled and nothing is quoted until the next snapshot. A day the
 stored book reports sequence gaps for, whose flatten found no fresh book, or
 that has no funding plane, is flagged and excluded from verdicts. The
 accounting identity is checked after every change to the account and once more
-at the end. The full set of rules, each with the direction it biases a result and the
+at the end, with each side's turnover against the sum of its fills' notionals. The full set of rules, each with the direction it biases a result and the
 test that pins it, is in ``docs/market_making_simulator.md``.
 """
 
@@ -391,6 +393,7 @@ class _Day:
         stop = self.start + _time_ns(config.stop_quoting_at)
         flatten = self.start + _time_ns(config.flatten_at)
         self.stop_ns = stop
+        self.flatten_ns = flatten
         self._schedule(stop, _STOP, None)
         self._schedule(flatten, _FLATTEN, None)
 
@@ -495,6 +498,8 @@ class _Day:
                     self._fill(order, filled, CROSSED, t)
         if self.quote_start <= t < self.stop_ns and not self.stopped:
             self._decide(row, t)
+        elif self.stopped and t < self.flatten_ns and self.account.position != 0.0:
+            self._decide(row, t, cross_only=True)
 
     def _trade(self, row: int, t: int, side: int) -> None:
         if not self.trade_eligible[row]:
@@ -507,7 +512,7 @@ class _Day:
         rule = self.config.fill_rule
         for order in list(self.resting[side]):
             filled, path = on_print_rule(
-                order, price, available, aggressor, rule=rule, ts=t, growth=growth
+                order, price, available, aggressor, rule=rule, ts=t, growth=growth, lot=self.lot
             )
             if filled > 0.0:
                 self._fill(order, filled, path, t)
@@ -562,7 +567,8 @@ class _Day:
                 return 0.0
         return 0.0
 
-    def _decide(self, row: int, t: int) -> None:
+    def _decide(self, row: int, t: int, *, cross_only: bool = False) -> None:
+        """Ask the quoter; with ``cross_only`` (after the stop) only its taker order counts."""
         config = self.config
         events = self.events
         mid = self.mids[row]
@@ -612,6 +618,11 @@ class _Day:
             )
             self.observe(own, self.opened_ns)
         wanted = self.quoter.quotes(view, self.account.position)
+        if cross_only:
+            self.counters.add("decisions_after_stop")
+            if wanted.cross:
+                self._cross(wanted.cross, t + config.feed_latency_ns)
+            return
         self.counters.add("decisions")
         bid, ask = wanted.bid, wanted.ask
         if bid.price is not None and ask.price is not None and bid.price >= ask.price:
@@ -1034,6 +1045,7 @@ class _Day:
             raise IdentityError(
                 f"decomposition net {decomposition['net']!r} differs from cash {equity!r}"
             )
+        check_turnover(fills, account.maker_turnover, account.taker_turnover)
 
         orders = pd.DataFrame(
             [
@@ -1114,6 +1126,17 @@ class _Day:
             oracle=oracle,
             flags=tuple(flags),
         )
+
+
+def check_turnover(fills: pd.DataFrame, maker_turnover: float, taker_turnover: float) -> None:
+    """Raise :class:`IdentityError` unless each side's turnover is the sum of its
+    fills' notionals (the registration's K-acct: turnover equals the fills)."""
+    for maker, booked in ((True, maker_turnover), (False, taker_turnover)):
+        mine = fills[fills["maker"].to_numpy(dtype=bool) == maker]
+        found = float((mine["price"] * mine["size"]).sum()) if len(mine) else 0.0
+        if not abs(found - booked) <= 1e-9 * max(1.0, booked):
+            side = "maker" if maker else "taker"
+            raise IdentityError(f"{side} turnover {booked!r} is not its fills' notional {found!r}")
 
 
 def _time_ns(moment: time) -> int:

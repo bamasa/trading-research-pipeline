@@ -37,10 +37,10 @@ Choices the registration leaves open, made here:
   statistics in its row, and its measured numbers are in a table of their own;
 * the ladder's A0 rows are A0's mean daily net at 0/0 crossing, and its net
   over the filled notional under each fill rule (O's days pooled); S25's D
-  gross is the leaderboard's, blank until the trial ledger records a gross;
+  gross is the leaderboard's (stage B keeps each trade's gross);
 * the regime map's charts keep units apart: the taker slots in bp of traded
-  notional, S-P and S-M per 100 USDT of clip a day; S25-Z, whose series is a
-  gross, is in the file and not on a chart.
+  notional, S-P and S-M per 100 USDT of clip a day; S25-Z, whose net is at
+  0/0, is in the file and not on a chart.
 """
 
 from __future__ import annotations
@@ -431,7 +431,7 @@ def finalist_inputs(c: Computed, block: str, slot: str) -> Any:
                           placebo_percentile=_number(numbers.get("placebo_percentile")),
                           k_nbhd_median=_number(numbers.get("k_nbhd_median")),
                           break_even_per_side=_number(numbers.get("break_even_per_side")),
-                          attribution=found, **common)  # fmt: skip
+                          tiers_paying=numbers.get("tiers_paying"), attribution=found, **common)  # fmt: skip
 
 
 def finalists_page(c: Computed, out: Written) -> pd.DataFrame | None:

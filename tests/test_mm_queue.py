@@ -432,6 +432,7 @@ def test_an_inside_order_shares_arrival_prints_with_hidden_earlier_joiners(
     market = hand_built_market(
         [(0.0, *book), (100.0, *book), (200.0, *book)],
         [(50.0, 101, 3.0, -1)],
+        lot=0.1,
     )
     config = SimConfig(
         clip_notional=10.0, clip_touch_share=1e9, warmup_s=0.0, arrival_growth=growth
@@ -449,12 +450,35 @@ def test_a_touch_order_shares_the_excess_in_its_arrival_interval(growth: Arrival
     market = hand_built_market(
         [(0.0, *book), (100.0, *_book(100, 102, size=10.0)), (200.0, *book)],
         [(50.0, 100, 13.0, -1)],
+        lot=0.1,
     )
     config = SimConfig(
         clip_notional=10.0, clip_touch_share=1e9, warmup_s=0.0, arrival_growth=growth
     )
     fills = simulate_day(market, Fixed(bid=100), config).fills.query("maker")
     assert fills["size"].sum() == pytest.approx(_ARRIVAL_SHARE[growth])
+
+
+def test_a_fill_at_the_price_is_floored_to_the_lot() -> None:
+    """The pro-rata share of a print is not a size the venue matches: with a lot
+    of 1 the order gets 2 of the 2.4 it is entitled to, and the rest stays
+    entitled, so the next print at the price tops it up by whole lots only."""
+    order = _arrived(0.0, size=10.0)  # arrival snapshot at 0, live at 25
+    first = on_print(order, 100, 3.0, -1, ts=125, growth=ArrivalGrowth.PRO_RATA_TIME, lot=1.0)
+    assert first == (2.0, QUEUE) and order.remaining == 8.0  # 0.8 x 3 = 2.4, floored
+    second = on_print(order, 100, 3.0, -1, ts=125, growth=ArrivalGrowth.PRO_RATA_TIME, lot=1.0)
+    assert second == (2.0, QUEUE)  # 0.8 x 6 - 2 = 2.8, floored
+    assert on_print(_arrived(0.0), 100, 0.6, -1, ts=125, growth=ArrivalGrowth.NONE, lot=1.0) == (
+        0.0,
+        "",
+    )
+    book = _book(100, 103)
+    market = hand_built_market(
+        [(0.0, *book), (100.0, *book), (200.0, *book)], [(50.0, 101, 3.0, -1)], lot=1.0
+    )
+    config = SimConfig(clip_notional=10.0, clip_touch_share=1e9, warmup_s=0.0)
+    fills = simulate_day(market, Fixed(bid=101), config).fills.query("maker")
+    assert fills["size"].tolist() == [2.0]
 
 
 def test_arrival_prints_are_shared_as_a_running_total_and_never_exceed_the_print() -> None:

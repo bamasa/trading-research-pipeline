@@ -236,6 +236,12 @@ the spread was filled first by every print at its price until the next
 snapshot, whichever bracket was set: exactly the fills a faster competitor
 reacting to the same snapshot would have taken.
 
+**Whole lots.** A fill at the price is floored to the instrument's lot: the
+pro-rata share of a print, or what is left of it after a proportionally
+attributed cancellation, is not a size the venue matches, and the part below
+one lot stays unfilled (biases fills down by less than a lot a print).
+*Test.* `test_a_fill_at_the_price_is_floored_to_the_lot`.
+
 **Off-book prints.** A print more than 25 bp outside the price range of the ten
 visible levels of the latest snapshot at or before it could not have swept that
 book (a negotiated block trade, or a bad record) and is offered to no own order;

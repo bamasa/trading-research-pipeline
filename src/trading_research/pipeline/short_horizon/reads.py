@@ -181,11 +181,14 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
     numbers on all of the block; for a slot on S25's signal, its numbers with kills
     and placebos inside S25's information set (H from 2025-08-01, all of H, F, P);
     for a slot with a regime window above 0, its regime attribution; its regime,
-    passive-exit and control-IC measurements; on H, FILL on its stream; and its
-    verdict's numbers on its status window (``windows``, the whole block by
-    default) with the days excluded for sequence gaps inside it put back (``gaps``)."""
+    passive-exit and control-IC measurements; on H, FILL on its stream; the
+    measurements beside its verdict on its status window (``beside_verdict``);
+    and its verdict's numbers on its status window (``windows``, the whole block
+    by default) with the days excluded for sequence gaps inside it put back
+    (``gaps``)."""
     import numpy as np
 
+    from trading_research.pipeline.short_horizon.beside_verdict import verdict_measures
     from trading_research.pipeline.short_horizon.heldout_measures import attribution, measured_rows
     from trading_research.pipeline.short_horizon.statuses import S25_WINDOW_END, merge
 
@@ -207,6 +210,7 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
         found["measured"] = measured_rows(s)
         window = windows.get(slot, sa.BLOCKS[block])
         days = within(s.days, window)
+        found["beside_verdict"] = verdict_measures(s, days)
         skips = {k.removeprefix("skipped/"): int(np.nansum(v[s.mask(days)]))
                  for k, v in s.extra.items() if k.startswith("skipped/")}  # fmt: skip
         if skips:  # beside K-placebo and K-drift: entries each placebo skipped in the window
@@ -426,7 +430,7 @@ def sentences(block: str, statuses: dict[str, str], assessments: dict[str, Any])
 def regime_segments(
     series: dict[str, Any], alarms: list[dict[str, Any]], block: str
 ) -> list[dict[str, Any]]:
-    """Each slot's daily series cut at the frozen detector's alarms: a measurement."""
+    """Each slot's daily net cut at the frozen detector's alarms: a measurement."""
     import pandas as pd
 
     from trading_research.reporting.regime_map import regime_map
@@ -434,7 +438,9 @@ def regime_segments(
     stamps = [pd.Timestamp(a["timestamp"]) for a in alarms]
     rows: list[dict[str, Any]] = []
     for slot, s in series.items():
-        daily = pd.Series(s.value, index=pd.Index(s.days))
+        # S25-Z's net is its net at 0/0, beside its gross primary series
+        net = s.second if s.kind == "zero" and s.second is not None else s.value
+        daily = pd.Series(net, index=pd.Index(s.days))
         frame = regime_map(daily, stamps, blocks=dict.fromkeys(s.days, block), slot=slot)
         rows += json.loads(frame.to_json(orient="records", date_format="iso"))
     return rows

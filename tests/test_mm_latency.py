@@ -93,7 +93,7 @@ def test_a_replace_loses_priority_and_a_kept_quote_keeps_it() -> None:
     after = _book(100, 102, size=10.0)
     prints = [(50.0, 100, 6.0, -1), (250.0, 100, 5.0, -1)]
     snapshots = [(0.0, *BOOK), (100.0, *after), (200.0, *after)]
-    market = hand_built_market(snapshots, prints)
+    market = hand_built_market(snapshots, prints, lot=0.1)  # 4.6 ahead: a 0.4 fill is a lot
 
     kept = simulate_day(market, ALWAYS_100, CONFIG)
     assert _maker_fill_times(kept) == [250.0]

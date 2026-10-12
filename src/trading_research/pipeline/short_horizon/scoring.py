@@ -9,7 +9,8 @@ guard, one position at a time by the event-jump loop, each trade's long and
 short walked P&L looked up). A day keeps three files, written together:
 
 * the trial ledger's rows (one per cell, zeros for a cell without a trade);
-* the trades Null A sums by hour (stamped at the entry snapshot);
+* the trades Null A sums by hour (stamped at the entry snapshot), each with
+  its gross in USDT, from which the leaderboard's gross is formed;
 * the accepted entries Null B carries to other days (time of day and side).
 
 A day already scored is not scored again. At the end the day's rows go into the
@@ -84,7 +85,9 @@ def score_day(
         for key, found in scored.items():
             stale = stale or found.stale
             if found.trades:
-                trades.append(pd.DataFrame(trade_rows(key, table, found)))
+                rows = pd.DataFrame(trade_rows(key, table, found))
+                rows["gross"] = np.nan if found.gross is None else found.gross
+                trades.append(rows)
                 taken = entries_of(table, found)
                 entries.append(
                     pd.DataFrame(
@@ -92,7 +95,7 @@ def score_day(
                     )
                 )
     empty_trades = pd.DataFrame(
-        columns=["key", "time", "side", "notional", "pnl_long_bp", "pnl_short_bp"]
+        columns=["key", "time", "side", "notional", "pnl_long_bp", "pnl_short_bp", "gross"]
     )
     empty_entries = pd.DataFrame({"cell": pd.Series(dtype=np.int64), "tod_ns": pd.Series(dtype=np.int64),
                                   "side": pd.Series(dtype=np.int64)})  # fmt: skip
@@ -184,3 +187,27 @@ def run(study: Any) -> dict[str, Any]:
         "n_trials": int(manifest["n_trials"]),
         "commit_the_trial_ledger": "the registration commits the ledger's manifest at the end of each stage; its parts stay under data/",
     }
+
+
+def gross_bp(out: Path, days: Sequence[date], keys: Sequence[str]) -> np.ndarray:
+    """Each cell's daily gross over its entry notional, x 1e4 (``gross_bp_trade``,
+    the day formed as for the net), from the trades stage B kept: cells x days in
+    ``keys``' order, NaN on a day without a trade or kept without a gross."""
+    found = np.full((len(keys), len(days)), np.nan)
+    if not days:
+        return found
+    trades = day_frames(out, days, "trades.parquet")
+    if trades.empty or "gross" not in trades:
+        return found
+    entry = pd.DatetimeIndex(pd.to_datetime(trades["time"], utc=True)).tz_localize(None)
+    frame = pd.DataFrame({"key": trades["key"].to_numpy(), "day": entry.normalize(),
+                          "gross": trades["gross"].to_numpy(dtype=np.float64),
+                          "notional": trades["notional"].to_numpy(dtype=np.float64)})  # fmt: skip
+    sums = frame.groupby(["key", "day"], sort=False)[["gross", "notional"]].sum(min_count=1)
+    row = pd.Index(list(keys)).get_indexer(sums.index.get_level_values("key"))
+    stamps = pd.DatetimeIndex(np.asarray(list(days), dtype="datetime64[ns]"))
+    column = stamps.get_indexer(sums.index.get_level_values("day"))
+    ok = (row >= 0) & (column >= 0)
+    values = (sums["gross"] / sums["notional"] * 1e4).to_numpy(dtype=np.float64)
+    found[row[ok], column[ok]] = values[ok]
+    return found

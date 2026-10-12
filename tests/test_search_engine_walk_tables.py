@@ -128,3 +128,15 @@ def test_bad_input_is_refused() -> None:
         execute_rows(table, np.array([5, 3]), np.array([1, 1]))
     with pytest.raises(ValueError, match="side"):
         execute_rows(table, np.array([3, 5]), np.array([1, 0]))
+
+
+def test_the_tables_gross_is_the_executors_gross_trade_by_trade() -> None:
+    """Each trade taken from a table carries its gross before fees and funding, as
+    the executor books it, so stage B can form the leaderboard's gross."""
+    book = make_book(seed=4)
+    table = hold_table(WalkTable.from_book(book, CLIP), 20 * NS_PER_S)
+    rows, side = decisions(book, len(book.ts) // 3, seed=4)
+    taken = execute_rows(table, rows, side)
+    day = execute_day(book, book.ts[rows], side, 20 * NS_PER_S, TakerSettings())
+    assert taken.gross is not None and taken.trades == len(day.trades) >= 3
+    np.testing.assert_allclose(taken.gross, day.trades["gross"].to_numpy(), rtol=0, atol=1e-9)

@@ -71,11 +71,52 @@ class SimCell:
 
 @dataclass(frozen=True)
 class Decisions:
-    """A cell's decisions on one day: stamps, sides and the lean's signed strength in bp."""
+    """A cell's decisions on one day: stamps, sides and the lean's signed strength in bp,
+    and in stratum R each row's EV-gate event (one entry per event)."""
 
     stamps_ns: np.ndarray
     side: np.ndarray
     strength_bp: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    event: np.ndarray | None = None
+
+
+def entry_hours(day: date) -> tuple[int, int]:
+    """The day's entry hours in epoch ns, [00:01, 23:58] as the taker executor's."""
+    from trading_research.backtest.taker import TakerSettings
+
+    settings = TakerSettings()
+    midnight = pd.Timestamp(day.isoformat(), tz="UTC").value
+
+    def at(moment: Any) -> int:
+        return midnight + (moment.hour * 3600 + moment.minute * 60 + moment.second) * 10**9
+
+    return at(settings.no_entry_before), at(settings.no_entry_after)
+
+
+def tape_decisions(tape: Any, cell: Any, rule: Any, scale_bp: float, day: date) -> Decisions:
+    """A cell's decisions on ``day`` from its tape after its own rule, gate and guard:
+    the rows inside the entry hours, and in stratum R every row of each EV-gate event
+    with its event id (the quoter enters an event once, at its first free row); the
+    lean's strength is mu in R and the side times ``scale_bp`` in C."""
+    from trading_research.search_engine.cells import cell_sides
+
+    side, events = cell_sides(tape, cell, rule)
+    stamps = np.asarray(tape.stamps, dtype=np.int64)
+    first, last = entry_hours(day)
+    taken = np.flatnonzero((side != 0) & (stamps >= first) & (stamps <= last))
+    strength = tape.scores["mu_bp"][taken] if cell.stratum == "R" else side[taken] * scale_bp
+    event = None if events is None else np.asarray(events[taken], dtype=np.int64)
+    return Decisions(stamps[taken], side[taken].astype(np.int64),
+                     np.asarray(strength, dtype=np.float64), event)  # fmt: skip
+
+
+def first_of_events(decided: Decisions) -> Decisions:
+    """Each event's first row only (the market maker's lean reads one row an event)."""
+    if decided.event is None or not len(decided.event):
+        return decided
+    first = np.r_[True, decided.event[1:] != decided.event[:-1]]
+    strength = decided.strength_bp[first] if len(decided.strength_bp) else decided.strength_bp
+    return Decisions(decided.stamps_ns[first], decided.side[first], strength, decided.event[first])
 
 
 @dataclass(frozen=True)
@@ -113,9 +154,10 @@ def quoter_and_tapes(
     tapes: dict[str, Any] = flag_tape(flags_ns) if cell.policy != "none" else {}
     if cell.kind == "entry":
         config = _config(cell, max_gaps, flagged)
-        tapes |= entry_tapes(decided.stamps_ns, decided.side)
+        tapes |= entry_tapes(decided.stamps_ns, decided.side, decided.event)
         return SignalEntryQuoter(cell.hold_s, passive_exit=cell.passive_exit), config, tapes
     config = _config(cell, max_gaps, False)
+    decided = first_of_events(decided)
     plan = lean_plan(config, sigma_ref, lean=cell.lean, hold_s=cell.hold_s,
                      policy=RegimePolicy.parse(cell.policy))  # fmt: skip
     tapes |= signal_tapes(decided.stamps_ns, decided.strength_bp)
@@ -143,24 +185,88 @@ def per_100_clip(filled: pd.DataFrame, funding: float) -> float:
     return float((net / notional * 100.0).sum() + funding * 100.0 / notional.mean())
 
 
-def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float) -> dict[str, Any]:
-    """One cell-day: ``net_per_100_clip_day`` and what the kills read beside it."""
+#: What a passive cell-day records beside its series for the measurements beside
+#: every verdict, summed over days (``beside_sums``); NaN where it does not apply.
+BESIDE_COLUMNS: tuple[str, ...] = (
+    "net_usdt", "gross_usdt", "fees_usdt", "funding_usdt", "passive_notional", "taker_notional",
+    "entry_notional", "per100_maker_weight", "per100_taker_weight", "making_usdt", "making_bp_sum", "making_fills",
+    "net_long_usdt", "net_short_usdt", "notional_long", "notional_short", "trades_long",
+    "trades_short", "entries_skipped", "exit_late_snapshot", "flatten_beyond_visible_book",
+    "max_abs_position", "time_above_one_clip_s",
+)  # fmt: skip
+
+
+def _making(fills: pd.DataFrame) -> dict[str, float]:
+    """``spread + adverse(5 s)`` over the passive fills: in USDT, and as the sum and the
+    count of each fill's own value in bp (its 5 s markout), for a mean per fill."""
+    from trading_research.market_making.analysis import horizon_column
+
+    maker = fills[fills["maker"].to_numpy(dtype=bool)] if len(fills) else fills
+    if not len(maker):
+        return {"making_usdt": 0.0, "making_bp_sum": 0.0, "making_fills": 0.0}
+    markout = maker[horizon_column(5.0)].to_numpy(dtype=np.float64)
+    ok = np.isfinite(markout)
+    paid = (maker["price"] * maker["size"]).to_numpy(dtype=np.float64)
+    return {"making_usdt": float((markout[ok] * paid[ok]).sum() * 1e-4),
+            "making_bp_sum": float(markout[ok].sum()), "making_fills": float(ok.sum())}  # fmt: skip
+
+
+def _episodes(fills: pd.DataFrame, clip: float) -> pd.DataFrame:
+    """The market maker's entries: each run of fills from a flat position back to flat,
+    its side, net (fees included), the clip's notional at its first fill and its
+    fills' notionals by kind."""
+    columns = ["side", "net", "notional", "maker_notional", "taker_notional"]
+    if fills.empty:
+        return pd.DataFrame(columns=columns)
+    position = fills["position_after"].to_numpy(dtype=np.float64)
+    flat = np.abs(position) < 1e-12
+    episode = np.r_[0, np.cumsum(flat)[:-1]]
+    side = fills["side"].to_numpy(dtype=np.float64)
+    price = fills["price"].to_numpy(dtype=np.float64)
+    paid = price * fills["size"].to_numpy(dtype=np.float64)
+    maker = fills["maker"].to_numpy(dtype=bool)
+    frame = pd.DataFrame({"episode": episode, "side": side, "price": price,
+                          "flow": -side * paid - fills["fee"].to_numpy(dtype=np.float64),
+                          "maker_notional": np.where(maker, paid, 0.0),
+                          "taker_notional": np.where(maker, 0.0, paid)})  # fmt: skip
+    grouped = frame.groupby("episode", sort=True)
+    first = grouped.first()
+    sums = grouped[["flow", "maker_notional", "taker_notional"]].sum()
+    return pd.DataFrame({"side": first["side"], "net": sums["flow"], "notional": first["price"] * clip,
+                         "maker_notional": sums["maker_notional"],
+                         "taker_notional": sums["taker_notional"]}).reset_index(drop=True)  # fmt: skip
+
+
+def _by_side(table: pd.DataFrame, notional: str) -> dict[str, float]:
+    long, short = table[table["side"] > 0], table[table["side"] < 0]
+    return {"net_long_usdt": float(long["net"].sum()), "net_short_usdt": float(short["net"].sum()),
+            "notional_long": float(long[notional].sum()), "notional_short": float(short[notional].sum()),
+            "trades_long": float(len(long)), "trades_short": float(len(short))}  # fmt: skip
+
+
+def day_values(cell: SimCell, quoter: Any, result: Any, clip: float) -> dict[str, Any]:
+    """One cell-day: ``net_per_100_clip_day`` and what the kills and the measurements
+    beside the verdict read: the making part over the passive fills, each side's
+    turnover, the weights that move ``net_per_100`` to another fee pair exactly (the
+    quoter never reads a fee), the result by side and the execution counters."""
     d = result.decomposition
     fills = result.fills
+    counters = result.counters
     maker = fills[fills["maker"]] if len(fills) else fills
     passive_notional = float((maker["price"] * maker["size"]).sum()) if len(maker) else 0.0
-    making = float(d.get("spread", 0.0) + d.get("adverse", 0.0))
+    made = _making(fills)
     row: dict[str, Any] = {
         "label": cell.label, "slot": cell.slot, "key": cell.key, "excluded": bool(result.excluded),
         "flags": ",".join(result.flags), "net_usdt": float(d.get("net", 0.0)),
         "gross_usdt": float(d.get("gross", 0.0)), "fees_usdt": float(d.get("fees", 0.0)),
-        "funding_usdt": float(d.get("funding", 0.0)), "making_usdt": making,
+        "funding_usdt": float(d.get("funding", 0.0)), **made,
         "passive_fills": len(maker), "passive_notional": passive_notional,
-        "making_bp": making / passive_notional * 1e4 if passive_notional > 0 else float("nan"),
+        "taker_notional": float(counters.get("taker_turnover", 0.0)),
+        "making_bp": made["making_bp_sum"] / made["making_fills"] if made["making_fills"] else float("nan"),
     }  # fmt: skip
     for name in ("exit_late_snapshot", "flatten_beyond_visible_book", "time_above_one_clip_s",
-                 "entries_cancelled_by_flag", "feed_pauses"):  # fmt: skip
-        row[name] = float(result.counters.get(name, 0.0))
+                 "entries_cancelled_by_flag", "feed_pauses", "max_abs_position"):  # fmt: skip
+        row[name] = float(counters.get(name, 0.0))
     orders = result.orders  # what FILL reads: the posted orders and their fills
     posted = len(orders)
     row |= {"orders_posted": float(posted),
@@ -169,25 +275,49 @@ def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float)
             "volume_filled": float(orders["filled"].sum()) if posted else 0.0,
             "notional_filled": float((orders["filled"] * orders["price"]).sum()) if posted else 0.0}  # fmt: skip
     if cell.kind == "entry":
-        table = quoter.attempts(fills)
-        filled = table[table["filled"]] if len(table) else table
-        notional = float(filled["notional"].sum()) if len(filled) else 0.0
-        row |= {"trades": len(filled), "attempts": len(table),
-                "net_per_100": per_100_clip(filled, row["funding_usdt"]),
-                "gross_bp_trade": row["gross_usdt"] / notional * 1e4 if notional > 0 else float("nan"),
-                "net_bp_trade": row["net_usdt"] / notional * 1e4 if notional > 0 else float("nan")}  # fmt: skip
-        flat = fills.empty or abs(float(fills["position_after"].iloc[-1])) < 1e-12
-        cash = float(filled["net"].sum()) if len(filled) else 0.0
-        expected = row["gross_usdt"] - row["fees_usdt"]
-        if flat and abs(cash - expected) > 1e-9 * max(1.0, notional):
-            raise RuntimeError(
-                f"{cell.label}: the filled attempts' cash {cash!r} is not the day's {expected!r}"
-            )
+        row |= _entry_values(quoter, fills, row)
     else:
-        row |= {"trades": _flat_returns(fills), "attempts": len(fills),
-                "net_per_100": row["net_usdt"] * 100.0 / (clip * mid) if mid > 0 else 0.0,
-                "gross_bp_trade": float("nan"), "net_bp_trade": float("nan")}  # fmt: skip
+        row |= _maker_values(fills, clip, row["funding_usdt"])
     return row
+
+
+def _entry_values(quoter: Any, fills: pd.DataFrame, row: dict[str, Any]) -> dict[str, Any]:
+    """The signal-entry quoter's day: each filled attempt over its own clip's notional,
+    and ``gross_bp_trade`` and ``net_bp_trade`` over the entries' filled notional."""
+    table = quoter.attempts(fills)
+    filled = table[table["filled"]] if len(table) else table
+    entered = float(filled["entry_notional"].sum()) if len(filled) else 0.0
+    weight = filled["notional"].to_numpy(dtype=np.float64) / 100.0 if len(filled) else np.ones(0)
+    counts = quoter.counts
+    out = {"trades": len(filled), "attempts": len(table), "entry_notional": entered,
+           "net_per_100": per_100_clip(filled, row["funding_usdt"]),
+           "per100_maker_weight": float((filled["maker_notional"] / weight).sum()) if len(filled) else 0.0,
+           "per100_taker_weight": float((filled["taker_notional"] / weight).sum()) if len(filled) else 0.0,
+           "gross_bp_trade": row["gross_usdt"] / entered * 1e4 if entered > 0 else float("nan"),
+           "net_bp_trade": row["net_usdt"] / entered * 1e4 if entered > 0 else float("nan"),
+           "entries_skipped": float(counts.get("skipped_busy", 0) + counts.get("expired_unseen", 0)),
+           **_by_side(filled, "entry_notional")}  # fmt: skip
+    flat = fills.empty or abs(float(fills["position_after"].iloc[-1])) < 1e-12
+    cash = float(filled["net"].sum()) if len(filled) else 0.0
+    expected = row["gross_usdt"] - row["fees_usdt"]
+    if flat and abs(cash - expected) > 1e-9 * max(1.0, entered):
+        raise RuntimeError(
+            f"{row['label']}: the filled attempts' cash {cash!r} is not the day's {expected!r}"
+        )
+    return out
+
+
+def _maker_values(fills: pd.DataFrame, clip: float, funding: float) -> dict[str, Any]:
+    """The market maker's day: each entry (flat to flat) over the clip's notional at its
+    first fill, the day's funding over their mean, as for the quoter's attempts."""
+    table = _episodes(fills, clip)
+    weight = table["notional"].to_numpy(dtype=np.float64) / 100.0 if len(table) else np.ones(0)
+    return {"trades": _flat_returns(fills), "attempts": len(fills), "entry_notional": float("nan"),
+            "net_per_100": per_100_clip(table, funding),
+            "per100_maker_weight": float((table["maker_notional"] / weight).sum()) if len(table) else 0.0,
+            "per100_taker_weight": float((table["taker_notional"] / weight).sum()) if len(table) else 0.0,
+            "gross_bp_trade": float("nan"), "net_bp_trade": float("nan"),
+            "entries_skipped": float("nan"), **_by_side(table, "notional")}  # fmt: skip
 
 
 def simulate_day(job: DayJob) -> Path:
@@ -200,7 +330,6 @@ def simulate_day(job: DayJob) -> Path:
     roots = StudyRoots.under(job.repo / "data")
     events = sl.load_events_day(job.symbol, job.day, book_roots=[roots.book], trades_root=roots.trades,
                                 funding_root=roots.funding, access=sa.development_access())  # fmt: skip
-    mid = float(np.mean((events.bid_px[:, 0] + events.ask_px[:, 0]) / 2.0) * events.spec.tick)
     clip = sl.clip_for(job.symbol)
     rows = []
     for cell, decided in zip(job.cells, job.decisions, strict=True):
@@ -208,7 +337,7 @@ def simulate_day(job: DayJob) -> Path:
             cell, decided, job.flags_ns, job.max_sequence_gaps, job.sigma_ref
         )
         result = simulate(events, quoter, config, tapes)
-        rows.append(day_values(cell, quoter, result, clip, mid) | {"day": job.day.isoformat()})
+        rows.append(day_values(cell, quoter, result, clip) | {"day": job.day.isoformat()})
     target = job.out / f"{job.day}.parquet"
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
@@ -274,12 +403,11 @@ def slot_cells(keys: list[str], record_d: dict[str, Any]) -> list[SimCell]:
 def cell_decisions(
     inputs: Any, key: str, day: date, record: dict[str, Any], tapes: Path
 ) -> Decisions:
-    """A cell's decisions on one test day: its tape rows after its own rule, gate and
-    guard (an EV-gate event's first row only), with the lean's signed strength."""
+    """A cell's decisions on one test day (:func:`tape_decisions`), the lean's scale in
+    C the median absolute forward move over the fold's training days."""
     from trading_research.pipeline.short_horizon import features as ft
     from trading_research.pipeline.short_horizon.fits import rules_from
     from trading_research.search_engine.catalogue import parse_key
-    from trading_research.search_engine.cells import cell_sides
     from trading_research.search_engine.tapes import read_tape, tape_path
 
     cell = parse_key(key)
@@ -289,23 +417,14 @@ def cell_decisions(
     rule = None
     if cell.stratum == "C":
         rule = rules_from(record["fits"][cell.configuration]["thresholds"])[cell.trades_per_day]
-    side, events = cell_sides(tape, cell, rule)
-    taken = np.flatnonzero(side != 0)
-    if events is not None and len(taken):
-        first = np.r_[True, events[taken][1:] != events[taken][:-1]]
-        taken = taken[first]
-    if cell.stratum == "R":
-        strength = tape.scores["mu_bp"][taken]
-    else:
+    scale = 0.0
+    if cell.stratum != "R":
         moves = [
             inputs.targets(d)[ft.forward_column(cell.hold_s)].to_numpy()
             for d in record["days"]["train"]
         ]
         scale = float(np.nanmedian(np.abs(np.concatenate(moves)))) if moves else 0.0
-        strength = side[taken] * scale
-    return Decisions(
-        tape.stamps[taken], side[taken].astype(np.int64), np.asarray(strength, dtype=np.float64)
-    )
+    return tape_decisions(tape, cell, rule, scale, day)
 
 
 def simulate_all(study: Any, inputs: Any, cells: list[SimCell], days: list[date]) -> pd.DataFrame:
@@ -346,10 +465,23 @@ def simulate_all(study: Any, inputs: Any, cells: list[SimCell], days: list[date]
     return pd.concat([pd.read_parquet(out / f"{d}.parquet") for d in days], ignore_index=True)
 
 
+def flagged_days(rows: pd.DataFrame) -> set[str]:
+    """Every day a simulated run of any cell flagged (stale flatten, sequence gaps or
+    no funding): stage C leaves it out of every passive cell's series."""
+    return {str(d) for d in rows.loc[rows["excluded"].astype(bool), "day"]} if len(rows) else set()
+
+
+def kept_rows(rows: pd.DataFrame) -> pd.DataFrame:
+    """The rows on days no run flagged."""
+    return rows[~rows["day"].astype(str).isin(flagged_days(rows))] if len(rows) else rows
+
+
 def admit(rows: pd.DataFrame, cells: list[SimCell], days: list[date], slot: str,
           record_d: dict[str, Any]) -> dict[str, Any]:  # fmt: skip
-    """S-P's or S-M's admission on D: (i) and (ii) on ``net_per_100_clip_day``, and
-    for S-M a positive making part (named with (i), the payoff condition it adds to)."""
+    """S-P's or S-M's admission on D: (i) and (ii) on ``net_per_100_clip_day`` over
+    the days no run flagged, and for S-M a positive making part, the mean of
+    ``spread + adverse(5 s)`` over its passive fills in bp per fill (named with (i),
+    the payoff condition it adds to)."""
     from trading_research.validation.choice import CellDays, not_admitted, slot_conditions
 
     signal, key = sp_signal(record_d)
@@ -357,19 +489,16 @@ def admit(rows: pd.DataFrame, cells: list[SimCell], days: list[date], slot: str,
     central = next(
         i for i, c in enumerate(mine) if (c.key == key if slot == "S-P" else c.lean == 1.0)
     )
+    where = {c.label: i for i, c in enumerate(mine)}
+    flagged = flagged_days(rows)
+    days = [d for d in days if d.isoformat() not in flagged]
     shape = (len(mine), len(days))
     net, trades = np.full(shape, np.nan), np.zeros(shape, dtype=np.int64)
-    where = {c.label: i for i, c in enumerate(mine)}
     columns = {d.isoformat(): j for j, d in enumerate(days)}
-    for label, day, excluded, value, count in zip(
-        rows["label"],
-        rows["day"],
-        rows["excluded"],
-        rows["net_per_100"],
-        rows["trades"],
-        strict=True,
+    for label, day, value, count in zip(
+        rows["label"], rows["day"], rows["net_per_100"], rows["trades"], strict=True
     ):
-        if label in where and day in columns and not excluded:
+        if label in where and day in columns:
             net[where[label], columns[day]] = float(value)
             trades[where[label], columns[day]] = int(count)
     index = np.tile(np.arange(len(mine)), (len(mine), 1))
@@ -377,9 +506,10 @@ def admit(rows: pd.DataFrame, cells: list[SimCell], days: list[date], slot: str,
     failed = [name for name, ok in (("i", found.i), ("ii", found.ii)) if not ok]
     making = float("nan")
     if slot == "S-M":
-        own = rows[(rows["label"] == mine[central].label) & ~rows["excluded"]]
-        notional = float(own["passive_notional"].sum())
-        making = float(own["making_usdt"].sum()) / notional * 1e4 if notional > 0 else float("nan")
+        own = kept_rows(rows)
+        own = own[own["label"] == mine[central].label]
+        fills = float(own["making_fills"].sum())
+        making = float(own["making_bp_sum"].sum()) / fills if fills > 0 else float("nan")
         if not making > 0 and "i" not in failed:
             failed.insert(0, "i")
     if record_d["hand_runs"] and signal != "S25":
@@ -388,13 +518,15 @@ def admit(rows: pd.DataFrame, cells: list[SimCell], days: list[date], slot: str,
         status = not_admitted(failed) if failed else "admitted"
     return {"signal": signal, "signal_key": key, "cell": mine[central].label, "S": found.s,
             "monthly": list(found.monthly), "i": found.i, "ii": found.ii,
-            "making_bp_per_fill": making, "status_on_D": status}  # fmt: skip
+            "making_bp_per_fill": making, "status_on_D": status,
+            "flagged_days": sorted(flagged)}  # fmt: skip
 
 
 def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """A0 on O (S25's signal under the short-window protocol) crossing at 0/0, and
-    FILL: the same decisions posted under the three fill rules. Descriptive only;
-    beside the record, its four runs' rows for the trial ledger."""
+    """A0 on O (S25's signal under the short-window protocol) crossing at 0/0, with
+    its net at the base and every published tier, and FILL: the same decisions
+    posted under the three fill rules. Descriptive only; beside the record, its
+    four runs' rows for the trial ledger."""
     from functools import partial
 
     from trading_research.backtest.taker import TakerSettings, execute_day
@@ -404,6 +536,7 @@ def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str,
     from trading_research.market_making.fill_rules import compare_fill_rules
     from trading_research.market_making.signal_entry import SignalEntryQuoter, entry_tapes
     from trading_research.pipeline.short_horizon import features as ft
+    from trading_research.pipeline.short_horizon.beside_verdict import crossing_tiers
     from trading_research.pipeline.short_horizon.fits import (
         LOOSEST_RATE,
         FoldData,
@@ -476,6 +609,7 @@ def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str,
                        "net_bp": float(r["net"]) / notional * 1e4 if notional > 0 else 0.0})  # fmt: skip
     return {"run": True, "days": [d.isoformat() for d in fold.test], "thresholds": entry["thresholds"],
             "crossing": crossing, "gross_bp_turnover": gross / turnover * 1e4 if turnover else float("nan"),
+            "net_at_tiers": crossing_tiers(crossing),
             "ic": ic, "fill_summary": fill.summary.reset_index().to_dict("records"),
             "fill_prediction": fill.prediction()}, trials  # fmt: skip
 
@@ -520,9 +654,36 @@ def record_trials(study: Any, frame: pd.DataFrame) -> dict[str, Any]:
             "ledger_rows": int(manifest["rows"]), "ledger_sha256": manifest["sha256"]}  # fmt: skip
 
 
+def passive_dsr(rows: pd.DataFrame, cells: list[SimCell], days: list[date], n_trials: int,
+                admission: dict[str, Any]) -> dict[str, float]:  # fmt: skip
+    """The deflated Sharpe ratio of S-P's and S-M's daily ``net_per_100_clip_day`` on
+    D (their cells, the days no run flagged, 0 without a fill), against N_trials and
+    the variance of the Sharpe ratios of every S-P and S-M cell simulated."""
+    from trading_research.evaluation.overfitting import deflated_sharpe_ratio, sharpe_variance
+
+    kept = kept_rows(rows)
+    wanted = [d.isoformat() for d in days if d.isoformat() not in flagged_days(rows)]
+    labels = [c.label for c in cells if c.slot in ("S-P", "S-M") and not c.measured]
+    mine = kept[kept["label"].isin(labels)]
+    panel = mine.pivot_table(index="day", columns="label", values="net_per_100", aggfunc="sum")
+    panel = panel.reindex(index=wanted, columns=labels).fillna(0.0)
+    variance = sharpe_variance(panel)
+    out: dict[str, float] = {}
+    for slot in ("S-P", "S-M"):
+        label = admission[slot]["cell"]
+        if label in panel and len(panel) >= 3:
+            out[f"{slot}/net"] = deflated_sharpe_ratio(
+                panel[label].to_numpy(), n_trials, variance
+            ).dsr
+    return out
+
+
 def run(study: Any) -> dict[str, Any]:
-    """Stage C's record: every simulated cell-day, S-P's and S-M's admission, A0 and FILL."""
+    """Stage C's record: every simulated cell-day, S-P's and S-M's admission, A0 and
+    FILL, and the second detector over D (reported beside R, run in development)."""
+    from trading_research.data import study_access as sa
     from trading_research.pipeline.short_horizon.inputs import Inputs
+    from trading_research.pipeline.short_horizon.second_detector import run_span
 
     record_d = study.record("D")
     inputs = Inputs(study)
@@ -531,10 +692,11 @@ def run(study: Any) -> dict[str, Any]:
     rows = simulate_all(study, inputs, cells, days)
     rows.to_parquet(study.dir("C") / "cells.parquet", index=False)
     admission = {slot: admit(rows, cells, days, slot, record_d) for slot in ("S-P", "S-M")}
-    summary = rows[~rows["excluded"]].groupby("label").agg(
+    summary = kept_rows(rows).groupby("label").agg(
         days=("day", "count"), mean_net_per_100=("net_per_100", "mean"), trades=("trades", "sum"),
         gross_bp_trade=("gross_bp_trade", "mean"))  # fmt: skip
     measured, trials = a0_and_fill(study, inputs)
+    recorded = record_trials(study, trial_rows(rows, study.run, trials))
     return {
         "commit": study.commit(),
         "cells": [asdict(c) | {"label": c.label} for c in cells],
@@ -543,5 +705,7 @@ def run(study: Any) -> dict[str, Any]:
         "admission": admission,
         "summary": summary.reset_index().to_dict("records"),
         "a0_and_fill": measured,
-        "trials": record_trials(study, trial_rows(rows, study.run, trials)),
+        "trials": recorded,
+        "overfitting": {"dsr": passive_dsr(rows, cells, days, recorded["n_trials"], admission)},
+        "second_detector_D": run_span(study, "D", sa.development_access()),
     }

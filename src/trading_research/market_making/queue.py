@@ -49,7 +49,9 @@ had passed when the order arrived (``pro_rata_time``), or all of it
 (``all_ahead``). The estimate is a running total over the interval: after
 cumulative excess ``E`` the order is entitled to ``(1 - share) * E`` of it,
 less what it has already received, and never to more than the print at hand
-brought.
+brought. A fill at the price is floored to the instrument's lot (``lot``): a
+share of a print, or of a cancellation attributed in proportion, is not a size
+the venue can match, and the part below one lot stays unfilled.
 
 A snapshot that lags its prints
 -------------------------------
@@ -162,6 +164,7 @@ def on_print(
     *,
     ts: int,
     growth: ArrivalGrowth,
+    lot: float = 0.0,
 ) -> tuple[float, str]:
     """Apply one print at time ``ts`` to one order; return the size filled and the path.
 
@@ -194,11 +197,13 @@ def on_print(
         entitled = (1.0 - arrival_share(order, ts, growth)) * order.arrival_excess
         excess = min(excess, max(0.0, entitled - order.arrival_filled))
     filled = min(order.remaining, excess)
+    if lot > 0.0:
+        filled = math.floor(filled / lot + 1e-9) * lot
+    if filled <= 0.0:
+        return 0.0, ""
     order.remaining -= filled
     if order.in_arrival_interval:
         order.arrival_filled += filled
-    if filled <= 0.0:
-        return 0.0, ""
     return filled, QUEUE
 
 
@@ -260,6 +265,7 @@ def on_print_rule(
     rule: FillRule,
     ts: int,
     growth: ArrivalGrowth,
+    lot: float = 0.0,
 ) -> tuple[float, str]:
     """:func:`on_print` under a fill rule; the queue rule is :func:`on_print` itself.
 
@@ -269,7 +275,7 @@ def on_print_rule(
     through the price, up to their size, and ignores prints at it.
     """
     if rule is FillRule.QUEUE:
-        return on_print(order, price, size, aggressor, ts=ts, growth=growth)
+        return on_print(order, price, size, aggressor, ts=ts, growth=growth, lot=lot)
     if aggressor != -order.side or size <= 0.0:
         return 0.0, ""
     beyond = (order.price - price) * order.side

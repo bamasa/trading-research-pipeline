@@ -134,8 +134,11 @@ def test_the_passive_series_carry_the_twin_the_flag_sets_and_each_measurement() 
                         "flagset/0": 5.0, "flagset/1": 6.0, "flipped": -1.0})  # fmt: skip
     s = ho.passive_series(p, rows, DAYS, 0, 4, False)
     assert s.value.tolist() == [1.0, 2.0, 3.0, 4.0] and s.window_h == 4
-    assert set(s.extra) == {"regime/none", "regime/none/trades", "regime/pull_24h", "regime/pull_24h/trades",
-                            "exit/passive", "exit/passive/trades", "twin", "flagsets"}  # fmt: skip
+    assert {k for k in s.extra if not k.startswith("day/")} == {
+        "regime/none", "regime/none/trades", "regime/pull_24h", "regime/pull_24h/trades",
+        "exit/passive", "exit/passive/trades", "twin", "flagsets"}  # fmt: skip
+    assert {"day/net_usdt", "day/passive_notional", "day/making_usdt"} <= set(s.extra)
+    assert s.kind == "entry" and s.extra["day/net_usdt"].tolist() == [1.0] * 4
     assert s.extra["twin"].tolist() == [2.0, 3.0, 4.0, 5.0] and s.extra["exit/passive"][0] == -1.0
     assert s.extra["flagsets"].shape == (2, 4) and s.extra["flagsets"][1].tolist() == [
         6.0,
@@ -145,7 +148,7 @@ def test_the_passive_series_carry_the_twin_the_flag_sets_and_each_measurement() 
     ]
     assert s.extra["regime/none/trades"].tolist() == [2.0] * 4
     bare = ho.passive_series(p, _rows(DAYS, {"true": 1.0}), DAYS, 0, 4, False)
-    assert bare.extra == {} and np.isnan(bare.flipped).all()
+    assert not [k for k in bare.extra if not k.startswith("day/")] and np.isnan(bare.flipped).all()
 
 
 def test_the_put_back_view_reads_the_gap_days_as_usable_with_the_threshold_lifted() -> None:
@@ -211,7 +214,7 @@ def test_run_passive_without_kills_is_the_true_run_of_each_slot(
                             fitted={"sigma_ref": 1.0})  # fmt: skip
     block.work = Path("work")
     own = SimpleNamespace(stamps_ns=np.zeros(0, dtype=np.int64), side=np.zeros(0, dtype=np.int64),
-                          strength_bp=np.zeros(0))  # fmt: skip
+                          strength_bp=np.zeros(0), event=None)  # fmt: skip
     p = ho.PassiveSlot("S-P", SimCell("S-P", C_KEY, "entry", 50.0, policy="pull_4h"), [],
                        [("regime/none", SimCell("S-P", S25, "entry", 50.0))],
                        decisions={C_KEY: [own, own], S25: [own, own]}, flagged=[[own, own]])  # fmt: skip

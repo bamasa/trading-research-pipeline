@@ -315,3 +315,31 @@ def test_f_puts_the_gap_excluded_day_back_as_a_measurement(dry: dict[str, Any]) 
         else:  # a taker slot's days with a trade; a guard may pull the gap day
             assert whole <= back["days"] <= whole + 1, slot
     assert results["split"]["b"] == "2025-09-15" and results["split"]["on_all_of_F"]
+
+
+def test_the_reads_carry_the_measurements_beside_every_verdict_and_beside_r(
+    dry: dict[str, Any],
+) -> None:
+    """Every slot on H reports the result at every tier, by side, its drawdown and
+    counters; S25-Z its registered break-even and its base and cheapest tiers' nets;
+    each read the second detector's span and the mean channel; stage D the power of
+    the bar, stage C the second detector over D."""
+    from trading_research.backtest.costs import tiers_for
+    from trading_research.pipeline.short_horizon.reads import read_results
+
+    study = dry["study"]
+    results = read_results(study, "H")
+    for slot, found in results["measurements"].items():
+        beside = found["beside_verdict"]
+        assert [r["tier"] for r in beside["tiers"]] == [t.name for t in tiers_for("g1")], slot
+        assert set(beside["by_side"]) == {"long", "short"} and "max_drawdown" in beside
+    numbers = results["pages"]
+    if "S25-Z" in numbers["slots"]:
+        assert {"net_base_tier_mean", "net_cheapest_tier_mean", "tiers_paying"} <= set(
+            numbers["slots"]["S25-Z"]
+        )
+    for block in ("H", "F"):
+        pages = read_results(study, block)["pages"]
+        assert pages["second_detector"]["span"] == block and "mean_channel" in pages
+    assert "power_at_bar" in study.record("D") and "fits_lacking_a_class" in study.record("D")
+    assert study.record("C")["second_detector_D"]["span"] == "D"

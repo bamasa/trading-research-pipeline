@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from trading_research.pipeline.short_horizon import beside_verdict as bv
 from trading_research.pipeline.short_horizon.context import Study
 from trading_research.pipeline.short_horizon.statuses import (
     S25_WINDOW_END,
@@ -86,10 +87,52 @@ def slot_numbers(s: SlotDays, days: list[date]) -> dict[str, Any]:
         second = _series(s, s.second, mask)
         out["net_zero_fee_mean"] = float(second.mean()) if len(second) else NAN
     if s.making is not None and s.passive_notional is not None:
-        notional = float(np.nansum(s.passive_notional[mask]))
-        making = float(np.nansum(s.making[mask]))
-        out["making_bp_per_fill"] = making / notional * 1e4 if notional > 0 else NAN
+        out["making_bp_per_fill"] = bv.making_bp_per_fill(s, mask)
+    return out | fee_numbers(s, mask)
+
+
+def fee_numbers(s: SlotDays, mask: np.ndarray) -> dict[str, Any]:
+    """Beside the break-even: how many published tiers pay at their own maker and
+    taker fees, a passive slot's maker break-even with the taker exit at 1.5 bp, and
+    S25-Z's net on the same trades at the base tier and at the cheapest published
+    tier (it is never reported without them). Only from a read that kept the day sums."""
+    from trading_research.backtest.costs import BYBIT_BASE, best_maker_tier
+
+    if "day/net_usdt" not in s.extra:
+        return {}
+    out: dict[str, Any] = {"tiers_paying": bv.tiers_paying(s, mask)}
+    if s.kind != "taker":
+        out["break_even_maker_bp_exit_1_5"] = bv.passive_break_even(s, mask, 1.5)
+    if s.kind == "zero":
+        for name, tier in (("base_tier", BYBIT_BASE), ("cheapest_tier", best_maker_tier("g1"))):
+            values = bv.series_at(s, mask, tier.maker_bp, tier.taker_bp)
+            finite = values[np.isfinite(values)]
+            out[f"net_{name}_mean"] = float(finite.mean()) if len(finite) else NAN
+            out[f"net_{name}_usdt"] = bv.net_usdt_at(s, mask, tier.maker_bp, tier.taker_bp)
+            out[f"net_{name}_fees"] = [tier.maker_bp, tier.taker_bp]
     return out
+
+
+def delta_b(s: SlotDays, b: date) -> dict[str, Any]:
+    """R's statistic for one slot as a measurement: Delta(b), the mean of the daily
+    series on F's usable days before ``b`` less its mean after, with its percentile
+    among Delta(d) at every admissible split day d != b (at least 20 usable days
+    before and 10 after), as R's own test forms them; reported whether or not the
+    slot passes on F-, the registration's measurement when it does not."""
+    days = list(s.days)
+
+    def mean_on(chosen: list[date]) -> float:
+        picked = _series(s, s.value, s.mask(chosen))
+        return float(picked.mean()) if len(picked) else 0.0
+
+    def delta(d: date) -> float:
+        return mean_on([x for x in days if x < d]) - mean_on([x for x in days if x > d])
+
+    admissible = [d for i, d in enumerate(days) if d != b and i >= 20 and len(days) - i - 1 >= 10]
+    found = delta(b)
+    others = np.array([delta(d) for d in admissible], dtype=np.float64)
+    return {"b": b.isoformat(), "delta_b": found, "admissible_days": len(admissible),
+            "percentile_among_admissible": _percentile(found, others)}  # fmt: skip
 
 
 def close_path(study: Study, label: str) -> Path:
@@ -148,22 +191,32 @@ def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
 
 def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]) -> dict[str, Any]:
     """Every slot's numbers on its status days, its whole daily series, the
-    frozen detector's alarms, FILL for S-P's and S25-Z's streams, and (written
-    beside, not returned) the hourly close."""
+    frozen detector's alarms and its mean channel, the second detector's span,
+    FILL for S-P's and S25-Z's streams, and (written beside, not returned) the
+    hourly close."""
     split = found.get("split")
+    taken = found.get("after_F")  # on F: the slots taken there; the others on all of F
     slots: dict[str, Any] = {}
     for slot, s in series.items():
-        numbers = slot_numbers(s, status_days(block.name, s, split))
+        cut = split if taken is None or slot in taken else None
+        numbers = slot_numbers(s, status_days(block.name, s, cut))
         numbers["daily"] = {"days": [d.isoformat() for d in s.days],
                             "value": [float(v) for v in s.value]}  # fmt: skip
         numbers["window_h"] = int(s.window_h)
         if block.name == "H":
             early = [d for d in s.days if d <= S25_WINDOW_END]
             numbers["h_before_0801_mean"] = slot_numbers(s, early)["mean"]
+        tested = (found.get("R") or {}).get(slot, {}).get("outcome", "not tested") != "not tested"
+        if block.name == "F" and split and split.get("b") and tested:
+            passes = (found.get("assessments") or {}).get(slot, {}).get("status") == "passes"
+            b = date.fromisoformat(str(split["b"]))
+            numbers["R_delta_b"] = delta_b(s, b) | {"passes_on_F_minus": passes}
         slots[slot] = numbers
+    from trading_research.pipeline.short_horizon import second_detector
+
     save_close(block)
     return {"slots": slots, "alarms": list(block.detector["alarms"]),
-            "fill_rules": fill_rule_summary(block)}  # fmt: skip
+            "fill_rules": fill_rule_summary(block)} | second_detector.beside_r(block)  # fmt: skip
 
 
 def _d_days(study: Study) -> list[date]:
@@ -171,10 +224,12 @@ def _d_days(study: Study) -> list[date]:
 
 
 def d_daily(study: Study) -> dict[str, pd.Series]:
-    """Each slot's walk-forward daily series on D's usable test days: the taker
-    slots' ``net_bp_trade`` from the trial ledger (NaN without a trade), S-P's and
-    S-M's ``net_per_100_clip_day`` and S25-Z's ``gross_bp_trade`` from stage C."""
+    """Each slot's walk-forward daily net on D's usable test days: the taker slots'
+    ``net_bp_trade`` from the trial ledger (NaN without a trade), S-P's and S-M's
+    ``net_per_100_clip_day`` and S25-Z's net at 0/0 (``net_bp_trade``) from stage C,
+    on the days no simulated run flagged."""
     from trading_research.pipeline.short_horizon.freeze import d_series
+    from trading_research.pipeline.short_horizon.passive import kept_rows
     from trading_research.reporting.search_keys import S25_KEY
 
     record_d, record_c = study.record("D"), study.record("C")
@@ -185,14 +240,14 @@ def d_daily(study: Study) -> dict[str, pd.Series]:
     for slot, key in taker.items():
         if key is not None and key in study.keys:
             out[slot] = d_series(study, key, days)
-    rows = pd.read_parquet(study.work / "C" / "cells.parquet")
+    rows = kept_rows(pd.read_parquet(study.work / "C" / "cells.parquet"))
     passive = {"S-P": record_c["admission"]["S-P"]["cell"], "S-M": record_c["admission"]["S-M"]["cell"],
                "S25-Z": f"S25-Z|{S25_KEY}|entry|fees=zero"}  # fmt: skip
     for slot, label in passive.items():
-        mine = rows[(rows["label"] == label) & ~rows["excluded"].astype(bool)]
+        mine = rows[rows["label"] == label]
         if mine.empty:
             continue
-        column = "gross_bp_trade" if slot == "S25-Z" else "net_per_100"
+        column = "net_bp_trade" if slot == "S25-Z" else "net_per_100"
         index = [date.fromisoformat(str(d)) for d in mine["day"]]
         out[slot] = pd.Series(mine[column].to_numpy(np.float64), index=index).reindex(days)
     return out
