@@ -1340,8 +1340,9 @@ basis points against an 11 bp taker round trip at the base tier.
       beside R, gross through the leaderboard); with the registration's
       clarifications and the amendment's records these called for, and the
       null-placeholder sha256 recomputed
-- [ ] Stage 0 on the two 2024 days, the code-freeze note, and the 200-level
-      book reader proven on three 2026 days outside the study
+- [x] Stage 0 on the two 2024 days (parity at every hold, 75.7 h projected
+      against the 144 h ceiling, no cut) and the code-freeze note at `9784ef7`
+- [ ] The 200-level book reader proven on three 2026 days outside the study
 - [ ] Development period: the search, the placebo search and the amendment
       that freezes the finalists
 - [ ] The held-out read, then the boundary block and the break
