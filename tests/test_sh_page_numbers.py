@@ -37,6 +37,27 @@ def test_only_the_slots_taken_to_f_are_numbered_on_f_minus(monkeypatch: pytest.M
     assert numbers["S-C"]["window_days"] == 24 and numbers["S25"]["window_days"] == len(F_DAYS)
 
 
+def test_the_numbers_read_the_status_window_the_read_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read records every slot's status window (``status_windows``): the numbers are
+    on its days, before the split as a fallback; on H a slot on S25's signal to 07-31."""
+    monkeypatch.setattr(pn, "save_close", lambda _: None)
+    monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
+    monkeypatch.setattr(sd, "beside_r", lambda _: {"second_detector": None, "mean_channel": []})
+    block = SimpleNamespace(name="F", detector={"alarms": []})
+    found = {"split": {"b": F_DAYS[24].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"},
+             "status_windows": {"S-C": [F_DAYS[0].isoformat(), F_DAYS[9].isoformat()],
+                                "S25": [F_DAYS[0].isoformat(), F_DAYS[-1].isoformat()]}}  # fmt: skip
+    numbers = pn.block_numbers(block, {"S-C": _slot("S-C"), "S25": _slot("S25")}, found)["slots"]
+    assert numbers["S-C"]["window_days"] == 10 and numbers["S25"]["window_days"] == len(F_DAYS)
+    h_days = [date(2025, 7, 8) + timedelta(days=i) for i in range(44)]
+    s = _slot("S25")
+    s.days = h_days
+    assert pn.status_days("H", s, None, ["2025-07-08", "2025-07-31"]) == h_days[:24]
+    assert pn.status_days("H", s, None, None) == h_days  # no window recorded: as the rules form it
+
+
 def test_s25zs_regime_map_cuts_its_net_at_zero_fees() -> None:
     s = _slot("S25-Z", "zero", value=3.0)
     s.second = np.full(len(F_DAYS), -1.0)

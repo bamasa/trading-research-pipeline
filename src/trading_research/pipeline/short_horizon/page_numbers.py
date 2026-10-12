@@ -22,6 +22,7 @@ at each test month's fold-wise alarms.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -46,8 +47,14 @@ NAN = math.nan
 CLOSE_FILE = "hourly_close.parquet"
 
 
-def status_days(block: str, s: SlotDays, split: dict[str, Any] | None = None) -> list[date]:
-    """The days a slot's status on ``block`` is taken on."""
+def status_days(block: str, s: SlotDays, split: dict[str, Any] | None = None,
+                window: Sequence[str] | None = None) -> list[date]:  # fmt: skip
+    """The days a slot's status on ``block`` is taken on: the status window the read
+    recorded for it (``window``, its ``status_windows[slot]``: first and last day)
+    when there is one, else the window as the status rules form it."""
+    if window:
+        first, last = (date.fromisoformat(str(d)) for d in window)
+        return [d for d in s.days if first <= d <= last]
     if block == "H":
         return [d for d in s.days if d <= S25_WINDOW_END] if s.on_s25_signal else list(s.days)
     if block == "F" and split and split.get("b") and not split.get("on_all_of_F", True):
@@ -196,10 +203,11 @@ def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]
     hourly close."""
     split = found.get("split")
     taken = found.get("after_F")  # on F: the slots taken there; the others on all of F
+    windows = found.get("status_windows") or {}  # each slot's window as the read recorded it
     slots: dict[str, Any] = {}
     for slot, s in series.items():
         cut = split if taken is None or slot in taken else None
-        numbers = slot_numbers(s, status_days(block.name, s, cut))
+        numbers = slot_numbers(s, status_days(block.name, s, cut, windows.get(slot)))
         numbers["daily"] = {"days": [d.isoformat() for d in s.days],
                             "value": [float(v) for v in s.value]}  # fmt: skip
         numbers["window_h"] = int(s.window_h)
