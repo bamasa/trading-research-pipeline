@@ -96,11 +96,19 @@ def test_the_trial_ledger_manifest_is_committed_and_its_parts_are_not(dry: dict[
     study = dry["study"]
     paths = trial_ledger_parts(study.repo)
     manifest = json.loads((study.repo / shr.TRIALS_MANIFEST_PATH).read_text(encoding="utf-8"))
-    assert manifest["sha256"] == trial_ledger_sha256(paths) == study.record("D")["ledger_sha256"]
+    trials = study.record("E")["trials"]
+    assert manifest["sha256"] == trial_ledger_sha256(paths) == trials["ledger_sha256"]
     assert [p.name for p in paths] == [part["file"] for part in manifest["parts"]]
-    assert manifest["n_trials"] == len(study.keys)
+    assert manifest["n_trials_taker"] == len(study.keys) == trials["N_trials_taker"]
+    simulator = study.record("C")["trials"]["n_trials_simulator"]
+    assert (
+        simulator >= 4 and manifest["n_trials"] == len(study.keys) + simulator == trials["N_trials"]
+    )
+    assert manifest["runs"]["1"]["simulator"]["keys"] == simulator
     assert shr.TRIALS_MANIFEST_PATH.as_posix() in tracked(study.repo)
     assert not {p.relative_to(study.repo).as_posix() for p in paths} & tracked(study.repo)
+    registration = shr.Registration.load(repo=study.repo).require_frozen()
+    assert registration.value(("search", "result_trials"))["N_trials"] == trials["N_trials"]
 
 
 def test_stage_d_chose_admitted_and_wrote_its_files(dry: dict[str, Any]) -> None:
@@ -210,3 +218,78 @@ def test_each_read_keeps_the_numbers_the_pages_show(dry: dict[str, Any]) -> None
         for rows in fill.values():
             assert [r["rule"] for r in rows] == ["touch", "trade_through", "queue"]
             assert all(r["orders_posted"] >= r["orders_filled"] >= 0 for r in rows)
+
+
+def test_r_star_is_the_network_admitted_on_d_and_read_on_h(dry: dict[str, Any]) -> None:
+    from trading_research.pipeline.short_horizon.reads import read_results
+
+    study = dry["study"]
+    record = study.record("D")
+    assert record["statuses_on_D"]["S-R"] == "admitted"
+    assert "|R|tcn|" in record["choice"]["R*"]["cell"]
+    assert any(
+        k.startswith("control__") and k.endswith(".pt") for k in study.record("E")["weights_sha256"]
+    )
+    results = read_results(study, "H")
+    assert results["statuses"]["S-R"] not in ("not assessed", "admitted") and not results[
+        "statuses"
+    ]["S-R"].startswith("not admitted")
+    control = results["measurements"]["S-R"]["measured"]
+    assert control["control_ic_label"]["days"] >= 1 and control["control_ic_move"]["days"] >= 1
+
+
+def test_h_reports_every_registered_measurement_beside_the_statuses(dry: dict[str, Any]) -> None:
+    from trading_research.pipeline.short_horizon.reads import read_results
+    from trading_research.pipeline.short_horizon.statuses import S25_WINDOW_END
+
+    results = read_results(dry["study"], "H")
+    info, measurements = results["info"], results["measurements"]
+    assert info["flags_in_block"] >= 1 and info["flag_sets"] == {"taker": 10, "simulator": 5}
+    assert info["gap_days"] == [] and set(info["fill_rules"]) == {"S-P", "S25-Z"}
+    guarded = [slot for slot, m in measurements.items() if m["regime_attribution"] is not None]
+    assert guarded and all(
+        m["regime_attribution"] is None for s, m in measurements.items() if s not in guarded
+    )
+    for slot in guarded:
+        row = measurements[slot]["regime_attribution"]
+        assert row["flags"] == info["flags_in_block"] and row["window_h"] in (4, 24, 120)
+        assert row["sets"] == len(row["draws"]) == (5 if slot in ("S-P", "S-M") else 10)
+        assert any(
+            s.startswith(f"{slot} on H: its {row['window_h']} h guard")
+            for s in results["sentences"]
+        )
+    for slot in ("S-P", "S25-Z"):
+        fill = measurements[slot]["fill_rules"]
+        assert [r["rule"] for r in fill["summary"]] == ["touch", "trade_through", "queue"]
+        assert all(r["days"] >= 1 and 0 <= r["fill_ratio"] <= 1 for r in fill["summary"])
+        assert set(fill["prediction"]) == {"touch_fill_ratio", "queue_fill_ratio", "holds"}
+        assert measurements[slot]["measured"]["exit/passive"]["days"] >= 1
+    assert {k for k in measurements["S-P"]["measured"] if k.startswith("regime/")} >= {
+        "regime/pull_4h",
+        "regime/pull_120h",
+    }
+    assert len([k for k in measurements["S-M"]["measured"] if k.startswith("regime/")]) >= 5
+    window = len([d for d in info["usable_days"] if d <= S25_WINDOW_END.isoformat()])
+    for slot, m in measurements.items():  # a taker slot counts its days with a trade
+        back = m["gap_days_included"]
+        assert back["gap_days"] == 0 and back["days"] <= m["all_of_H"]["days"], slot
+    assert measurements["S25"]["gap_days_included"]["days"] <= window < len(info["usable_days"])
+
+
+def test_f_puts_the_gap_excluded_day_back_as_a_measurement(dry: dict[str, Any]) -> None:
+    from trading_research.pipeline.short_horizon.reads import read_results
+
+    results = read_results(dry["study"], "F")
+    info = results["info"]
+    assert info["gap_days"] == ["2025-09-16"] and info["excluded"]["2025-09-16"] == [
+        "sequence_gaps"
+    ]
+    assert "2025-09-16" not in info["usable_days"]
+    for slot, m in results["measurements"].items():
+        back, whole = m["gap_days_included"], m["all_of_F"]["days"]
+        assert back["gap_days"] == 1, slot
+        if slot in ("S-P", "S-M"):  # every usable day counts, zero-filled
+            assert back["days"] == whole + 1 == len(info["usable_days"]) + 1, slot
+        else:  # a taker slot's days with a trade; a guard may pull the gap day
+            assert whole <= back["days"] <= whole + 1, slot
+    assert results["split"]["b"] == "2025-09-15" and results["split"]["on_all_of_F"]

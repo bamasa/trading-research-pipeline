@@ -17,6 +17,18 @@ files and the frozen weights. For each usable day:
 * for the passive slots (:mod:`.heldout_passive`): the simulator under the same
   variants and the queue brackets.
 
+Beside them, the per-day values of the registered measurements: for a slot with
+a regime window above 0, its window-0 twin and its runs under the random flag
+sets (as many flags as the block has inside its usable days, drawn before any
+day is left out as stale; a taker slot's three terms from its walk tables, a
+simulator slot's from the simulator); S-P's cell at the other regime windows
+and S-M's guards; the passive exit of S-P and S25-Z; on H, FILL's two other
+fill rules on their streams; and, for S-R on the network, the control
+network's IC against its own label and against the realised move. The days
+excluded for sequence gaps alone are read again with the threshold lifted
+(:meth:`Block.put_back`), the true runs only, so each verdict can be reported
+with them put back.
+
 The results are :class:`~trading_research.pipeline.short_horizon.statuses.SlotDays`.
 """
 
@@ -40,6 +52,34 @@ from trading_research.pipeline.short_horizon.fits import Configuration, configur
 from trading_research.pipeline.short_horizon.passive import SimCell as SimCellType
 from trading_research.search_engine.catalogue import parse_key
 
+#: The sequence-gap threshold of the put-back view: no day is excluded for its gaps.
+GAPS_UNBOUNDED = 2**31 - 1
+#: The regime windows S-P's cell is measured at beside its own, and S-M's guards.
+REGIME_POLICIES: tuple[str, ...] = ("none", "pull_4h", "pull_24h", "pull_120h")
+MAKER_GUARDS: tuple[str, ...] = tuple(
+    f"{action}_{w}h" for w in (4, 24, 120) for action in ("pull", "widen")
+)
+
+
+def twin_key(key: str) -> str:
+    """The cell's window-0 twin: the same key at ``regime=none``."""
+    return key.rsplit("|regime=", 1)[0] + "|regime=none"
+
+
+def with_regime(key: str, regime: str) -> str:
+    return key.rsplit("|regime=", 1)[0] + f"|regime={regime}"
+
+
+def reguarded(tape: Any, flags_ns: np.ndarray, window_h: int) -> Any:
+    """The tape with its guard state at ``window_h`` recomputed from other flags."""
+    from dataclasses import replace
+
+    from trading_research.pipeline.execution import guarded_rows
+    from trading_research.pipeline.regime import NS_PER_HOUR
+
+    guard = guarded_rows(tape.stamps, np.asarray(flags_ns, dtype=np.int64), window_h * NS_PER_HOUR)
+    return replace(tape, guards={**tape.guards, window_h: guard})
+
 
 @dataclass
 class Block:
@@ -57,6 +97,8 @@ class Block:
     end: date | None = None
     #: The folder under ``reads/`` its days are kept in (the block's name by default).
     label: str | None = None
+    #: The put-back view: the days excluded for sequence gaps alone read as usable.
+    gaps_put_back: bool = False
 
     @cached_property
     def registration(self) -> Any:
@@ -72,6 +114,8 @@ class Block:
 
     @property
     def threshold(self) -> int:
+        if self.gaps_put_back:
+            return GAPS_UNBOUNDED
         return int(self.value(("data", "max_sequence_gaps")))
 
     @cached_property
@@ -103,20 +147,40 @@ class Block:
             book = sl.load_book_day(self.study.symbol, day, self.study.roots.book,
                                     max_sequence_gaps=self.threshold, access=self.access)  # fmt: skip
             reasons = list(book.exclusions)
-            if not reasons:
+            if reasons in ([], [sl.SEQUENCE_GAPS]):
                 try:
                     self.events(day)
                 except (DayUnavailable, FileNotFoundError) as exc:
                     reasons.append(f"simulator day loader: {exc}")
             found[day.isoformat()] = reasons
         usable = [d for d in self.days_planned if not found[d.isoformat()]]
+        gaps = [d for d in self.days_planned if found[d.isoformat()] == [sl.SEQUENCE_GAPS]]
         excluded = len(self.days_planned) - len(usable)
-        return {"reasons": found, "usable": usable,
+        return {"reasons": found, "usable": usable, "gap_days": gaps,
                 "unreadable": sl.block_unreadable(excluded, max(1, len(self.days_planned)))}  # fmt: skip
 
     @property
     def usable(self) -> list[date]:
+        """The usable days (with the gap days among them in the put-back view)."""
+        if self.gaps_put_back:
+            return sorted([*self.validated["usable"], *self.validated["gap_days"]])
         return list(self.validated["usable"])
+
+    @property
+    def gap_days(self) -> list[date]:
+        """The days excluded for sequence gaps and nothing else."""
+        return list(self.validated["gap_days"])
+
+    def put_back(self) -> Block:
+        """The same block with the gap days read as usable: the threshold lifted, the
+        validation and the frozen values already found kept, the same work folder."""
+        from dataclasses import replace
+
+        view = replace(self, gaps_put_back=True)
+        for name in ("registration", "fitted", "validated", "detector"):
+            if name in self.__dict__:
+                view.__dict__[name] = self.__dict__[name]
+        return view
 
     def book(self, day: date) -> pd.DataFrame:
         found = sl.load_book_day(self.study.symbol, day, self.study.roots.book,
@@ -220,7 +284,8 @@ def load_models(block: Block, configs: list[Configuration]) -> dict[str, Any]:
 
 
 def network_scores(block: Block, configs: list[Configuration], days: list[date]) -> None:
-    """The frozen networks' mean and log-variance on every row of every day; run in a
+    """The frozen networks' mean and log-variance on every row of every day, and the
+    control network's mean (``control_mu``) where its weights were frozen; run in a
     fresh process (the network never shares one with XGBoost)."""
     from trading_research.models.windows import Day
     from trading_research.pipeline.short_horizon.freeze import fit_key
@@ -230,17 +295,19 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
     columns = [*block.value(("features", "selected")), *ft.TENSOR]
     for cfg in configs:
         path = block.study.repo / WEIGHTS_DIR / fit_key(cfg)
+        control_path = block.study.repo / WEIGHTS_DIR / fit_key(cfg, control=True)
         out = block.work / "network" / cfg.folder
         out.mkdir(parents=True, exist_ok=True)
+        model = load(path, kind="tcn") if path.exists() else None
+        control = load(control_path, kind="tcn") if model and control_path.exists() else None
         for k, day in enumerate(days):
             target = out / f"{day}.npz"
             if target.exists():
                 continue
             rows = len(block.features(day))
-            if not path.exists():
+            if model is None:
                 np.savez(target, mu=np.full(rows, np.nan), log_variance=np.full(rows, np.nan))
                 continue
-            model = load(path, kind="tcn")
             follows = k > 0 and (day - days[k - 1]).days == 1 and not block.cold(day)
 
             def values(d: date = day) -> np.ndarray:
@@ -254,7 +321,10 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
                     0, Day(str(previous), partial(values, previous), np.arange(n), None, False)
                 )
             mu, log_variance = model.predict_days(sequence)[-1]
-            np.savez(target, mu=mu, log_variance=log_variance)
+            arrays = {"mu": mu, "log_variance": log_variance}
+            if control is not None:
+                arrays["control_mu"] = control.predict_days(sequence)[-1][0]
+            np.savez(target, **arrays)
 
 
 @dataclass
@@ -269,6 +339,9 @@ class DayContext:
     tapes: dict[str, Any]
     scores: dict[str, np.ndarray]
     forward: dict[float, np.ndarray]
+    #: Per network configuration with a control fit: the control network's IC against
+    #: its own (smoothed) label and against the realised move over the hold.
+    control: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 def day_context(block: Block, day: date, configs: list[Configuration], models: dict[str, Any],
@@ -276,8 +349,8 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
     """Tapes from the frozen fits, and the walk tables at 10 ms and at 110 ms."""
     from trading_research.backtest.taker import TakerBook, TakerSettings
     from trading_research.backtest.walk import walk_cost_bp
-    from trading_research.labels.taker_vwap import forward_move_bp
-    from trading_research.pipeline.short_horizon.fits import on_complete_rows
+    from trading_research.labels.taker_vwap import control_move_bp, forward_move_bp
+    from trading_research.pipeline.short_horizon.fits import on_complete_rows, rank_ic
     from trading_research.search_engine.market_gate import gate_inputs, gate_states
     from trading_research.search_engine.tapes import ev_gate_tape, hold_first_tape
     from trading_research.search_engine.walk_tables import WalkTable, hold_table
@@ -290,7 +363,8 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
     given = gate_inputs(rows)
     cost = walk_cost_bp(rows, sl.clip_for(block.study.symbol))
     holds = sorted({cfg.hold_s for cfg in configs})
-    tapes, scores = {}, {}
+    forward = {h: forward_move_bp(rows, h).to_numpy() for h in holds}
+    tapes, scores, control = {}, {}, {}
     for cfg in configs:
         gates = gate_states(given, levels[cfg.hold_s])
         x = frame[
@@ -319,6 +393,10 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
         if cfg.model == "tcn":
             with np.load(block.work / "network" / cfg.folder / f"{day}.npz") as saved:
                 mu, sigma = saved["mu"].astype(np.float64), np.exp(0.5 * saved["log_variance"])
+                if "control_mu" in saved:
+                    guess = np.where(unscored, np.nan, saved["control_mu"].astype(np.float64))
+                    own = control_move_bp(rows, cfg.hold_s).to_numpy(dtype=np.float64)
+                    control[cfg.name] = (rank_ic(guess, own), rank_ic(guess, forward[cfg.hold_s]))
         elif cfg.name in models:
             mu = on_complete_rows(models[cfg.name].predict_mean_bp, x, 1)
             sigma = on_complete_rows(models[cfg.name].predict_sigma_bp, x, 1)
@@ -334,8 +412,7 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
     late = TakerSettings(latency_ns=110_000_000)
     tables = {round(h * 1e9): hold_table(walk, round(h * 1e9), TakerSettings()) for h in holds}
     later = {round(h * 1e9): hold_table(walk, round(h * 1e9), late) for h in holds}
-    forward = {h: forward_move_bp(rows, h).to_numpy() for h in holds}
-    return DayContext(day, book, stamps, tables, later, tapes, scores, forward)
+    return DayContext(day, book, stamps, tables, later, tapes, scores, forward, control)
 
 
 def _bp(trades: Any) -> float:
@@ -363,6 +440,8 @@ class TakerSlot:
     neighbours: list[str]
     days: list[date]
     draws: int
+    #: The random flag sets of the regime attribution (a slot with a window above 0).
+    flag_sets: list[np.ndarray] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         n = len(self.days)
@@ -379,6 +458,22 @@ class TakerSlot:
         self.stale: set[int] = set()
         self.entries: dict[int, Any] = {}
         self.first: Any = None
+        self.window_h = parse_key(self.key).regime_h
+        self.guarded, self.twin = nan(), nan()
+        self.flagsets = np.full((len(self.flag_sets), n), np.nan)
+        self.control_label, self.control_move = nan(), nan()
+        self.has_control = False
+
+    def extra(self) -> dict[str, np.ndarray]:
+        """The per-day measurements beside the status (``SlotDays.extra``)."""
+        out: dict[str, np.ndarray] = {}
+        if self.window_h > 0:
+            out |= {"guarded": self.guarded, "twin": self.twin}
+            if self.flag_sets:  # the gap days' pass draws none; merge fills their rows with NaN
+                out["flagsets"] = self.flagsets
+        if self.has_control:
+            out |= {"control_ic_label": self.control_label, "control_ic_move": self.control_move}
+        return out
 
     def add(self, i: int, ctx: DayContext, rules: dict[str, dict[float, Any]]) -> None:
         from trading_research.backtest.taker import TakerSettings, execute_day
@@ -445,6 +540,15 @@ class TakerSlot:
             self.first = table
         else:
             self.shifted[i] = _bp(replay(table, self.entries[i - 1]))
+        if self.window_h > 0:  # the attribution's three terms, all from the walk tables
+            rule = rules.get(cell.configuration, {}).get(cell.trades_per_day)
+            self.guarded[i], self.twin[i] = _bp(true), _bp(scored(twin_key(self.key)))
+            for k, flags in enumerate(self.flag_sets):
+                tape = reguarded(ctx.tapes[cell.configuration], flags, self.window_h)
+                self.flagsets[k, i] = _bp(score_cell(tape, table, cell, rule))
+        if cell.configuration in ctx.control:
+            self.has_control = True
+            self.control_label[i], self.control_move[i] = ctx.control[cell.configuration]
 
     def finish(self) -> None:
         """The first day's one-day shift: the last usable day's entries, circularly."""
@@ -457,13 +561,16 @@ class TakerSlot:
 
 
 def passive_decisions(ctx: DayContext, key: str, rules: dict[str, dict[float, Any]],
-                      lean_scale: dict[str, float]) -> Any:  # fmt: skip
-    """A passive cell's decisions on the day under the frozen thresholds."""
+                      lean_scale: dict[str, float], flags_ns: np.ndarray | None = None) -> Any:  # fmt: skip
+    """A passive cell's decisions on the day under the frozen thresholds (its guard
+    reading ``flags_ns`` instead of the block's when given: a random flag set)."""
     from trading_research.pipeline.short_horizon.passive import Decisions
     from trading_research.search_engine.cells import cell_sides
 
     cell = parse_key(key)
     tape = ctx.tapes[cell.configuration]
+    if flags_ns is not None and cell.regime_h > 0:
+        tape = reguarded(tape, flags_ns, cell.regime_h)
     rule = (
         rules.get(cell.configuration, {}).get(cell.trades_per_day) if cell.stratum == "C" else None
     )
@@ -484,34 +591,54 @@ def passive_decisions(ctx: DayContext, key: str, rules: dict[str, dict[float, An
 
 @dataclass
 class PassiveSlot:
-    """A passive slot's central cell, its neighbours and their decisions by day."""
+    """A passive slot's central cell, its neighbours, its measured cells (the regime
+    measurements, the window-0 twin as ``regime/none`` among them) and their
+    decisions by key and day; under each random flag set, the central cell's."""
 
     slot: str
     cell: SimCellType
     neighbours: list[SimCellType]
+    measured: list[tuple[str, SimCellType]] = field(default_factory=list)
     decisions: dict[str, list[Any]] = field(default_factory=dict)
+    flagged: list[list[Any]] = field(default_factory=list)
     ic: list[float] = field(default_factory=list)
+
+    @property
+    def cells(self) -> list[SimCellType]:
+        return [self.cell, *self.neighbours, *(c for _, c in self.measured)]
+
+    @property
+    def window_h(self) -> int:
+        return int(parse_key(self.cell.key).regime_h)
 
 
 def passive_slots(block: Block) -> list[PassiveSlot]:
-    """S-P, S-M and S25-Z as their finalist files froze them."""
+    """S-P, S-M and S25-Z as their finalist files froze them, with the measured cells:
+    S-P's at the other regime windows, S-M's guards at lean 1 and, when it has a
+    guard, its twin on the unguarded signal."""
     from trading_research.pipeline.short_horizon.passive import SimCell
 
     out = []
     sp, sm, sz = block.finalist("S-P"), block.finalist("S-M"), block.finalist("S25-Z")
     if sp is not None:
-        key = sp["key"]
-        own = SimCell("S-P", key, "entry", parse_key(key).hold_s, policy=parse_key(key).regime)
+        key, hold = sp["key"], parse_key(sp["key"]).hold_s
+        own = SimCell("S-P", key, "entry", hold, policy=parse_key(key).regime)
         others = [SimCell("S-P", k, "entry", parse_key(k).hold_s, policy=parse_key(k).regime)
                   for k in sp.get("cells", []) if k != key]  # fmt: skip
-        out.append(PassiveSlot("S-P", own, others))
+        measured = [(f"regime/{r}", SimCell("S-P", with_regime(key, r), "entry", hold, policy=r))
+                    for r in REGIME_POLICIES if r != own.policy]  # fmt: skip
+        out.append(PassiveSlot("S-P", own, others, measured))
     if sm is not None:
-        key, guard = sm["key"], sm.get("guard", "none")
+        key, guard, hold = sm["key"], sm.get("guard", "none"), parse_key(sm["key"]).hold_s
         cells = [
-            SimCell("S-M", key, "maker", parse_key(key).hold_s, lean=lean, policy=guard)
-            for lean in (1.0, 0.5, 2.0)
+            SimCell("S-M", key, "maker", hold, lean=lean, policy=guard) for lean in (1.0, 0.5, 2.0)
         ]
-        out.append(PassiveSlot("S-M", cells[0], cells[1:]))
+        measured = [(f"regime/{p}", SimCell("S-M", key, "maker", hold, lean=1.0, policy=p))
+                    for p in MAKER_GUARDS if p != guard]  # fmt: skip
+        if guard != "none":
+            twin = SimCell("S-M", twin_key(key), "maker", hold, lean=1.0, policy="none")
+            measured.insert(0, ("regime/none", twin))
+        out.append(PassiveSlot("S-M", cells[0], cells[1:], measured))
     if sz is not None:
         cells = [
             SimCell("S25-Z", k, "entry", parse_key(k).hold_s, fees="zero")
@@ -541,6 +668,16 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
         return out
 
     neighbours = [f"neighbour/{c.label}" for c in p.neighbours]
+    variants = set(mine["variant"]) if len(mine) else set()
+    extra: dict[str, np.ndarray] = {}
+    for name in sorted(v for v in variants if v.startswith(("regime/", "exit/"))):
+        extra[name], extra[f"{name}/trades"] = series(name), series(name, "trades")
+    if window_h > 0 and "regime/none" in variants:
+        extra["twin"] = series("regime/none")
+        sets = sorted(int(v.split("/")[1]) for v in variants if v.startswith("flagset/"))
+        extra["flagsets"] = np.array([series(f"flagset/{k}") for k in sets]).reshape(
+            len(sets), len(days)
+        )
     return SlotDays(
         p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
         value=series("true"), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
@@ -554,17 +691,21 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
         making=series("true", "making_usdt") if p.slot == "S-M" else None,
         passive_notional=series("true", "passive_notional"),
         second=series("true", "net_bp_trade") if p.slot == "S25-Z" else None,
-        on_s25_signal=on_s25, window_h=window_h,
+        on_s25_signal=on_s25, window_h=window_h, extra=extra,
     )  # fmt: skip
 
 
-def run_passive(block: Block, slots: list[PassiveSlot], days: list[date]) -> pd.DataFrame:
-    """Every passive run of every day, a day per worker process; days on disk are kept."""
+def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
+                flag_sets: list[np.ndarray], *, kills: bool = True) -> pd.DataFrame:  # fmt: skip
+    """Every passive run of every day, a day per worker process; days on disk are kept.
+    Without ``kills`` only the true run of each slot (the gap days put back)."""
     from concurrent.futures import ProcessPoolExecutor
     from multiprocessing import get_context
 
     from trading_research.pipeline.short_horizon.heldout_passive import (
+        Run,
         VariantJob,
+        measured_runs,
         run_variants,
         variants,
     )
@@ -572,16 +713,26 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date]) -> pd.
 
     draws = block.study.scale.random_direction_draws
     rngs = {p.slot: [np.random.default_rng(k) for k in range(draws)] for p in slots}
-    out = block.work / "passive"
+    out = block.work / ("passive" if kills else "passive_gap_days")
     jobs = []
     for i, day in enumerate(days):
         runs = []
         for p in slots:
+            own = p.decisions[p.cell.key][i]
+            if not kills:
+                runs.append(Run(p.slot, "true", p.cell, own))
+                continue
             j = (i - 1) % len(days)
-            own, previous = p.decisions[p.cell.label][i], p.decisions[p.cell.label][j]
-            near = [(c, p.decisions[c.label][i]) for c in p.neighbours]
-            runs += variants(p.slot, p.cell, own, previous, midnight_ns(day), midnight_ns(days[j]),
-                             near, draws, rngs[p.slot])  # fmt: skip
+            near = [(c, p.decisions[c.key][i]) for c in p.neighbours]
+            runs += variants(p.slot, p.cell, own, p.decisions[p.cell.key][j], midnight_ns(day),
+                             midnight_ns(days[j]), near, draws, rngs[p.slot])  # fmt: skip
+            measured = [(name, c, p.decisions[c.key][i]) for name, c in p.measured]
+            sets = (
+                [(flags, p.flagged[k][i]) for k, flags in enumerate(flag_sets)]
+                if p.window_h
+                else []
+            )
+            runs += measured_runs(p.slot, p.cell, own, measured, sets, fill=block.name == "H")
         jobs.append(VariantJob(block.study.repo, block.study.symbol, day, block.access, tuple(runs),
                                block.flags_ns, block.threshold, float(block.fitted["sigma_ref"]), out))  # fmt: skip
     workers = max(1, min(6, block.study.workers))
@@ -597,47 +748,73 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date]) -> pd.
     )
 
 
-def compute_block(block: Block) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Every slot's per-day values on the block's usable days, a day flagged stale
-    in any run left out of every series; and what the read records beside them."""
+def flag_sets(block: Block, days: list[date]) -> tuple[int, list[np.ndarray]]:
+    """The regime attribution's random flag sets over ``days``: how many flags the
+    block has inside them, and the registered number of sets for a taker slot
+    (a simulator slot takes the first of them)."""
+    from trading_research.pipeline.regime import flags_inside, random_flag_sets
+
+    if not days:
+        return 0, []
+    count = flags_inside(block.flags_ns, days)
+    return count, random_flag_sets(days, count, sets=block.study.scale.taker_flag_sets)
+
+
+def compute_block(block: Block, *, days: list[date] | None = None,
+                  kills: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:  # fmt: skip
+    """Every slot's per-day values on the block's usable days (or on ``days``), a
+    day flagged stale in any run left out of every series; and what the read
+    records beside them. Without ``kills``, the true runs only (the gap days put
+    back: the simulator's placebos, measurements and brackets are not run)."""
     from trading_research.pipeline.short_horizon.fits import rank_ic
+    from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
     from trading_research.pipeline.short_horizon.models import in_fresh_process
     from trading_research.pipeline.short_horizon.statuses import SlotDays, subset
     from trading_research.reporting.search_keys import S25_KEY
 
-    days, draws = block.usable, block.study.scale.random_direction_draws
-    takers = [TakerSlot(slot, keys[0], keys[1:], days, draws)
+    usable, draws = block.usable, block.study.scale.random_direction_draws
+    days = usable if days is None else days
+    n_flags, sets = flag_sets(block, usable) if kills else (0, [])
+    sim_sets = sets[: block.study.scale.simulator_flag_sets]
+    takers = [TakerSlot(slot, keys[0], keys[1:], days, draws, sets)
               for slot in ("S25", "S-C", "S-R") if (keys := slot_keys(block, slot))]  # fmt: skip
     passive = passive_slots(block)
     wanted = {k for t in takers for k in (t.key, *t.neighbours)}
-    wanted |= {c.key for p in passive for c in (p.cell, *p.neighbours)}
+    wanted |= {c.key for p in passive for c in p.cells}
     configs = configurations([k for k in block.study.catalogue().keys if k in wanted])
     models = load_models(block, configs)
     networks = [c for c in configs if c.model == "tcn"]
     if networks and days:
-        in_fresh_process(network_scores, block, networks, days)
+        in_fresh_process(network_scores, block, networks, usable)
     rules, levels = frozen_rules(block), frozen_gate_levels(block)
     lean = dict(block.fitted.get("lean_scale_bp", {}))
     for p in passive:
-        p.decisions = {c.label: [] for c in (p.cell, *p.neighbours)}
+        p.decisions = {c.key: [] for c in p.cells}
+        p.flagged = [[] for _ in sim_sets] if p.window_h else []
     for i, day in enumerate(days):
         ctx = day_context(block, day, configs, models, rules, levels)
         for t in takers:
             t.add(i, ctx, rules)
         for p in passive:
-            for c in (p.cell, *p.neighbours):
-                p.decisions[c.label].append(passive_decisions(ctx, c.key, rules, lean))
+            for key in p.decisions:
+                p.decisions[key].append(passive_decisions(ctx, key, rules, lean))
+            for k, flags in enumerate(sim_sets if p.window_h else []):
+                p.flagged[k].append(passive_decisions(ctx, p.cell.key, rules, lean, flags))
             cell = parse_key(p.cell.key)
             p.ic.append(rank_ic(ctx.scores[cell.configuration], ctx.forward[cell.hold_s]))
     for t in takers:
         t.finish()
-    rows = run_passive(block, passive, days) if passive and days else pd.DataFrame()
+    rows = (
+        run_passive(block, passive, days, sim_sets, kills=kills)
+        if passive and days
+        else pd.DataFrame()
+    )
     series: dict[str, Any] = {}
     for t in takers:
         series[t.slot] = SlotDays(t.slot, "taker", days, t.value, t.trades, t.gross, t.turnover, t.ic,
                                   t.random, t.flipped, t.shifted, t.long_only, t.short_only, t.cells,
                                   t.latency, void=tuple(sorted(t.void)), on_s25_signal=t.slot == "S25",
-                                  window_h=parse_key(t.key).regime_h)  # fmt: skip
+                                  window_h=t.window_h, extra=t.extra())  # fmt: skip
     signal_is_s25 = any(p.slot == "S-P" and p.cell.key == S25_KEY for p in passive)
     for p in passive:
         on_s25 = p.slot == "S25-Z" or signal_is_s25
@@ -651,7 +828,14 @@ def compute_block(block: Block) -> tuple[dict[str, Any], dict[str, Any]]:
     series = {slot: subset(s, keep) for slot, s in series.items()}
     in_block = [a for a in block.detector["alarms"]
                 if pd.Timestamp(a["timestamp"]).date() >= sa.BLOCKS[block.name][0]]  # fmt: skip
+    kept = [d for d in days if d not in stale]
     info = {"usable_days": [d.isoformat() for d in days], "stale_days": sorted(d.isoformat() for d in stale),
             "excluded": block.validated["reasons"], "unreadable": block.validated["unreadable"],
-            "alarms_in_block": in_block, "passive_runs": len(rows)}  # fmt: skip
+            "gap_days": [d.isoformat() for d in block.validated["gap_days"]],
+            "alarms_in_block": in_block, "passive_runs": len(rows),
+            "flag_days": [d.isoformat() for d in usable], "flags_in_block": n_flags,
+            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}}  # fmt: skip
+    if kills and block.name == "H" and len(rows):
+        info["fill_rules"] = {p.slot: fill_rules(rows, p.slot, kept) for p in passive
+                              if p.cell.kind == "entry"}  # fmt: skip
     return series, info

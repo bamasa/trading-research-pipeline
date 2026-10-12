@@ -329,6 +329,30 @@ def detector_record(study: Study) -> dict[str, Any]:
     }
 
 
+def complete_trials(study: Study, inputs: Any, record_d: dict[str, Any]) -> dict[str, Any]:
+    """The trial ledger after stage C: N_trials with the simulator trials counted, the
+    ledger's sha256 and rows, and N_eff and the deflated Sharpe ratios at that N (stage
+    D quoted them at the taker cells' count, before the simulator ran). The
+    leaderboard's header is rewritten to quote the same N."""
+    from trading_research.pipeline.short_horizon import search
+    from trading_research.search_engine.ledger import TrialLedger
+
+    manifest = TrialLedger.in_repository(study.repo, study.catalogue()).record()
+    n = int(manifest["n_trials"])
+    grid = search.Grid(list(study.keys))
+    cells = search.observed_cells(study, grid, search.Calendar.of(study, inputs))
+    chosen = {s: grid.position(record_d["choice"][f"{s}*"]["cell"] or "") for s in grid.strata}
+    board = study.results("leaderboard.csv")
+    if board.exists():
+        text = board.read_text(encoding="utf-8")
+        board.write_text(text.replace(f"# N trials: {record_d['N_trials']}\n", f"# N trials: {n}\n"),
+                         encoding="utf-8")  # fmt: skip
+    return {"N_trials": n, "N_trials_taker": int(manifest.get("n_trials_taker", n)),
+            "N_trials_simulator": int(manifest.get("n_trials_simulator", 0)),
+            "ledger_sha256": manifest["sha256"], "ledger_rows": int(manifest["rows"]),
+            "overfitting": search.overfitting(grid, cells, chosen, n)}  # fmt: skip
+
+
 def compute_record(study: Study) -> dict[str, Any]:
     """The compute record: stage times, workers, the replay's memory, the stores' sizes."""
     entries = study.state.entries()
@@ -352,7 +376,7 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
     excluded = [[date.fromisoformat(d), "; ".join(e["reasons"])] for d, e in record1["days"].items()
                 if not e["usable"]]  # fmt: skip
     excluded += [[date.fromisoformat(d), "flatten_stale"] for d in record_b["stale_days"]]
-    slots, fits, mdes = parts["slots"], parts["fits"], parts["mdes"]
+    slots, fits, mdes, trials = parts["slots"], parts["fits"], parts["mdes"], parts["trials"]
     admission = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null",
                          "against_its_own_nulls": record_d["S25"]},
                  "S25-Z": {"status_on_D": "fixed before D; outside the family"}}  # fmt: skip
@@ -379,9 +403,9 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
         ("models", "weights_sha256"): fits["weights_sha256"],
         ("models", "checkpoint_epoch"): fits["checkpoint_epoch"],
         ("search", "result_trials"): {
-            "N_trials": record_d["N_trials"], "N_eff": record_d["overfitting"]["N_eff"],
-            "R_D": record_d["R_D"], "ledger_sha256": record_d["ledger_sha256"],
-            "ledger_rows": record_d["ledger_rows"], "hand_runs": record_d["hand_runs"]},
+            "N_trials": trials["N_trials"], "N_eff": trials["overfitting"]["N_eff"],
+            "R_D": record_d["R_D"], "ledger_sha256": trials["ledger_sha256"],
+            "ledger_rows": trials["ledger_rows"], "hand_runs": record_d["hand_runs"]},
         ("search", "result_choice"): record_d["choice"],
         ("search", "result_admission"): admission,
         ("search", "result_nulls"): {"nulls_file_sha256": record_d["files_sha256"]["nulls"],
@@ -411,6 +435,10 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
 
     record_d = study.record("D")
     choice = record_d["choice"]
+    result = values[("search", "result_trials")]
+    simulator = int(study.record("C").get("trials", {}).get("n_trials_simulator", 0))
+    trials = {"N": result["N_trials"], "N_taker": result["N_trials"] - simulator,
+              "N_simulator": simulator, "sha256": result["ledger_sha256"], "rows": result["ledger_rows"]}  # fmt: skip
     lines = [
         "",
         f"### {values[('amendment', 'date')]}: the D amendment",
@@ -420,8 +448,9 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
         "",
         shr.frozen_hash_line(frozen),
         "",
-        f"- Complete D runs: R_D = {record_d['R_D']}; N_trials = {record_d['N_trials']}; "
-        f"trial ledger sha256 `{record_d['ledger_sha256']}`, {record_d['ledger_rows']} rows.",
+        f"- Complete D runs: R_D = {record_d['R_D']}; N_trials = {trials['N']} "
+        f"({trials['N_taker']} taker cells and {trials['N_simulator']} simulator trials); "
+        f"trial ledger sha256 `{trials['sha256']}`, {trials['rows']} rows.",
         f"- C*: `{choice['C*']['cell']}`; R*: `{choice['R*']['cell']}` (selected, biased upward).",
         f"- p_search = {record_d['p_search']:.4g} (on development data, selected).",
         f"- Statuses set on D: {record_d['statuses_on_D']}.",
@@ -530,6 +559,7 @@ def run(study: Study) -> dict[str, Any]:
         "fits": fits, "slots": slots, "fitted_sha256": fitted_sha,
         "finalists": finalist_files(study, slots, fits, fitted_sha),
         "mdes": slot_mdes(study, record_d, slots), "detector": detector_record(study),
+        "trials": complete_trials(study, inputs, record_d),
     }  # fmt: skip
     values = placeholder_values(study, parts)
     rehearsal = rehearse(study, inputs, values)
@@ -538,5 +568,6 @@ def run(study: Study) -> dict[str, Any]:
     return plain({"commit": study.commit(), "fits": len(fits["weights_sha256"]),
                   "weights_sha256": fits["weights_sha256"], "finalists": parts["finalists"],
                   "fitted_values_sha256": fitted_sha, "mde": parts["mdes"], "detector": parts["detector"],
-                  "amendment": written, "dry_run": rehearsal, "pages": pages, "next": "review and commit the frozen "
-                  "configuration, the amendment, the trial ledger, the results files and the pages; then open H"})  # fmt: skip
+                  "trials": parts["trials"], "amendment": written, "dry_run": rehearsal, "pages": pages,
+                  "next": "review and commit the frozen configuration, the amendment, the trial ledger's "
+                  "manifest, the results files and the pages; then open H"})  # fmt: skip

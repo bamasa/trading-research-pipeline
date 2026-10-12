@@ -17,6 +17,14 @@ accounting:
   and trade-through; the true run is the queue rule): FILL on the block, the
   comparison the registration reports for their streams on H, a measurement.
 
+Beside them, the measurements (:func:`measured_runs`): S-P's cell at the other
+regime windows and S-M's guards (``guard_pull`` and ``guard_widen`` at 4, 24
+and 120 h at lean 1), each with the window-0 twin when the slot has a window;
+the passive-exit variant of S-P and S25-Z; on H, FILL's two other fill rules
+on S-P's and S25-Z's streams; and, for a slot with a regime window, its runs
+under the random flag sets of the regime attribution, each run reading its
+own flags.
+
 A day's runs share one load of the day's events and run in a worker process.
 """
 
@@ -63,6 +71,8 @@ class Run:
     cell: SimCell
     decisions: Decisions
     changes: dict[str, Any] = field(default_factory=dict)
+    #: The flags this run's guard reads (the block's frozen flags when None).
+    flags_ns: np.ndarray | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -78,11 +88,56 @@ class VariantJob:
     out: Path
 
 
+def fill_values(result: Any) -> dict[str, Any]:
+    """What FILL reads of an entry run: orders and volume posted and filled, and each
+    fill path's markouts as volume-weighted sums (summed over days, then divided)."""
+    import json
+
+    orders, fills = result.orders, result.fills
+    maker = fills[fills["maker"]] if len(fills) else fills
+    paths: dict[str, dict[str, float]] = {}
+    for path, group in maker.groupby("path", sort=True) if len(maker) else ():
+        size = group["size"].to_numpy(dtype=np.float64)
+        entry = paths.setdefault(
+            str(path), {"fills": float(len(group)), "volume": float(size.sum())}
+        )
+        for column in [c for c in group.columns if c.startswith("markout_")]:
+            values = group[column].to_numpy(dtype=np.float64)
+            ok = np.isfinite(values)
+            entry[column] = float((values[ok] * size[ok]).sum())
+            entry[column + "_weight"] = float(size[ok].sum())
+    return {"orders_posted": float(len(orders)), "orders_filled": float((orders["filled"] > 0).sum()),
+            "volume_posted": float(orders["size"].sum()), "volume_filled": float(orders["filled"].sum()),
+            "fill_paths": json.dumps(paths, sort_keys=True)}  # fmt: skip
+
+
+def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_sequence_gaps: int,
+             sigma_ref: float, clip: float) -> list[dict[str, Any]]:  # fmt: skip
+    """Every run of one loaded day, each under its own flags and changes."""
+    from trading_research.market_making.simulator import simulate_day
+
+    mid = float(np.mean((events.bid_px[:, 0] + events.ask_px[:, 0]) / 2.0) * events.spec.tick)
+    rows = []
+    for run in runs:
+        flags = flags_ns if run.flags_ns is None else run.flags_ns
+        quoter, config, tapes = quoter_and_tapes(run.cell, run.decisions, flags, max_sequence_gaps,
+                                                 sigma_ref)  # fmt: skip
+        if run.changes:
+            config = config.with_(**run.changes)
+        result = simulate_day(events, quoter, config, tapes)
+        row = day_values(run.cell, quoter, result, clip, mid)
+        if run.cell.kind == "entry":
+            row |= fill_values(result)
+        rows.append(
+            row | {"day": events.day.isoformat(), "run_slot": run.slot, "variant": run.variant}
+        )
+    return rows
+
+
 def run_variants(job: VariantJob) -> Path:
     """Every run of one day, the day's events loaded once (in a worker process)."""
     from trading_research.data import study_loader as sl
     from trading_research.data.fetch_stage import StudyRoots
-    from trading_research.market_making.simulator import simulate_day
 
     target = job.out / f"{job.day}.parquet"
     if target.exists():
@@ -90,17 +145,8 @@ def run_variants(job: VariantJob) -> Path:
     roots = StudyRoots.under(job.repo / "data")
     events = sl.load_events_day(job.symbol, job.day, book_roots=[roots.book], trades_root=roots.trades,
                                 funding_root=roots.funding, access=job.access)  # fmt: skip
-    mid = float(np.mean((events.bid_px[:, 0] + events.ask_px[:, 0]) / 2.0) * events.spec.tick)
-    clip = sl.clip_for(job.symbol)
-    rows = []
-    for run in job.runs:
-        quoter, config, tapes = quoter_and_tapes(run.cell, run.decisions, job.flags_ns,
-                                                 job.max_sequence_gaps, job.sigma_ref)  # fmt: skip
-        if run.changes:
-            config = config.with_(**run.changes)
-        result = simulate_day(events, quoter, config, tapes)
-        rows.append(day_values(run.cell, quoter, result, clip, mid) |
-                    {"day": job.day.isoformat(), "run_slot": run.slot, "variant": run.variant})  # fmt: skip
+    rows = day_rows(events, job.runs, job.flags_ns, job.max_sequence_gaps, job.sigma_ref,
+                    sl.clip_for(job.symbol))  # fmt: skip
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
     pd.DataFrame(rows).to_parquet(partial, index=False)
@@ -144,4 +190,28 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
     if cell.kind == "entry":  # FILL on the block: the same orders under the two other rules
         runs += [Run(slot, f"fill/{rule.value}", cell, own, {"fill_rule": rule})
                  for rule in RULES if rule is not FillRule.QUEUE]  # fmt: skip
+    return runs
+
+
+def measured_runs(slot: str, cell: SimCell, own: Decisions, measured: list[tuple[str, SimCell, Decisions]],
+                  flag_sets: list[tuple[np.ndarray, Decisions]], fill: bool) -> list[Run]:  # fmt: skip
+    """The measurements of a passive slot on one day, beside its kills' runs.
+
+    ``measured`` are the regime measurements (``regime/<window or guard>``, the
+    window-0 twin among them as ``regime/none``), each on its own decisions;
+    ``flag_sets`` the regime attribution's random flag sets with the decisions
+    guarded by each; ``fill`` adds FILL's touch and trade-through rules (H only).
+    S-P and S25-Z also run with the passive exit."""
+    from dataclasses import replace
+
+    from trading_research.market_making.queue import FillRule
+
+    runs = [Run(slot, name, other, decided) for name, other, decided in measured]
+    if cell.kind == "entry":
+        runs.append(Run(slot, "exit/passive", replace(cell, passive_exit=True), own))
+        if fill:
+            runs += [Run(slot, f"fill/{rule.value}", cell, own, {"fill_rule": rule})
+                     for rule in (FillRule.TOUCH, FillRule.THROUGH)]  # fmt: skip
+    runs += [Run(slot, f"flagset/{k}", cell, decided, flags_ns=flags)
+             for k, (flags, decided) in enumerate(flag_sets)]  # fmt: skip
     return runs

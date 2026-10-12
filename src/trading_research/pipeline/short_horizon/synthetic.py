@@ -69,20 +69,44 @@ def _price(ticks: int) -> str:
 
 @dataclass(frozen=True)
 class DayPath:
-    """One day's market: message stamps (ms), each message's best bid in ticks."""
+    """One day's market: message stamps (ms), each message's best bid in ticks, and the
+    side a trend episode's book signal shows at each message (0 outside episodes)."""
 
     stamps_ms: np.ndarray
     bid0: np.ndarray
     rng_seed: int
+    signal: np.ndarray | None = None
+    #: Each message's spread in ticks (one tick when None).
+    spread: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
 class SyntheticMarket:
-    """The days a book and prints exist on, and how often the book updates."""
+    """The days a book and prints exist on, and how often the book updates.
+
+    With ``episodes_per_day`` above 0 the walk carries trend episodes: each moves
+    the price ``drift_ticks`` a message for ``episode_steps`` messages, and while it
+    lasts the touch on its side shows ``signal_size``, so a model can learn it.
+    ``burst_days`` give the hourly bars ten times their volatility over
+    ``burst_hours``, which the break detector alarms on, and from the burst's
+    first hour to the day's end widen the book's spread to
+    ``burst_spread_ticks`` and show each episode's signal on the wrong side of
+    the touch, so trading on the signal after the alarm costs more and loses:
+    a guard after an alarm pays, and a cell with a regime window can win the
+    choice. ``gap_days`` skip three sequence numbers in the book.
+    """
 
     days: frozenset[date]
     step_ms: int = 4_000
     seed: int = 2025
+    gap_days: frozenset[date] = frozenset()
+    episodes_per_day: int = 0
+    episode_steps: int = 30
+    drift_ticks: int = 2
+    signal_size: float = 4.0
+    burst_days: frozenset[date] = frozenset()
+    burst_hours: tuple[int, int] = (18, 24)
+    burst_spread_ticks: int = 8
 
     def path(self, day: date) -> DayPath:
         """A random walk of the best bid with a fat tail, one message per step."""
@@ -94,7 +118,20 @@ class SyntheticMarket:
         moves = np.rint(rng.standard_t(4, size=n) * 1.5).astype(np.int64)
         moves[0] = 0
         level = START_TICKS + int(rng.integers(-500, 500))
-        return DayPath(stamps, level + np.cumsum(moves), seed)
+        signal = np.zeros(n, dtype=np.int8)
+        if self.episodes_per_day > 0:
+            draws = np.random.default_rng(seed + 3)
+            starts = draws.integers(1, n - self.episode_steps, size=self.episodes_per_day)
+            sides = draws.choice(np.array([-1, 1], dtype=np.int8), size=self.episodes_per_day)
+            for start, side in zip(starts, sides, strict=True):
+                signal[start : start + self.episode_steps] = side
+            moves[1:] += self.drift_ticks * signal[:-1].astype(np.int64)
+        spread = np.ones(n, dtype=np.int64)
+        if day in self.burst_days:  # the drift keeps the episode's side; the touch shows the other
+            after = stamps >= _ms(day, self.burst_hours[0])
+            spread[after] = self.burst_spread_ticks
+            signal[after] *= -1
+        return DayPath(stamps, level + np.cumsum(moves), seed, signal, spread)
 
     def book_lines(self, day: date, *, hours: int | None = None) -> list[str]:
         """The archive's JSON lines: a snapshot, then deltas of what changed."""
@@ -116,25 +153,37 @@ class SyntheticMarket:
             return json.dumps({"type": kind, "ts": int(stamp), "data": data})
 
         lines = [message("snapshot", p.stamps_ms[0], side(bids), side(asks), 1)]
+        skips = (
+            set(np.linspace(end // 4, 3 * end // 4, 3).astype(int))
+            if day in self.gap_days
+            else set()
+        )
+        sequence = 1
         for i in range(1, end):
             top = int(p.bid0[i])
+            ask = top + (1 if p.spread is None else int(p.spread[i]))
             new_bids = {top - k: bids.get(top - k, 0.0) for k in range(LEVELS)}
-            new_asks = {top + 1 + k: asks.get(top + 1 + k, 0.0) for k in range(LEVELS)}
+            new_asks = {ask + k: asks.get(ask + k, 0.0) for k in range(LEVELS)}
             fresh = sizes(4)
             for k, key in enumerate((top, top - 1)):
                 new_bids[key] = float(fresh[k])
-            for k, key in enumerate((top + 1, top + 2)):
+            for k, key in enumerate((ask, ask + 1)):
                 new_asks[key] = float(fresh[2 + k])
             for new in (new_bids, new_asks):
                 for key in new:
                     if new[key] == 0.0:
                         new[key] = float(sizes(1)[0])
+            shown = 0 if p.signal is None else int(p.signal[i])
+            if shown:
+                big = round(self.signal_size + float(rng.random()), 3)
+                (new_bids if shown > 0 else new_asks)[top if shown > 0 else ask] = big
             delta_b = [[_price(t), "0"] for t in bids if t not in new_bids]
             delta_b += [[_price(t), f"{s:.3f}"] for t, s in new_bids.items() if bids.get(t) != s]
             delta_a = [[_price(t), "0"] for t in asks if t not in new_asks]
             delta_a += [[_price(t), f"{s:.3f}"] for t, s in new_asks.items() if asks.get(t) != s]
             bids, asks = new_bids, new_asks
-            lines.append(message("delta", p.stamps_ms[i], delta_b, delta_a, i + 1))
+            sequence += 2 if i in skips else 1
+            lines.append(message("delta", p.stamps_ms[i], delta_b, delta_a, sequence))
         return lines
 
     def book_archive(self, day: date, *, hours: int | None = None) -> bytes:
@@ -151,7 +200,8 @@ class SyntheticMarket:
         gap = p.stamps_ms[at + 1] - p.stamps_ms[at]
         times = p.stamps_ms[at] + 1 + np.floor(rng.random(len(at)) * (gap - 1)).astype(np.int64)
         side = rng.choice(np.array([-1, 1]), size=len(at))
-        price = np.where(side > 0, p.bid0[at] + 1, p.bid0[at])
+        spread = np.ones(len(at), dtype=np.int64) if p.spread is None else p.spread[at]
+        price = np.where(side > 0, p.bid0[at] + spread, p.bid0[at])
         size = np.round(rng.exponential(0.05, size=len(at)) + 0.001, 3)
         rows = ["timestamp,symbol,side,size,price"]
         rows += [
@@ -165,8 +215,11 @@ class SyntheticMarket:
         first = _ms(STREAM_START)
         hours = (date(2026, 2, 1) - STREAM_START).days * 24
         rng = np.random.default_rng(self.seed)
-        closes = 1_000.0 * np.exp(np.cumsum(rng.standard_t(5, size=hours) * 0.004))
-        return first, closes
+        returns = rng.standard_t(5, size=hours) * 0.004
+        for day in self.burst_days:
+            start = (day - STREAM_START).days * 24
+            returns[start + self.burst_hours[0] : start + self.burst_hours[1]] *= 10.0
+        return first, 1_000.0 * np.exp(np.cumsum(returns))
 
     def klines_archive(self, day: date) -> bytes:
         first, closes = self.hourly_closes()

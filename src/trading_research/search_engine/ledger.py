@@ -17,6 +17,20 @@ pairs, counted even beyond N_max. Rows whose key is outside the catalogue are
 refused, as is a ledger whose manifest names another catalogue. Reading checks
 every part against the manifest's sha256 and row count.
 ``validation.choice.CellDays.from_ledger`` reads one run's rows.
+
+**Simulator trials.** The registered trial bound counts the simulator's runs on
+D beside the 2,400 taker cells (N_max = 2,400 + 12 + 30 + 9 + 4): S25-Z's cells,
+S-P's cells and regime measurements, S-M's leans and guard measurements, and A0
+and FILL's four runs on O. Each is one configuration scored on D, so each is a
+key of the ledger and counts in N_trials. Their keys are not catalogue keys,
+and the catalogue (its keys and its hash) is unchanged: a simulated cell is
+written ``<slot>|<catalogue key>|<quoter>|fees=<fees>[|lean=<l>|policy=<p>]``,
+S-P, S-M or S25-Z on a catalogue key, and A0 and FILL as the four
+:data:`MEASUREMENT_TRIALS`; any other key is refused. They are appended after
+stage C (:meth:`TrialLedger.append_simulator`) to a run that stage B wrote. A
+simulated configuration has no walked long and short P&L: its ``net_bp`` is the
+day's net in bp of its filled notional (0 without a fill), and ``G_bp``,
+``pnl_long_bp`` and ``pnl_short_bp`` are written 0.
 """
 
 from __future__ import annotations
@@ -65,8 +79,59 @@ SCHEMA = pa.schema(
 )
 
 
+#: The simulated slots whose cells are trials, each on a catalogue key.
+SIMULATED_SLOTS: tuple[str, ...] = ("S-P", "S-M", "S25-Z")
+#: A0 crossing on O at 0/0, and its posted stream under FILL's three fill rules.
+MEASUREMENT_TRIALS: tuple[str, ...] = (
+    "A0|crossing|fees=zero",
+    "FILL|touch|fees=zero",
+    "FILL|trade_through|fees=zero",
+    "FILL|queue|fees=zero",
+)
+#: Fields of a catalogue key (instrument, stratum, model, inputs, gate, hold,
+#: rate or k, label fee or beta, regime).
+KEY_FIELDS = 9
+
+
 class LedgerError(ValueError):
     """Rows that cannot enter the ledger, or a ledger that fails its manifest."""
+
+
+def is_simulator_key(key: str) -> bool:
+    """Whether ``key`` names a simulator trial rather than a taker cell."""
+    return key in MEASUREMENT_TRIALS or key.split("|", 1)[0] in SIMULATED_SLOTS
+
+
+def require_simulator_keys(keys: Iterable[str], catalogue: Catalogue) -> None:
+    """Refuse a simulator trial key that is not a registered simulated configuration."""
+    for key in set(keys):
+        if key in MEASUREMENT_TRIALS:
+            continue
+        parts = key.split("|")
+        cell = "|".join(parts[1 : 1 + KEY_FIELDS])
+        rest = parts[1 + KEY_FIELDS :]
+        kinds = {"entry": 1, "maker": 3}
+        ok = (
+            parts[0] in SIMULATED_SLOTS
+            and cell in catalogue
+            and bool(rest)
+            and rest[0] in kinds
+            and len(rest) == 1 + kinds[rest[0]]
+            and rest[1].startswith("fees=")
+            and (
+                rest[0] == "entry"
+                or (rest[2].startswith("lean=") and rest[3].startswith("policy="))
+            )
+        )
+        if not ok:
+            raise LedgerError(f"{key!r} is neither a catalogue key nor a simulator trial")
+
+
+def require_keys(keys: Iterable[str], catalogue: Catalogue) -> None:
+    """Taker keys must be catalogue keys; simulator keys registered simulated configurations."""
+    keys = list(keys)
+    catalogue.require(k for k in keys if not is_simulator_key(k))
+    require_simulator_keys((k for k in keys if is_simulator_key(k)), catalogue)
 
 
 def file_sha256(path: Path) -> str:
@@ -85,8 +150,13 @@ def ledger_sha256(paths: Iterable[Path]) -> str:
 
 
 def n_trials(rows: pd.DataFrame) -> int:
-    """The number of distinct ``(run, key)`` pairs."""
+    """The number of distinct ``(run, key)`` pairs, taker cells and simulator trials."""
     return len(rows[["run", "key"]].drop_duplicates())
+
+
+def simulator_rows(rows: pd.DataFrame) -> pd.Series:
+    """Which rows are simulator trials."""
+    return rows["key"].map(is_simulator_key).astype(bool)
 
 
 def _day(value: Any) -> date:
@@ -101,7 +171,7 @@ def check_rows(rows: pd.DataFrame, catalogue: Catalogue) -> pd.DataFrame:
     """The rows in ledger form, refused unless every value can enter the ledger."""
     if list(rows.columns) != list(LEDGER_COLUMNS):
         raise LedgerError(f"ledger rows need exactly the columns {LEDGER_COLUMNS}")
-    catalogue.require(rows["key"])
+    require_keys(rows["key"], catalogue)
     out = rows.copy()
     out["day"] = [_day(v) for v in out["day"]]
     for name in ("run", "trades", "skips"):
@@ -203,10 +273,12 @@ class TrialLedger:
     def n_trials(self) -> int:
         return int(self.record()["n_trials"])
 
-    def run_rows(self, run: int) -> pd.DataFrame:
-        """One run's rows, as ``CellDays.from_ledger`` reads them."""
+    def run_rows(self, run: int, *, simulator: bool = False) -> pd.DataFrame:
+        """One run's taker rows, as ``CellDays.from_ledger`` reads them (with
+        ``simulator``, its simulator trials instead)."""
         rows = self.read()
-        return rows[rows["run"] == run].reset_index(drop=True)
+        mine = (rows["run"] == run) & (simulator_rows(rows) == simulator)
+        return rows[mine].reset_index(drop=True)
 
     def append(self, run: int, commit: str, rows: pd.DataFrame) -> dict[str, Any]:
         """Add one run's rows (a stage's worth), refused if any (run, key, day)
@@ -214,6 +286,8 @@ class TrialLedger:
         self.catalogue.verify()
         record = self.record()
         new = check_rows(rows, self.catalogue)
+        if simulator_rows(new).any():
+            raise LedgerError("simulator trials are appended with append_simulator")
         if set(new["run"]) != {run}:
             raise LedgerError(f"every row appended for run {run} must carry run {run}")
         if not commit:
@@ -232,6 +306,25 @@ class TrialLedger:
             "keys": int(mine["key"].nunique()),
             "days": int(mine["day"].nunique()),
         }
+        return self._commit(both, record)
+
+    def append_simulator(self, run: int, commit: str, rows: pd.DataFrame) -> dict[str, Any]:
+        """Add one run's simulator trials (stage C), once, to a run stage B wrote;
+        the commit they were computed at is recorded beside the run's."""
+        self.catalogue.verify()
+        record = self.record()
+        new = check_rows(rows, self.catalogue)
+        if not simulator_rows(new).all() or set(new["run"]) - {run}:
+            raise LedgerError(f"append_simulator takes run {run}'s simulator trials only")
+        known = record["runs"].get(str(run))
+        if known is None:
+            raise LedgerError(f"run {run} has no taker rows; its simulator trials come after them")
+        if "simulator" in known:
+            raise LedgerError(f"run {run}'s simulator trials are already in the ledger")
+        if not commit:
+            raise LedgerError("each run's commit is recorded; none was given")
+        both = pd.concat([self.read(), new], ignore_index=True)
+        known["simulator"] = {"commit": commit, "rows": len(new), "keys": int(new["key"].nunique())}
         return self._commit(both, record)
 
     def log_hand_run(self, when: date, computed: str, days: Iterable[date]) -> dict[str, Any]:
@@ -260,6 +353,9 @@ class TrialLedger:
         record["sha256"] = ledger_sha256(self.path.with_name(part["file"]) for part in parts)
         record["rows"] = len(rows)
         record["n_trials"] = n_trials(rows)
+        simulated = simulator_rows(rows) if len(rows) else pd.Series(dtype=bool)
+        record["n_trials_simulator"] = n_trials(rows[simulated]) if len(rows) else 0
+        record["n_trials_taker"] = record["n_trials"] - record["n_trials_simulator"]
         self._write_manifest(record)
         return record
 
