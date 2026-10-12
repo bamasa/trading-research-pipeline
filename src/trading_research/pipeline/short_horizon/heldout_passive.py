@@ -109,7 +109,14 @@ def fill_values(result: Any) -> dict[str, Any]:
 
 def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_sequence_gaps: int,
              sigma_ref: float, clip: float) -> list[dict[str, Any]]:  # fmt: skip
-    """Every run of one loaded day, each under its own flags and changes."""
+    """Every run of one loaded day, each under its own flags and changes.
+
+    Each row carries the void conditions' inputs: ``accounting_failed``, the
+    accounting fault a run raised (the simulator's identity, R15, or the filled
+    attempts' cash against the day's; K-acct), and ``max_abs_position`` from the
+    fills' positions with ``cap_exceeded`` above the cap (K-cap: one clip for the
+    signal-entry quoter, the hard limit of two clips for S1)."""
+    from trading_research.market_making.accounting import IdentityError
     from trading_research.market_making.simulator import simulate_day
 
     mid = float(np.mean((events.bid_px[:, 0] + events.ask_px[:, 0]) / 2.0) * events.spec.tick)
@@ -120,14 +127,30 @@ def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_seque
                                                  sigma_ref)  # fmt: skip
         if run.changes:
             config = config.with_(**run.changes)
-        result = simulate_day(events, quoter, config, tapes)
-        row = day_values(run.cell, quoter, result, clip, mid)
+        where = {"day": events.day.isoformat(), "run_slot": run.slot, "variant": run.variant}
+        try:
+            result = simulate_day(events, quoter, config, tapes)
+            row = day_values(run.cell, quoter, result, clip, mid)
+        except (IdentityError, RuntimeError) as exc:
+            rows.append(where | {"label": run.cell.label, "excluded": False,
+                                 "accounting_failed": f"{type(exc).__name__}: {exc}"})  # fmt: skip
+            continue
         if run.cell.kind == "entry":
             row |= fill_values(result)
-        rows.append(
-            row | {"day": events.day.isoformat(), "run_slot": run.slot, "variant": run.variant}
-        )
+        rows.append(row | where | position_cap(result.fills, clip, run.cell.kind))
     return rows
+
+
+def position_cap(fills: pd.DataFrame, clip: float, kind: str) -> dict[str, Any]:
+    """K-cap's inputs from a run's fills: the largest |position| after any fill, and
+    whether it exceeds the cap (one clip for the signal-entry quoter, whose order
+    with a cancel in flight counts as resting; ``soft_limit_clips`` + 1 = 2 clips
+    for S1's hard limit)."""
+    position = fills["position_after"].to_numpy(dtype=np.float64) if len(fills) else np.zeros(0)
+    largest = float(np.abs(position).max()) if len(position) else 0.0
+    cap = clip * (1.0 if kind == "entry" else 2.0)
+    return {"max_abs_position": largest, "cap_exceeded": bool(largest > cap * (1.0 + 1e-9)),
+            "accounting_failed": ""}  # fmt: skip
 
 
 def run_variants(job: VariantJob) -> Path:

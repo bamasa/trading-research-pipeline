@@ -734,6 +734,8 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
     def series(variant: str, column: str = primary) -> np.ndarray:
         out = np.full(len(days), np.nan)
         part = mine[mine["variant"] == variant]
+        if column not in part:
+            return out
         for day, excluded, value in zip(part["day"], part["excluded"], part[column], strict=True):
             if not excluded:
                 out[index[day]] = float(value)
@@ -750,6 +752,15 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
         extra["flagsets"] = np.array([series(f"flagset/{k}") for k in sets]).reshape(
             len(sets), len(days)
         )
+    void = []  # K-acct: an accounting fault in any run of the slot; K-cap: its true run's position
+    if (
+        "accounting_failed" in mine
+        and mine["accounting_failed"].fillna("").astype(str).ne("").any()
+    ):
+        void.append("K-acct")
+    true = mine[mine["variant"] == "true"]
+    if "cap_exceeded" in true and true["cap_exceeded"].fillna(False).astype(bool).any():
+        void.append("K-cap")
     return SlotDays(
         p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
         value=series("true"), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
@@ -763,7 +774,7 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
         making=series("true", "making_usdt") if p.slot == "S-M" else None,
         passive_notional=series("true", "passive_notional"),
         second=series("true", "net_bp_trade") if p.slot == "S25-Z" else None,
-        on_s25_signal=on_s25, window_h=window_h, extra=extra,
+        on_s25_signal=on_s25, window_h=window_h, extra=extra, void=tuple(void),
     )  # fmt: skip
 
 
@@ -880,6 +891,15 @@ def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[Passive
             return stale, rows
 
 
+def failures(rows: pd.DataFrame) -> list[dict[str, Any]]:
+    """Each simulated run that raised an accounting fault (its slot is void, K-acct)."""
+    if not len(rows) or "accounting_failed" not in rows:
+        return []
+    failed = rows[rows["accounting_failed"].fillna("").astype(str).ne("")]
+    columns = ["day", "run_slot", "variant", "accounting_failed"]
+    return [{str(k): v for k, v in row.items()} for row in failed[columns].to_dict("records")]
+
+
 def unreadable(block: Block, stale: set[date]) -> bool:
     """More than a quarter of the block's planned days excluded: the loader's
     exclusions and the days any run of the read flagged stale, each day once."""
@@ -980,7 +1000,7 @@ def compute_block(block: Block, *, days: list[date] | None = None,
             "one_day_shift_from": shift if kills else {},
             "excluded": block.validated["reasons"], "unreadable": unreadable(block, stale),
             "gap_days": [d.isoformat() for d in block.validated["gap_days"]],
-            "alarms_in_block": in_block, "passive_runs": len(rows),
+            "alarms_in_block": in_block, "passive_runs": len(rows), "accounting_failures": failures(rows),
             "flag_days": [d.isoformat() for d in usable], "flags_in_block": n_flags,
             "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}}  # fmt: skip
     if kills and block.name == "H" and len(rows):
