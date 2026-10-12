@@ -2837,7 +2837,7 @@ text left a gap:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`28f63504d7e367615360464100328e01552cec9e0f043904c96118ae87c6920f`.
+`cbae8c75e636596f63d0f14f401a0941d37d375a3f1429a9ac257a8d5e2899b7`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`

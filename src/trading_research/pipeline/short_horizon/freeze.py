@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -308,9 +308,11 @@ def detector_record(study: Study) -> dict[str, Any]:
     close = flags.hourly_close(study.symbol, study.roots.bars, d_end, sa.development_access())
     frozen = flags.frozen(close, d_end)
     alarms = flags.alarms_frame(frozen)
-    end = pd.Timestamp(d_end, tz="UTC") + pd.Timedelta(days=1)
-    rate = rf.alarm_rate(alarms, pd.Timestamp(d_start, tz="UTC"), end)
-    on_d = [a for a in frozen["alarms"] if pd.Timestamp(a["timestamp"]) < end]
+    start = pd.Timestamp(d_start, tz="UTC")
+    end = pd.Timestamp(d_end + timedelta(days=1), tz="UTC")
+    rate = rf.alarm_rate(alarms, start, end)
+    # the run starts on 2024-12-01; alarms_D is the registered span, 2025-01-01..06-30
+    on_d = [a for a in frozen["alarms"] if start <= pd.Timestamp(a["timestamp"]) < end]
     foldwise = {}
     for month in TEST_MONTHS:
         record = flags.saved_fold_flags(month, study.work / "A" / "flags")
@@ -520,17 +522,51 @@ def lean_scales(study: Study, inputs: Any) -> dict[str, float]:
 STAND_IN_H = (date(2025, 5, 18), date(2025, 6, 30))
 
 
+class FrozenValues:
+    """The values the amendment will freeze, read as the frozen registration gives them."""
+
+    def __init__(self, values: dict[tuple[str, ...], Any]) -> None:
+        self.values = values
+
+    def value(self, path: tuple[str, ...]) -> Any:
+        return self.values[path]
+
+
+def rehearsal_read(block: Any, statuses: Any) -> dict[str, Any]:
+    """One stand-in block's read as ``reads.compute_results`` computes it: the
+    usable days under the frozen threshold (or the block unreadable), every
+    slot's series with its kills and placebos, the gap days put back, the MDEs,
+    the statuses from ``statuses(series, info, gaps)`` and the pages' numbers."""
+    from trading_research.pipeline.short_horizon.heldout import compute_block
+    from trading_research.pipeline.short_horizon.page_numbers import block_numbers
+
+    if block.validated["unreadable"]:
+        return {"unreadable": True, "excluded": block.validated["reasons"], "found": None}
+    series, info = compute_block(block)
+    gaps = (
+        compute_block(block.put_back(), days=block.gap_days, kills=False)[0]
+        if block.gap_days
+        else {}
+    )
+    mdes = block.value(("metrics", "mde", "value")) or {}
+    for slot, s in series.items():
+        s.mde = mdes.get(slot)
+    found = statuses(series, info, gaps)
+    found["pages"] = block_numbers(block, series, found)
+    return {"unreadable": False, "info": info, "found": found}
+
+
 def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> dict[str, Any]:
     """The registered dry run, before the amendment: the parity test repeated on the
-    2024 days (a failure is a bug, and D is re-run in full), then the block read's
-    whole computation on D's last 44 days standing in for H and the reader on the
-    three ``ob200`` reader-test days standing in for F and P, under the development
-    access. Its outputs are kept apart and never reported; the record says only
-    that it ran."""
+    2024 days (a failure is a bug, and D is re-run in full), then the block reads'
+    whole computation, under the development access, on D's last 44 days standing
+    in for H and on the three ``ob200`` reader-test days standing in for F and then
+    for P, each read on the stand-in before it (statuses, kills, placebos, R, P's
+    reading and the pages' numbers). Its outputs are kept apart and never
+    reported; the record says only that it ran."""
     from trading_research.data import study_access as sa
-    from trading_research.pipeline.short_horizon import statuses as st
-    from trading_research.pipeline.short_horizon.heldout import Block, compute_block
-    from trading_research.pipeline.short_horizon.page_numbers import block_numbers
+    from trading_research.pipeline.short_horizon import reads
+    from trading_research.pipeline.short_horizon.heldout import Block
     from trading_research.pipeline.short_horizon.stage0 import load_timing_day, parity
 
     holds = sorted({parse_key(k).hold_s for k in study.keys})
@@ -539,18 +575,33 @@ def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> d
         raise RuntimeError("the dry run's repeat of the walk-table parity test failed: a bug under "
                            "the amendment protocol, and D is re-run in full")  # fmt: skip
     access, end = sa.development_access(), sa.BLOCKS["D"][1]
+    frozen = FrozenValues(values)
     days = tuple(d for d in inputs.usable("D") if STAND_IN_H[0] <= d <= STAND_IN_H[1])
-    stand_in = Block(study, "H", access, days, values=values, end=end, label="rehearsal_H")
-    series, info = compute_block(stand_in)
-    found = st.family(series, {slot: s.mask(s.days) for slot, s in series.items()}, "H", {})
-    numbers = block_numbers(stand_in, series, {})
-    reader = Block(study, "F", access, study.scale.days(sa.READER_TEST), values=values, end=end,
-                   label="rehearsal_F_and_P")  # fmt: skip
-    outputs = {"stand_in_H": {"info": info, "statuses": {k: a.status for k, a in found.items()},
-                              "pages": numbers}, "stand_in_F_and_P": reader.validated}  # fmt: skip
+    reader = study.scale.days(sa.READER_TEST)
+
+    def block(name: str, planned: Any) -> Block:
+        return Block(
+            study, name, access, planned, values=values, end=end, label=f"rehearsal_{name}"
+        )
+
+    h_block, f_block, p_block = block("H", days), block("F", reader), block("P", reader)
+    h = rehearsal_read(h_block, lambda s, i, g: reads.statuses_h(study, s, i, g, h_block.flags_ns))
+    skipped: dict[str, Any] = {"unreadable": None, "found": None,
+                               "skipped": "the stand-in before it was unreadable"}  # fmt: skip
+    f, p = skipped, skipped
+    if h["found"] is not None:
+        f = rehearsal_read(f_block, lambda s, i, g: reads.statuses_f(
+            study, s, f_block.detector["alarms"], frozen, i, g, f_block.flags_ns, h=h["found"]))  # fmt: skip
+    if f["found"] is not None:
+        p = rehearsal_read(p_block, lambda s, i, g: reads.statuses_p(
+            study, s, i, g, p_block.flags_ns, f=f["found"]))  # fmt: skip
+    outputs = {"stand_in_H": h, "stand_in_F": f, "stand_in_P": p}
     save_json(study.dir("E", "rehearsal") / "discarded_outputs.json", outputs)
     return {"ran": True, "parity_repeated_ok": True, "stand_in_H_days": len(days),
-            "stand_in_F_and_P_days": len(reader.days_planned), "outputs": "discarded, never reported"}  # fmt: skip
+            "stand_in_F_and_P_days": len(reader),
+            "read": {name: ("unreadable" if out["unreadable"] else "skipped" if out["unreadable"] is None
+                            else "read") for name, out in outputs.items()},
+            "outputs": "discarded, never reported"}  # fmt: skip
 
 
 def run(study: Study) -> dict[str, Any]:

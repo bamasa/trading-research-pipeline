@@ -30,7 +30,7 @@ its results file with every slot ``not assessed (<block> read failed)``.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -226,18 +226,19 @@ def r_void(registration: Any, alarms: list[dict[str, Any]]) -> bool:
         (pd.Timestamp(a["timestamp"]), a["channel"])
         for a in registration.value(("detector", "alarms_D"))
     }
-    end = pd.Timestamp(sa.BLOCKS["D"][1], tz="UTC") + pd.Timedelta(days=1)
+    start = pd.Timestamp(sa.BLOCKS["D"][0], tz="UTC")
+    end = pd.Timestamp(sa.BLOCKS["D"][1] + timedelta(days=1), tz="UTC")
     again = {
         (pd.Timestamp(a["timestamp"]), a["statistic"])
         for a in alarms
-        if pd.Timestamp(a["timestamp"]) < end
+        if start <= pd.Timestamp(a["timestamp"]) < end
     }
     return recorded != again
 
 
 def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]], registration: Any,
                info: dict[str, Any] | None = None, gaps: dict[str, Any] | None = None,
-               flags_ns: Any = None) -> dict[str, Any]:  # fmt: skip
+               flags_ns: Any = None, h: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
     """F: the slots taken to F on F- (or all of F, labelled), R for H's candidates,
     the slots P is opened for, and every slot on all of F as a measurement."""
     import pandas as pd
@@ -245,7 +246,7 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
     from trading_research.evaluation.family import FAMILY
     from trading_research.pipeline.short_horizon import statuses as st
 
-    h = read_results(study, "H")
+    h = read_results(study, "H") if h is None else h  # given: the dry run's stand-in H
     taken, before = list(h["taken_to_F"]), dict(h["statuses"])
     days = next(iter(series.values())).days if series else []
     f_start = sa.BLOCKS["F"][0]
@@ -289,12 +290,13 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
 
 
 def statuses_p(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,
-               gaps: dict[str, Any] | None = None, flags_ns: Any = None) -> dict[str, Any]:  # fmt: skip
+               gaps: dict[str, Any] | None = None, flags_ns: Any = None,
+               f: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
     """P: the slots that passed on F (scored only by their mean when R is supported)."""
     from trading_research.evaluation.family import FAMILY
     from trading_research.pipeline.short_horizon import statuses as st
 
-    f = read_results(study, "F")
+    f = read_results(study, "F") if f is None else f  # given: the dry run's stand-in F
     qualifying = list(f["qualifying_for_P"])
     supported = [s for s in qualifying if f["R"].get(s, {}).get("outcome") == "supported"]
     preset = {slot: "not read on P" for slot in FAMILY if slot not in qualifying}

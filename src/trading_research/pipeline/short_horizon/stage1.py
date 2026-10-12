@@ -8,7 +8,8 @@ of E, H, F or P):
    note (``docs/short_horizon_2025_code_freeze.md``) naming a commit after which
    no study code has changed.
 2. **The fetch** of W's and D's books, prints and funding, the three ``ob200``
-   reader-test days' books, and the hourly bars from 2024-12-01 to 2025-06-30,
+   reader-test days' books, prints and funding (the funding a span of its own),
+   and the hourly bars from 2024-12-01 to 2025-06-30,
    through :func:`trading_research.data.fetch_stage.run_stage`, which checks the
    disk first, retries every failure but a 404, and returns only when each day
    is on disk or terminally excluded. The fetch log is kept, so a stopped fetch
@@ -76,13 +77,20 @@ def code_freeze(study: Study) -> dict[str, str]:
 
 
 def development_plan(study: Study) -> StagePlan:
-    """Stage 1's days per plane: W and D, the reader-test books, D's hourly bars."""
+    """Stage 1's days per plane: W and D, the reader-test books and prints, D's hourly
+    bars; funding for W and D (the reader-test days' is :func:`reader_funding_plan`)."""
     days = tuple(sorted({*study.scale.days("W"), *study.scale.days("D")}))
     bars = tuple(
         BARS_SPAN[0] + timedelta(days=i) for i in range((BARS_SPAN[1] - BARS_SPAN[0]).days + 1)
     )
     reader = study.scale.days(sa.READER_TEST)
-    return StagePlan(book=days + reader, prints=days, bars=bars, funding=days)
+    return StagePlan(book=days + reader, prints=days + reader, bars=bars, funding=days)
+
+
+def reader_funding_plan(study: Study) -> StagePlan:
+    """The reader-test days' funding, for the dry run's F and P read: a span of its
+    own, since funding is fetched as one span and none may cross a held-out block."""
+    return StagePlan(funding=study.scale.days(sa.READER_TEST))
 
 
 def fetch(study: Study, book_workers: int) -> fl.FetchLog:
@@ -96,6 +104,7 @@ def fetch(study: Study, book_workers: int) -> fl.FetchLog:
     if opener is not None:
         present = opener.market.present()
         present["ob200"] = present["ob200"] | opener.reader_test_days
+        present["prints"] = present["prints"] | opener.reader_test_days
         book_workers, print_workers = 1, 1
     else:
         present = head_check_present(study.repo / HEAD_CHECK)
@@ -107,6 +116,9 @@ def fetch(study: Study, book_workers: int) -> fl.FetchLog:
     run_stage(study.symbol, plan, study.roots, log, budget=budget, book_workers=book_workers,
               print_workers=print_workers, expected_present=present, opener=opener,
               access=sa.development_access())  # fmt: skip
+    run_stage(study.symbol, reader_funding_plan(study), study.roots, log,
+              budget=stage_budget(book_days=0, print_archives_gb=0.0, workers=1), book_workers=1,
+              opener=opener, access=sa.development_access())  # fmt: skip
     if not log.complete():
         raise RuntimeError("the fetch returned with days neither on disk nor excluded")
     return log

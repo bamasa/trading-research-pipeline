@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import numpy as np
@@ -10,7 +10,13 @@ import pandas as pd
 
 from trading_research.pipeline.short_horizon import features as ft
 from trading_research.pipeline.short_horizon.fits import FoldData, thin_positions, window_days
-from trading_research.pipeline.short_horizon.plan import midnight_ns, purge_ns
+from trading_research.pipeline.short_horizon.plan import (
+    a0_fold,
+    frozen_fold,
+    midnight_ns,
+    purge_ns,
+    walk_forward,
+)
 
 NS = 1_000_000_000
 
@@ -76,3 +82,22 @@ def test_the_networks_rows_are_thinned_before_the_unlabelled_ones_are_dropped() 
     assert kept.tolist() == [r for r in every.tolist() if (r // 10) % 8 != 0]
     assert len(kept) == 10  # thinning first, labelled rows only, would keep 20
     assert all(np.isfinite(d.targets).all() for d in found)
+
+
+def test_the_inner_validation_is_the_seven_calendar_days_before_the_month() -> None:
+    days = [date(2025, 1, 1) + timedelta(days=i) for i in range(59)]  # to 02-28
+    days.remove(date(2025, 1, 28))  # an excluded day inside the window
+    fold = walk_forward(days, months=("2025-02",))[0]
+    assert fold.inner == tuple(date(2025, 1, d) for d in (25, 26, 27, 29, 30, 31))
+    assert fold.train[-1] == date(2025, 1, 24)  # never filled from earlier days
+
+
+def test_the_frozen_fits_and_a0_purge_both_ends_of_their_threshold_window() -> None:
+    days = [date(2025, 1, 1) + timedelta(days=i) for i in range(181)]
+    frozen = frozen_fold(days)
+    assert frozen.inner[0] == date(2025, 6, 24) and frozen.inner[-1] == date(2025, 6, 30)
+    assert frozen.train_end_ns(50.0) == midnight_ns(date(2025, 6, 24)) - purge_ns(50.0)
+    assert frozen.inner_end_ns(50.0) == midnight_ns(date(2025, 7, 1)) - purge_ns(50.0)
+    a0 = a0_fold(days)
+    assert a0.train_end_ns(50.0) == midnight_ns(date(2025, 1, 28)) - purge_ns(50.0)
+    assert a0.inner_end_ns(50.0) == midnight_ns(date(2025, 2, 4)) - purge_ns(50.0)
