@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 from datetime import date, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest import mock
@@ -99,31 +100,61 @@ def test_the_cutoff_reaches_the_last_exit_snapshot_an_inner_row_reads() -> None:
 needs_torch = pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs 'deep'")
 
 
-@needs_torch
-def test_the_fold_level_test_fits_through_the_production_path_twice(stage1: Inputs) -> None:
+def _late(inputs: Any, model: Any, columns: Any, days: Any, before_ns: int) -> np.ndarray:
+    """Thresholds read three hours of rows meant to be purged."""
+    return _INNER_PROBA(inputs, model, columns, days, before_ns + 3 * 3600 * NS)
+
+
+_INNER_PROBA = fits.inner_proba
+
+
+def _in_a_process_of_its_own(repo: Path, work_root: Path, record: dict[str, Any], network: bool,
+                             late_thresholds: bool) -> dict[str, Any]:  # fmt: skip
+    """The fold-level test on the stage-1 root at ``repo``, in a process torch was never
+    loaded into, as the study's own main process is (its networks fit in processes of
+    their own): the xgboost and torch wheels bring different OpenMP runtimes, and a
+    process that has loaded torch crashes in xgboost's first fit. Returns what was
+    called and found, or the leak the test raised."""
+    inputs = Inputs(Study(repo, DRY_RUN, work_root=work_root), given=record)
     with (
         mock.patch.object(lk, "fit_main_process", wraps=fits.fit_main_process) as main,
         mock.patch.object(fits.FoldData, "load", wraps=fits.FoldData.load) as load,
         mock.patch.object(
             fits.FoldData, "gate_levels", autospec=True, side_effect=fits.FoldData.gate_levels
         ) as gates,  # fmt: skip
+        mock.patch.object(fits, "inner_proba", _late if late_thresholds else _INNER_PROBA),
     ):
-        found = lk.fold_level(stage1, [FOLD], network=True)
-    assert main.call_count == 6 and load.call_count == 2 and gates.call_count == 2
-    artefacts = found[0]["artefacts"]
+        try:
+            found = lk.fold_level(inputs, [FOLD], network=network)
+        except lk.LeakError as exc:
+            return {"leak": str(exc)}
+    scratch = inputs.study.work / "1" / "fold_leakage" / FOLD.name
+    return {"found": found, "calls": (main.call_count, load.call_count, gates.call_count),
+            "scratch_left": scratch.exists()}  # fmt: skip
+
+
+def _own_process(stage1: Inputs, *, network: bool, late_thresholds: bool = False) -> dict[str, Any]:
+    from trading_research.pipeline.short_horizon.models import in_fresh_process
+
+    study = stage1.study
+    return in_fresh_process(_in_a_process_of_its_own, study.repo, study.work_root, stage1.record,
+                            network, late_thresholds)  # fmt: skip
+
+
+@needs_torch
+def test_the_fold_level_test_fits_through_the_production_path_twice(stage1: Inputs) -> None:
+    found = _own_process(stage1, network=True)
+    assert "leak" not in found, found
+    assert found["calls"] == (6, 2, 2)  # three models twice; the rows and the gate levels twice
+    artefacts = found["found"][0]["artefacts"]
     for name in ("gbm/weights", "logistic/weights", "bound_ridge/weights", "gbm/thresholds",
                  "logistic/thresholds", "gate_levels", "tcn/weights_sha256", "tcn/state_sha256",
                  "tcn/inner_ic", "tcn/checkpoint_epoch"):  # fmt: skip
         assert name in artefacts
-    assert found[0]["past_inner_end_plus_hold_ns"] >= 0
-    assert not (stage1.study.work / "1" / "fold_leakage" / FOLD.name).exists()
+    assert found["found"][0]["past_inner_end_plus_hold_ns"] >= 0
+    assert not found["scratch_left"]
 
 
 def test_thresholds_set_on_rows_meant_to_be_purged_are_caught(stage1: Inputs) -> None:
-    real = fits.inner_proba
-
-    def late(inputs: Any, model: Any, columns: Any, days: Any, before_ns: int) -> np.ndarray:
-        return real(inputs, model, columns, days, before_ns + 3 * 3600 * NS)  # reads purged rows
-
-    with mock.patch.object(fits, "inner_proba", late), pytest.raises(lk.LeakError, match="thresh"):
-        lk.fold_level(stage1, [FOLD], network=False)
+    found = _own_process(stage1, network=False, late_thresholds=True)
+    assert "thresh" in found.get("leak", ""), found
