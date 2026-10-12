@@ -209,3 +209,26 @@ def test_an_exit_walked_where_the_next_attempt_posts_stays_with_its_own_attempt(
     d = result.decomposition
     assert table["net"].sum() == pytest.approx(d["gross"] - d["fees"])
     assert quoter.counts["round_trips"] == 1 and quoter.counts["attempts"] == 2
+
+
+def test_an_exit_due_between_the_stop_and_the_flatten_is_crossed_when_due() -> None:
+    """Filled at 23:57:20 with a 50 s hold: quoting stops at 23:58, but the exit
+    due at 23:58:10 is crossed then, not held to the 23:59 flatten; flat, the
+    quoter is not asked after the stop, so a decision then posts nothing."""
+    late = (23 * 3600 + 57 * 60) * 1_000.0  # 23:57:00 in ms
+    stamps = [late + 1_000.0 * i for i in range(150)]  # a snapshot a second to 23:59:29
+    snapshots = [(t, *_book(100, 102)) for t in stamps]
+    market = hand_built_market(snapshots, [(late + 20_500.0, 99, 5.0, -1)], lot=1.0)
+    quoter = SignalEntryQuoter(50.0)
+    tapes = _tapes(market, [late + 10_000.0, late + 75_000.0], [1, 1])
+    result = simulate_day(market, quoter, CONFIG, tapes)
+    fills = result.fills
+    moments = ((fills["ts"] - market.day_start_ns) / MS - late).tolist()
+    assert fills["maker"].tolist() == [True, False]
+    assert moments == [
+        20_500.0,
+        72_000.0,
+    ]  # 23:57:20.5 filled; exit asked at 23:58:11, walked at :12
+    assert result.counters["flattens_strategy"] == 1 and "flattens_day_end" not in result.counters
+    assert result.counters["decisions_after_stop"] > 0
+    assert len(result.orders) == 1 and quoter.counts["attempts"] == 1
