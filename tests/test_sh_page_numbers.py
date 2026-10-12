@@ -26,8 +26,8 @@ def _slot(slot: str, kind: str = "taker", value: float = 1.0) -> st.SlotDays:
 def test_only_the_slots_taken_to_f_are_numbered_on_f_minus(monkeypatch: pytest.MonkeyPatch) -> None:
     """A split at the 25th day: S-C, taken to F, is numbered on its 24 days before b;
     S25, never taken to F, on all of F."""
-    monkeypatch.setattr(pn, "save_close", lambda block: None)
-    monkeypatch.setattr(pn, "fill_rule_summary", lambda block: {})
+    monkeypatch.setattr(pn, "save_close", lambda _: None)
+    monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
     block = SimpleNamespace(name="F", detector={"alarms": []})
     found = {"split": {"b": F_DAYS[24].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"}}
     series = {"S-C": _slot("S-C"), "S25": _slot("S25")}
