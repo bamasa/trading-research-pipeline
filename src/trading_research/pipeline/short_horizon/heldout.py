@@ -761,21 +761,30 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
     true = mine[mine["variant"] == "true"]
     if "cap_exceeded" in true and true["cap_exceeded"].fillna(False).astype(bool).any():
         void.append("K-cap")
-    return SlotDays(
-        p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
-        value=series("true"), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
-        gross=series("true", "net_usdt"), turnover=series("true", "passive_notional"), ic=np.asarray(p.ic),
-        random=np.array([series(f"random/{k}") for k in range(draws)]).reshape(draws, len(days)),
-        flipped=series("flipped"), shifted=series("shifted"), long_only=series("long_only"),
-        short_only=series("short_only"),
-        neighbours=np.array([series(v) for v in neighbours]).reshape(len(neighbours), len(days)),
-        latency=series("latency"), stale=series("stale"),
-        brackets={name: series(f"bracket/{name}") for name in ("pessimistic", "none", "all_ahead")},
-        making=series("true", "making_usdt") if p.slot == "S-M" else None,
-        passive_notional=series("true", "passive_notional"),
-        second=series("true", "net_bp_trade") if p.slot == "S25-Z" else None,
-        on_s25_signal=on_s25, window_h=window_h, extra=extra, void=tuple(void),
-    )  # fmt: skip
+
+    def claim(column: str) -> SlotDays:
+        """The slot's series and every variant's under one claim's column."""
+        return SlotDays(
+            p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
+            value=series("true", column), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
+            gross=series("true", "net_usdt"), turnover=series("true", "passive_notional"), ic=np.asarray(p.ic),
+            random=np.array([series(f"random/{k}", column) for k in range(draws)]).reshape(draws, len(days)),
+            flipped=series("flipped", column), shifted=series("shifted", column),
+            long_only=series("long_only", column), short_only=series("short_only", column),
+            neighbours=np.array([series(v, column) for v in neighbours]).reshape(len(neighbours), len(days)),
+            latency=series("latency", column), stale=series("stale", column),
+            brackets={name: series(f"bracket/{name}", column) for name in ("pessimistic", "none", "all_ahead")},
+            making=series("true", "making_usdt") if p.slot == "S-M" else None,
+            passive_notional=series("true", "passive_notional"),
+            on_s25_signal=on_s25, window_h=window_h, void=tuple(void),
+        )  # fmt: skip
+
+    found = claim(primary)
+    found.extra = extra
+    if p.slot == "S25-Z":  # its second claim, net at 0/0, with every variant's net
+        found.net_claim = claim("net_bp_trade")
+        found.second = found.net_claim.value
+    return found
 
 
 def simulate_jobs(block: Block, jobs: list[Any]) -> list[Path]:

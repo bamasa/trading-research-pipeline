@@ -171,3 +171,19 @@ def test_k_nbhd_takes_its_median_over_the_whole_neighbourhood_the_chosen_cell_in
     silent = slot_days(neighbours=np.array([np.full(n, np.nan), np.full(n, -1.0)]))
     # the cell itself near 3, a cell without a trade scoring 0 and one at -1
     assert st.neighbourhood_median(silent, silent.mask(silent.days)) == 0.0
+
+
+def test_every_kill_of_s25_z_reads_both_claims() -> None:
+    gross = slot_days("S25-Z", on_s25_signal=True)
+    net = slot_days("S25-Z", on_s25_signal=True, mean=2.0, seed=1)
+    gross.net_claim, gross.second = net, net.value
+    window = gross.mask([d for d in gross.days if d <= st.S25_WINDOW_END])
+    clean = st.kills(gross, window)
+    assert [k.name for k in clean][:2] == ["K1", "K2"] and not any(k.fired for k in clean)
+    net.flipped = np.full(len(H_DAYS), 5.0)  # the net claim does not beat its sign-flipped placebo
+    found = {k.name: k for k in st.kills(gross, window)}
+    assert found["K-placebo"].fired and found["K-placebo"].test.endswith("(net at 0/0)")
+    assert not found["K1"].fired and not found["K2"].fired
+    assert st.s25_z(gross, window).status == "killed"
+    net.value = np.full(len(H_DAYS), -1.0)
+    assert {k.name for k in st.kills(gross, window) if k.fired} >= {"K2"}

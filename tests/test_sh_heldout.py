@@ -14,6 +14,7 @@ import pytest
 
 from trading_research.pipeline.regime import NS_PER_HOUR, usable_hours
 from trading_research.pipeline.short_horizon import heldout as ho
+from trading_research.pipeline.short_horizon import statuses as st
 from trading_research.pipeline.short_horizon.passive import SimCell
 from trading_research.search_engine.tapes import GUARD_WINDOWS_H, CandidateTape
 
@@ -222,3 +223,17 @@ def test_run_passive_without_kills_is_the_true_run_of_each_slot(
     names = [r.variant for r in seen[0].runs]
     assert names[:2] == ["true", "flipped"] and "regime/none" in names and "flagset/0" in names
     assert "exit/passive" in names and "fill/touch" not in names and seen[0].out.name == "passive"
+
+
+def test_s25_z_carries_its_net_claim_with_every_variants_net() -> None:
+    p = ho.PassiveSlot("S25-Z", SimCell("S25-Z", S25, "entry", 50.0, fees="zero"), [], ic=[0.1] * 4)
+    rows = _rows(DAYS, {"true": 1.0, "flipped": -1.0, "latency": 0.5})
+    rows["run_slot"], rows["net_bp_trade"] = "S25-Z", rows["net_per_100"] * 10.0
+    rows["gross_bp_trade"] = rows["net_per_100"] + 0.5
+    s = ho.passive_series(p, rows, DAYS, 0, 0, True)
+    assert s.value.tolist() == [1.5, 2.5, 3.5, 4.5] and s.net_claim is not None
+    assert s.net_claim.value.tolist() == [10.0, 20.0, 30.0, 40.0] == s.second.tolist()
+    assert s.net_claim.flipped.tolist() == [-10.0, 0.0, 10.0, 20.0]
+    assert s.net_claim.latency.tolist() == [5.0, 15.0, 25.0, 35.0]
+    kept = np.array([True, False, True, True])
+    assert st.subset(s, kept).net_claim.value.tolist() == [10.0, 30.0, 40.0]
