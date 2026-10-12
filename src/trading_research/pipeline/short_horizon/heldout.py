@@ -604,8 +604,8 @@ class TakerSlot:
         ):
             self.void.add("K-cap")
         self.value[i], self.trades[i] = day.day_bp("net"), len(trades)
-        for name, found in taker_day_sums(day).items():
-            self.sums.setdefault(name, np.full(len(self.days), np.nan))[i] = found
+        for name, total in taker_day_sums(day).items():
+            self.sums.setdefault(name, np.full(len(self.days), np.nan))[i] = total
         self.gross[i], self.turnover[i] = float(trades["gross"].sum()), float(day.turnover)
         self.flipped[i], self.skips["flipped"][i] = _lookup(table, rows, -side)
         self.long_only[i], self.skips["long_only"][i] = _lookup(table, rows, np.ones_like(side))
