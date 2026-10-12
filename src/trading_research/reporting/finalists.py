@@ -82,11 +82,16 @@ class FinalistInputs:
     break_even_per_side: float = NAN
     h_before_0801_mean: float = NAN
     attribution: Attribution | None = None
+    #: Tiers whose own maker and taker fees leave a positive net (the read's count,
+    #: exact for a passive slot); None: counted from the break-even alone.
+    tiers_paying: int | None = None
 
 
 def tiers_paying(slot: str, break_even: float, tiers: Sequence[FeeTier] | None = None) -> int:
     """How many published tiers for BTCUSDT charge less than the break-even on
-    the side it is read on (the maker fee for the passive slots)."""
+    the side it is read on (the maker fee for the passive slots). Exact for a
+    taker slot; a passive slot's read counts the tiers at both their fees
+    (``beside_verdict.tiers_paying``), which the page takes when it has it."""
     if not math.isfinite(break_even) and not math.isinf(break_even):
         return 0
     rows = tiers if tiers is not None else tiers_for("g1")
@@ -121,7 +126,9 @@ def finalist_row(inputs: FinalistInputs) -> dict[str, object]:
         "placebo_percentile": inputs.placebo_percentile,
         "k_nbhd_median": inputs.k_nbhd_median,
         "break_even_per_side": inputs.break_even_per_side,
-        "tiers_paying": tiers_paying(inputs.slot, inputs.break_even_per_side),
+        "tiers_paying": tiers_paying(inputs.slot, inputs.break_even_per_side)
+        if inputs.tiers_paying is None
+        else int(inputs.tiers_paying),
         "h_before_0801_mean": inputs.h_before_0801_mean,
         "regime_difference": NAN if found is None else found.difference,
         "regime_random_p95": NAN if found is None else found.reference,

@@ -523,9 +523,10 @@ def admit(rows: pd.DataFrame, cells: list[SimCell], days: list[date], slot: str,
 
 
 def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """A0 on O (S25's signal under the short-window protocol) crossing at 0/0, and
-    FILL: the same decisions posted under the three fill rules. Descriptive only;
-    beside the record, its four runs' rows for the trial ledger."""
+    """A0 on O (S25's signal under the short-window protocol) crossing at 0/0, with
+    its net at the base and every published tier, and FILL: the same decisions
+    posted under the three fill rules. Descriptive only; beside the record, its
+    four runs' rows for the trial ledger."""
     from functools import partial
 
     from trading_research.backtest.taker import TakerSettings, execute_day
@@ -535,6 +536,7 @@ def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str,
     from trading_research.market_making.fill_rules import compare_fill_rules
     from trading_research.market_making.signal_entry import SignalEntryQuoter, entry_tapes
     from trading_research.pipeline.short_horizon import features as ft
+    from trading_research.pipeline.short_horizon.beside_verdict import crossing_tiers
     from trading_research.pipeline.short_horizon.fits import (
         LOOSEST_RATE,
         FoldData,
@@ -607,6 +609,7 @@ def a0_and_fill(study: Any, inputs: Any) -> tuple[dict[str, Any], list[dict[str,
                        "net_bp": float(r["net"]) / notional * 1e4 if notional > 0 else 0.0})  # fmt: skip
     return {"run": True, "days": [d.isoformat() for d in fold.test], "thresholds": entry["thresholds"],
             "crossing": crossing, "gross_bp_turnover": gross / turnover * 1e4 if turnover else float("nan"),
+            "net_at_tiers": crossing_tiers(crossing),
             "ic": ic, "fill_summary": fill.summary.reset_index().to_dict("records"),
             "fill_prediction": fill.prediction()}, trials  # fmt: skip
 

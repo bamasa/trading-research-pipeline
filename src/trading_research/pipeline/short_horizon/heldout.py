@@ -463,6 +463,7 @@ class TakerSlot:
         self.flagsets = np.full((len(self.flag_sets), n), np.nan)
         self.control_label, self.control_move = nan(), nan()
         self.has_control = False
+        self.sums: dict[str, np.ndarray] = {}  # per-day sums beside the verdict (``day/...``)
 
     def extra(self) -> dict[str, np.ndarray]:
         """The per-day measurements beside the status (``SlotDays.extra``)."""
@@ -473,11 +474,12 @@ class TakerSlot:
                 out["flagsets"] = self.flagsets
         if self.has_control:
             out |= {"control_ic_label": self.control_label, "control_ic_move": self.control_move}
-        return out
+        return out | self.sums
 
     def add(self, i: int, ctx: DayContext, rules: dict[str, dict[float, Any]]) -> None:
         from trading_research.backtest.taker import TakerSettings, execute_day
         from trading_research.market_making.accounting import IdentityError
+        from trading_research.pipeline.short_horizon.beside_verdict import taker_day_sums
         from trading_research.pipeline.short_horizon.fits import rank_ic
         from trading_research.search_engine.cells import score_cell
         from trading_research.search_engine.null_b import entries_of, replay
@@ -524,6 +526,8 @@ class TakerSlot:
         ):
             self.void.add("K-cap")
         self.value[i], self.trades[i] = day.day_bp("net"), len(trades)
+        for name, found in taker_day_sums(day).items():
+            self.sums.setdefault(name, np.full(len(self.days), np.nan))[i] = found
         self.gross[i], self.turnover[i] = float(trades["gross"].sum()), float(day.turnover)
         self.flipped[i] = _lookup(table, rows, -side)
         self.long_only[i] = _lookup(table, rows, np.ones_like(side))
@@ -656,9 +660,13 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
                 out[index[day]] = float(value)
         return out
 
+    from trading_research.pipeline.short_horizon.passive import BESIDE_COLUMNS
+
     neighbours = [f"neighbour/{c.label}" for c in p.neighbours]
     variants = set(mine["variant"]) if len(mine) else set()
-    extra: dict[str, np.ndarray] = {}
+    extra: dict[str, np.ndarray] = {
+        f"day/{c}": series("true", c) for c in BESIDE_COLUMNS if c in mine
+    }
     for name in sorted(v for v in variants if v.startswith(("regime/", "exit/"))):
         extra[name], extra[f"{name}/trades"] = series(name), series(name, "trades")
     if window_h > 0 and "regime/none" in variants:
@@ -668,7 +676,7 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
             len(sets), len(days)
         )
     return SlotDays(
-        p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
+        p.slot, "zero" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
         value=series("true"), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
         gross=series("true", "net_usdt"), turnover=series("true", "passive_notional"), ic=np.asarray(p.ic),
         random=np.array([series(f"random/{k}") for k in range(draws)]).reshape(draws, len(days)),

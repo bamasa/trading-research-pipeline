@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from trading_research.pipeline.short_horizon import beside_verdict as bv
 from trading_research.pipeline.short_horizon.context import Study
 from trading_research.pipeline.short_horizon.statuses import (
     S25_WINDOW_END,
@@ -86,9 +87,29 @@ def slot_numbers(s: SlotDays, days: list[date]) -> dict[str, Any]:
         second = _series(s, s.second, mask)
         out["net_zero_fee_mean"] = float(second.mean()) if len(second) else NAN
     if s.making is not None and s.passive_notional is not None:
-        notional = float(np.nansum(s.passive_notional[mask]))
-        making = float(np.nansum(s.making[mask]))
-        out["making_bp_per_fill"] = making / notional * 1e4 if notional > 0 else NAN
+        out["making_bp_per_fill"] = bv.making_bp_per_fill(s, mask)
+    return out | fee_numbers(s, mask)
+
+
+def fee_numbers(s: SlotDays, mask: np.ndarray) -> dict[str, Any]:
+    """Beside the break-even: how many published tiers pay at their own maker and
+    taker fees, a passive slot's maker break-even with the taker exit at 1.5 bp, and
+    S25-Z's net on the same trades at the base tier and at the cheapest published
+    tier (it is never reported without them). Only from a read that kept the day sums."""
+    from trading_research.backtest.costs import BYBIT_BASE, best_maker_tier
+
+    if "day/net_usdt" not in s.extra:
+        return {}
+    out: dict[str, Any] = {"tiers_paying": bv.tiers_paying(s, mask)}
+    if s.kind != "taker":
+        out["break_even_maker_bp_exit_1_5"] = bv.passive_break_even(s, mask, 1.5)
+    if s.kind == "zero":
+        for name, tier in (("base_tier", BYBIT_BASE), ("cheapest_tier", best_maker_tier("g1"))):
+            values = bv.series_at(s, mask, tier.maker_bp, tier.taker_bp)
+            finite = values[np.isfinite(values)]
+            out[f"net_{name}_mean"] = float(finite.mean()) if len(finite) else NAN
+            out[f"net_{name}_usdt"] = bv.net_usdt_at(s, mask, tier.maker_bp, tier.taker_bp)
+            out[f"net_{name}_fees"] = [tier.maker_bp, tier.taker_bp]
     return out
 
 

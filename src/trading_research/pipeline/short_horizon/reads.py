@@ -156,6 +156,7 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
     regime attribution; its regime, passive-exit and control-IC measurements; on
     H, FILL on its stream; and its verdict's numbers on its status window
     (``windows``) with the days excluded for sequence gaps put back (``gaps``)."""
+    from trading_research.pipeline.short_horizon.beside_verdict import verdict_measures
     from trading_research.pipeline.short_horizon.heldout_measures import attribution, measured_rows
     from trading_research.pipeline.short_horizon.statuses import merge
 
@@ -169,6 +170,7 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
         )
         found["measured"] = measured_rows(s)
         window = windows.get(slot, s.days)
+        found["beside_verdict"] = verdict_measures(s, window)
         if slot in gaps:
             back = gaps[slot]
             found["gap_days_included"] = measured(merge(s, back), [*window, *back.days])

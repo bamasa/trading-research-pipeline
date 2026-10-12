@@ -47,10 +47,12 @@ class SlotDays:
     ``value`` is the primary series: ``net_bp_trade`` (NaN on a day without a
     trade) for the taker slots, ``net_per_100_clip_day`` (0 without a fill) for
     S-P and S-M, ``gross_bp_trade`` for S25-Z (with ``second`` its net at 0/0).
+    S25-Z's kind is ``zero``: the quoter at 0/0, its series on its days with a
+    trade as a taker slot's.
     """
 
     slot: str
-    kind: str  # taker, entry, maker
+    kind: str  # taker, entry, maker, zero
     days: list[date]
     value: np.ndarray
     trades: np.ndarray
@@ -93,7 +95,9 @@ def _series(s: SlotDays, values: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """A series on the masked days as the bar reads it: the taker's days with a
     trade, every usable day for the passive slots."""
     picked = values[mask]
-    return picked[np.isfinite(picked)] if s.kind == "taker" else np.nan_to_num(picked, nan=0.0)
+    if s.kind in ("taker", "zero"):
+        return picked[np.isfinite(picked)]
+    return np.nan_to_num(picked, nan=0.0)
 
 
 def _check(
@@ -146,15 +150,23 @@ def kills(s: SlotDays, mask: np.ndarray) -> list[KillCheck]:
         checks["K-queue"] = _check(s.slot, "K-queue", "positive, but not under a bracket", worst, 0.0,
                                    mean > 0 and not worst > 0)  # fmt: skip
     if s.making is not None and s.passive_notional is not None:
-        notional = float(np.nansum(s.passive_notional[mask]))
-        making = float(np.nansum(s.making[mask])) / notional * 1e4 if notional > 0 else float("nan")
+        from trading_research.pipeline.short_horizon.beside_verdict import making_bp_per_fill
+
+        making = making_bp_per_fill(s, mask)  # the mean over the passive fills, bp per fill
         checks["K-dir"] = _check(s.slot, "K-dir", "making part not positive while net is", making, 0.0,
                                  k_dir(making, mean))  # fmt: skip
     return [checks[name] for name in KILL_ORDER[s.slot] if name in checks]
 
 
 def fee_check(s: SlotDays, mask: np.ndarray) -> KillCheck:
-    """K-fee: the fee break-even per side at or below the base fee for that side."""
+    """K-fee: the fee break-even per side at or below the base fee for that side
+    (S25-Z, no K-fee: the maker break-even with the taker exit at the base fee, reported)."""
+    if s.kind == "zero":
+        from trading_research.pipeline.short_horizon.beside_verdict import passive_break_even
+
+        breakeven = passive_break_even(s, mask, TAKER_FEE_BP)
+        return _check(s.slot, "K-fee", "maker fee break-even <= maker fee", breakeven, MAKER_FEE_BP,
+                      not breakeven > MAKER_FEE_BP)  # fmt: skip
     if s.kind == "taker":
         turnover = float(np.nansum(s.turnover[mask]))
         breakeven = (

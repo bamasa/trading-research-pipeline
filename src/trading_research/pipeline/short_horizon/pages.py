@@ -431,7 +431,7 @@ def finalist_inputs(c: Computed, block: str, slot: str) -> Any:
                           placebo_percentile=_number(numbers.get("placebo_percentile")),
                           k_nbhd_median=_number(numbers.get("k_nbhd_median")),
                           break_even_per_side=_number(numbers.get("break_even_per_side")),
-                          attribution=found, **common)  # fmt: skip
+                          tiers_paying=numbers.get("tiers_paying"), attribution=found, **common)  # fmt: skip
 
 
 def finalists_page(c: Computed, out: Written) -> pd.DataFrame | None:
