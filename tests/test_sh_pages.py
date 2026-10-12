@@ -213,7 +213,8 @@ def test_the_regime_axis_sentence_reads_the_attribution_h_recorded() -> None:
     h = read_h(h_series(), PRESET)
     draws = np.linspace(-1.0, 1.0, 101)
     found = Attribution("pull_4h", 2.0, float(np.quantile(draws, 0.95)), draws, 12)
-    h["regime_attribution"] = {"S-C": asdict(found) | {"draws": list(draws)}}
+    beside = h.setdefault("measurements", {}).setdefault("S-C", {})
+    beside["regime_attribution"] = asdict(found) | {"draws": list(draws)}
     out = written(computed(d=record_d(), read={"H": h}))
     assert out.plain()["regime_axis"] == [hl.regime_axis("S-C", 4, found)]
     assert "did add more than random pauses (100th percentile" in out.plain()["regime_axis"][0]

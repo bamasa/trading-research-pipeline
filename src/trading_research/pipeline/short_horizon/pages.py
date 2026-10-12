@@ -307,7 +307,9 @@ def attribution(record: dict[str, Any] | None) -> Any:
 
 
 def regime_axis_sentences(c: Computed, out: Written) -> None:
-    """One per slot with a window above 0, against random pauses on H."""
+    """One per slot with a window above 0, against random pauses on H; the
+    attribution is read where H's read records it, beside the slot's status
+    (``measurements[slot]["regime_attribution"]``)."""
     from trading_research.reporting import headlines as hl
 
     h = c.read.get("H")
@@ -320,7 +322,8 @@ def regime_axis_sentences(c: Computed, out: Written) -> None:
         window = int(numbers.get("window_h", 0))
         if window <= 0:
             continue
-        found = attribution(h.get("regime_attribution", {}).get(slot))
+        beside = (h.get("measurements") or {}).get(slot) or {}
+        found = attribution(beside.get("regime_attribution"))
         if found is None:
             out.wait("regime_axis", f"{slot}'s regime attribution is not in H's results")
             continue

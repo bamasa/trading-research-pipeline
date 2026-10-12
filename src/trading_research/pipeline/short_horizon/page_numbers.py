@@ -112,7 +112,8 @@ def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
     usable day pooled, one table per slot in the form of
     ``fill_rules.FillComparison.summary`` (the fill ratio is the share of posted
     orders with a fill). Read from the passive runs' day files; nothing when the
-    block ran no passive slot."""
+    block ran no passive slot, and nothing on a block without the other rules'
+    runs (the registration measures FILL on H's streams alone)."""
     from trading_research.market_making.fill_rules import BIAS, RULES
     from trading_research.market_making.queue import FillRule
 
@@ -137,7 +138,7 @@ def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
                             "fill_ratio": sums["orders_filled"] / posted if posted else NAN,
                             "volume_ratio": sums["volume_filled"] / volume if volume else NAN,
                             "bias": BIAS[rule]})  # fmt: skip
-        if any(s["days"] for s in summary):
+        if all(s["days"] for s in summary):
             out[slot] = summary
     return out
 

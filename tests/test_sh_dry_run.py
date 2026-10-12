@@ -152,9 +152,9 @@ def test_each_read_closes_its_session_with_registered_statuses(dry: dict[str, An
 #: Every registered figure, each written in both themes.
 FIGURES = ("placebo_search", "placebo_s25", "leaderboard", "marginals", "edge_ladder", "fill_rules",
            "regime_map_taker", "regime_map_entry", "regime_map_maker", "break_view")  # fmt: skip
-#: The sentences the dry run can fill (the regime-axis one needs a slot with a window above 0).
+#: The sentences the dry run fills (the regime-axis one from H's attribution of R*).
 SENTENCES = ("search_on_D", "payoff_on_D", "slot_on_block", "S25", "passive_and_maker",
-             "regime_map", "break")  # fmt: skip
+             "regime_axis", "regime_map", "break")  # fmt: skip
 
 
 def test_the_pages_the_regime_map_and_every_figure_are_written(dry: dict[str, Any]) -> None:
@@ -213,8 +213,8 @@ def test_each_read_keeps_the_numbers_the_pages_show(dry: dict[str, Any]) -> None
             assert len(found["daily"]["days"]) == len(found["daily"]["value"])
             assert (block == "H") == ("h_before_0801_mean" in found), slot
         assert close_path(study, block).exists()
-        fill = numbers["fill_rules"]
-        assert set(fill) == {"S-P", "S25-Z"}
+        fill = numbers["fill_rules"]  # FILL is measured on H's streams alone
+        assert set(fill) == ({"S-P", "S25-Z"} if block == "H" else set())
         for rows in fill.values():
             assert [r["rule"] for r in rows] == ["touch", "trade_through", "queue"]
             assert all(r["orders_posted"] >= r["orders_filled"] >= 0 for r in rows)

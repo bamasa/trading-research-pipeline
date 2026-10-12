@@ -12,10 +12,7 @@ accounting:
   the leans 0.5 and 2);
 * the queue brackets (K-queue): pessimistic cancellation attribution with
   ``all_ahead`` arrival growth, and ``none`` and ``all_ahead`` alone;
-* every order and cancel live 110 ms after the decision (K-latency);
-* for S-P and S25-Z, the same orders under the two other fill rules (on touch
-  and trade-through; the true run is the queue rule): FILL on the block, the
-  comparison the registration reports for their streams on H, a measurement.
+* every order and cancel live 110 ms after the decision (K-latency).
 
 Beside them, the measurements (:func:`measured_runs`): S-P's cell at the other
 regime windows and S-M's guards (``guard_pull`` and ``guard_widen`` at 4, 24
@@ -39,8 +36,6 @@ import numpy as np
 import pandas as pd
 
 from trading_research.data import study_access as sa
-from trading_research.market_making.fill_rules import RULES
-from trading_research.market_making.queue import FillRule
 from trading_research.pipeline.short_horizon.passive import (
     Decisions,
     SimCell,
@@ -187,9 +182,6 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
     ]
     runs.append(Run(slot, "latency", cell, own, dict(LATENCY_110_MS)))
     runs += [Run(slot, f"neighbour/{other.label}", other, decided) for other, decided in neighbours]
-    if cell.kind == "entry":  # FILL on the block: the same orders under the two other rules
-        runs += [Run(slot, f"fill/{rule.value}", cell, own, {"fill_rule": rule})
-                 for rule in RULES if rule is not FillRule.QUEUE]  # fmt: skip
     return runs
 
 
