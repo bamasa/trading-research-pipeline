@@ -342,9 +342,8 @@ def regime_segments(
     stamps = [pd.Timestamp(a["timestamp"]) for a in alarms]
     rows: list[dict[str, Any]] = []
     for slot, s in series.items():
-        net = (
-            s.second if s.kind == "zero" and s.second is not None else s.value
-        )  # S25-Z: net at 0/0
+        # S25-Z's net is its net at 0/0, beside its gross primary series
+        net = s.second if s.kind == "zero" and s.second is not None else s.value
         daily = pd.Series(net, index=pd.Index(s.days))
         frame = regime_map(daily, stamps, blocks=dict.fromkeys(s.days, block), slot=slot)
         rows += json.loads(frame.to_json(orient="records", date_format="iso"))
