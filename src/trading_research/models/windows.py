@@ -80,7 +80,8 @@ def thin_evenly(rows_per_day: Sequence[np.ndarray], max_rows: int) -> list[np.nd
     total = int(sizes.sum())
     if total <= max_rows:
         return [np.asarray(r, dtype=np.int64) for r in rows_per_day]
-    keep = np.floor(np.arange(max_rows) * (total / max_rows)).astype(np.int64)
+    # floor(i * total / max_rows) in integer arithmetic, as registered
+    keep = (np.arange(max_rows, dtype=np.int64) * np.int64(total)) // np.int64(max_rows)
     bounds = np.concatenate([[0], np.cumsum(sizes)])
     out = []
     for day, rows in enumerate(rows_per_day):
