@@ -466,16 +466,23 @@ MEASURED_COLUMNS = (
     "median_day",
 )
 SPANS = {"all_of_H": "all of H", "all_of_F": "all of F", "all_of_P": "all of P",
-         "H_before_2025_08_01": "H before 2025-08-01"}  # fmt: skip
+         "H_before_2025_08_01": "H before 2025-08-01",
+         "gap_days_included": "status window, gap days put back"}  # fmt: skip
 
 
 def measured_rows(c: Computed) -> pd.DataFrame:
     """The measurements beside the statuses: every slot's numbers on all of each
-    block read and, on H, before 2025-08-01; no status, no placebo."""
+    block read, on H before 2025-08-01, on its status window with the gap days put
+    back, and each measured series (the regime measurements, the passive exit, the
+    control network's IC) under its own name; no status, no placebo. The regime
+    attribution and FILL's tables stand beside them and are read elsewhere."""
     rows = []
     for block, results in c.read.items():
         for slot, spans in results.get("measurements", {}).items():
-            for span, m in spans.items():
+            series = {span: m for span, m in spans.items() if isinstance(m, dict) and "days" in m}
+            series |= {name: m for name, m in (spans.get("measured") or {}).items()
+                       if isinstance(m, dict) and "days" in m}  # fmt: skip
+            for span, m in series.items():
                 rows.append({"block": block, "slot": slot, "span": SPANS.get(span, span),
                              **{k: m.get(k) for k in MEASURED_COLUMNS[3:]}})  # fmt: skip
     frame = pd.DataFrame(rows, columns=list(MEASURED_COLUMNS))
