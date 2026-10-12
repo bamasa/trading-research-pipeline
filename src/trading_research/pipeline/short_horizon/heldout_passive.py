@@ -136,17 +136,23 @@ def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_seque
             continue
         if run.cell.kind == "entry":
             row |= fill_values(result)
-        rows.append(row | where | position_cap(result.fills, clip, run.cell.kind))
+        rows.append(row | where | position_cap(result.fills, clip, run.cell.kind,
+                                               result.counters.get("max_abs_position")))  # fmt: skip
     return rows
 
 
-def position_cap(fills: pd.DataFrame, clip: float, kind: str) -> dict[str, Any]:
-    """K-cap's inputs from a run's fills: the largest |position| after any fill, and
-    whether it exceeds the cap (one clip for the signal-entry quoter, whose order
-    with a cancel in flight counts as resting; ``soft_limit_clips`` + 1 = 2 clips
-    for S1's hard limit)."""
+def position_cap(fills: pd.DataFrame, clip: float, kind: str,
+                 counted: float | None = None) -> dict[str, Any]:  # fmt: skip
+    """K-cap's inputs from a run: the largest |position| after any fill, as the
+    simulator counted it (``counted``, its ``max_abs_position`` counter, the number
+    ``day/max_abs_position`` carries beside the verdict) or from the fills'
+    positions without it, and whether it exceeds the cap (one clip for the
+    signal-entry quoter, whose order with a cancel in flight counts as resting;
+    ``soft_limit_clips`` + 1 = 2 clips for S1's hard limit)."""
     position = fills["position_after"].to_numpy(dtype=np.float64) if len(fills) else np.zeros(0)
     largest = float(np.abs(position).max()) if len(position) else 0.0
+    if counted is not None:
+        largest = float(counted)
     cap = clip * (1.0 if kind == "entry" else 2.0)
     return {"max_abs_position": largest, "cap_exceeded": bool(largest > cap * (1.0 + 1e-9)),
             "accounting_failed": ""}  # fmt: skip

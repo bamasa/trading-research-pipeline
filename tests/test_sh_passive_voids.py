@@ -32,6 +32,10 @@ def test_the_cap_is_one_clip_for_the_quoter_and_two_for_s1() -> None:
     assert hp.position_cap(_fills(-0.021), CLIP, "maker")["cap_exceeded"]
     assert hp.position_cap(_fills(), CLIP, "entry") == {"max_abs_position": 0.0, "cap_exceeded": False,
                                                         "accounting_failed": ""}  # fmt: skip
+    # the simulator's own count is read when a run carries it (day/max_abs_position)
+    counted = hp.position_cap(_fills(0.005), CLIP, "entry", counted=0.012)
+    assert counted["cap_exceeded"] and counted["max_abs_position"] == pytest.approx(0.012)
+    assert not hp.position_cap(_fills(0.015), CLIP, "entry", counted=0.009)["cap_exceeded"]
 
 
 def test_an_accounting_fault_in_one_run_is_recorded_and_the_others_still_run(
@@ -42,7 +46,7 @@ def test_an_accounting_fault_in_one_run_is_recorded_and_the_others_still_run(
     def simulate(events: Any, quoter: Any, config: Any, tapes: Any) -> Any:
         if tapes.get("flipped"):
             raise IdentityError("decomposition net 1.0 differs from cash 2.0")
-        return SimpleNamespace(fills=_fills(0.01, 0.0))
+        return SimpleNamespace(fills=_fills(0.01, 0.0), counters={"max_abs_position": 0.01})
 
     monkeypatch.setattr(simulator, "simulate_day", simulate)
     monkeypatch.setattr(
