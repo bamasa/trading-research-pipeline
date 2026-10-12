@@ -505,7 +505,7 @@ def test_the_document_states_the_configuration_s_null_placeholder_hash() -> None
     computed = prereg.sha256_bytes(prereg.unfrozen_text(text).encode())
     stated = re.search(r"with every placeholder `null`, has sha256 `([0-9a-f]{64})`", _document())
     assert stated is not None and stated.group(1) == computed
-    assert len(prereg.placeholder_lines(text)) == 24
+    assert len(prereg.placeholder_lines(text)) == 25  # the ob200 reader test added on 2026-10-12
     assert ("features", "longest_lookback_minutes") not in prereg.placeholder_lines(text)
 
 

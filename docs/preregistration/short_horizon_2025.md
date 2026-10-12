@@ -8,7 +8,7 @@ agree.
 
 | | |
 |---|---|
-| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span, from W's first day, 2024-12-01, to P's last, 2025-12-31, to bound the data and the compute. The values the study code fixed, which the text had left open, were written in on 9 October 2026, still before any data was read ([Choices and their reasons](#choices-and-their-reasons)) |
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span, from W's first day, 2024-12-01, to P's last, 2025-12-31, to bound the data and the compute. The values the study code fixed, which the text had left open, were written in on 9 October 2026, still before any data was read ([Choices and their reasons](#choices-and-their-reasons)). Clarified on 12 October 2026, still before any data was read, after three reviews of the study code against this text, where the code had to choose between two readings or the text left a gap ([Choices and their reasons](#choices-and-their-reasons)) |
 | **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy and holding horizons: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the status rules, the fetch plan, the compute budget and the amendment protocol |
 | **The break detector** | One frozen detector on hourly BTCUSDT returns ([The break detector](#the-break-detector)) has three roles: it **locates the 2025 break** `b`, the first alarm in F, that [R](#r-the-break-conditional) tests; its alarms **drive the [regime-policy axis](#the-regime-break-policy-axis)**, the guard after each alarm that the search chooses over; and its alarms **cut the [regime map](#the-regime-map)**. Its settings are fixed now; inside the search on D its hour profile is fitted fold by fold, so that the guard is causal; it is never refitted after a read |
 | **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
@@ -265,7 +265,9 @@ instead of inside a block. Its consequences:
   grid, and no more sequence gaps than D's frozen `max_sequence_gaps`. Their
   message counts, median interval between messages and sequence-gap counts,
   and every other finding of their reports by check and severity beside the
-  same counts for D, go in the amendment. A day that fails is first checked
+  same counts for D, go in the amendment (the configuration's
+  `data.ob200_reader_test_result`), and the ledger opens H only when no
+  reader-test day failed but on its gap count. A day that fails is first checked
   as a reader fault, and a fault found is corrected under the amendment
   protocol before H is opened; the replay itself is unchanged. If, the reader
   checked, a day fails on its sequence-gap count alone, that is a property of
@@ -323,7 +325,13 @@ Why these blocks.
   before it.
 
 Days are independent: each starts flat, no position is held across midnight,
-and the day is the cluster for every statistic. Rolling statistics may read
+and the day is the cluster for every statistic. **A day is the rows stamped
+from its midnight to the next**: a replayed file also holds the next day's
+first second, which the study's loader drops before anything reads the day,
+as `market_making/events.load_day` does, and counts per day; so no label,
+forward move, walk or flatten of a day reads the next day's book, and a
+day-end flatten after a feed gap finds no snapshot and flags the day
+`flatten_stale` (R16). Rolling statistics may read
 the previous days of the same block, and of the block before it where the two
 are adjacent and share an archive (W before D, F before P); a reader never
 reads a later block than its access permits. **Two days start cold**:
@@ -490,7 +498,14 @@ quietly favour a result.
   on the fold's training rows), `lean_window_s` equal to the signal's hold,
   and the regime guard of
   `pipeline/market_making` (`guard_pull`, or `guard_widen` as a measurement)
-  with `guard_window_min` equal to 60 × the window in hours.
+  with `guard_window_min` equal to 60 × the window in hours. **At these values
+  S-M will rarely post on BTCUSDT**: S1's half-spread, the maker fee plus
+  `min_edge_bp` plus `k` × σ, is at least 6 bp, beyond the tenth visible level of BTCUSDT's
+  book, and the simulator never quotes past the visible book (R11); so S-M
+  posts only when the lean moves its reservation price past its half-spread,
+  and then on one side at the touch. K-trades will most likely leave it
+  inconclusive, and `guard_widen` will rarely differ from `guard_pull`. The
+  values are kept ([Choices and their reasons](#choices-and-their-reasons)).
 - **Fees for verdicts**: the base tier, 2.0 bp maker and 5.5 bp taker
   (`BYBIT_BASE`). Other published tiers
   (`BYBIT_LINEAR_TIERS`, group `g1`, which holds BTCUSDT, down
@@ -668,7 +683,9 @@ models draw no random numbers).
 - **Training rows**: every fit reads at most 4 million training rows, taken
   evenly in time from every tenth row: the kept positions are
   ⌊i × total / 4,000,000⌋ over the training days' every-tenth rows in day
-  order, so every day is thinned alike.
+  order, in integer arithmetic, so every day is thinned alike. `total` counts
+  every such row stamped before the purge, labelled or not, and a kept row
+  without a label is then dropped, never replaced.
 
 ---
 
@@ -893,7 +910,9 @@ gives each one's time and disk.
 3. **Selection**, on January.
 4. **Walk-forward over D** by calendar month: for each test month from
    February to June (150 test days), train on D's days before it except the
-   last seven, which are the inner validation; purge the hold plus the
+   last seven, which are the inner validation (the seven calendar days before
+   the month: their usable days, fewer when one is excluded, never filled from
+   earlier days); purge the hold plus the
    longest feature lookback before the inner validation and before the test
    month (`experiments/grand_search.py`'s purge is not used). The inner
    validation sets the per-side θ from the target rate, which reads no
@@ -904,6 +923,13 @@ gives each one's time and disk.
    cutoff is the end of fold m's inner validation plus the hold, inside the
    purge before test month m: the inner validation's labels and forward moves
    read prices up to a hold past its end, and nothing fitted reads later.
+   Where the last exit snapshot a target row before that end reads lies later
+   (the 10 ms latency and the grid can put it a snapshot past), the cutoff is
+   that snapshot, still inside the purge. The test runs the study's own fit
+   code, twice per fold: once on stage 1's stores and targets, once on a
+   scratch copy in which every row after the cutoff, of the last inner day
+   and of the test month, is mutated, the book's prices moved and the labels,
+   forward moves and gate inputs recomputed from them.
    **The test's fits run on the CPU.** In every fold it compares one fit of
    each model at a hold of 20 s (stratum C's on the micro-selected inputs at
    a 0 bp label fee), with θ at the four rates and the gate levels; the
@@ -944,7 +970,8 @@ gives each one's time and disk.
    S25's: at most 12 boosted or logistic fits (6 for C\*'s holds and label
    fees, 6 for S25's), at most 3 bound-regressor fits (R\*'s holds) and at
    most 4 network fits with 4 control fits, trained on D from 2025-01-01 to 06-23 with the purge
-   before 06-24; their θ and checkpoints set on 06-24 to 06-30. These cover
+   before 06-24; their θ and checkpoints set on 06-24 to 06-30, with the same
+   purge before 07-01 at that window's end, as in every walk-forward fold. These cover
    every cell of every finalist's neighbourhood, so K-nbhd on a held-out block
    runs only frozen files. The weights stay in the ignored `models/`
    directory; every weight file's sha256, every threshold and every checkpoint
@@ -953,7 +980,10 @@ gives each one's time and disk.
     slot, and the detector's alarm rate on D.
 11. **A dry run of the entry point**, end to end, before the amendment: on
     D's last 44 days (2025-05-18 to 06-30) standing in for H, and on the three
-    `ob200` reader-test days standing in for F and P. Its outputs are
+    `ob200` reader-test days standing in for F and P, whose read (statuses,
+    kills, placebos, R and P's reading) runs end to end on the stand-in H's
+    statuses; stage 1 fetches the reader-test days' prints and funding for it
+    beside their books. Its outputs are
     discarded and never reported; it is the reader-test days' one use besides
     the reader test. It repeats stage 0's walk-table parity test as a check; a
     failure there is a bug under the [amendment
@@ -1152,7 +1182,10 @@ maximum.
   A_j pass and 6 fail). `verdicts.exceeds_placebos`, whose interpolated
   percentile admits more, is not used for (iv).
 - **The refit replication, mandatory, once.** Every fold's training labels are
-  circularly shifted by 28 days within its training span, every boosted and
+  circularly shifted by 28 days within its training span (a label at `t`
+  takes the one at start + ((t − start − 28 days) mod span): on February's
+  span of about 24 days the labels move about 4 days, and none is lost),
+  every boosted and
   logistic fit is redone, and stratum C's whole selection is re-run, giving
   the refit A of stratum C's chosen cell, A_refit. It adds a condition for C\*
   only: C\* passes (iv) when the bar above holds **and** A_C\* > A_refit,
@@ -1530,7 +1563,11 @@ not depend on the direction; for the quoter a placebo order fills at other
 times than the true one, or not at all, so it may still be busy at the next
 one. **The one-day shift** gives each usable day the signal tape of the
 previous usable day, circularly over the block's usable days, so it steps
-over excluded days.
+over excluded days. For a slot on S25's signal on H, whose status, kills and
+placebos are computed on its usable days from 2025-07-08 to 07-31, the circle
+is those days: 07-08 takes the tape of the last of them, never one from
+08-01, which lies inside S25's information set; its measurements on all of H
+wrap over all of H.
 
 ---
 
@@ -1708,7 +1745,8 @@ None enters a verdict, and none can be quoted as a result.
 **A0, S25 under a short-window protocol, on O.** S25's signal (gradient
 boosting on BTCUSDT on the walked-book label at 0 bp, micro-selected inputs),
 trained on 2025-01-01 to 01-27, thresholds for 240 trades a day set on 01-28
-to 02-03, a 50 s hold, run on O (2025-02-04 to 02-26): crossing at 0/0, and
+to 02-03 (the purge of the hold plus `N` taken before 01-28 and before 02-04,
+as in every walk-forward fold), a 50 s hold, run on O (2025-02-04 to 02-26): crossing at 0/0, and
 posted at the touch under each of the three fill rules of FILL. Reported:
 `gross_bp_turnover`, net at the base tier and at every published tier, trades
 a day and IC. A0 differs from S25 only in protocol (thresholds from O's
@@ -1918,7 +1956,7 @@ archive.
 
 | Stage | When | What | Book archives (GB) | Print archives (GB) |
 |---|---|---|---:|---:|
-| 1 | after this registration and the code it names are merged, and after stage 0's amendment if it cuts anything | W and D (212 days, `ob500`); funding for W and D only; hourly bars 2024-12-01 to 2025-06-30; the three `ob200` reader-test days of 2026 (0.6 GB of the book column) | 76.0 | 15.3 |
+| 1 | after this registration and the code it names are merged, and after stage 0's amendment if it cuts anything | W and D (212 days, `ob500`); funding for W and D; hourly bars 2024-12-01 to 2025-06-30; the three `ob200` reader-test days of 2026 (0.6 GB of the book column) with their prints and funding, for the dry run's F and P read (their prints not checked by `HEAD` and not in the print column) | 76.0 | 15.3 |
 | 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4 | 2.1 |
 | 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8 | 5.9 |
 | 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9 | 3.5 |
@@ -2001,8 +2039,14 @@ scoring of the inner validation at every epoch, and the replay's seconds and
 peak resident memory on the two timing days' `ob500` archives kept under
 `data/timing_archives/`, each replayed alone in a fresh process: the slower
 archive's seconds stand for a day in place of the 2–3 minutes above, and the
-larger peak sets the replay workers. It projects Null B at 137 × the
-catalogue's cell-days, and its record holds every figure it measured.
+larger peak sets the replay workers; stage 0 refuses to run without both
+archives and reads no other there. It also times the fold-level leakage
+test's network on the CPU (a training batch and inference per row) and a day
+of a feature store read and written, and projects that test's fits, twice
+per fold, with its mutated days. It projects Null B at 137 × the
+catalogue's cell-days, at the worker counts above (8, the simulator 6, the
+replay's as measured), whatever count a run is started with, and its record
+holds every figure it measured.
 
 | Stage | Size | Estimate |
 |---|---|---|
@@ -2748,10 +2792,52 @@ October 2026, before any data was read, one line each:
   2024-02-11 and 2024-03-05 under `data/timing_archives/`, stand for a day's
   replay and set its workers, in place of the 2–3 minutes a day.
 
+Written in on 12 October 2026, still before any data was read, after three
+reviews of the study code against this text (for leakage, for fidelity and
+for execution), where the code had to choose between two readings or the
+text left a gap:
+
+- **A day is the rows stamped from its midnight to the next**: a replayed
+  file holds the next day's first second; read, it would give a day's last
+  labels, forward moves and walks, and a flatten after a feed gap, the next
+  day's book, across a block boundary a later block's.
+- **The fold-level leakage test runs the study's own fit code on a mutated
+  copy of stage 1's files**: a test that re-implements the fits can pass
+  while the fits leak; its cutoff reaches the last exit snapshot an inner
+  target reads, so a snapshot read inside the purge cannot stop the study.
+- **Training rows are thinned over every every-tenth row of the span,
+  labelled or not, in integer arithmetic**: the kept positions then depend
+  only on the span, and float rounding cannot move one.
+- **The refit's shift wraps as often as the span needs**: wrapped once, a
+  shift of 28 days on February's span of about 24 would leave its first
+  four days without labels.
+- **The inner validation is the seven calendar days before the month,
+  whatever is usable in them**: filling it from earlier days would move
+  training days into it and make "the last seven" differ between folds.
+- **The frozen fits and A0 keep the purge at both ends of their threshold
+  window, as every fold does**: one code sets every θ and checkpoint, and no
+  threshold row's label reads past its window (for A0, into O); it costs the
+  frozen fits the last hold and 61 minutes of 06-30.
+- **On H the one-day shift of a slot on S25's signal wraps within 07-08 to
+  07-31**: wrapped over all of H, 07-08 would take the tape of 08-20, inside
+  S25's information set.
+- **S-M keeps S1's frozen values although at them it will rarely post on
+  BTCUSDT**: the registered choice is one S1 slot at round one's frozen
+  values, not a searched quoter; values picked now from BTCUSDT's book would
+  be an unsearched choice, so the expected behaviour is written down instead.
+- **The `ob200` reader test is a placeholder the ledger reads**: H's gate
+  then checks the proof the registration asks for rather than trusting that
+  it ran.
+- **The reader-test days' prints and funding are fetched with their books**:
+  the dry run's F and P read cannot run end to end on a book alone.
+- **Stage 0 projects at the registered worker counts and needs both timing
+  archives**: a run's own worker count, or a fallback figure, could
+  otherwise cut the catalogue.
+
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`3cd428257e46e0772229c18d1feadb9dba5efe48af83cbf7284588efd37e4c12`.
+`28f63504d7e367615360464100328e01552cec9e0f043904c96118ae87c6920f`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
@@ -2777,7 +2863,10 @@ placeholders, and
 trial ledger's parts were moved under `data/` beside a committed manifest, and
 `d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a` before
 stage 0's timing of the network over a whole day's rows and of the replay on
-the two timing days' archives was written in.)
+the two timing days' archives was written in, and
+`3cd428257e46e0772229c18d1feadb9dba5efe48af83cbf7284588efd37e4c12` before
+the clarifications after the reviews of the study code, the `ob200` reader
+test's placeholder among them, which left 25 placeholders.)
 This study's loader will check that putting `null` back into every placeholder
 of the frozen file gives this hash, or the hash recorded by the latest
 amendment committed before stage 1 (stage 0's, if it cuts anything), as the

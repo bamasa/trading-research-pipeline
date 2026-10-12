@@ -398,6 +398,7 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
         ("data", "max_sequence_gaps"): int(record1["max_sequence_gaps"]),
         ("data", "excluded_days_D"): sorted(excluded),
         ("data", "instrument_spec"): record1["instrument_spec"],
+        ("data", "ob200_reader_test_result"): record1["reader_test"],
         ("features", "selected"): record1["selected"],
         ("features", "fitted_values_sha256"): parts["fitted_sha256"],
         ("models", "weights_sha256"): fits["weights_sha256"],
@@ -455,9 +456,26 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
         f"- p_search = {record_d['p_search']:.4g} (on development data, selected).",
         f"- Statuses set on D: {record_d['statuses_on_D']}.",
         f"- The fitted-values file's sha256 `{values[('features', 'fitted_values_sha256')]}`.",
+        *reader_test_lines(values[("data", "ob200_reader_test_result")]),
         "",
     ]
     return "\n".join(lines)
+
+
+def reader_test_lines(result: dict[str, Any]) -> list[str]:
+    """The ``ob200`` reader test in the amendment: each day's outcome and stream
+    statistics beside D's medians (every finding is in the frozen configuration)."""
+    d = result["D"]["stream"]
+    lines = [f"- The ob200 reader test against max_sequence_gaps = {result['max_sequence_gaps']} "
+             f"(D's medians: {d['messages']['median']} messages, {d['median_interval_ms']['median']} "
+             f"ms between messages, {d['sequence_gaps']['median']} sequence gaps):"]  # fmt: skip
+    for day, entry in sorted(result["days"].items()):
+        outcome = ("passes" if entry["passes"] else "fails on its gap count alone"
+                   if entry["fails_on_gaps_alone"] else f"fails: {entry['exclusions']}")  # fmt: skip
+        stream = entry["stream"]
+        lines.append(f"  {day}: {outcome}; {stream.get('messages')} messages, "
+                     f"{stream.get('median_interval_ms')} ms, {stream.get('sequence_gaps')} gaps.")  # fmt: skip
+    return lines
 
 
 def write_amendment(study: Study, values: dict[tuple[str, ...], Any]) -> dict[str, str]:

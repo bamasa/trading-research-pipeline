@@ -18,7 +18,9 @@ of E, H, F or P):
    (non-positive or off-grid prices), the simulator's day loader's refusals,
    a missing funding history, and the sequence-gap threshold, the 95th
    percentile of D's per-day gap counts, rounded up, with the days above it.
-   The reader-test days' stream statistics are recorded against it.
+   The ``ob200`` reader test (:func:`reader_test`): each reader-test day loaded
+   as a block day against that threshold, its findings and stream statistics
+   beside D's, for the amendment and H's gate.
 5. **The fitted values** on W, the feature stores, selection on January and the
    leakage tests (:mod:`.leakage`).
 """
@@ -26,6 +28,7 @@ of E, H, F or P):
 from __future__ import annotations
 
 import re
+import statistics
 from collections import Counter
 from datetime import date, timedelta
 from functools import partial
@@ -130,6 +133,7 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
     days = sorted({*study.scale.days("W"), *study.scale.days("D")})
     gaps: dict[date, int] = {}
     outside: dict[date, int] = {}
+    d_findings: dict[str, dict[str, int]] = {}
     found: dict[str, dict[str, Any]] = {}
     for day in days:
         reasons = [
@@ -144,6 +148,11 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
             reasons += list(book.exclusions)
             notes += list(book.notes)
             outside[day] = book.rows_outside_day
+            if sa.block_of(day) == "D":
+                for check, severities in book.findings.items():
+                    for severity, count in severities.items():
+                        by = d_findings.setdefault(check, {})
+                        by[severity] = by.get(severity, 0) + count
             if book.sequence_gaps is not None:
                 gaps[day] = book.sequence_gaps
         if not reasons:
@@ -167,17 +176,53 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
         entry["sequence_gaps"] = gaps.get(day)
         entry["rows_outside_day"] = outside.get(day)
     by_reason = Counter(r for e in found.values() for r in e["reasons"])
-    reader = {}
-    for day in study.scale.days(sa.READER_TEST):
-        record = log.get(sa.BOOK, day)
-        stats = dict(record.stats)
-        stats["status"] = record.status
-        stats["within_threshold"] = (
-            record.status == fl.ON_DISK and int(stats.get("sequence_gaps", 0)) <= threshold
-        )
-        reader[day.isoformat()] = stats
+    reader = reader_test(study, log, spec, threshold, d_findings)
     return {"days": found, "max_sequence_gaps": threshold, "excluded_by_reason": dict(by_reason),
             "reader_test": reader}  # fmt: skip
+
+
+#: The stream statistics the fetch records for a book day, compared across archives.
+STREAM = ("messages", "snapshots", "deltas", "median_interval_ms", "sequence_gaps", "rows")
+
+
+def _spread(values: list[Any]) -> dict[str, float | int | None]:
+    known = [float(v) for v in values if v is not None]
+    if not known:
+        return {"days": 0, "min": None, "median": None, "max": None}
+    return {"days": len(known), "min": min(known), "median": float(statistics.median(known)),
+            "max": max(known)}  # fmt: skip
+
+
+def reader_test(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument, threshold: int,
+                d_findings: dict[str, dict[str, int]]) -> dict[str, Any]:  # fmt: skip
+    """The ``ob200`` reader test: each reader-test day loaded as the study's loader
+    loads a block day (no non-positive or off-grid price, gaps at most D's frozen
+    threshold), its exclusions, every finding by check and severity and its stream
+    statistics, beside D's statistics and findings. A day passes with no exclusion;
+    one excluded for its gap count alone is a property of the archive. The ledger
+    opens H only when no day failed otherwise."""
+    access = sa.development_access()
+    days: dict[str, dict[str, Any]] = {}
+    for day in study.scale.days(sa.READER_TEST):
+        record = log.get(sa.BOOK, day)
+        entry: dict[str, Any] = {"status": record.status,
+                                 "stream": {k: record.stats.get(k) for k in STREAM}}  # fmt: skip
+        if record.status == fl.ON_DISK:
+            book = sl.load_book_day(study.symbol, day, study.roots.book, max_sequence_gaps=threshold,
+                                    spec_tick=spec.tick, access=access)  # fmt: skip
+            entry |= {"exclusions": list(book.exclusions), "findings": book.findings,
+                      "notes": list(book.notes), "rows_outside_day": book.rows_outside_day}  # fmt: skip
+        else:
+            entry |= {"exclusions": [f"fetch: {record.status}"], "findings": {}, "notes": [],
+                      "rows_outside_day": None}  # fmt: skip
+        entry["passes"] = not entry["exclusions"]
+        entry["fails_on_gaps_alone"] = entry["exclusions"] == [sl.SEQUENCE_GAPS]
+        days[day.isoformat()] = entry
+    on_disk = [log.get(sa.BOOK, d) for d in study.scale.days("D")]
+    on_disk = [r for r in on_disk if r.status == fl.ON_DISK]
+    d_stream = {k: _spread([r.stats.get(k) for r in on_disk]) for k in STREAM}
+    return {"max_sequence_gaps": threshold, "days": days,
+            "D": {"stream": d_stream, "findings": d_findings}}  # fmt: skip
 
 
 def _book(study: Study, day: date, threshold: int | None) -> Any:

@@ -25,6 +25,14 @@ VALUES: dict[tuple[str, ...], Any] = {
     ("data", "max_sequence_gaps"): 3,
     ("data", "excluded_days_D"): [[date(2025, 3, 1), "sequence_gaps"]],
     ("data", "instrument_spec"): {"tick": 0.1, "lot": 0.001},
+    ("data", "ob200_reader_test_result"): {
+        "max_sequence_gaps": 3,
+        "days": {
+            d: {"exclusions": [], "passes": True, "fails_on_gaps_alone": False}
+            for d in ("2026-01-05", "2026-01-06", "2026-01-07")
+        },
+        "D": {"stream": {"messages": {"median": 1}}, "findings": {}},
+    },
     ("features", "selected"): ["ofi_1", "spread_bp"],
     ("features", "fitted_values_sha256"): "a" * 64,
     ("models", "weights_sha256"): {"gbm_micro_h50_f0": "b" * 64},

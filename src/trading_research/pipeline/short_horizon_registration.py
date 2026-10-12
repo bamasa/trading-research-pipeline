@@ -57,7 +57,7 @@ RESULTS_PATHS: dict[str, Path] = {
 }
 
 #: The sha256 of the YAML as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "3cd428257e46e0772229c18d1feadb9dba5efe48af83cbf7284588efd37e4c12"
+REGISTERED_SHA256 = "28f63504d7e367615360464100328e01552cec9e0f043904c96118ae87c6920f"
 #: The registered catalogue's sha256 (``search.catalogue.sha256``).
 REGISTERED_CATALOGUE_SHA256 = "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d"
 #: The break-detector library's locked commit (``detector.library.commit``).
@@ -74,6 +74,7 @@ PLACEHOLDERS: tuple[tuple[str, ...], ...] = (
     ("data", "max_sequence_gaps"),
     ("data", "excluded_days_D"),
     ("data", "instrument_spec"),
+    ("data", "ob200_reader_test_result"),
     ("features", "selected"),
     ("features", "fitted_values_sha256"),
     ("models", "weights_sha256"),
@@ -290,6 +291,26 @@ def _alarms(value: Any, where: str) -> None:
         )
 
 
+def _reader_test(value: Any, where: str) -> None:
+    """The ``ob200`` reader test: every reader-test day with its exclusions and whether
+    it passed, or failed on its gap count alone; D's statistics beside them."""
+    result = _mapping(value, where)
+    days = _mapping(result.get("days"), f"{where}.days")
+    wanted = {d.isoformat() for d in sa.READER_TEST_DAYS}
+    _require(
+        {str(d) for d in days} == wanted, f"{where}.days are the reader-test days {sorted(wanted)}"
+    )
+    for day, entry in days.items():
+        _require(
+            isinstance(entry, Mapping)
+            and isinstance(entry.get("passes"), bool)
+            and isinstance(entry.get("fails_on_gaps_alone"), bool)
+            and isinstance(entry.get("exclusions"), list),
+            f"{where}.days.{day} records its exclusions, passes and fails_on_gaps_alone",
+        )
+    _mapping(result.get("D"), f"{where}.D")
+
+
 def _boolean(value: Any, where: str) -> None:
     _require(isinstance(value, bool), f"{where} must be true or false")
 
@@ -307,6 +328,7 @@ FROZEN_KINDS: dict[tuple[str, ...], Any] = {
     ("data", "max_sequence_gaps"): _non_negative_int,
     ("data", "excluded_days_D"): _excluded_days,
     ("data", "instrument_spec"): _instrument_spec,
+    ("data", "ob200_reader_test_result"): _reader_test,
     ("features", "selected"): _selected,
     ("features", "fitted_values_sha256"): lambda v, w: _require(_is_sha256(v), f"{w} is a sha256"),
     ("models", "weights_sha256"): _hashes,
