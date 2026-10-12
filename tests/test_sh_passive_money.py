@@ -180,3 +180,21 @@ def test_s_p_and_s_m_have_their_deflated_sharpe_ratio_from_stage_c() -> None:
     panel = rows.pivot_table(index="day", columns="label", values="net_per_100")
     expected = deflated_sharpe_ratio(panel[cells[0].label].to_numpy(), 30, sharpe_variance(panel))
     assert set(found) == {"S-P/net", "S-M/net"} and found["S-P/net"] == pytest.approx(expected.dsr)
+
+
+def test_a_cell_day_records_every_day_sum_the_measurements_beside_the_verdict_read() -> None:
+    """What ``beside_verdict`` reads of a passive slot is in ``BESIDE_COLUMNS``, and a
+    cell-day of either quoter carries every one of them."""
+    from trading_research.pipeline.short_horizon import beside_verdict as bv
+    from trading_research.pipeline.short_horizon.passive import BESIDE_COLUMNS
+
+    read = {"net_usdt", "passive_notional", "taker_notional", "entry_notional", "funding_usdt",
+            "per100_maker_weight", "per100_taker_weight", "making_usdt", "making_bp_sum",
+            "making_fills", "net_long_usdt", "net_short_usdt", "notional_long", "notional_short",
+            "trades_long", "trades_short", *bv.PASSIVE_COUNTERS}  # fmt: skip
+    assert read <= set(BESIDE_COLUMNS)
+    market = _market([100] * 8 + [103] * 12, [(150.0, 99, 5.0, -1)])
+    quoter, result = _run(market, [0])
+    entry = day_values(CELL, quoter, result, clip=1.0)
+    maker = day_values(SimCell("S-M", "k", "maker", 0.5, lean=1.0), quoter, result, clip=1.0)
+    assert set(BESIDE_COLUMNS) <= set(entry) and set(BESIDE_COLUMNS) <= set(maker)

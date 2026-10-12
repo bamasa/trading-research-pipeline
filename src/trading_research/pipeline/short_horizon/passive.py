@@ -189,7 +189,7 @@ def per_100_clip(filled: pd.DataFrame, funding: float) -> float:
 #: every verdict, summed over days (``beside_sums``); NaN where it does not apply.
 BESIDE_COLUMNS: tuple[str, ...] = (
     "net_usdt", "gross_usdt", "fees_usdt", "funding_usdt", "passive_notional", "taker_notional",
-    "per100_maker_weight", "per100_taker_weight", "making_usdt", "making_bp_sum", "making_fills",
+    "entry_notional", "per100_maker_weight", "per100_taker_weight", "making_usdt", "making_bp_sum", "making_fills",
     "net_long_usdt", "net_short_usdt", "notional_long", "notional_short", "trades_long",
     "trades_short", "entries_skipped", "exit_late_snapshot", "flatten_beyond_visible_book",
     "max_abs_position", "time_above_one_clip_s",
