@@ -128,8 +128,7 @@ def kills(s: SlotDays, mask: np.ndarray) -> list[KillCheck]:
     drift = max(_mean(_series(s, s.long_only, mask)), _mean(_series(s, s.short_only, mask)))
     checks["K-drift"] = _check(s.slot, "K-drift", "mean <= all-long or all-short", mean, drift,
                                not (math.isfinite(drift) and mean > drift))  # fmt: skip
-    neighbour_means = [np.nan_to_num(_mean(_series(s, row, mask)), nan=0.0) for row in s.neighbours]
-    median = float(np.median(neighbour_means)) if neighbour_means else float("nan")
+    median = neighbourhood_median(s, mask)
     checks["K-nbhd"] = _check(
         s.slot, "K-nbhd", "neighbourhood median <= 0", median, 0.0, not median > 0
     )
@@ -151,6 +150,14 @@ def kills(s: SlotDays, mask: np.ndarray) -> list[KillCheck]:
         checks["K-dir"] = _check(s.slot, "K-dir", "making part not positive while net is", making, 0.0,
                                  k_dir(making, mean))  # fmt: skip
     return [checks[name] for name in KILL_ORDER[s.slot] if name in checks]
+
+
+def neighbourhood_median(s: SlotDays, mask: np.ndarray) -> float:
+    """K-nbhd's median over the whole neighbourhood, the chosen cell included: the
+    slot's own series and each neighbour cell's (``s.neighbours`` holds the other
+    cells only), a cell without a trade on the masked days scoring 0."""
+    rows = [s.value, *s.neighbours]
+    return float(np.median([np.nan_to_num(_mean(_series(s, row, mask)), nan=0.0) for row in rows]))
 
 
 def fee_check(s: SlotDays, mask: np.ndarray) -> KillCheck:

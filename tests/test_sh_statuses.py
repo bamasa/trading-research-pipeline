@@ -156,3 +156,18 @@ def test_r_is_supported_when_the_edge_stops_at_b_and_nowhere_else_as_sharply() -
     split = st.split_f(days, b, False, False)
     found = st.r_test(s, days, split, False, True, lambda _: True)
     assert found["outcome"] == "supported" and found["p_R"] <= 0.05
+
+
+def test_k_nbhd_takes_its_median_over_the_whole_neighbourhood_the_chosen_cell_included() -> None:
+    from trading_research.pipeline.short_horizon.page_numbers import slot_numbers
+
+    n = len(H_DAYS)
+    near = np.array([np.full(n, -1.0), np.full(n, 1.0)])  # the other cells' median is 0
+    s = slot_days(neighbours=near)
+    found = st.family({"S-C": s}, {"S-C": s.mask(s.days)}, "H", {})["S-C"]
+    nbhd = next(k for k in found.kills if k.name == "K-nbhd")
+    assert not nbhd.fired and nbhd.value == pytest.approx(1.0)
+    assert slot_numbers(s, s.days)["k_nbhd_median"] == pytest.approx(1.0)
+    silent = slot_days(neighbours=np.array([np.full(n, np.nan), np.full(n, -1.0)]))
+    # the cell itself near 3, a cell without a trade scoring 0 and one at -1
+    assert st.neighbourhood_median(silent, silent.mask(silent.days)) == 0.0
