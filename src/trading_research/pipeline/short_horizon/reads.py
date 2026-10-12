@@ -149,32 +149,74 @@ def measured(series: Any, days: list[date] | None = None) -> dict[str, Any]:
             "median_day": float(np.median(values)) if len(values) else None}  # fmt: skip
 
 
+#: A status window: its first and last calendar day (the usable days between are its days).
+Window = tuple[date, date]
+
+
+def within(days: list[date], window: Window) -> list[date]:
+    return [d for d in days if window[0] <= d <= window[1]]
+
+
+def spans(windows: dict[str, Window]) -> dict[str, list[str]]:
+    """Each slot's status window as recorded: a slot not taken to F has all of F."""
+    return {slot: [w[0].isoformat(), w[1].isoformat()] for slot, w in windows.items()}
+
+
+def information_set(s: Any, days: list[date]) -> dict[str, Any]:
+    """A slot on S25's signal on days inside S25's information set: its numbers with
+    its kills and placebos computed as a status would compute them, a measurement."""
+    from dataclasses import asdict
+
+    from trading_research.pipeline.short_horizon import statuses as st
+
+    mask = s.mask(days)
+    return measured(s, days) | {"label": "inside S25's information set",
+                                "kills": [asdict(k) for k in st.kills(s, mask)],
+                                "placebos": st.placebo_means(s, mask)}  # fmt: skip
+
+
 def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[str, Any],
-           flags_ns: Any, windows: dict[str, list[date]]) -> dict[str, dict[str, Any]]:  # fmt: skip
+           flags_ns: Any, windows: dict[str, Window]) -> dict[str, dict[str, Any]]:  # fmt: skip
     """What the read reports beside each slot's status, every one a measurement: its
-    numbers on all of the block; for a slot with a regime window above 0, its
-    regime attribution; its regime, passive-exit and control-IC measurements; on
-    H, FILL on its stream; and its verdict's numbers on its status window
-    (``windows``) with the days excluded for sequence gaps put back (``gaps``)."""
+    numbers on all of the block; for a slot on S25's signal, its numbers with kills
+    and placebos inside S25's information set (H from 2025-08-01, all of H, F, P);
+    for a slot with a regime window above 0, its regime attribution; its regime,
+    passive-exit and control-IC measurements; on H, FILL on its stream; and its
+    verdict's numbers on its status window (``windows``, the whole block by
+    default) with the days excluded for sequence gaps inside it put back (``gaps``)."""
+    import numpy as np
+
     from trading_research.pipeline.short_horizon.heldout_measures import attribution, measured_rows
-    from trading_research.pipeline.short_horizon.statuses import merge
+    from trading_research.pipeline.short_horizon.statuses import S25_WINDOW_END, merge
 
     drawn = [date.fromisoformat(d) for d in info["flag_days"]]
     out: dict[str, dict[str, Any]] = {}
     for slot, s in series.items():
         found: dict[str, Any] = {f"all_of_{block}": measured(s)}
+        if s.on_s25_signal:
+            inside = {f"all_of_{block}": information_set(s, s.days)}
+            if block == "H":
+                inside["H_2025_08_01_to_08_20"] = information_set(
+                    s, [d for d in s.days if d > S25_WINDOW_END]
+                )
+            found["inside_s25_information_set"] = inside
         policy = f"{'guard' if s.kind == 'maker' else 'pull'}_{s.window_h}h"
         found["regime_attribution"] = attribution(
             s, flags_ns, drawn, info["flags_in_block"], policy
         )
         found["measured"] = measured_rows(s)
-        window = windows.get(slot, s.days)
-        if slot in gaps:
-            back = gaps[slot]
-            found["gap_days_included"] = measured(merge(s, back), [*window, *back.days])
-            found["gap_days_included"]["gap_days"] = len(back.days)
+        window = windows.get(slot, sa.BLOCKS[block])
+        days = within(s.days, window)
+        skips = {k.removeprefix("skipped/"): int(np.nansum(v[s.mask(days)]))
+                 for k, v in s.extra.items() if k.startswith("skipped/")}  # fmt: skip
+        if skips:  # beside K-placebo and K-drift: entries each placebo skipped in the window
+            found["placebo_skips"] = skips
+        back = within(gaps[slot].days, window) if slot in gaps else []
+        if back:
+            found["gap_days_included"] = measured(merge(s, gaps[slot]), [*days, *back])
         else:
-            found["gap_days_included"] = measured(s, window) | {"gap_days": 0}
+            found["gap_days_included"] = measured(s, days)
+        found["gap_days_included"]["gap_days"] = len(back)
         if slot in info.get("fill_rules", {}):
             found["fill_rules"] = info["fill_rules"][slot]
         out[slot] = found
@@ -191,7 +233,8 @@ def preset_on_d(study: Study) -> dict[str, str]:
 
 
 def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,
-               gaps: dict[str, Any] | None = None, flags_ns: Any = None) -> dict[str, Any]:  # fmt: skip
+               gaps: dict[str, Any] | None = None, flags_ns: Any = None,
+               alarms: list[dict[str, Any]] | None = None, registration: Any = None) -> dict[str, Any]:  # fmt: skip
     """H: the family on H (slots on S25's signal on H's days to 07-31), S25-Z alone,
     what is taken to F, and every slot's numbers on all of H as measurements."""
     from trading_research.pipeline.short_horizon import statuses as st
@@ -199,8 +242,9 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
     preset = preset_on_d(study)
     masks, windows = {}, {}
     for slot, s in series.items():
-        window = [d for d in s.days if d <= st.S25_WINDOW_END] if s.on_s25_signal else s.days
-        masks[slot], windows[slot] = s.mask(window), window
+        first, last = sa.BLOCKS["H"]
+        windows[slot] = (first, st.S25_WINDOW_END if s.on_s25_signal else last)
+        masks[slot] = s.mask(within(s.days, windows[slot]))
     found = st.family(series, masks, "H", preset)
     out = {slot: a.record() for slot, a in found.items()}
     if "S25-Z" in series:
@@ -213,27 +257,53 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
             measurements[slot]["H_before_2025_08_01"] = measured(
                 s, [d for d in s.days if d <= st.S25_WINDOW_END]
             )
+    void = None if registration is None else r_void(registration, alarms or [])
     return {"assessments": out, "statuses": {slot: a["status"] for slot, a in out.items()},
-            "taken_to_F": taken, "measurements": measurements}  # fmt: skip
+            "taken_to_F": taken, "measurements": measurements, "R_void": void,
+            "status_windows": spans(windows)}  # fmt: skip
 
 
-def r_void(registration: Any, alarms: list[dict[str, Any]]) -> bool:
-    """R is void when this run of the frozen detector does not reproduce D's alarms
-    as the amendment records them (by time and channel)."""
+def _alarm_keys(alarms: list[dict[str, Any]], block: str) -> set[tuple[Any, str]]:
+    """The alarms stamped inside ``block``'s dates, by time and channel."""
     import pandas as pd
 
-    recorded = {
-        (pd.Timestamp(a["timestamp"]), a["channel"])
-        for a in registration.value(("detector", "alarms_D"))
-    }
-    start = pd.Timestamp(sa.BLOCKS["D"][0], tz="UTC")
-    end = pd.Timestamp(sa.BLOCKS["D"][1] + timedelta(days=1), tz="UTC")
-    again = {
-        (pd.Timestamp(a["timestamp"]), a["statistic"])
-        for a in alarms
-        if start <= pd.Timestamp(a["timestamp"]) < end
-    }
-    return recorded != again
+    first, last = sa.BLOCKS[block]
+    start = pd.Timestamp(first.isoformat(), tz="UTC")
+    end = pd.Timestamp((last + timedelta(days=1)).isoformat(), tz="UTC")
+    found = set()
+    for a in alarms:
+        stamp = pd.Timestamp(a["timestamp"])
+        stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp
+        if start <= stamp < end:
+            found.add((stamp, str(a.get("channel", a.get("statistic")))))
+    return found
+
+
+def r_void(registration: Any, alarms: list[dict[str, Any]],
+           earlier: dict[str, list[dict[str, Any]]] | None = None) -> bool:  # fmt: skip
+    """R is void when this run of the frozen detector does not reproduce an earlier
+    run's alarms by time and channel: D's (2025-01-01 to 06-30) as the amendment
+    records them, and each earlier block's (``earlier``) as its results file
+    records them, each compared on that block's dates."""
+    if _alarm_keys(list(registration.value(("detector", "alarms_D"))), "D") != _alarm_keys(
+        alarms, "D"
+    ):
+        return True
+    return any(_alarm_keys(recorded, block) != _alarm_keys(alarms, block)
+               for block, recorded in (earlier or {}).items())  # fmt: skip
+
+
+def recorded_alarms(study: Study, blocks: tuple[str, ...]) -> dict[str, list[dict[str, Any]]]:
+    """Each earlier block's alarms as its results file records them (a block read
+    with nothing computed, unreadable or failed, records none to compare)."""
+    out = {}
+    for block in blocks:
+        info = (
+            read_results(study, block).get("info") if results_path(study, block).exists() else None
+        )
+        if info is not None and "alarms_in_block" in info:
+            out[block] = list(info["alarms_in_block"])
+    return out
 
 
 def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]], registration: Any,
@@ -256,7 +326,7 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
         if pd.Timestamp(a["timestamp"]).date() >= f_start
     )
     untestable = bool(registration.value(("detector", "r_untestable_declared")))
-    void = r_void(registration, alarms)
+    void = bool(h.get("R_void")) or r_void(registration, alarms, recorded_alarms(study, ("H",)))
     split = st.split_f(days, in_f[0] if in_f else None, untestable, void)
     preset = {slot: "not taken to F" for slot in FAMILY if slot not in taken}
     masks = {slot: series[slot].mask(split.minus) for slot in taken if slot in series}
@@ -270,6 +340,12 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
         if before[slot] != "candidate":
             r[slot] = {"outcome": "not tested", "reason": "not a candidate on H"}
             continue
+        if void:  # read as not supported, never tested
+            r[slot] = {
+                "outcome": "void",
+                "reason": "the detector did not reproduce an earlier run's alarms",
+            }
+            continue
 
         def passes_before(d: date, slot: str = slot) -> bool:
             cut = {s: series[s].mask([x for x in days if x < d]) for s in masks}
@@ -281,24 +357,39 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
     qualifying = [s for s in taken if after[s].split(",")[0] in ("candidate", "exploratory: significant on F")
                   and found[s].status == "passes"]  # fmt: skip
     statuses = {slot: after.get(slot, status) for slot, status in before.items()}
-    windows = {slot: list(split.minus) for slot in taken}
+    first, last = sa.BLOCKS["F"]
+    before_b = (
+        (first, split.b - timedelta(days=1))
+        if split.b is not None and not split.on_all_of_f
+        else (first, last)
+    )
+    windows = dict.fromkeys(taken, before_b)  # a slot not taken to F: F as one whole block
     return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": statuses,
             "after_F": after, "split": {"b": None if split.b is None else split.b.isoformat(),
             "minus": len(split.minus), "plus": len(split.plus), "on_all_of_F": split.on_all_of_f,
             "reason": split.reason}, "R_void": void, "R": r, "qualifying_for_P": qualifying,
+            "status_windows": spans({slot: windows.get(slot, (first, last)) for slot in series}),
             "measurements": beside("F", series, info or NO_INFO, gaps or {}, flags_ns, windows)}  # fmt: skip
 
 
 def statuses_p(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,
                gaps: dict[str, Any] | None = None, flags_ns: Any = None,
+               alarms: list[dict[str, Any]] | None = None, registration: Any = None,
                f: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
-    """P: the slots that passed on F (scored only by their mean when R is supported)."""
+    """P: the slots that passed on F (scored only by their mean when R is supported).
+    R found void when P is read leaves F's statuses as committed and P is scored
+    with the full bar, R read as not supported."""
     from trading_research.evaluation.family import FAMILY
     from trading_research.pipeline.short_horizon import statuses as st
 
     f = read_results(study, "F") if f is None else f  # given: the dry run's stand-in F
     qualifying = list(f["qualifying_for_P"])
-    supported = [s for s in qualifying if f["R"].get(s, {}).get("outcome") == "supported"]
+    void = registration is not None and r_void(
+        registration, alarms or [], recorded_alarms(study, ("H", "F"))
+    )
+    supported = [
+        s for s in qualifying if f["R"].get(s, {}).get("outcome") == "supported" and not void
+    ]
     preset = {slot: "not read on P" for slot in FAMILY if slot not in qualifying}
     preset |= dict.fromkeys(supported, "scored on P only by its mean")
     masks = {slot: series[slot].mask(series[slot].days) for slot in qualifying if slot in series}
@@ -312,7 +403,8 @@ def statuses_p(study: Study, series: dict[str, Any], info: dict[str, Any] | None
             assessment.void = st.void_reasons(series[slot], ())
             assessment.status = "void" if assessment.void else ""
         final[slot] = st.after_p(f["after_F"][slot].split(",")[0], assessment, slot in supported)
-    return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": final,
+    return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": final, "R_void": void,
+            "status_windows": spans(dict.fromkeys(series, sa.BLOCKS["P"])),
             "measurements": beside("P", series, info or NO_INFO, gaps or {}, flags_ns, {})}  # fmt: skip
 
 
@@ -384,14 +476,18 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
         return head | {"unreadable": True, "excluded": blk.validated["reasons"]} | unreadable_results(
             study, block, "unreadable")  # fmt: skip
     series, info = compute_block(blk)
+    if info["unreadable"]:  # the days flagged stale in the read's runs counted too
+        return head | {"unreadable": True, "excluded": blk.validated["reasons"],
+                       "stale_days": info["stale_days"]} | unreadable_results(study, block, "unreadable")  # fmt: skip
     gaps = compute_block(blk.put_back(), days=blk.gap_days, kills=False)[0] if blk.gap_days else {}
     mdes = blk.value(("metrics", "mde", "value")) or {}
     for slot, s in series.items():
         s.mde = mdes.get(slot)
     flags = blk.flags_ns
-    found = {"H": lambda: statuses_h(study, series, info, gaps, flags),
-             "F": lambda: statuses_f(study, series, blk.detector["alarms"], blk.registration, info, gaps, flags),
-             "P": lambda: statuses_p(study, series, info, gaps, flags)}[block]()  # fmt: skip
+    alarms, registration = blk.detector["alarms"], blk.registration
+    found = {"H": lambda: statuses_h(study, series, info, gaps, flags, alarms, registration),
+             "F": lambda: statuses_f(study, series, alarms, registration, info, gaps, flags),
+             "P": lambda: statuses_p(study, series, info, gaps, flags, alarms, registration)}[block]()  # fmt: skip
     found["sentences"] = sentences(block, found["statuses"], found["assessments"])
     if block == "H":
         found["sentences"] += regime_sentences(found["measurements"])

@@ -64,7 +64,17 @@ def test_non_finite_days_are_dropped() -> None:
 def test_a_short_series_has_no_t() -> None:
     assert math.isnan(newey_west_t([1.0]).t)
     assert math.isnan(newey_west_t([]).mean)
-    assert math.isnan(newey_west_t([2.0, 2.0, 2.0]).t)
+    assert math.isnan(newey_west_t([0.0, 0.0, 0.0]).t)
+
+
+def test_a_constant_series_has_an_infinite_t_of_its_sign_and_passes_the_bar() -> None:
+    from trading_research.evaluation.family import MIN_DAYS, bar
+
+    assert newey_west_t([2.0, 2.0, 2.0]).t == math.inf
+    assert newey_west_t([-2.0, -2.0, -2.0]).t == -math.inf
+    found = bar([0.5] * 25, True, MIN_DAYS["H"])
+    assert found.t == math.inf and found.p_one_sided == 0.0
+    assert found.newey_west_t == math.inf and found.newey_west_ok and found.passes
 
 
 def test_the_lag_is_cut_to_the_series() -> None:

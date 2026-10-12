@@ -36,6 +36,7 @@ from trading_research.pipeline.short_horizon.statuses import (
     _mean,
     _series,
     fee_check,
+    neighbourhood_median,
     trade_count,
 )
 
@@ -71,7 +72,6 @@ def slot_numbers(s: SlotDays, days: list[date]) -> dict[str, Any]:
     values = _series(s, s.value, mask)
     mean = float(values.mean()) if len(values) else NAN
     draws = np.array([_mean(_series(s, row, mask)) for row in s.random], dtype=np.float64)
-    near = [np.nan_to_num(_mean(_series(s, row, mask)), nan=0.0) for row in s.neighbours]
     out: dict[str, Any] = {
         "status_days": len(values),
         "window_days": int(mask.sum()),
@@ -80,7 +80,7 @@ def slot_numbers(s: SlotDays, days: list[date]) -> dict[str, Any]:
         "trades": trade_count(s, mask),
         "break_even_per_side": float(fee_check(s, mask).value),
         "placebo_percentile": _percentile(mean, draws),
-        "k_nbhd_median": float(np.median(near)) if near else NAN,
+        "k_nbhd_median": neighbourhood_median(s, mask),
     }
     if s.second is not None:
         second = _series(s, s.second, mask)

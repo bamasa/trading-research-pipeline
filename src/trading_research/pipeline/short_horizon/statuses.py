@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -69,6 +69,9 @@ class SlotDays:
     making: np.ndarray | None = None
     passive_notional: np.ndarray | None = None
     second: np.ndarray | None = None
+    #: S25-Z's second claim, net at 0/0, as a slot of its own: every variant's net
+    #: (placebos, neighbours, re-run, brackets) beside the gross ones above.
+    net_claim: SlotDays | None = None
     void: tuple[str, ...] = ()
     on_s25_signal: bool = False
     window_h: int = 0
@@ -103,7 +106,26 @@ def _check(
 
 
 def kills(s: SlotDays, mask: np.ndarray) -> list[KillCheck]:
-    """The slot's kill conditions on the masked days, in the kill table's order."""
+    """The slot's kill conditions on the masked days, in the kill table's order.
+
+    Each condition is applied to every claim of the slot: for S25-Z, whose second
+    claim (net at 0/0) carries its own placebos, neighbours, re-run and brackets
+    (``net_claim``), K1 reads the gross and K2 the net, and every other condition
+    fires when it fires on either claim (the net claim's check, so labelled, when
+    only the net's fires)."""
+    checks = _checks(s, mask)
+    if s.net_claim is not None:
+        net = _checks(s.net_claim, mask)
+        k1 = net["K1"]
+        checks["K2"] = KillCheck(s.slot, "K2", "net at 0/0 <= 0", k1.value, k1.reference, k1.fired)
+        for name, check in net.items():
+            if name not in ("K1", "K2") and check.fired and not checks[name].fired:
+                checks[name] = replace(check, test=f"{check.test} (net at 0/0)")
+    return [checks[name] for name in KILL_ORDER[s.slot] if name in checks]
+
+
+def _checks(s: SlotDays, mask: np.ndarray) -> dict[str, KillCheck]:
+    """Every kill condition of one claim of the slot on the masked days, by name."""
     from trading_research.market_making.verdicts import exceeds_placebos
 
     v = _series(s, s.value, mask)
@@ -128,8 +150,7 @@ def kills(s: SlotDays, mask: np.ndarray) -> list[KillCheck]:
     drift = max(_mean(_series(s, s.long_only, mask)), _mean(_series(s, s.short_only, mask)))
     checks["K-drift"] = _check(s.slot, "K-drift", "mean <= all-long or all-short", mean, drift,
                                not (math.isfinite(drift) and mean > drift))  # fmt: skip
-    neighbour_means = [np.nan_to_num(_mean(_series(s, row, mask)), nan=0.0) for row in s.neighbours]
-    median = float(np.median(neighbour_means)) if neighbour_means else float("nan")
+    median = neighbourhood_median(s, mask)
     checks["K-nbhd"] = _check(
         s.slot, "K-nbhd", "neighbourhood median <= 0", median, 0.0, not median > 0
     )
@@ -150,7 +171,26 @@ def kills(s: SlotDays, mask: np.ndarray) -> list[KillCheck]:
         making = float(np.nansum(s.making[mask])) / notional * 1e4 if notional > 0 else float("nan")
         checks["K-dir"] = _check(s.slot, "K-dir", "making part not positive while net is", making, 0.0,
                                  k_dir(making, mean))  # fmt: skip
-    return [checks[name] for name in KILL_ORDER[s.slot] if name in checks]
+    return checks
+
+
+def neighbourhood_median(s: SlotDays, mask: np.ndarray) -> float:
+    """K-nbhd's median over the whole neighbourhood, the chosen cell included: the
+    slot's own series and each neighbour cell's (``s.neighbours`` holds the other
+    cells only), a cell without a trade on the masked days scoring 0."""
+    rows = [s.value, *s.neighbours]
+    return float(np.median([np.nan_to_num(_mean(_series(s, row, mask)), nan=0.0) for row in rows]))
+
+
+def placebo_means(s: SlotDays, mask: np.ndarray) -> dict[str, float]:
+    """Each placebo's mean on the masked days, the random draws' 95th percentile among them."""
+    draws = np.array([_mean(_series(s, row, mask)) for row in s.random], dtype=np.float64)
+    draws = draws[np.isfinite(draws)]
+    named = {"flipped": s.flipped, "shifted": s.shifted, "long_only": s.long_only,
+             "short_only": s.short_only, **({} if s.stale is None else {"stale": s.stale})}  # fmt: skip
+    found = {name: _mean(_series(s, x, mask)) for name, x in named.items()}
+    level = float(np.percentile(draws, PLACEBO_PERCENTILE)) if len(draws) else math.nan
+    return found | {"random_p95": level}
 
 
 def fee_check(s: SlotDays, mask: np.ndarray) -> KillCheck:
@@ -227,17 +267,34 @@ def _screen(s: SlotDays, mask: np.ndarray, study_voids: Sequence[str]) -> Assess
     return found
 
 
+#: The days of H's series the frozen MDE assumes: 44, and 24 for a slot on S25's signal.
+MDE_DAYS_H = {False: 44, True: 24}
+
+
+def block_mde(s: SlotDays, mask: np.ndarray, block: str) -> float | None:
+    """The MDE the "below the minimum detectable effect" label reads on ``block``:
+    the frozen one on H; on F (F- or all of F) and P the same formula with the
+    frozen sigma_D and share and the usable days of the series assessed in place
+    of H's, that is the frozen MDE times sqrt(H's days / the usable days)."""
+    if s.mde is None or block == "H":
+        return s.mde
+    days = int(mask.sum())
+    return float(s.mde * math.sqrt(MDE_DAYS_H[s.on_s25_signal] / days)) if days else math.inf
+
+
 def _barred(s: SlotDays, mask: np.ndarray, found: Assessment, passes_holm: bool, block: str,
             passes_word: str) -> Assessment:  # fmt: skip
     """Precedence steps 4 and 5 for a slot no earlier step settled."""
     series = _series(s, s.value, mask)
     result = bar(series, passes_holm, MIN_DAYS[block])
+    mde = block_mde(s, mask, block)
     found.bar = {k: getattr(result, k) for k in result.__dataclass_fields__} | {
-        "passes": result.passes
+        "passes": result.passes,
+        "mde": mde,
     }
     if result.passes:
         found.status = passes_word
-    elif s.mde is not None and math.isfinite(found.mean) and abs(found.mean) < s.mde:
+    elif mde is not None and math.isfinite(found.mean) and abs(found.mean) < mde:
         found.status = "inconclusive, below the minimum detectable effect"
     else:
         found.status = "inconclusive"
@@ -278,10 +335,8 @@ def s25_z(s: SlotDays, mask: np.ndarray, study_voids: Sequence[str] = ()) -> Ass
     found = _screen(s, mask, study_voids)
     if found.status:
         return found
-    claims = [
-        _series(s, s.value, mask),
-        _series(s, s.second if s.second is not None else s.value, mask),
-    ]
+    second = s.net_claim.value if s.net_claim is not None else s.second
+    claims = [_series(s, s.value, mask), _series(s, s.value if second is None else second, mask)]
     alone = passes_alone([slot_p_value(c) for c in claims])
     bars = [bar(c, alone, MIN_DAYS["H"]) for c in claims]
     found.bar = {"claims": [{k: getattr(b, k) for k in b.__dataclass_fields__} for b in bars],
@@ -411,7 +466,6 @@ def r_test(s: SlotDays, days: Sequence[date], split: Split, untestable_declared:
 
 def subset(s: SlotDays, keep: np.ndarray) -> SlotDays:
     """The same slot on the kept days only (every per-day array sliced alike)."""
-    from dataclasses import replace
 
     def cut(values: np.ndarray | None) -> np.ndarray | None:
         if values is None:
@@ -426,6 +480,7 @@ def subset(s: SlotDays, keep: np.ndarray) -> SlotDays:
         latency=s.latency[keep], stale=cut(s.stale), brackets={k: v[keep] for k, v in s.brackets.items()},
         making=cut(s.making), passive_notional=cut(s.passive_notional), second=cut(s.second),
         extra={name: values[..., keep] for name, values in s.extra.items()},
+        net_claim=None if s.net_claim is None else subset(s.net_claim, keep),
     )  # fmt: skip
 
 
@@ -433,8 +488,6 @@ def merge(a: SlotDays, b: SlotDays) -> SlotDays:
     """One slot on two sets of days as one, in day order: the days excluded for
     sequence gaps put back beside the usable days. An array one side lacks is NaN
     on that side's days; the void conditions are the union."""
-    from dataclasses import replace
-
     days = [*a.days, *b.days]
     if len(set(days)) != len(days):
         raise ValueError("the two sets of days overlap")
@@ -464,4 +517,5 @@ def merge(a: SlotDays, b: SlotDays) -> SlotDays:
         making=cat(a.making, b.making), passive_notional=cat(a.passive_notional, b.passive_notional),
         second=cat(a.second, b.second), void=tuple(sorted({*a.void, *b.void})),
         extra={k: cat(a.extra.get(k), b.extra.get(k)) for k in sorted(keys)},
+        net_claim=None if a.net_claim is None or b.net_claim is None else merge(a.net_claim, b.net_claim),
     )  # fmt: skip

@@ -6,7 +6,8 @@ accounting:
 
 * placebos on its decisions: the sign flipped, random directions (one seed per
   draw), the previous usable day's decisions at the same times of day
-  (circularly over the block), the decisions delayed by one hold (stale), and
+  (circularly over the block, stepping over a day any run flags stale:
+  ``heldout.step_over_stale``), the decisions delayed by one hold (stale), and
   all-long and all-short (K-drift);
 * its neighbourhood (S-P and S25-Z: the other cells of the signal's grid; S-M:
   the leans 0.5 and 2);
@@ -108,7 +109,14 @@ def fill_values(result: Any) -> dict[str, Any]:
 
 def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_sequence_gaps: int,
              sigma_ref: float, clip: float) -> list[dict[str, Any]]:  # fmt: skip
-    """Every run of one loaded day, each under its own flags and changes."""
+    """Every run of one loaded day, each under its own flags and changes.
+
+    Each row carries the void conditions' inputs: ``accounting_failed``, the
+    accounting fault a run raised (the simulator's identity, R15, or the filled
+    attempts' cash against the day's; K-acct), and ``max_abs_position`` from the
+    fills' positions with ``cap_exceeded`` above the cap (K-cap: one clip for the
+    signal-entry quoter, the hard limit of two clips for S1)."""
+    from trading_research.market_making.accounting import IdentityError
     from trading_research.market_making.simulator import simulate_day
 
     mid = float(np.mean((events.bid_px[:, 0] + events.ask_px[:, 0]) / 2.0) * events.spec.tick)
@@ -119,14 +127,30 @@ def day_rows(events: Any, runs: tuple[Run, ...], flags_ns: np.ndarray, max_seque
                                                  sigma_ref)  # fmt: skip
         if run.changes:
             config = config.with_(**run.changes)
-        result = simulate_day(events, quoter, config, tapes)
-        row = day_values(run.cell, quoter, result, clip, mid)
+        where = {"day": events.day.isoformat(), "run_slot": run.slot, "variant": run.variant}
+        try:
+            result = simulate_day(events, quoter, config, tapes)
+            row = day_values(run.cell, quoter, result, clip, mid)
+        except (IdentityError, RuntimeError) as exc:
+            rows.append(where | {"label": run.cell.label, "excluded": False,
+                                 "accounting_failed": f"{type(exc).__name__}: {exc}"})  # fmt: skip
+            continue
         if run.cell.kind == "entry":
             row |= fill_values(result)
-        rows.append(
-            row | {"day": events.day.isoformat(), "run_slot": run.slot, "variant": run.variant}
-        )
+        rows.append(row | where | position_cap(result.fills, clip, run.cell.kind))
     return rows
+
+
+def position_cap(fills: pd.DataFrame, clip: float, kind: str) -> dict[str, Any]:
+    """K-cap's inputs from a run's fills: the largest |position| after any fill, and
+    whether it exceeds the cap (one clip for the signal-entry quoter, whose order
+    with a cancel in flight counts as resting; ``soft_limit_clips`` + 1 = 2 clips
+    for S1's hard limit)."""
+    position = fills["position_after"].to_numpy(dtype=np.float64) if len(fills) else np.zeros(0)
+    largest = float(np.abs(position).max()) if len(position) else 0.0
+    cap = clip * (1.0 if kind == "entry" else 2.0)
+    return {"max_abs_position": largest, "cap_exceeded": bool(largest > cap * (1.0 + 1e-9)),
+            "accounting_failed": ""}  # fmt: skip
 
 
 def run_variants(job: VariantJob) -> Path:
@@ -149,6 +173,25 @@ def run_variants(job: VariantJob) -> Path:
     return target
 
 
+#: The simulator's workers: at most 6, while that many peaks of one day stay within 24 GB.
+SIMULATOR_WORKERS_MAX = 6
+SIMULATOR_MEMORY_BUDGET_BYTES = 24 * 10**9
+
+
+def simulator_workers(requested: int, peak_rss: int) -> int:
+    """Simulator workers: at most 6 and the count asked for, and fewer while that
+    many times one day's peak resident memory would exceed 24 GB; at least one."""
+    allowed = SIMULATOR_MEMORY_BUDGET_BYTES // peak_rss if peak_rss > 0 else SIMULATOR_WORKERS_MAX
+    return int(max(1, min(SIMULATOR_WORKERS_MAX, requested, allowed)))
+
+
+def run_measured(job: VariantJob) -> tuple[Path, int]:
+    """:func:`run_variants` in a fresh worker, with that process's peak memory after it."""
+    from trading_research.data.study_fetch import peak_rss_bytes
+
+    return run_variants(job), peak_rss_bytes()
+
+
 def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_start: int,
              previous_start: int, neighbours: list[tuple[SimCell, Decisions]], draws: int,
              rngs: list[np.random.Generator]) -> list[Run]:  # fmt: skip
@@ -166,8 +209,7 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
             Run(slot, "long_only", cell, sided(np.ones_like(own.side))),
             Run(slot, "short_only", cell, sided(-np.ones_like(own.side))),
             Run(slot, "stale", cell, sided(own.side, own.stamps_ns + round(cell.hold_s * 1e9)))]  # fmt: skip
-    shifted = previous.stamps_ns - previous_start + day_start
-    runs.append(Run(slot, "shifted", cell, Decisions(shifted, previous.side, previous.strength_bp)))
+    runs.append(shifted_run(slot, cell, previous, day_start, previous_start))
     for k in range(draws):
         runs.append(
             Run(
@@ -183,6 +225,13 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
     runs.append(Run(slot, "latency", cell, own, dict(LATENCY_110_MS)))
     runs += [Run(slot, f"neighbour/{other.label}", other, decided) for other, decided in neighbours]
     return runs
+
+
+def shifted_run(slot: str, cell: SimCell, previous: Decisions, day_start: int,
+                previous_start: int) -> Run:  # fmt: skip
+    """The one-day shift: another day's decisions at the same times of day."""
+    shifted = previous.stamps_ns - previous_start + day_start
+    return Run(slot, "shifted", cell, Decisions(shifted, previous.side, previous.strength_bp))
 
 
 def measured_runs(slot: str, cell: SimCell, own: Decisions, measured: list[tuple[str, SimCell, Decisions]],

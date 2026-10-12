@@ -156,3 +156,62 @@ def test_r_is_supported_when_the_edge_stops_at_b_and_nowhere_else_as_sharply() -
     split = st.split_f(days, b, False, False)
     found = st.r_test(s, days, split, False, True, lambda _: True)
     assert found["outcome"] == "supported" and found["p_R"] <= 0.05
+
+
+def test_k_nbhd_takes_its_median_over_the_whole_neighbourhood_the_chosen_cell_included() -> None:
+    from trading_research.pipeline.short_horizon.page_numbers import slot_numbers
+
+    n = len(H_DAYS)
+    near = np.array([np.full(n, -1.0), np.full(n, 1.0)])  # the other cells' median is 0
+    s = slot_days(neighbours=near)
+    found = st.family({"S-C": s}, {"S-C": s.mask(s.days)}, "H", {})["S-C"]
+    nbhd = next(k for k in found.kills if k.name == "K-nbhd")
+    assert not nbhd.fired and nbhd.value == pytest.approx(1.0)
+    assert slot_numbers(s, s.days)["k_nbhd_median"] == pytest.approx(1.0)
+    silent = slot_days(neighbours=np.array([np.full(n, np.nan), np.full(n, -1.0)]))
+    # the cell itself near 3, a cell without a trade scoring 0 and one at -1
+    assert st.neighbourhood_median(silent, silent.mask(silent.days)) == 0.0
+
+
+def test_every_kill_of_s25_z_reads_both_claims() -> None:
+    gross = slot_days("S25-Z", on_s25_signal=True)
+    net = slot_days("S25-Z", on_s25_signal=True, mean=2.0, seed=1)
+    gross.net_claim, gross.second = net, net.value
+    window = gross.mask([d for d in gross.days if d <= st.S25_WINDOW_END])
+    clean = st.kills(gross, window)
+    assert [k.name for k in clean][:2] == ["K1", "K2"] and not any(k.fired for k in clean)
+    net.flipped = np.full(len(H_DAYS), 5.0)  # the net claim does not beat its sign-flipped placebo
+    found = {k.name: k for k in st.kills(gross, window)}
+    assert found["K-placebo"].fired and found["K-placebo"].test.endswith("(net at 0/0)")
+    assert not found["K1"].fired and not found["K2"].fired
+    assert st.s25_z(gross, window).status == "killed"
+    net.value = np.full(len(H_DAYS), -1.0)
+    assert {k.name for k in st.kills(gross, window) if k.fired} >= {"K2"}
+
+
+def test_the_mde_on_f_and_p_uses_the_usable_days_of_the_series_assessed() -> None:
+    f_days = [date(2025, 8, 21) + timedelta(days=i) for i in range(11)]
+    value = np.r_[np.full(6, 3.0), np.full(5, -1.0)]  # mean 1.18: no kill, not the bar
+    s = slot_days(days=f_days, mde=1.0)
+    s.value, s.latency = value, value - 0.1
+    on_f = st.family({"S-C": s}, {"S-C": s.mask(f_days)}, "F", {})["S-C"]
+    assert on_f.bar["mde"] == pytest.approx(2.0)  # 1.0 x sqrt(44 / 11)
+    assert on_f.status == "inconclusive, below the minimum detectable effect"
+    assert st.block_mde(s, s.mask(f_days), "H") == 1.0
+    s.on_s25_signal = True
+    assert st.block_mde(s, s.mask(f_days[:6]), "P") == pytest.approx(2.0)  # 1.0 x sqrt(24 / 6)
+
+
+def test_a_void_result_on_f_is_void_since_killed_on_f_names_a_kill_that_fired() -> None:
+    from trading_research.market_making.verdicts import KillCheck
+    from trading_research.reporting.headlines import HeadlineError, slot_on_block
+
+    void = st.family({"S-C": slot_days(void=("K-cap",))}, {"S-C": np.ones(44, bool)}, "F", {})[
+        "S-C"
+    ]
+    assert void.status == "void" and void.kills == [] and st.after_f("candidate", void) == "void"
+    assert "void" in slot_on_block("S-C", "F", "void", void.kills)
+    with pytest.raises(HeadlineError):  # a void result has no kill evaluated to name
+        slot_on_block("S-C", "F", "killed on F", void.kills)
+    k1 = KillCheck("S-C", "K1", "mean <= 0", -1.0, 0.0, True)
+    assert "K1" in slot_on_block("S-C", "F", "killed on F", [k1])

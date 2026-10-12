@@ -10,10 +10,12 @@ files and the frozen weights. For each usable day:
   and are not scored for N minutes), the frozen models' scores on every row,
   and each configuration's candidate tape under the frozen thresholds, gate
   levels and the frozen detector's flags;
-* for the taker slots (:func:`taker_days`): the true slot through the event-time
-  executor, and from walk tables its placebos (sign flip, random directions,
-  one-day shift, all-long and all-short), its neighbour cells and its re-run at
-  110 ms;
+* for the taker slots (:class:`TakerSlot`): the true slot through the event-time
+  executor, and from walk tables its placebos (sign flip, random directions and
+  all-long and all-short at its entries, an entry beyond the visible book on the
+  placebo's side skipped and counted; the previous usable day's signal tape at
+  the same times of day), its neighbour cells and the slot re-run with every
+  order live at 110 ms; a day any of these runs flags stale is stale;
 * for the passive slots (:mod:`.heldout_passive`): the simulator under the same
   variants and the queue brackets.
 
@@ -36,7 +38,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from functools import cached_property, partial
 from pathlib import Path
 from typing import Any
@@ -54,6 +56,8 @@ from trading_research.search_engine.catalogue import parse_key
 
 #: The sequence-gap threshold of the put-back view: no day is excluded for its gaps.
 GAPS_UNBOUNDED = 2**31 - 1
+#: The taker placebos that count the entries they skip (reported beside K-placebo and K-drift).
+PLACEBO_SKIPS: tuple[str, ...] = ("flipped", "random", "long_only", "short_only")
 #: The regime windows S-P's cell is measured at beside its own, and S-M's guards.
 REGIME_POLICIES: tuple[str, ...] = ("none", "pull_4h", "pull_24h", "pull_120h")
 MAKER_GUARDS: tuple[str, ...] = tuple(
@@ -177,7 +181,7 @@ class Block:
         from dataclasses import replace
 
         view = replace(self, gaps_put_back=True)
-        for name in ("registration", "fitted", "validated", "detector"):
+        for name in ("registration", "fitted", "validated", "detector", "history"):
             if name in self.__dict__:
                 view.__dict__[name] = self.__dict__[name]
         return view
@@ -216,8 +220,33 @@ class Block:
     def flags_ns(self) -> np.ndarray:
         return np.asarray(self.detector["flags_ns"], dtype=np.int64)
 
+    @cached_property
+    def history(self) -> list[date]:
+        """The earlier block's last day when it is usable and adjacent with the same
+        archive (F's for P, F before P), which the rolling state of the block's
+        first day may read; none for H and F, whose first days start cold."""
+        from trading_research.market_making.events import DayUnavailable
+
+        last = self.days_planned[0] - timedelta(days=1) if self.days_planned else None
+        if self.name != "P" or last is None or sa.block_of(last) != "F":
+            return []
+        try:
+            book = sl.load_book_day(self.study.symbol, last, self.study.roots.book,
+                                    max_sequence_gaps=int(self.value(("data", "max_sequence_gaps"))),
+                                    access=self.access)  # fmt: skip
+            usable = not list(book.exclusions)
+            if usable:
+                self.events(last)
+        except (DayUnavailable, FileNotFoundError):
+            return []
+        return [last] if usable else []
+
+    def previous(self, day: date) -> date | None:
+        """The day whose rolling state ``day`` reads (the earlier block's for P's first day)."""
+        return ft.previous_day(day, [*self.history, *self.usable])
+
     def cold(self, day: date) -> bool:
-        return ft.previous_day(day, self.usable) is None
+        return self.previous(day) is None
 
     def features(self, day: date) -> pd.DataFrame:
         """The day's every-row inputs as the stores hold them (raw sizes scaled, cast
@@ -226,7 +255,7 @@ class Block:
         from trading_research.features.lob_tensor import TensorCalibration
 
         def build() -> pd.DataFrame:
-            previous = ft.previous_day(day, self.usable)
+            previous = self.previous(day)
             history = None if previous is None else (self.book(previous), self.prints(previous))
             calibration = TensorCalibration.from_dict(self.fitted["tensor"])
             frame = ft.day_frame(self.book(day), self.prints(day), calibration, history)
@@ -300,7 +329,7 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
         out.mkdir(parents=True, exist_ok=True)
         model = load(path, kind="tcn") if path.exists() else None
         control = load(control_path, kind="tcn") if model and control_path.exists() else None
-        for k, day in enumerate(days):
+        for day in days:
             target = out / f"{day}.npz"
             if target.exists():
                 continue
@@ -308,14 +337,13 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
             if model is None:
                 np.savez(target, mu=np.full(rows, np.nan), log_variance=np.full(rows, np.nan))
                 continue
-            follows = k > 0 and (day - days[k - 1]).days == 1 and not block.cold(day)
+            previous = block.previous(day)
 
             def values(d: date = day) -> np.ndarray:
                 return block.features(d)[columns].to_numpy(dtype=np.float32)
 
-            sequence = [Day(str(day), values, np.arange(rows), None, follows)]
-            if follows:
-                previous = days[k - 1]
+            sequence = [Day(str(day), values, np.arange(rows), None, previous is not None)]
+            if previous is not None:
                 n = len(block.features(previous))
                 sequence.insert(
                     0, Day(str(previous), partial(values, previous), np.arange(n), None, False)
@@ -420,15 +448,59 @@ def _bp(trades: Any) -> float:
     return float(trades.day_values()["net_bp"]) if trades.trades else float("nan")
 
 
-def _lookup(table: Any, rows: np.ndarray, side: np.ndarray) -> float:
-    """The day's value of trades at ``rows`` on ``side`` from the hold table."""
+def _lookup(table: Any, rows: np.ndarray, side: np.ndarray) -> tuple[float, int]:
+    """The day's value of a placebo's trades at the true slot's entry ``rows`` on
+    ``side`` from the hold table, and how many it skips: an entry whose clip goes
+    beyond the visible book on the placebo's own side is skipped as the executor
+    skips it (counted, never priced). A skipped entry only frees the placebo
+    earlier, so the true slot's later entries stay free for it."""
     from trading_research.search_engine.walk_tables import side_index
 
-    if not len(rows):
-        return float("nan")
     own = side_index(side)
-    net, notional = table.net[own, rows], table.notional[own, rows]
-    return float(net.sum() / notional.sum() * 1e4)
+    skipped = table.skip[own, rows] if len(rows) else np.zeros(0, dtype=bool)
+    kept, own = rows[~skipped], own[~skipped]
+    if not len(kept):
+        return float("nan"), int(skipped.sum())
+    net, notional = table.net[own, kept], table.notional[own, kept]
+    return float(net.sum() / notional.sum() * 1e4), int(skipped.sum())
+
+
+@dataclass(frozen=True)
+class SignalTape:
+    """A cell's signal tape on one day as the one-day shift carries it to another:
+    each decided row's time of day and side after the cell's rule, gate and guard,
+    and in R its event (one entry per event)."""
+
+    tod_ns: np.ndarray
+    side: np.ndarray
+    events: np.ndarray | None
+
+
+def signal_tape(tape: Any, table: Any, cell: Any, rule: Any) -> SignalTape:
+    """The day's signal tape of ``cell`` (its decisions, not only the entries taken)."""
+    from trading_research.search_engine.cells import cell_sides
+
+    side, events = cell_sides(tape, cell, rule)
+    decided = side != 0
+    tod = table.walk.ts[tape.rows[decided]] - table.walk.start_ns
+    return SignalTape(tod.astype(np.int64), side[decided].astype(np.int64),
+                      None if events is None else events[decided])  # fmt: skip
+
+
+def shift_on(table: Any, signal: SignalTape) -> Any:
+    """Another day's signal tape on ``table``'s day at the same times of day, each
+    decision at the first row stamped at or after it, thinned on this day's table
+    with its own one-position state; a decision after the day's last row counts as
+    ``entries_no_snapshot``."""
+    from trading_research.search_engine.cells import score_sides
+
+    rows = np.searchsorted(table.walk.ts, table.walk.start_ns + signal.tod_ns, side="left")
+    inside = rows < table.rows
+    events = None if signal.events is None else signal.events[inside]
+    found = score_sides(table, rows[inside], signal.side[inside], events)
+    found.counters["decisions"] += int((~inside).sum())
+    found.counters["entries_no_snapshot"] += int((~inside).sum())
+    return found
 
 
 @dataclass
@@ -456,17 +528,24 @@ class TakerSlot:
         self.rngs = [np.random.default_rng(k) for k in range(self.draws)]
         self.void: set[str] = set()
         self.stale: set[int] = set()
-        self.entries: dict[int, Any] = {}
+        #: Each day's signal tape, and the day whose tape each day's one-day shift read.
+        self.signals: dict[int, SignalTape] = {}
+        self.shifted_from: dict[int, int] = {}
         self.first: Any = None
         self.window_h = parse_key(self.key).regime_h
         self.guarded, self.twin = nan(), nan()
         self.flagsets = np.full((len(self.flag_sets), n), np.nan)
         self.control_label, self.control_move = nan(), nan()
         self.has_control = False
+        #: Entries each placebo skips (beyond the visible book on its own side), by day;
+        #: the random draws' summed over the draws.
+        self.skips = {name: np.zeros(n, dtype=np.int64) for name in PLACEBO_SKIPS}
 
     def extra(self) -> dict[str, np.ndarray]:
         """The per-day measurements beside the status (``SlotDays.extra``)."""
-        out: dict[str, np.ndarray] = {}
+        out: dict[str, np.ndarray] = {
+            f"skipped/{k}": v.astype(np.float64) for k, v in self.skips.items()
+        }
         if self.window_h > 0:
             out |= {"guarded": self.guarded, "twin": self.twin}
             if self.flag_sets:  # the gap days' pass draws none; merge fills their rows with NaN
@@ -480,22 +559,21 @@ class TakerSlot:
         from trading_research.market_making.accounting import IdentityError
         from trading_research.pipeline.short_horizon.fits import rank_ic
         from trading_research.search_engine.cells import score_cell
-        from trading_research.search_engine.null_b import entries_of, replay
-        from trading_research.search_engine.walk_tables import execute_rows
         from trading_research.strategies.ev_gate import UnitsError
 
-        def scored(key: str) -> Any:
+        def rule_of(cell: Any) -> Any:
+            return (rules.get(cell.configuration, {}).get(cell.trades_per_day)
+                    if cell.stratum == "C" else None)  # fmt: skip
+
+        def scored(key: str, tables: dict[int, Any] = ctx.tables) -> Any:
+            """The cell's re-run from walk tables (``ctx.late``: every order live at 110 ms)."""
             cell = parse_key(key)
-            rule = (
-                rules.get(cell.configuration, {}).get(cell.trades_per_day)
-                if cell.stratum == "C"
-                else None
-            )
-            if cell.stratum == "C" and rule is None:
+            if cell.stratum == "C" and rule_of(cell) is None:
                 return None
-            return score_cell(
-                ctx.tapes[cell.configuration], ctx.tables[round(cell.hold_s * 1e9)], cell, rule
-            )
+            found = score_cell(ctx.tapes[cell.configuration], tables[round(cell.hold_s * 1e9)],
+                               cell, rule_of(cell))  # fmt: skip
+            self.flag(i, found)
+            return found
 
         cell = parse_key(self.key)
         hold = round(cell.hold_s * 1e9)
@@ -525,38 +603,56 @@ class TakerSlot:
             self.void.add("K-cap")
         self.value[i], self.trades[i] = day.day_bp("net"), len(trades)
         self.gross[i], self.turnover[i] = float(trades["gross"].sum()), float(day.turnover)
-        self.flipped[i] = _lookup(table, rows, -side)
-        self.long_only[i] = _lookup(table, rows, np.ones_like(side))
-        self.short_only[i] = _lookup(table, rows, -np.ones_like(side))
+        self.flipped[i], self.skips["flipped"][i] = _lookup(table, rows, -side)
+        self.long_only[i], self.skips["long_only"][i] = _lookup(table, rows, np.ones_like(side))
+        self.short_only[i], self.skips["short_only"][i] = _lookup(table, rows, -np.ones_like(side))
+        self.skips["random"][i] = 0
         for k, rng in enumerate(self.rngs):
-            self.random[k, i] = _lookup(table, rows, rng.choice(np.array([-1, 1]), size=len(rows)))
-        self.latency[i] = _bp(execute_rows(ctx.late[hold], rows, side))
+            drawn = rng.choice(np.array([-1, 1]), size=len(rows))
+            self.random[k, i], skipped = _lookup(table, rows, drawn)
+            self.skips["random"][i] += skipped
+        # K-latency: the slot re-run with every order live 110 ms after its decision
+        self.latency[i] = _bp(scored(self.key, ctx.late))
         for j, key in enumerate(self.neighbours):
             found = scored(key)
             self.cells[j, i] = np.nan if found is None else _bp(found)
         self.ic[i] = rank_ic(ctx.scores[cell.configuration], ctx.forward[cell.hold_s])
-        self.entries[i] = entries_of(table, true)
+        self.signals[i] = signal_tape(ctx.tapes[cell.configuration], table, cell, rule_of(cell))
         if i == 0:
             self.first = table
         else:
-            self.shifted[i] = _bp(replay(table, self.entries[i - 1]))
+            self.shift(i, table, i - 1)
         if self.window_h > 0:  # the attribution's three terms, all from the walk tables
-            rule = rules.get(cell.configuration, {}).get(cell.trades_per_day)
             self.guarded[i], self.twin[i] = _bp(true), _bp(scored(twin_key(self.key)))
             for k, flags in enumerate(self.flag_sets):
                 tape = reguarded(ctx.tapes[cell.configuration], flags, self.window_h)
-                self.flagsets[k, i] = _bp(score_cell(tape, table, cell, rule))
+                found = score_cell(tape, table, cell, rule_of(cell))
+                self.flag(i, found)
+                self.flagsets[k, i] = _bp(found)
         if cell.configuration in ctx.control:
             self.has_control = True
             self.control_label[i], self.control_move[i] = ctx.control[cell.configuration]
 
-    def finish(self) -> None:
-        """The first day's one-day shift: the last usable day's entries, circularly."""
-        from trading_research.search_engine.null_b import replay
+    def flag(self, i: int, found: Any) -> None:
+        """A run of the slot on day ``i`` that walked a stale snapshot makes the day stale."""
+        if found is not None and bool(found.stale):
+            self.stale.add(i)
 
+    def shift(self, i: int, table: Any, source: int) -> None:
+        """The one-day shift on day ``i``: day ``source``'s signal tape on ``i``'s table."""
+        self.shifted_from[i] = source
+        if source not in self.signals:  # nothing decided on the source day
+            self.shifted[i] = np.nan
+            return
+        found = shift_on(table, self.signals[source])
+        self.shifted[i] = _bp(found)
+        self.flag(i, found)
+
+    def finish(self) -> None:
+        """The first day's one-day shift: the last usable day's signal tape, circularly."""
         n = len(self.days)
-        if n > 1 and self.first is not None and n - 1 in self.entries:
-            self.shifted[0] = _bp(replay(self.first, self.entries[n - 1]))
+        if n > 1 and self.first is not None:
+            self.shift(0, self.first, n - 1)
         self.first = None
 
 
@@ -662,6 +758,8 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
     def series(variant: str, column: str = primary) -> np.ndarray:
         out = np.full(len(days), np.nan)
         part = mine[mine["variant"] == variant]
+        if column not in part:
+            return out
         for day, excluded, value in zip(part["day"], part["excluded"], part[column], strict=True):
             if not excluded:
                 out[index[day]] = float(value)
@@ -678,35 +776,75 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
         extra["flagsets"] = np.array([series(f"flagset/{k}") for k in sets]).reshape(
             len(sets), len(days)
         )
-    return SlotDays(
-        p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
-        value=series("true"), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
-        gross=series("true", "net_usdt"), turnover=series("true", "passive_notional"), ic=np.asarray(p.ic),
-        random=np.array([series(f"random/{k}") for k in range(draws)]).reshape(draws, len(days)),
-        flipped=series("flipped"), shifted=series("shifted"), long_only=series("long_only"),
-        short_only=series("short_only"),
-        neighbours=np.array([series(v) for v in neighbours]).reshape(len(neighbours), len(days)),
-        latency=series("latency"), stale=series("stale"),
-        brackets={name: series(f"bracket/{name}") for name in ("pessimistic", "none", "all_ahead")},
-        making=series("true", "making_usdt") if p.slot == "S-M" else None,
-        passive_notional=series("true", "passive_notional"),
-        second=series("true", "net_bp_trade") if p.slot == "S25-Z" else None,
-        on_s25_signal=on_s25, window_h=window_h, extra=extra,
-    )  # fmt: skip
+    void = []  # K-acct: an accounting fault in any run of the slot; K-cap: its true run's position
+    if (
+        "accounting_failed" in mine
+        and mine["accounting_failed"].fillna("").astype(str).ne("").any()
+    ):
+        void.append("K-acct")
+    true = mine[mine["variant"] == "true"]
+    if "cap_exceeded" in true and true["cap_exceeded"].fillna(False).astype(bool).any():
+        void.append("K-cap")
+
+    def claim(column: str) -> SlotDays:
+        """The slot's series and every variant's under one claim's column."""
+        return SlotDays(
+            p.slot, "taker" if p.slot == "S25-Z" else "entry" if p.slot == "S-P" else "maker", days,
+            value=series("true", column), trades=np.nan_to_num(series("true", "trades")).astype(np.int64),
+            gross=series("true", "net_usdt"), turnover=series("true", "passive_notional"), ic=np.asarray(p.ic),
+            random=np.array([series(f"random/{k}", column) for k in range(draws)]).reshape(draws, len(days)),
+            flipped=series("flipped", column), shifted=series("shifted", column),
+            long_only=series("long_only", column), short_only=series("short_only", column),
+            neighbours=np.array([series(v, column) for v in neighbours]).reshape(len(neighbours), len(days)),
+            latency=series("latency", column), stale=series("stale", column),
+            brackets={name: series(f"bracket/{name}", column) for name in ("pessimistic", "none", "all_ahead")},
+            making=series("true", "making_usdt") if p.slot == "S-M" else None,
+            passive_notional=series("true", "passive_notional"),
+            on_s25_signal=on_s25, window_h=window_h, void=tuple(void),
+        )  # fmt: skip
+
+    found = claim(primary)
+    found.extra = extra
+    if p.slot == "S25-Z":  # its second claim, net at 0/0, with every variant's net
+        found.net_claim = claim("net_bp_trade")
+        found.second = found.net_claim.value
+    return found
+
+
+def simulate_jobs(block: Block, jobs: list[Any]) -> list[Path]:
+    """Each day's simulated runs, a day per worker process: at most 6 workers, and
+    fewer while 6 x one day's peak resident memory would pass 24 GB. The first day
+    runs alone in a fresh process to measure that peak; each later batch of days
+    runs in fresh processes as many as the largest peak so far allows."""
+    from concurrent.futures import ProcessPoolExecutor
+    from multiprocessing import get_context
+
+    from trading_research.pipeline.short_horizon import heldout_passive as hp
+
+    requested = max(1, min(hp.SIMULATOR_WORKERS_MAX, block.study.workers))
+    if requested == 1:
+        return [hp.run_variants(job) for job in jobs]
+    paths: list[Path] = []
+    peak, workers = 0, 1
+    while len(paths) < len(jobs):
+        batch = jobs[len(paths) : len(paths) + workers]
+        with ProcessPoolExecutor(max_workers=len(batch), mp_context=get_context("spawn")) as pool:
+            done = list(pool.map(hp.run_measured, batch))
+        paths += [path for path, _ in done]
+        peak = max(peak, *(rss for _, rss in done))
+        workers = hp.simulator_workers(requested, peak)
+    block.notes.append(f"simulator: peak {peak} bytes for one day, {workers} workers")
+    return paths
 
 
 def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
                 flag_sets: list[np.ndarray], *, kills: bool = True) -> pd.DataFrame:  # fmt: skip
     """Every passive run of every day, a day per worker process; days on disk are kept.
     Without ``kills`` only the true run of each slot (the gap days put back)."""
-    from concurrent.futures import ProcessPoolExecutor
-    from multiprocessing import get_context
-
     from trading_research.pipeline.short_horizon.heldout_passive import (
         Run,
         VariantJob,
         measured_runs,
-        run_variants,
         variants,
     )
     from trading_research.pipeline.short_horizon.plan import midnight_ns
@@ -735,17 +873,83 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
             runs += measured_runs(p.slot, p.cell, own, measured, sets, fill=block.name == "H")
         jobs.append(VariantJob(block.study.repo, block.study.symbol, day, block.access, tuple(runs),
                                block.flags_ns, block.threshold, float(block.fitted["sigma_ref"]), out))  # fmt: skip
-    workers = max(1, min(6, block.study.workers))
-    if workers == 1:
-        paths = [run_variants(job) for job in jobs]
-    else:
-        with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
-            paths = list(pool.map(run_variants, jobs))
+    paths = simulate_jobs(block, jobs)
     return (
         pd.concat([pd.read_parquet(path) for path in paths], ignore_index=True)
         if paths
         else pd.DataFrame()
     )
+
+
+def hold_table_of(block: Block, day: date, hold_ns: int) -> Any:
+    """The day's hold table at 10 ms, built again as :func:`day_context` builds it."""
+    from trading_research.backtest.taker import TakerBook, TakerSettings
+    from trading_research.search_engine.walk_tables import WalkTable, hold_table
+
+    book = TakerBook.from_frame(block.book(day), day, funding=block.funding(day))
+    walk = WalkTable.from_book(book, sl.clip_for(block.study.symbol))
+    return hold_table(walk, hold_ns, TakerSettings())
+
+
+def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[PassiveSlot],
+                    days: list[date], stale: set[date], rows: pd.DataFrame) -> tuple[set[date], pd.DataFrame]:  # fmt: skip
+    """The one-day shift from the previous kept day, circularly over the days no run
+    flagged stale, so it steps over excluded days. A day whose previous kept day is
+    not the day its shift read is shifted again (a taker slot on its rebuilt hold
+    table, a passive slot simulated again); a day a new shift run flags stale is
+    left out in turn (any run's flag counts), until no day changes."""
+    from trading_research.pipeline.short_horizon.heldout_passive import VariantJob, shifted_run
+    from trading_research.pipeline.short_horizon.plan import midnight_ns
+
+    n = len(days)
+    passive_from = {i: (i - 1) % n for i in range(n)}
+    while True:
+        kept = [i for i, d in enumerate(days) if d not in stale]
+        wanted = {i: kept[k - 1] for k, i in enumerate(kept)} if len(kept) > 1 else {}
+        tables: dict[tuple[int, int], Any] = {}
+        changed = False
+        for t in takers:
+            hold = round(parse_key(t.key).hold_s * 1e9)
+            for i, j in wanted.items():
+                if t.shifted_from.get(i, j) != j:
+                    if (i, hold) not in tables:
+                        tables[i, hold] = hold_table_of(block, days[i], hold)
+                    t.shift(i, tables[i, hold], j)
+                    changed = True
+        stale |= {days[i] for t in takers for i in t.stale}
+        redo = {i: j for i, j in wanted.items() if passive and passive_from[i] != j}
+        if redo:
+            jobs = [VariantJob(block.study.repo, block.study.symbol, days[i], block.access,
+                               tuple(shifted_run(p.slot, p.cell, p.decisions[p.cell.key][j],
+                                                 midnight_ns(days[i]), midnight_ns(days[j])) for p in passive),
+                               block.flags_ns, block.threshold, float(block.fitted["sigma_ref"]),
+                               block.work / "passive_shifted" / days[j].isoformat())
+                    for i, j in redo.items()]  # fmt: skip
+            new = pd.concat([pd.read_parquet(path) for path in simulate_jobs(block, jobs)])
+            again = rows["variant"].eq("shifted") & rows["day"].isin(
+                [days[i].isoformat() for i in redo]
+            )
+            rows = pd.concat([rows[~again], new], ignore_index=True)
+            stale |= {date.fromisoformat(d) for d in new.loc[new["excluded"].astype(bool), "day"]}
+            passive_from.update(redo)
+        if not changed and not redo:
+            return stale, rows
+
+
+def failures(rows: pd.DataFrame) -> list[dict[str, Any]]:
+    """Each simulated run that raised an accounting fault (its slot is void, K-acct)."""
+    if not len(rows) or "accounting_failed" not in rows:
+        return []
+    failed = rows[rows["accounting_failed"].fillna("").astype(str).ne("")]
+    columns = ["day", "run_slot", "variant", "accounting_failed"]
+    return [{str(k): v for k, v in row.items()} for row in failed[columns].to_dict("records")]
+
+
+def unreadable(block: Block, stale: set[date]) -> bool:
+    """More than a quarter of the block's planned days excluded: the loader's
+    exclusions and the days any run of the read flagged stale, each day once."""
+    excluded = (set(block.days_planned) - set(block.validated["usable"])) | stale
+    return bool(sl.block_unreadable(len(excluded), max(1, len(block.days_planned))))
 
 
 def flag_sets(block: Block, days: list[date]) -> tuple[int, list[np.ndarray]]:
@@ -763,7 +967,8 @@ def flag_sets(block: Block, days: list[date]) -> tuple[int, list[np.ndarray]]:
 def compute_block(block: Block, *, days: list[date] | None = None,
                   kills: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:  # fmt: skip
     """Every slot's per-day values on the block's usable days (or on ``days``), a
-    day flagged stale in any run left out of every series; and what the read
+    day flagged stale in any run left out of every series (the one-day shift
+    stepping over it: :func:`step_over_stale`); and what the read
     records beside them. Without ``kills``, the true runs only (the gap days put
     back: the simulator's placebos, measurements and brackets are not run)."""
     from trading_research.pipeline.short_horizon.fits import rank_ic
@@ -823,18 +1028,26 @@ def compute_block(block: Block, *, days: list[date] | None = None,
         )
     stale = {days[i] for t in takers for i in t.stale}
     if len(rows):
-        stale |= {date.fromisoformat(d) for d in rows.loc[rows["excluded"], "day"]}
+        stale |= {date.fromisoformat(d) for d in rows.loc[rows["excluded"].astype(bool), "day"]}
+    if kills and days:
+        stale, rows = step_over_stale(block, takers, passive, days, stale, rows)
     keep = np.array([d not in stale for d in days], dtype=bool)
     series = {slot: subset(s, keep) for slot, s in series.items()}
     in_block = [a for a in block.detector["alarms"]
                 if pd.Timestamp(a["timestamp"]).date() >= sa.BLOCKS[block.name][0]]  # fmt: skip
     kept = [d for d in days if d not in stale]
+    shift = (
+        {d.isoformat(): kept[k - 1].isoformat() for k, d in enumerate(kept)}
+        if len(kept) > 1
+        else {}
+    )
     info = {"usable_days": [d.isoformat() for d in days], "stale_days": sorted(d.isoformat() for d in stale),
-            "excluded": block.validated["reasons"], "unreadable": block.validated["unreadable"],
+            "one_day_shift_from": shift if kills else {},
+            "excluded": block.validated["reasons"], "unreadable": unreadable(block, stale),
             "gap_days": [d.isoformat() for d in block.validated["gap_days"]],
-            "alarms_in_block": in_block, "passive_runs": len(rows),
+            "alarms_in_block": in_block, "passive_runs": len(rows), "accounting_failures": failures(rows),
             "flag_days": [d.isoformat() for d in usable], "flags_in_block": n_flags,
-            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}}  # fmt: skip
+            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}, "notes": list(block.notes)}  # fmt: skip
     if kills and block.name == "H" and len(rows):
         info["fill_rules"] = {p.slot: fill_rules(rows, p.slot, kept) for p in passive
                               if p.cell.kind == "entry"}  # fmt: skip

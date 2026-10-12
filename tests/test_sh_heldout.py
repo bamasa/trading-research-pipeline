@@ -14,6 +14,7 @@ import pytest
 
 from trading_research.pipeline.regime import NS_PER_HOUR, usable_hours
 from trading_research.pipeline.short_horizon import heldout as ho
+from trading_research.pipeline.short_horizon import statuses as st
 from trading_research.pipeline.short_horizon.passive import SimCell
 from trading_research.search_engine.tapes import GUARD_WINDOWS_H, CandidateTape
 
@@ -172,14 +173,28 @@ def test_the_put_back_view_reads_the_gap_days_as_usable_with_the_threshold_lifte
 
 
 def test_a_taker_slot_reports_extras_only_for_a_window_or_a_control_fit() -> None:
+    skips = {f"skipped/{name}" for name in ho.PLACEBO_SKIPS}
     plain = ho.TakerSlot("S25", S25, [], DAYS, 2)
-    assert plain.window_h == 0 and plain.extra() == {}
+    assert plain.window_h == 0 and set(plain.extra()) == skips
     guarded = ho.TakerSlot("S-C", C_KEY, [S25], DAYS, 2, [np.zeros(0, dtype=np.int64)] * 3)
-    assert guarded.window_h == 4 and set(guarded.extra()) == {"guarded", "twin", "flagsets"}
+    assert guarded.window_h == 4 and set(guarded.extra()) == {"guarded", "twin", "flagsets", *skips}
     assert guarded.extra()["flagsets"].shape == (3, 4) and np.isnan(guarded.extra()["twin"]).all()
     network = ho.TakerSlot("S-R", R_KEY, [], DAYS, 2)
     network.has_control = True
-    assert set(network.extra()) == {"control_ic_label", "control_ic_move"}
+    assert set(network.extra()) == {"control_ic_label", "control_ic_move", *skips}
+
+
+def test_a_placebo_skips_and_counts_an_entry_beyond_the_book_on_its_own_side() -> None:
+    net = np.array([[1.0, 2.0, 4.0], [-1.0, -2.0, -4.0]])  # long row first, as the tables hold them
+    skip = np.array([[False, True, False], [False, False, False]])
+    table = SimpleNamespace(net=net, notional=np.full((2, 3), 100.0), skip=skip)
+    rows = np.array([0, 1, 2])
+    value, skipped = ho._lookup(table, rows, np.ones(3, dtype=np.int64))  # all-long skips row 1
+    assert skipped == 1 and value == pytest.approx((1.0 + 4.0) / 200.0 * 1e4)
+    value, skipped = ho._lookup(table, rows, -np.ones(3, dtype=np.int64))
+    assert skipped == 0 and value == pytest.approx(-7.0 / 300.0 * 1e4)
+    value, skipped = ho._lookup(table, rows[1:2], np.ones(1, dtype=np.int64))
+    assert skipped == 1 and np.isnan(value)
 
 
 def test_run_passive_without_kills_is_the_true_run_of_each_slot(
@@ -208,3 +223,48 @@ def test_run_passive_without_kills_is_the_true_run_of_each_slot(
     names = [r.variant for r in seen[0].runs]
     assert names[:2] == ["true", "flipped"] and "regime/none" in names and "flagset/0" in names
     assert "exit/passive" in names and "fill/touch" not in names and seen[0].out.name == "passive"
+
+
+def test_s25_z_carries_its_net_claim_with_every_variants_net() -> None:
+    p = ho.PassiveSlot("S25-Z", SimCell("S25-Z", S25, "entry", 50.0, fees="zero"), [], ic=[0.1] * 4)
+    rows = _rows(DAYS, {"true": 1.0, "flipped": -1.0, "latency": 0.5})
+    rows["run_slot"], rows["net_bp_trade"] = "S25-Z", rows["net_per_100"] * 10.0
+    rows["gross_bp_trade"] = rows["net_per_100"] + 0.5
+    s = ho.passive_series(p, rows, DAYS, 0, 0, True)
+    assert s.value.tolist() == [1.5, 2.5, 3.5, 4.5] and s.net_claim is not None
+    assert s.net_claim.value.tolist() == [10.0, 20.0, 30.0, 40.0] == s.second.tolist()
+    assert s.net_claim.flipped.tolist() == [-10.0, 0.0, 10.0, 20.0]
+    assert s.net_claim.latency.tolist() == [5.0, 15.0, 25.0, 35.0]
+    kept = np.array([True, False, True, True])
+    assert st.subset(s, kept).net_claim.value.tolist() == [10.0, 30.0, 40.0]
+
+
+def test_ps_first_day_reads_fs_last_day_when_it_is_usable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from trading_research.data import study_loader as sl
+
+    p_days = (date(2025, 11, 17), date(2025, 11, 18))
+    exclusions: dict[date, list[str]] = {date(2025, 11, 16): []}
+    seen: list[date] = []
+
+    def load(_symbol: str, day: date, _root: Any, **_: Any) -> Any:
+        seen.append(day)
+        return SimpleNamespace(exclusions=exclusions[day])
+
+    monkeypatch.setattr(sl, "load_book_day", load)
+    study = SimpleNamespace(symbol="BTCUSDT", roots=SimpleNamespace(book="book"))
+
+    def block(name: str, days: tuple[date, ...]) -> Any:
+        found = ho.Block(study, name, None, days, values={("data", "max_sequence_gaps"): 3})  # type: ignore[arg-type]
+        found.__dict__["validated"] = {"usable": list(days), "gap_days": []}
+        monkeypatch.setattr(found, "events", lambda _day: None)
+        return found
+
+    p = block("P", p_days)
+    assert (
+        p.history == [date(2025, 11, 16)] and not p.cold(p_days[0]) and seen == [date(2025, 11, 16)]
+    )
+    assert p.previous(p_days[0]) == date(2025, 11, 16) and p.put_back().history == p.history
+    exclusions[date(2025, 11, 16)] = [sl.SEQUENCE_GAPS]
+    assert block("P", p_days).cold(p_days[0])
+    f = block("F", (date(2025, 8, 21), date(2025, 8, 22)))
+    assert f.history == [] and f.cold(date(2025, 8, 21)) and not f.cold(date(2025, 8, 22))

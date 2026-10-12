@@ -113,6 +113,17 @@ def score_cell(
     rows = tape.rows
     if len(rows) and rows[-1] >= table.rows:
         raise TapeError("the tape's rows run past the day's book")
+    return score_sides(table, rows, side, events)
+
+
+def score_sides(
+    table: HoldTable, rows: np.ndarray, side: np.ndarray, events: np.ndarray | None = None
+) -> TableTrades:
+    """Steps 2 and 3 on decided ``side`` at table ``rows`` (in time order, repeats
+    allowed: a repeated row is busy after its first entry), one entry per event
+    where ``events`` are given: what :func:`score_cell` does after deciding."""
+    rows = np.asarray(rows, dtype=np.int64)
+    side = np.asarray(side, dtype=np.int64)
     decided = side != 0
     in_hours = decided & table.allowed[rows]
     fills = table.has_entry[rows]
