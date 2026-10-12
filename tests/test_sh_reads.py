@@ -95,10 +95,12 @@ def test_a_void_r_is_never_tested_and_f_is_assessed_on_all_of_f(tmp_path: Any) -
     _write(study, "H", h)
     found = reads.statuses_f(study, series, [ON_D, ON_H, ON_F], _registration())  # type: ignore[arg-type]
     assert not found["R_void"] and found["R"]["S-C"]["outcome"] == "supported"
+    assert found["status_windows"] == {"S-C": ["2025-08-21", F_DAYS[49].isoformat()]}
     _write(study, "H", h | {"info": {"alarms_in_block": []}})  # H's run recorded no alarm
     found = reads.statuses_f(study, series, [ON_D, ON_H, ON_F], _registration())  # type: ignore[arg-type]
     assert found["R_void"] and found["R"]["S-C"]["outcome"] == "void"
     assert found["split"]["on_all_of_F"] and found["split"]["reason"] == "R void"
+    assert found["status_windows"] == {"S-C": ["2025-08-21", "2025-11-16"]}
     assert found["after_F"]["S-C"].endswith(", assessed on all of F")
 
 
@@ -114,3 +116,38 @@ def test_r_found_void_on_p_scores_p_with_the_full_bar(tmp_path: Any) -> None:
     moved = ON_F | {"timestamp": f"{F_DAYS[51]}T12:00:00+00:00"}
     void = reads.statuses_p(study, series, alarms=[ON_D, ON_H, moved], registration=_registration())  # type: ignore[arg-type]
     assert void["R_void"] and void["statuses"]["S-C"] == "confirmed"
+
+
+def _s25(days: list[date]) -> Any:
+    from dataclasses import replace
+
+    return replace(_slot(days, 2.0 + np.random.default_rng(2).normal(0, 1, len(days))), slot="S25",
+                   on_s25_signal=True)  # fmt: skip
+
+
+def test_a_slot_on_s25s_signal_reports_kills_and_placebos_inside_its_information_set() -> None:
+    usable = [d for d in H_DAYS if d not in (date(2025, 7, 20), date(2025, 8, 10))]
+    s = _s25(usable)
+    found = reads.beside("H", {"S25": s}, reads.NO_INFO, {}, np.zeros(0, np.int64),
+                         {"S25": (H_DAYS[0], date(2025, 7, 31))})["S25"]  # fmt: skip
+    inside = found["inside_s25_information_set"]
+    assert set(inside) == {"all_of_H", "H_2025_08_01_to_08_20"}
+    late = inside["H_2025_08_01_to_08_20"]
+    assert late["days"] == 19 and late["label"] == "inside S25's information set"
+    assert [k["name"] for k in late["kills"]][:3] == ["K1", "K-label", "K-placebo"]
+    assert set(late["placebos"]) == {"flipped", "shifted", "long_only", "short_only", "random_p95"}
+    assert inside["all_of_H"]["days"] == 42 and found["gap_days_included"]["days"] == 23
+
+
+def test_the_gap_days_put_back_are_those_inside_the_status_window() -> None:
+    gaps = [date(2025, 7, 20), date(2025, 8, 10)]
+    usable = [d for d in H_DAYS if d not in gaps]
+    back = _s25(gaps)
+    found = reads.beside("H", {"S25": _s25(usable)}, reads.NO_INFO, {"S25": back}, np.zeros(0, np.int64),
+                         {"S25": (H_DAYS[0], date(2025, 7, 31))})["S25"]  # fmt: skip
+    assert found["gap_days_included"]["gap_days"] == 1 and found["gap_days_included"]["days"] == 24
+    whole = reads.beside(
+        "H", {"S25": _s25(usable)}, reads.NO_INFO, {"S25": back}, np.zeros(0, np.int64), {}
+    )
+    assert whole["S25"]["gap_days_included"]["gap_days"] == 2
+    assert whole["S25"]["gap_days_included"]["days"] == 44

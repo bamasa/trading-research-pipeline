@@ -149,38 +149,74 @@ def measured(series: Any, days: list[date] | None = None) -> dict[str, Any]:
             "median_day": float(np.median(values)) if len(values) else None}  # fmt: skip
 
 
+#: A status window: its first and last calendar day (the usable days between are its days).
+Window = tuple[date, date]
+
+
+def within(days: list[date], window: Window) -> list[date]:
+    return [d for d in days if window[0] <= d <= window[1]]
+
+
+def spans(windows: dict[str, Window]) -> dict[str, list[str]]:
+    """Each slot's status window as recorded: a slot not taken to F has all of F."""
+    return {slot: [w[0].isoformat(), w[1].isoformat()] for slot, w in windows.items()}
+
+
+def information_set(s: Any, days: list[date]) -> dict[str, Any]:
+    """A slot on S25's signal on days inside S25's information set: its numbers with
+    its kills and placebos computed as a status would compute them, a measurement."""
+    from dataclasses import asdict
+
+    from trading_research.pipeline.short_horizon import statuses as st
+
+    mask = s.mask(days)
+    return measured(s, days) | {"label": "inside S25's information set",
+                                "kills": [asdict(k) for k in st.kills(s, mask)],
+                                "placebos": st.placebo_means(s, mask)}  # fmt: skip
+
+
 def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[str, Any],
-           flags_ns: Any, windows: dict[str, list[date]]) -> dict[str, dict[str, Any]]:  # fmt: skip
+           flags_ns: Any, windows: dict[str, Window]) -> dict[str, dict[str, Any]]:  # fmt: skip
     """What the read reports beside each slot's status, every one a measurement: its
-    numbers on all of the block; for a slot with a regime window above 0, its
-    regime attribution; its regime, passive-exit and control-IC measurements; on
-    H, FILL on its stream; and its verdict's numbers on its status window
-    (``windows``) with the days excluded for sequence gaps put back (``gaps``)."""
+    numbers on all of the block; for a slot on S25's signal, its numbers with kills
+    and placebos inside S25's information set (H from 2025-08-01, all of H, F, P);
+    for a slot with a regime window above 0, its regime attribution; its regime,
+    passive-exit and control-IC measurements; on H, FILL on its stream; and its
+    verdict's numbers on its status window (``windows``, the whole block by
+    default) with the days excluded for sequence gaps inside it put back (``gaps``)."""
     import numpy as np
 
     from trading_research.pipeline.short_horizon.heldout_measures import attribution, measured_rows
-    from trading_research.pipeline.short_horizon.statuses import merge
+    from trading_research.pipeline.short_horizon.statuses import S25_WINDOW_END, merge
 
     drawn = [date.fromisoformat(d) for d in info["flag_days"]]
     out: dict[str, dict[str, Any]] = {}
     for slot, s in series.items():
         found: dict[str, Any] = {f"all_of_{block}": measured(s)}
+        if s.on_s25_signal:
+            inside = {f"all_of_{block}": information_set(s, s.days)}
+            if block == "H":
+                inside["H_2025_08_01_to_08_20"] = information_set(
+                    s, [d for d in s.days if d > S25_WINDOW_END]
+                )
+            found["inside_s25_information_set"] = inside
         policy = f"{'guard' if s.kind == 'maker' else 'pull'}_{s.window_h}h"
         found["regime_attribution"] = attribution(
             s, flags_ns, drawn, info["flags_in_block"], policy
         )
         found["measured"] = measured_rows(s)
-        window = windows.get(slot, s.days)
-        skips = {k.removeprefix("skipped/"): int(np.nansum(v[s.mask(window)]))
+        window = windows.get(slot, sa.BLOCKS[block])
+        days = within(s.days, window)
+        skips = {k.removeprefix("skipped/"): int(np.nansum(v[s.mask(days)]))
                  for k, v in s.extra.items() if k.startswith("skipped/")}  # fmt: skip
         if skips:  # beside K-placebo and K-drift: entries each placebo skipped in the window
             found["placebo_skips"] = skips
-        if slot in gaps:
-            back = gaps[slot]
-            found["gap_days_included"] = measured(merge(s, back), [*window, *back.days])
-            found["gap_days_included"]["gap_days"] = len(back.days)
+        back = within(gaps[slot].days, window) if slot in gaps else []
+        if back:
+            found["gap_days_included"] = measured(merge(s, gaps[slot]), [*days, *back])
         else:
-            found["gap_days_included"] = measured(s, window) | {"gap_days": 0}
+            found["gap_days_included"] = measured(s, days)
+        found["gap_days_included"]["gap_days"] = len(back)
         if slot in info.get("fill_rules", {}):
             found["fill_rules"] = info["fill_rules"][slot]
         out[slot] = found
@@ -206,8 +242,9 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
     preset = preset_on_d(study)
     masks, windows = {}, {}
     for slot, s in series.items():
-        window = [d for d in s.days if d <= st.S25_WINDOW_END] if s.on_s25_signal else s.days
-        masks[slot], windows[slot] = s.mask(window), window
+        first, last = sa.BLOCKS["H"]
+        windows[slot] = (first, st.S25_WINDOW_END if s.on_s25_signal else last)
+        masks[slot] = s.mask(within(s.days, windows[slot]))
     found = st.family(series, masks, "H", preset)
     out = {slot: a.record() for slot, a in found.items()}
     if "S25-Z" in series:
@@ -222,7 +259,8 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
             )
     void = None if registration is None else r_void(registration, alarms or [])
     return {"assessments": out, "statuses": {slot: a["status"] for slot, a in out.items()},
-            "taken_to_F": taken, "measurements": measurements, "R_void": void}  # fmt: skip
+            "taken_to_F": taken, "measurements": measurements, "R_void": void,
+            "status_windows": spans(windows)}  # fmt: skip
 
 
 def _alarm_keys(alarms: list[dict[str, Any]], block: str) -> set[tuple[Any, str]]:
@@ -319,11 +357,18 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
     qualifying = [s for s in taken if after[s].split(",")[0] in ("candidate", "exploratory: significant on F")
                   and found[s].status == "passes"]  # fmt: skip
     statuses = {slot: after.get(slot, status) for slot, status in before.items()}
-    windows = {slot: list(split.minus) for slot in taken}
+    first, last = sa.BLOCKS["F"]
+    before_b = (
+        (first, split.b - timedelta(days=1))
+        if split.b is not None and not split.on_all_of_f
+        else (first, last)
+    )
+    windows = dict.fromkeys(taken, before_b)  # a slot not taken to F: F as one whole block
     return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": statuses,
             "after_F": after, "split": {"b": None if split.b is None else split.b.isoformat(),
             "minus": len(split.minus), "plus": len(split.plus), "on_all_of_F": split.on_all_of_f,
             "reason": split.reason}, "R_void": void, "R": r, "qualifying_for_P": qualifying,
+            "status_windows": spans({slot: windows.get(slot, (first, last)) for slot in series}),
             "measurements": beside("F", series, info or NO_INFO, gaps or {}, flags_ns, windows)}  # fmt: skip
 
 
@@ -358,6 +403,7 @@ def statuses_p(study: Study, series: dict[str, Any], info: dict[str, Any] | None
             assessment.status = "void" if assessment.void else ""
         final[slot] = st.after_p(f["after_F"][slot].split(",")[0], assessment, slot in supported)
     return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": final, "R_void": void,
+            "status_windows": spans(dict.fromkeys(series, sa.BLOCKS["P"])),
             "measurements": beside("P", series, info or NO_INFO, gaps or {}, flags_ns, {})}  # fmt: skip
 
 
