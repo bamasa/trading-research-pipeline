@@ -187,3 +187,16 @@ def test_every_kill_of_s25_z_reads_both_claims() -> None:
     assert st.s25_z(gross, window).status == "killed"
     net.value = np.full(len(H_DAYS), -1.0)
     assert {k.name for k in st.kills(gross, window) if k.fired} >= {"K2"}
+
+
+def test_the_mde_on_f_and_p_uses_the_usable_days_of_the_series_assessed() -> None:
+    f_days = [date(2025, 8, 21) + timedelta(days=i) for i in range(11)]
+    value = np.r_[np.full(6, 3.0), np.full(5, -1.0)]  # mean 1.18: no kill, not the bar
+    s = slot_days(days=f_days, mde=1.0)
+    s.value, s.latency = value, value - 0.1
+    on_f = st.family({"S-C": s}, {"S-C": s.mask(f_days)}, "F", {})["S-C"]
+    assert on_f.bar["mde"] == pytest.approx(2.0)  # 1.0 x sqrt(44 / 11)
+    assert on_f.status == "inconclusive, below the minimum detectable effect"
+    assert st.block_mde(s, s.mask(f_days), "H") == 1.0
+    s.on_s25_signal = True
+    assert st.block_mde(s, s.mask(f_days[:6]), "P") == pytest.approx(2.0)  # 1.0 x sqrt(24 / 6)

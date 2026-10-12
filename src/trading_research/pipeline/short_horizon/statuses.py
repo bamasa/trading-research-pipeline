@@ -256,17 +256,34 @@ def _screen(s: SlotDays, mask: np.ndarray, study_voids: Sequence[str]) -> Assess
     return found
 
 
+#: The days of H's series the frozen MDE assumes: 44, and 24 for a slot on S25's signal.
+MDE_DAYS_H = {False: 44, True: 24}
+
+
+def block_mde(s: SlotDays, mask: np.ndarray, block: str) -> float | None:
+    """The MDE the "below the minimum detectable effect" label reads on ``block``:
+    the frozen one on H; on F (F- or all of F) and P the same formula with the
+    frozen sigma_D and share and the usable days of the series assessed in place
+    of H's, that is the frozen MDE times sqrt(H's days / the usable days)."""
+    if s.mde is None or block == "H":
+        return s.mde
+    days = int(mask.sum())
+    return float(s.mde * math.sqrt(MDE_DAYS_H[s.on_s25_signal] / days)) if days else math.inf
+
+
 def _barred(s: SlotDays, mask: np.ndarray, found: Assessment, passes_holm: bool, block: str,
             passes_word: str) -> Assessment:  # fmt: skip
     """Precedence steps 4 and 5 for a slot no earlier step settled."""
     series = _series(s, s.value, mask)
     result = bar(series, passes_holm, MIN_DAYS[block])
+    mde = block_mde(s, mask, block)
     found.bar = {k: getattr(result, k) for k in result.__dataclass_fields__} | {
-        "passes": result.passes
+        "passes": result.passes,
+        "mde": mde,
     }
     if result.passes:
         found.status = passes_word
-    elif s.mde is not None and math.isfinite(found.mean) and abs(found.mean) < s.mde:
+    elif mde is not None and math.isfinite(found.mean) and abs(found.mean) < mde:
         found.status = "inconclusive, below the minimum detectable effect"
     else:
         found.status = "inconclusive"
