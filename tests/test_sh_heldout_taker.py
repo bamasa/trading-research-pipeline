@@ -161,9 +161,64 @@ def test_a_passive_slots_shift_is_simulated_again_from_the_previous_kept_day(
     stale, out = ho.step_over_stale(block, [], [p], days, {days[1]}, rows)  # type: ignore[arg-type]
     assert stale == {days[1]} and [job.day for job in seen] == [days[2]]
     run = seen[0].runs[0]
-    assert run.variant == "shifted" and seen[0].out.name == days[0].isoformat()
+    assert run.variant == "shifted" and seen[0].out.name == "round_1"
     assert run.decisions.stamps_ns.tolist() == [10 - midnight(days[0]) + midnight(days[2])]
     assert out.sort_values("day")["net_per_100"].tolist() == [1.0, 1.0, 7.0, 1.0]
+
+
+def test_on_h_a_slot_on_s25s_signal_wraps_its_first_days_shift_within_07_31(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """07-08 takes the tape of the last kept day at or before 07-31, never one from
+    08-01 (inside S25's information set); every other day and every slot not on
+    S25's signal takes the previous kept day, circularly over all of H."""
+    from trading_research.pipeline.short_horizon import statuses as st
+    from trading_research.pipeline.short_horizon.passive import Decisions, SimCell
+
+    days = [date(2025, 7, 28) + timedelta(days=i) for i in range(7)]  # 07-28 to 08-03
+    end = st.S25_WINDOW_END  # 07-31: index 3
+    every = list(range(7))
+    assert ho.shift_sources(days, every, end) == {0: 3, 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}
+    assert ho.shift_sources(days, every, None) == {0: 6, 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}
+    assert ho.shift_sources(days, [0, 1, 2, 4, 5, 6], end)[0] == 2  # 07-31 stale: 07-30
+    assert ho.shift_sources(days, [0, 4, 5], end) == {4: 0, 5: 4}  # alone before 08-01: no shift
+    assert ho.shift_sources(days, [4, 5, 6], end) == {4: 6, 5: 4, 6: 5}  # all inside: as elsewhere
+    assert ho.shift_sources(days, [2], end) == {} and ho.shift_sources(days, [], None) == {}
+    # the first day's shift (finish) and the shift stepping over 07-31 when it is stale
+    monkeypatch.setattr(
+        ho, "shift_on", lambda _table, _signal: SimpleNamespace(trades=0, stale=False)
+    )
+    monkeypatch.setattr(ho, "hold_table_of", lambda _block, day, _hold: day)
+    s25 = ho.TakerSlot("S25", KEY, [], days, 2, wrap_end=end)
+    other = ho.TakerSlot("S-C", KEY, [], days, 2)
+    for slot in (s25, other):
+        slot.signals = {
+            i: ho.SignalTape(np.zeros(0, np.int64), np.zeros(0, np.int64), None) for i in every
+        }
+        slot.first = days[0]
+        slot.finish()
+        slot.shifted_from |= {i: i - 1 for i in range(1, 7)}
+    assert s25.shifted_from[0] == 3 and other.shifted_from[0] == 6
+    stale, _ = ho.step_over_stale(SimpleNamespace(), [s25, other], [], days, {days[3]}, None)  # type: ignore[arg-type]
+    assert stale == {days[3]} and s25.shifted_from[0] == 2 and other.shifted_from[0] == 6
+    assert s25.shifted_from[4] == 2 and other.shifted_from[4] == 2
+    # a passive slot on S25's signal: its first day's shifted run reads 07-31's decisions
+    seen: list[Any] = []
+    monkeypatch.setattr(ho, "simulate_jobs", lambda _block, jobs: seen.extend(jobs) or [])
+    own = [Decisions(np.array([midnight(d) + 1000 + i], np.int64), np.array([1]), np.array([1.0]))
+           for i, d in enumerate(days)]  # fmt: skip
+    p = ho.PassiveSlot("S25-Z", SimCell("S25-Z", KEY, "entry", 5.0, fees="zero"), [],
+                       decisions={KEY: own}, wrap_end=end)  # fmt: skip
+    block = SimpleNamespace(study=SimpleNamespace(scale=SimpleNamespace(random_direction_draws=0), workers=1,
+                                                  repo="repo", symbol="BTCUSDT"), work=Path("work"),
+                            access=None, flags_ns=np.zeros(0, np.int64), threshold=9, name="H",
+                            fitted={"sigma_ref": 1.0})  # fmt: skip
+    ho.run_passive(block, [p], days, [], kills=True)  # type: ignore[arg-type]
+    shifted = [next(r for r in job.runs if r.variant == "shifted") for job in seen]
+    assert [
+        int(r.decisions.stamps_ns[0] - midnight(d)) - 1000
+        for r, d in zip(shifted, days, strict=True)
+    ] == [3, 0, 1, 2, 3, 4, 5]
 
 
 def midnight(day: date) -> int:

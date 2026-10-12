@@ -221,10 +221,11 @@ def simulate_batched(jobs: Sequence[Any], measure: Callable[[Any], tuple[Any, in
     return results, peak, workers
 
 
-def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_start: int,
+def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions | None, day_start: int,
              previous_start: int, neighbours: list[tuple[SimCell, Decisions]], draws: int,
              rngs: list[np.random.Generator]) -> list[Run]:  # fmt: skip
-    """Every run a passive slot's kills read on one day."""
+    """Every run a passive slot's kills read on one day (no shifted run on a day
+    without a shift source: ``previous`` None)."""
     magnitude = (
         np.abs(own.strength_bp) if len(own.strength_bp) == len(own.side) else np.ones(len(own.side))
     )
@@ -241,7 +242,8 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
             Run(slot, "long_only", cell, sided(np.ones_like(own.side))),
             Run(slot, "short_only", cell, sided(-np.ones_like(own.side))),
             Run(slot, "stale", cell, sided(own.side, own.stamps_ns + round(cell.hold_s * 1e9)))]  # fmt: skip
-    runs.append(shifted_run(slot, cell, previous, day_start, previous_start))
+    if previous is not None:
+        runs.append(shifted_run(slot, cell, previous, day_start, previous_start))
     for k in range(draws):
         runs.append(
             Run(

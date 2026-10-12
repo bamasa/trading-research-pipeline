@@ -503,6 +503,25 @@ def shift_on(table: Any, signal: SignalTape) -> Any:
     return found
 
 
+def shift_sources(days: list[date], kept: list[int], wrap_end: date | None) -> dict[int, int]:
+    """Each kept day's one-day shift source: the previous kept day, circularly over
+    the kept days (``kept``: indices into ``days``, the days no run flagged). With
+    ``wrap_end`` (on H for a slot on S25's signal: 07-31) the circle of the first
+    kept day is the kept days at or before it, so it takes the last of them, never
+    a later day's tape (inside S25's information set); when it is the only kept
+    day at or before ``wrap_end`` it has no source; the other days are unchanged."""
+    if len(kept) < 2:
+        return {}
+    out = {i: kept[k - 1] for k, i in enumerate(kept)}
+    if wrap_end is not None:
+        inside = [j for j in kept if days[j] <= wrap_end]
+        if len(inside) == 1:
+            del out[kept[0]]
+        elif inside:
+            out[kept[0]] = inside[-1]
+    return out
+
+
 @dataclass
 class TakerSlot:
     """A taker slot's per-day values, filled one day at a time."""
@@ -514,6 +533,8 @@ class TakerSlot:
     draws: int
     #: The random flag sets of the regime attribution (a slot with a window above 0).
     flag_sets: list[np.ndarray] = field(default_factory=list)
+    #: On H for a slot on S25's signal, the last day the first day's shift may read (07-31).
+    wrap_end: date | None = None
 
     def __post_init__(self) -> None:
         n = len(self.days)
@@ -653,10 +674,12 @@ class TakerSlot:
         self.flag(i, found)
 
     def finish(self) -> None:
-        """The first day's one-day shift: the last usable day's signal tape, circularly."""
-        n = len(self.days)
-        if n > 1 and self.first is not None:
-            self.shift(0, self.first, n - 1)
+        """The first day's one-day shift: the last usable day's signal tape, circularly
+        (:func:`shift_sources`: at or before ``wrap_end`` when the slot has one)."""
+        if self.first is not None:
+            source = shift_sources(self.days, list(range(len(self.days))), self.wrap_end).get(0)
+            if source is not None:
+                self.shift(0, self.first, source)
         self.first = None
 
 
@@ -691,6 +714,8 @@ class PassiveSlot:
     decisions: dict[str, list[Any]] = field(default_factory=dict)
     flagged: list[list[Any]] = field(default_factory=list)
     ic: list[float] = field(default_factory=list)
+    #: On H for a slot on S25's signal, the last day the first day's shift may read (07-31).
+    wrap_end: date | None = None
 
     @property
     def cells(self) -> list[SimCellType]:
@@ -838,6 +863,7 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
     draws = block.study.scale.random_direction_draws
     rngs = {p.slot: [np.random.default_rng(k) for k in range(draws)] for p in slots}
     out = block.work / ("passive" if kills else "passive_gap_days")
+    sources = {p.slot: shift_sources(days, list(range(len(days))), p.wrap_end) for p in slots}
     jobs = []
     for i, day in enumerate(days):
         runs = []
@@ -846,10 +872,11 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
             if not kills:
                 runs.append(Run(p.slot, "true", p.cell, own))
                 continue
-            j = (i - 1) % len(days)
+            j = sources[p.slot].get(i)  # the one-day shift's source before stale days are known
             near = [(c, p.decisions[c.key][i]) for c in p.neighbours]
-            runs += variants(p.slot, p.cell, own, p.decisions[p.cell.key][j], midnight_ns(day),
-                             midnight_ns(days[j]), near, draws, rngs[p.slot])  # fmt: skip
+            runs += variants(p.slot, p.cell, own, None if j is None else p.decisions[p.cell.key][j],
+                             midnight_ns(day), 0 if j is None else midnight_ns(days[j]), near, draws,
+                             rngs[p.slot])  # fmt: skip
             measured = [(name, c, p.decisions[c.key][i]) for name, c in p.measured]
             sets = (
                 [(flags, p.flagged[k][i]) for k, flags in enumerate(flag_sets)]
@@ -880,44 +907,53 @@ def hold_table_of(block: Block, day: date, hold_ns: int) -> Any:
 def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[PassiveSlot],
                     days: list[date], stale: set[date], rows: pd.DataFrame) -> tuple[set[date], pd.DataFrame]:  # fmt: skip
     """The one-day shift from the previous kept day, circularly over the days no run
-    flagged stale, so it steps over excluded days. A day whose previous kept day is
-    not the day its shift read is shifted again (a taker slot on its rebuilt hold
-    table, a passive slot simulated again); a day a new shift run flags stale is
-    left out in turn (any run's flag counts), until no day changes."""
+    flagged stale, so it steps over excluded days (:func:`shift_sources`, each slot
+    with its own wrap). A day whose previous kept day is not the day its shift read
+    is shifted again (a taker slot on its rebuilt hold table, a passive slot
+    simulated again); a day a new shift run flags stale is left out in turn (any
+    run's flag counts), until no day changes."""
     from trading_research.pipeline.short_horizon.heldout_passive import VariantJob, shifted_run
     from trading_research.pipeline.short_horizon.plan import midnight_ns
 
-    n = len(days)
-    passive_from = {i: (i - 1) % n for i in range(n)}
+    every = list(range(len(days)))
+    passive_from = {p.slot: shift_sources(days, every, p.wrap_end) for p in passive}
+    rounds = 0
     while True:
         kept = [i for i, d in enumerate(days) if d not in stale]
-        wanted = {i: kept[k - 1] for k, i in enumerate(kept)} if len(kept) > 1 else {}
         tables: dict[tuple[int, int], Any] = {}
         changed = False
         for t in takers:
             hold = round(parse_key(t.key).hold_s * 1e9)
-            for i, j in wanted.items():
+            for i, j in shift_sources(days, kept, t.wrap_end).items():
                 if t.shifted_from.get(i, j) != j:
                     if (i, hold) not in tables:
                         tables[i, hold] = hold_table_of(block, days[i], hold)
                     t.shift(i, tables[i, hold], j)
                     changed = True
         stale |= {days[i] for t in takers for i in t.stale}
-        redo = {i: j for i, j in wanted.items() if passive and passive_from[i] != j}
+        redo: dict[int, list[tuple[PassiveSlot, int]]] = {}  # each day's slots to shift again
+        for p in passive:
+            for i, j in shift_sources(days, kept, p.wrap_end).items():
+                if passive_from[p.slot].get(i) != j:
+                    redo.setdefault(i, []).append((p, j))
         if redo:
+            rounds += 1
             jobs = [VariantJob(block.study.repo, block.study.symbol, days[i], block.access,
                                tuple(shifted_run(p.slot, p.cell, p.decisions[p.cell.key][j],
-                                                 midnight_ns(days[i]), midnight_ns(days[j])) for p in passive),
+                                                 midnight_ns(days[i]), midnight_ns(days[j])) for p, j in pairs),
                                block.flags_ns, block.threshold, float(block.fitted["sigma_ref"]),
-                               block.work / "passive_shifted" / days[j].isoformat())
-                    for i, j in redo.items()]  # fmt: skip
+                               block.work / "passive_shifted" / f"round_{rounds}")
+                    for i, pairs in sorted(redo.items())]  # fmt: skip
             new = pd.concat([pd.read_parquet(path) for path in simulate_jobs(block, jobs)])
-            again = rows["variant"].eq("shifted") & rows["day"].isin(
-                [days[i].isoformat() for i in redo]
-            )
+            redone = {(p.slot, days[i].isoformat()) for i, pairs in redo.items() for p, _ in pairs}
+            again = rows["variant"].eq("shifted") & pd.Series(
+                [(slot, day) in redone for slot, day in zip(rows["run_slot"], rows["day"], strict=True)],
+                index=rows.index, dtype=bool)  # fmt: skip
             rows = pd.concat([rows[~again], new], ignore_index=True)
             stale |= {date.fromisoformat(d) for d in new.loc[new["excluded"].astype(bool), "day"]}
-            passive_from.update(redo)
+            for i, pairs in redo.items():
+                for p, j in pairs:
+                    passive_from[p.slot][i] = j
         if not changed and not redo:
             return stale, rows
 
@@ -960,16 +996,20 @@ def compute_block(block: Block, *, days: list[date] | None = None,
     from trading_research.pipeline.short_horizon.fits import rank_ic
     from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
     from trading_research.pipeline.short_horizon.models import in_fresh_process
-    from trading_research.pipeline.short_horizon.statuses import SlotDays, subset
+    from trading_research.pipeline.short_horizon.statuses import S25_WINDOW_END, SlotDays, subset
     from trading_research.reporting.search_keys import S25_KEY
 
     usable, draws = block.usable, block.study.scale.random_direction_draws
     days = usable if days is None else days
     n_flags, sets = flag_sets(block, usable) if kills else (0, [])
     sim_sets = sets[: block.study.scale.simulator_flag_sets]
-    takers = [TakerSlot(slot, keys[0], keys[1:], days, draws, sets)
+    wrap = S25_WINDOW_END if block.name == "H" else None  # a slot on S25's signal shifts within it
+    takers = [TakerSlot(slot, keys[0], keys[1:], days, draws, sets, wrap_end=wrap if slot == "S25" else None)
               for slot in ("S25", "S-C", "S-R") if (keys := slot_keys(block, slot))]  # fmt: skip
     passive = passive_slots(block)
+    signal_is_s25 = any(p.slot == "S-P" and p.cell.key == S25_KEY for p in passive)
+    for p in passive:
+        p.wrap_end = wrap if p.slot == "S25-Z" or signal_is_s25 else None
     wanted = {k for t in takers for k in (t.key, *t.neighbours)}
     wanted |= {c.key for p in passive for c in p.cells}
     configs = configurations([k for k in block.study.catalogue().keys if k in wanted])
@@ -1006,7 +1046,6 @@ def compute_block(block: Block, *, days: list[date] | None = None,
                                   t.random, t.flipped, t.shifted, t.long_only, t.short_only, t.cells,
                                   t.latency, void=tuple(sorted(t.void)), on_s25_signal=t.slot == "S25",
                                   window_h=t.window_h, extra=t.extra())  # fmt: skip
-    signal_is_s25 = any(p.slot == "S-P" and p.cell.key == S25_KEY for p in passive)
     for p in passive:
         on_s25 = p.slot == "S25-Z" or signal_is_s25
         series[p.slot] = passive_series(
@@ -1022,11 +1061,11 @@ def compute_block(block: Block, *, days: list[date] | None = None,
     in_block = [a for a in block.detector["alarms"]
                 if pd.Timestamp(a["timestamp"]).date() >= sa.BLOCKS[block.name][0]]  # fmt: skip
     kept = [d for d in days if d not in stale]
-    shift = (
-        {d.isoformat(): kept[k - 1].isoformat() for k, d in enumerate(kept)}
-        if len(kept) > 1
-        else {}
-    )
+    kept_i = [i for i, d in enumerate(days) if d not in stale]
+    slots: list[TakerSlot | PassiveSlot] = [*takers, *passive]
+    shift = {s.slot: {days[i].isoformat(): days[j].isoformat()
+                      for i, j in shift_sources(days, kept_i, s.wrap_end).items()}
+             for s in slots}  # fmt: skip
     info = {"usable_days": [d.isoformat() for d in days], "stale_days": sorted(d.isoformat() for d in stale),
             "one_day_shift_from": shift if kills else {},
             "excluded": block.validated["reasons"], "unreadable": unreadable(block, stale),
