@@ -152,6 +152,12 @@ def test_the_amendment_freezes_every_placeholder(dry: dict[str, Any]) -> None:
     reader = registration.value(("data", "ob200_reader_test_result"))
     assert set(reader["days"]) == {"2026-01-05", "2026-01-06", "2026-01-07"}
     assert "The ob200 reader test against" in document
+    # the amendment carries stage C's second detector over D (run, not the placeholder
+    # note of a pre-merge record) and stage D's list of the fits lacking a class
+    second = registration.value(("detector", "second_detector_D"))
+    assert second["span"] == "D" and "note" not in second
+    lacking = registration.value(("models", "fits_lacking_a_class"))
+    assert lacking == study.record("D")["fits_lacking_a_class"]
 
 
 def test_each_read_closes_its_session_with_registered_statuses(dry: dict[str, Any]) -> None:
@@ -315,6 +321,27 @@ def test_f_puts_the_gap_excluded_day_back_as_a_measurement(dry: dict[str, Any]) 
         else:  # a taker slot's days with a trade; a guard may pull the gap day
             assert whole <= back["days"] <= whole + 1, slot
     assert results["split"]["b"] == "2025-09-15" and results["split"]["on_all_of_F"]
+
+
+def test_on_h_the_one_day_shift_of_a_slot_on_s25s_signal_wraps_within_07_31(
+    dry: dict[str, Any],
+) -> None:
+    """H records each slot's shift sources: a slot on S25's signal takes, on its first
+    kept day, the last kept day at or before 07-31; every other slot the last kept
+    day of H; every later day its previous kept day."""
+    from trading_research.pipeline.short_horizon.reads import read_results
+
+    results = read_results(dry["study"], "H")
+    info = results["info"]
+    kept = sorted(set(info["usable_days"]) - set(info["stale_days"]))
+    assert len(kept) > 2 and kept[0] < "2025-07-31" < kept[-1]
+    for slot, sources in info["one_day_shift_from"].items():
+        on_s25 = "inside_s25_information_set" in results["measurements"][slot]
+        assert sources[kept[0]] == (
+            max(d for d in kept if d <= "2025-07-31") if on_s25 else kept[-1]
+        ), slot
+        assert [sources[d] for d in kept[1:]] == kept[:-1], slot
+    assert {"S25", "S25-Z"} <= set(info["one_day_shift_from"])
 
 
 def test_the_reads_carry_the_measurements_beside_every_verdict_and_beside_r(

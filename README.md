@@ -1323,6 +1323,23 @@ basis points against an 11 bp taker round trip at the base tier.
       episodes, detector bursts, a day with sequence gaps) in a temporary
       repository, with no request reaching the network, and is a test that
       checks every artefact is written
+- [x] Three reviews of the study code, each applied before any data is read:
+      the data path (each book day cut to its own UTC day, the fold-level
+      leakage test on the study's own fits over the real artefacts and a
+      mutated copy, stage 0 projecting them at the registered worker counts,
+      the reader test gating H, the dry run reading F and P end to end), the
+      statuses (K-nbhd over the whole neighbourhood, a void break test left
+      untested, the minimum detectable effect per block, S25-Z's kills on both
+      claims, K-acct and K-cap for the simulator slots, the one-day shift from
+      the signal tape stepping over stale days and wrapping within 07-31 on H,
+      P's first day reading F's last, the simulator's workers held to 24 GB)
+      and the execution (S25-Z's maker break-even with the taker exit at 5.5
+      and 1.5 bp, the making part per passive fill, an event entering at its
+      first free row, fills floored to the lot, an exit honoured before the
+      flatten, the measurements beside every verdict, the second detector
+      beside R, gross through the leaderboard); with the registration's
+      clarifications and the amendment's records these called for, and the
+      null-placeholder sha256 recomputed
 - [ ] Stage 0 on the two 2024 days, the code-freeze note, and the 200-level
       book reader proven on three 2026 days outside the study
 - [ ] Development period: the search, the placebo search and the amendment
