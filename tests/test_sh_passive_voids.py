@@ -87,3 +87,39 @@ def test_the_passive_slot_is_void_under_k_acct_or_k_cap() -> None:
     assert ho.passive_series(p, failed, DAYS, 0, 0, False).void == ("K-acct",)
     assert ho.failures(failed) == [{"day": DAYS[1].isoformat(), "run_slot": "S-P", "variant": "flipped",
                                     "accounting_failed": "RuntimeError: the filled attempts' cash"}]  # fmt: skip
+
+
+def test_simulator_workers_keep_six_peaks_within_24_gb() -> None:
+    assert hp.simulator_workers(6, int(2.9e9)) == 6
+    assert hp.simulator_workers(6, int(5e9)) == 4
+    assert hp.simulator_workers(6, int(30e9)) == 1
+    assert hp.simulator_workers(3, int(1e9)) == 3 and hp.simulator_workers(8, 0) == 6
+
+
+def test_the_first_day_measures_the_peak_and_sizes_every_later_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import concurrent.futures
+
+    batches: list[int] = []
+
+    class Inline:
+        def __init__(self, max_workers: int, **_: Any) -> None:
+            batches.append(max_workers)
+
+        def __enter__(self) -> Inline:
+            return self
+
+        def __exit__(self, *_: Any) -> None:
+            return None
+
+        def map(self, fn: Any, jobs: list[Any]) -> list[Any]:
+            return [fn(job) for job in jobs]
+
+    monkeypatch.setattr(concurrent.futures, "ProcessPoolExecutor", Inline)
+    monkeypatch.setattr(hp, "run_measured", lambda job: (job, int(7e9) if job == 3 else int(5e9)))
+    block = SimpleNamespace(study=SimpleNamespace(workers=8), notes=[])
+    assert ho.simulate_jobs(block, list(range(12))) == list(range(12))  # type: ignore[arg-type]
+    assert batches == [1, 4, 3, 3, 1] and block.notes == [
+        "simulator: peak 7000000000 bytes for one day, 3 workers"
+    ]

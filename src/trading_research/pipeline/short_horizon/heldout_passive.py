@@ -173,6 +173,25 @@ def run_variants(job: VariantJob) -> Path:
     return target
 
 
+#: The simulator's workers: at most 6, while that many peaks of one day stay within 24 GB.
+SIMULATOR_WORKERS_MAX = 6
+SIMULATOR_MEMORY_BUDGET_BYTES = 24 * 10**9
+
+
+def simulator_workers(requested: int, peak_rss: int) -> int:
+    """Simulator workers: at most 6 and the count asked for, and fewer while that
+    many times one day's peak resident memory would exceed 24 GB; at least one."""
+    allowed = SIMULATOR_MEMORY_BUDGET_BYTES // peak_rss if peak_rss > 0 else SIMULATOR_WORKERS_MAX
+    return int(max(1, min(SIMULATOR_WORKERS_MAX, requested, allowed)))
+
+
+def run_measured(job: VariantJob) -> tuple[Path, int]:
+    """:func:`run_variants` in a fresh worker, with that process's peak memory after it."""
+    from trading_research.data.study_fetch import peak_rss_bytes
+
+    return run_variants(job), peak_rss_bytes()
+
+
 def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_start: int,
              previous_start: int, neighbours: list[tuple[SimCell, Decisions]], draws: int,
              rngs: list[np.random.Generator]) -> list[Run]:  # fmt: skip

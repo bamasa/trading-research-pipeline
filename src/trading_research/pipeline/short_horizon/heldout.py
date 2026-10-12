@@ -812,17 +812,29 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
 
 
 def simulate_jobs(block: Block, jobs: list[Any]) -> list[Path]:
-    """Each day's simulated runs, a day per worker process (at most 6)."""
+    """Each day's simulated runs, a day per worker process: at most 6 workers, and
+    fewer while 6 x one day's peak resident memory would pass 24 GB. The first day
+    runs alone in a fresh process to measure that peak; each later batch of days
+    runs in fresh processes as many as the largest peak so far allows."""
     from concurrent.futures import ProcessPoolExecutor
     from multiprocessing import get_context
 
-    from trading_research.pipeline.short_horizon.heldout_passive import run_variants
+    from trading_research.pipeline.short_horizon import heldout_passive as hp
 
-    workers = max(1, min(6, block.study.workers))
-    if workers == 1:
-        return [run_variants(job) for job in jobs]
-    with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
-        return list(pool.map(run_variants, jobs))
+    requested = max(1, min(hp.SIMULATOR_WORKERS_MAX, block.study.workers))
+    if requested == 1:
+        return [hp.run_variants(job) for job in jobs]
+    paths: list[Path] = []
+    peak, workers = 0, 1
+    while len(paths) < len(jobs):
+        batch = jobs[len(paths) : len(paths) + workers]
+        with ProcessPoolExecutor(max_workers=len(batch), mp_context=get_context("spawn")) as pool:
+            done = list(pool.map(hp.run_measured, batch))
+        paths += [path for path, _ in done]
+        peak = max(peak, *(rss for _, rss in done))
+        workers = hp.simulator_workers(requested, peak)
+    block.notes.append(f"simulator: peak {peak} bytes for one day, {workers} workers")
+    return paths
 
 
 def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
@@ -1035,7 +1047,7 @@ def compute_block(block: Block, *, days: list[date] | None = None,
             "gap_days": [d.isoformat() for d in block.validated["gap_days"]],
             "alarms_in_block": in_block, "passive_runs": len(rows), "accounting_failures": failures(rows),
             "flag_days": [d.isoformat() for d in usable], "flags_in_block": n_flags,
-            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}}  # fmt: skip
+            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}, "notes": list(block.notes)}  # fmt: skip
     if kills and block.name == "H" and len(rows):
         info["fill_rules"] = {p.slot: fill_rules(rows, p.slot, kept) for p in passive
                               if p.cell.kind == "entry"}  # fmt: skip
