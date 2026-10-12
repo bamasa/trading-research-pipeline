@@ -156,6 +156,8 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
     regime attribution; its regime, passive-exit and control-IC measurements; on
     H, FILL on its stream; and its verdict's numbers on its status window
     (``windows``) with the days excluded for sequence gaps put back (``gaps``)."""
+    import numpy as np
+
     from trading_research.pipeline.short_horizon.heldout_measures import attribution, measured_rows
     from trading_research.pipeline.short_horizon.statuses import merge
 
@@ -169,6 +171,10 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
         )
         found["measured"] = measured_rows(s)
         window = windows.get(slot, s.days)
+        skips = {k.removeprefix("skipped/"): int(np.nansum(v[s.mask(window)]))
+                 for k, v in s.extra.items() if k.startswith("skipped/")}  # fmt: skip
+        if skips:  # beside K-placebo and K-drift: entries each placebo skipped in the window
+            found["placebo_skips"] = skips
         if slot in gaps:
             back = gaps[slot]
             found["gap_days_included"] = measured(merge(s, back), [*window, *back.days])

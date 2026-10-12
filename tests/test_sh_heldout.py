@@ -172,14 +172,28 @@ def test_the_put_back_view_reads_the_gap_days_as_usable_with_the_threshold_lifte
 
 
 def test_a_taker_slot_reports_extras_only_for_a_window_or_a_control_fit() -> None:
+    skips = {f"skipped/{name}" for name in ho.PLACEBO_SKIPS}
     plain = ho.TakerSlot("S25", S25, [], DAYS, 2)
-    assert plain.window_h == 0 and plain.extra() == {}
+    assert plain.window_h == 0 and set(plain.extra()) == skips
     guarded = ho.TakerSlot("S-C", C_KEY, [S25], DAYS, 2, [np.zeros(0, dtype=np.int64)] * 3)
-    assert guarded.window_h == 4 and set(guarded.extra()) == {"guarded", "twin", "flagsets"}
+    assert guarded.window_h == 4 and set(guarded.extra()) == {"guarded", "twin", "flagsets", *skips}
     assert guarded.extra()["flagsets"].shape == (3, 4) and np.isnan(guarded.extra()["twin"]).all()
     network = ho.TakerSlot("S-R", R_KEY, [], DAYS, 2)
     network.has_control = True
-    assert set(network.extra()) == {"control_ic_label", "control_ic_move"}
+    assert set(network.extra()) == {"control_ic_label", "control_ic_move", *skips}
+
+
+def test_a_placebo_skips_and_counts_an_entry_beyond_the_book_on_its_own_side() -> None:
+    net = np.array([[1.0, 2.0, 4.0], [-1.0, -2.0, -4.0]])  # long row first, as the tables hold them
+    skip = np.array([[False, True, False], [False, False, False]])
+    table = SimpleNamespace(net=net, notional=np.full((2, 3), 100.0), skip=skip)
+    rows = np.array([0, 1, 2])
+    value, skipped = ho._lookup(table, rows, np.ones(3, dtype=np.int64))  # all-long skips row 1
+    assert skipped == 1 and value == pytest.approx((1.0 + 4.0) / 200.0 * 1e4)
+    value, skipped = ho._lookup(table, rows, -np.ones(3, dtype=np.int64))
+    assert skipped == 0 and value == pytest.approx(-7.0 / 300.0 * 1e4)
+    value, skipped = ho._lookup(table, rows[1:2], np.ones(1, dtype=np.int64))
+    assert skipped == 1 and np.isnan(value)
 
 
 def test_run_passive_without_kills_is_the_true_run_of_each_slot(

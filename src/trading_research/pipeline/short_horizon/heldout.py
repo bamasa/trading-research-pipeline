@@ -54,6 +54,8 @@ from trading_research.search_engine.catalogue import parse_key
 
 #: The sequence-gap threshold of the put-back view: no day is excluded for its gaps.
 GAPS_UNBOUNDED = 2**31 - 1
+#: The taker placebos that count the entries they skip (reported beside K-placebo and K-drift).
+PLACEBO_SKIPS: tuple[str, ...] = ("flipped", "random", "long_only", "short_only")
 #: The regime windows S-P's cell is measured at beside its own, and S-M's guards.
 REGIME_POLICIES: tuple[str, ...] = ("none", "pull_4h", "pull_24h", "pull_120h")
 MAKER_GUARDS: tuple[str, ...] = tuple(
@@ -420,15 +422,21 @@ def _bp(trades: Any) -> float:
     return float(trades.day_values()["net_bp"]) if trades.trades else float("nan")
 
 
-def _lookup(table: Any, rows: np.ndarray, side: np.ndarray) -> float:
-    """The day's value of trades at ``rows`` on ``side`` from the hold table."""
+def _lookup(table: Any, rows: np.ndarray, side: np.ndarray) -> tuple[float, int]:
+    """The day's value of a placebo's trades at the true slot's entry ``rows`` on
+    ``side`` from the hold table, and how many it skips: an entry whose clip goes
+    beyond the visible book on the placebo's own side is skipped as the executor
+    skips it (counted, never priced). A skipped entry only frees the placebo
+    earlier, so the true slot's later entries stay free for it."""
     from trading_research.search_engine.walk_tables import side_index
 
-    if not len(rows):
-        return float("nan")
     own = side_index(side)
-    net, notional = table.net[own, rows], table.notional[own, rows]
-    return float(net.sum() / notional.sum() * 1e4)
+    skipped = table.skip[own, rows] if len(rows) else np.zeros(0, dtype=bool)
+    kept, own = rows[~skipped], own[~skipped]
+    if not len(kept):
+        return float("nan"), int(skipped.sum())
+    net, notional = table.net[own, kept], table.notional[own, kept]
+    return float(net.sum() / notional.sum() * 1e4), int(skipped.sum())
 
 
 @dataclass
@@ -463,10 +471,15 @@ class TakerSlot:
         self.flagsets = np.full((len(self.flag_sets), n), np.nan)
         self.control_label, self.control_move = nan(), nan()
         self.has_control = False
+        #: Entries each placebo skips (beyond the visible book on its own side), by day;
+        #: the random draws' summed over the draws.
+        self.skips = {name: np.zeros(n, dtype=np.int64) for name in PLACEBO_SKIPS}
 
     def extra(self) -> dict[str, np.ndarray]:
         """The per-day measurements beside the status (``SlotDays.extra``)."""
-        out: dict[str, np.ndarray] = {}
+        out: dict[str, np.ndarray] = {
+            f"skipped/{k}": v.astype(np.float64) for k, v in self.skips.items()
+        }
         if self.window_h > 0:
             out |= {"guarded": self.guarded, "twin": self.twin}
             if self.flag_sets:  # the gap days' pass draws none; merge fills their rows with NaN
@@ -525,11 +538,14 @@ class TakerSlot:
             self.void.add("K-cap")
         self.value[i], self.trades[i] = day.day_bp("net"), len(trades)
         self.gross[i], self.turnover[i] = float(trades["gross"].sum()), float(day.turnover)
-        self.flipped[i] = _lookup(table, rows, -side)
-        self.long_only[i] = _lookup(table, rows, np.ones_like(side))
-        self.short_only[i] = _lookup(table, rows, -np.ones_like(side))
+        self.flipped[i], self.skips["flipped"][i] = _lookup(table, rows, -side)
+        self.long_only[i], self.skips["long_only"][i] = _lookup(table, rows, np.ones_like(side))
+        self.short_only[i], self.skips["short_only"][i] = _lookup(table, rows, -np.ones_like(side))
+        self.skips["random"][i] = 0
         for k, rng in enumerate(self.rngs):
-            self.random[k, i] = _lookup(table, rows, rng.choice(np.array([-1, 1]), size=len(rows)))
+            drawn = rng.choice(np.array([-1, 1]), size=len(rows))
+            self.random[k, i], skipped = _lookup(table, rows, drawn)
+            self.skips["random"][i] += skipped
         self.latency[i] = _bp(execute_rows(ctx.late[hold], rows, side))
         for j, key in enumerate(self.neighbours):
             found = scored(key)
