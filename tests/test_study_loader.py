@@ -166,3 +166,79 @@ def test_the_tick_and_lot_come_from_the_venues_specification() -> None:
     spec = sl.fetch_instrument("BTCUSDT", opener=opener)
     assert (spec.tick, spec.lot, spec.clip) == (0.1, 0.001, 0.010)
     assert asked == [sl.INSTRUMENT_INFO_URL.format(symbol="BTCUSDT")]
+
+
+def _stamped(frame: pd.DataFrame, stamps: pd.DatetimeIndex) -> pd.DataFrame:
+    out = frame.iloc[: len(stamps)].copy()
+    out["timestamp"] = stamps
+    return out
+
+
+def _spanning(day_stamps: pd.DatetimeIndex, outside: pd.DatetimeIndex) -> pd.DataFrame:
+    """A replayed file: the day's rows, then rows stamped after its midnight."""
+    rows = book(len(day_stamps) + len(outside))
+    whole = _stamped(rows, day_stamps.append(outside)).sort_values("timestamp")
+    whole = whole.reset_index(drop=True)
+    whole.attrs["sequence_gaps"] = 0
+    return whole
+
+
+NEXT = pd.Timestamp("2024-12-06", tz="UTC")
+
+
+def _at(seconds: float) -> pd.Timestamp:
+    """``seconds`` from the next midnight (negative: before it)."""
+    return pd.Timestamp(NEXT.value + round(seconds * 1e9), tz="UTC")
+
+
+def test_rows_stamped_outside_the_day_are_cut_and_counted(tmp_path: Path) -> None:
+    before = pd.DatetimeIndex([_at(-86_400.05)])
+    inside = pd.date_range(datetime(2024, 12, 5, 12, tzinfo=UTC), periods=20, freq="100ms")
+    after = pd.date_range(NEXT, periods=7, freq="100ms")
+    frame = _spanning(before.append(inside), after)
+    loaded = sl.load_book_day("BTCUSDT", DAY, stored(tmp_path, frame), max_sequence_gaps=3)
+    assert loaded.usable and loaded.frame is not None
+    assert loaded.rows_outside_day == 8 and len(loaded.frame) == 20
+    stamps = pd.DatetimeIndex(loaded.frame["timestamp"])
+    assert stamps.min() >= pd.Timestamp(datetime(2024, 12, 5, tzinfo=UTC))
+    assert stamps.max() < NEXT
+
+
+def test_a_file_with_no_row_inside_the_day_has_no_book(tmp_path: Path) -> None:
+    frame = _spanning(pd.DatetimeIndex([], tz="UTC"), pd.date_range(NEXT, periods=5, freq="1s"))
+    loaded = sl.load_book_day("BTCUSDT", DAY, stored(tmp_path, frame), max_sequence_gaps=3)
+    assert loaded.exclusions == (sl.NO_BOOK,) and loaded.rows_outside_day == 5
+
+
+def test_the_last_rows_of_a_day_get_no_label_from_the_next_days_book(tmp_path: Path) -> None:
+    from trading_research.labels.taker_vwap import WalkedTakerLabel, forward_move_bp
+
+    inside = pd.date_range(_at(-30), periods=300, freq="100ms")
+    frame = _spanning(inside, pd.date_range(NEXT, periods=100, freq="100ms"))
+    loaded = sl.load_book_day("BTCUSDT", DAY, stored(tmp_path, frame), max_sequence_gaps=3)
+    assert loaded.frame is not None and loaded.rows_outside_day == 100
+    rows = loaded.frame
+    out = WalkedTakerLabel(5.0, clip=0.01).outcomes(rows)
+    move = forward_move_bp(rows, 5.0).to_numpy()
+    last = pd.DatetimeIndex(rows["timestamp"]) > _at(-4.9)
+    assert last.sum() > 0
+    assert out.loc[last, "long_bp"].isna().all() and np.isnan(move[last]).all()
+    assert (out["exit_index"].to_numpy()[last] >= len(rows)).all()
+    assert np.isfinite(move[~last][:100]).all()  # earlier rows keep their labels
+
+
+def test_a_flatten_after_a_feed_gap_is_flagged_stale_not_priced_on_the_next_day(
+    tmp_path: Path,
+) -> None:
+    from trading_research.backtest.taker import TakerBook
+    from trading_research.search_engine.walk_tables import WalkTable, hold_table
+
+    inside = pd.date_range(_at(-180), periods=90, freq="1s")  # to 23:58:29
+    frame = _spanning(inside, pd.DatetimeIndex([_at(0.5)]))
+    loaded = sl.load_book_day("BTCUSDT", DAY, stored(tmp_path, frame), max_sequence_gaps=3)
+    assert loaded.frame is not None and loaded.rows_outside_day == 1
+    walk = WalkTable.from_book(TakerBook.from_frame(loaded.frame, DAY), 0.01)
+    table = hold_table(walk, 120 * 1_000_000_000)
+    decision = 0  # 23:57:00, its exit decided at the 23:59 flatten
+    assert table.stale[decision]  # R16: no snapshot followed the flatten, the day is excluded
+    assert table.exit_row[decision] == len(loaded.frame) - 1

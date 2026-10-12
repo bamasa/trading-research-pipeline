@@ -129,6 +129,7 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
     excluded = log.excluded()
     days = sorted({*study.scale.days("W"), *study.scale.days("D")})
     gaps: dict[date, int] = {}
+    outside: dict[date, int] = {}
     found: dict[str, dict[str, Any]] = {}
     for day in days:
         reasons = [
@@ -142,6 +143,7 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
                                     spec_tick=spec.tick, access=access)  # fmt: skip
             reasons += list(book.exclusions)
             notes += list(book.notes)
+            outside[day] = book.rows_outside_day
             if book.sequence_gaps is not None:
                 gaps[day] = book.sequence_gaps
         if not reasons:
@@ -163,6 +165,7 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
         entry["usable"] = not entry["reasons"]
         entry["cold"] = previous_day(day, usable) is None
         entry["sequence_gaps"] = gaps.get(day)
+        entry["rows_outside_day"] = outside.get(day)
     by_reason = Counter(r for e in found.values() for r in e["reasons"])
     reader = {}
     for day in study.scale.days(sa.READER_TEST):
