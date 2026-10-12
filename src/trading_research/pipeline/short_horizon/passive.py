@@ -654,6 +654,30 @@ def record_trials(study: Any, frame: pd.DataFrame) -> dict[str, Any]:
             "ledger_rows": int(manifest["rows"]), "ledger_sha256": manifest["sha256"]}  # fmt: skip
 
 
+def passive_dsr(rows: pd.DataFrame, cells: list[SimCell], days: list[date], n_trials: int,
+                admission: dict[str, Any]) -> dict[str, float]:  # fmt: skip
+    """The deflated Sharpe ratio of S-P's and S-M's daily ``net_per_100_clip_day`` on
+    D (their cells, the days no run flagged, 0 without a fill), against N_trials and
+    the variance of the Sharpe ratios of every S-P and S-M cell simulated."""
+    from trading_research.evaluation.overfitting import deflated_sharpe_ratio, sharpe_variance
+
+    kept = kept_rows(rows)
+    wanted = [d.isoformat() for d in days if d.isoformat() not in flagged_days(rows)]
+    labels = [c.label for c in cells if c.slot in ("S-P", "S-M") and not c.measured]
+    mine = kept[kept["label"].isin(labels)]
+    panel = mine.pivot_table(index="day", columns="label", values="net_per_100", aggfunc="sum")
+    panel = panel.reindex(index=wanted, columns=labels).fillna(0.0)
+    variance = sharpe_variance(panel)
+    out: dict[str, float] = {}
+    for slot in ("S-P", "S-M"):
+        label = admission[slot]["cell"]
+        if label in panel and len(panel) >= 3:
+            out[f"{slot}/net"] = deflated_sharpe_ratio(
+                panel[label].to_numpy(), n_trials, variance
+            ).dsr
+    return out
+
+
 def run(study: Any) -> dict[str, Any]:
     """Stage C's record: every simulated cell-day, S-P's and S-M's admission, A0 and FILL."""
     from trading_research.pipeline.short_horizon.inputs import Inputs
@@ -669,6 +693,7 @@ def run(study: Any) -> dict[str, Any]:
         days=("day", "count"), mean_net_per_100=("net_per_100", "mean"), trades=("trades", "sum"),
         gross_bp_trade=("gross_bp_trade", "mean"))  # fmt: skip
     measured, trials = a0_and_fill(study, inputs)
+    recorded = record_trials(study, trial_rows(rows, study.run, trials))
     return {
         "commit": study.commit(),
         "cells": [asdict(c) | {"label": c.label} for c in cells],
@@ -677,5 +702,6 @@ def run(study: Any) -> dict[str, Any]:
         "admission": admission,
         "summary": summary.reset_index().to_dict("records"),
         "a0_and_fill": measured,
-        "trials": record_trials(study, trial_rows(rows, study.run, trials)),
+        "trials": recorded,
+        "overfitting": {"dsr": passive_dsr(rows, cells, days, recorded["n_trials"], admission)},
     }

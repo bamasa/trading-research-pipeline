@@ -231,7 +231,8 @@ def d_status(
 def overfitting(
     grid: Grid, cells: CellDays, chosen: dict[str, int | None], n_trials: int
 ) -> dict[str, Any]:
-    """PBO per stratum, the deflated Sharpe ratios of the chosen cells, N_eff."""
+    """PBO per stratum, N_eff, and the deflated Sharpe ratios of the chosen cells and
+    of S25's fixed cell (S-P's and S-M's are stage C's)."""
     from trading_research.evaluation.overfitting import (
         deflated_sharpe_ratio,
         effective_trials,
@@ -256,6 +257,65 @@ def overfitting(
                 out["dsr"][f"{name}*/{series}"] = deflated_sharpe_ratio(
                     finite, n_trials, variance
                 ).dsr
+    s25 = grid.position(S25_KEY)
+    for series, values in (
+        () if s25 is None else (("G", cells.g_bp[s25]), ("net", cells.net_bp[s25]))
+    ):
+        finite = values[np.isfinite(values)]
+        if len(finite) >= 3 and np.isfinite(variance):
+            out["dsr"][f"S25/{series}"] = deflated_sharpe_ratio(finite, n_trials, variance).dsr
+    return out
+
+
+def power(
+    cells: CellDays, choice: dict[str, Any], carry: dict[str, Any], grid: Grid
+) -> dict[str, Any]:
+    """For each searched slot's chosen cell: sigma_D of its daily net on D's usable
+    test days, n_eff (44 x the share of them with a trade), the MDE, and the power
+    of the t >= 3 bar against the carry-forward estimate of its net."""
+    from trading_research.evaluation.significance import minimum_detectable_effect, power_at_bar
+
+    out: dict[str, Any] = {}
+    for name in grid.strata:
+        key = choice[f"{name}*"]["cell"]
+        if key is None:
+            continue
+        values = cells.net_bp[grid.keys.index(key)]
+        traded = cells.trades[grid.keys.index(key)] > 0
+        finite = values[np.isfinite(values) & traded]
+        sigma = float(finite.std(ddof=1)) if len(finite) >= 2 else float("nan")
+        n_eff = 44.0 * float(traded.mean()) if len(traded) else 0.0
+        effect = float(carry[name].mean_net)
+        out[SLOT_OF[name]] = {"cell": key, "sigma_D": sigma, "n_eff": n_eff,
+                              "mde": minimum_detectable_effect(sigma, n_eff),
+                              "carry_forward_net": effect, "power": power_at_bar(effect, sigma, n_eff)}  # fmt: skip
+    return out
+
+
+def lacking_a_class(study: Study) -> list[dict[str, Any]]:
+    """Every stage-A fit (fold, configuration) whose training labels lacked a class,
+    with the side it lacked (sell: short, buy: long), or that had too few to fit."""
+    import json
+
+    from trading_research.labels.directional import CLASS_NAMES
+
+    sides = {-1: "short", 0: "hold", 1: "long"}
+    out: list[dict[str, Any]] = []
+    for path in sorted((study.work / "A" / "folds").glob("*.json")):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        for name, entry in sorted(record.get("fits", {}).items()):
+            if "|C|" not in name:  # stratum C's classifiers only
+                continue
+            present = entry.get("classes_present")
+            if present is None:  # not fitted: too few rows or classes, which is not recorded
+                out.append({"fold": path.stem, "configuration": name, "note": entry.get("note", ""),
+                            "missing": None, "side": None})  # fmt: skip
+                continue
+            missing = sorted(set(sides) - set(present))
+            if missing:
+                out.append({"fold": path.stem, "configuration": name, "note": "",
+                            "missing": [CLASS_NAMES[c] for c in missing],
+                            "side": [sides[c] for c in missing]})  # fmt: skip
     return out
 
 
@@ -365,6 +425,7 @@ def run(study: Study) -> dict[str, Any]:
         "selection_premium": {s: {"A": list(ps.selection_premium(r.a, a_null.maximum)),
                                   "B": list(ps.selection_premium(r.a, b_null.maximum))} for s, r in results.items()},
         "overfitting": overfitting(grid, cells, {s: o.cell for s, o in observed.items()}, n_trials),
+        "power_at_bar": power(cells, choice, carry, grid), "fits_lacking_a_class": lacking_a_class(study),
         "N_trials": n_trials, "ledger_sha256": manifest["sha256"], "ledger_rows": int(manifest["rows"]),
         "hand_runs": hand, "S25": s25_record, "files_sha256": files,
     }  # fmt: skip

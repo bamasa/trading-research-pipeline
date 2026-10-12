@@ -161,3 +161,22 @@ def test_stage_c_leaves_a_day_any_run_flagged_out_of_every_passive_cell() -> Non
     assert flagged_days(frame) == {"2025-03-05"} and found["flagged_days"] == ["2025-03-05"]
     assert found["S"] == pytest.approx(1.0) and found["status_on_D"] == "admitted"
     assert found["making_bp_per_fill"] == pytest.approx(1.5)
+
+
+def test_s_p_and_s_m_have_their_deflated_sharpe_ratio_from_stage_c() -> None:
+    from datetime import date
+
+    from trading_research.evaluation.overfitting import deflated_sharpe_ratio, sharpe_variance
+    from trading_research.pipeline.short_horizon.passive import passive_dsr
+
+    days = [date(2025, 2, d) for d in range(3, 13)]
+    cells = [SimCell("S-P", "a", "entry", 5.0), SimCell("S-P", "b", "entry", 5.0),
+             SimCell("S-M", "a", "maker", 5.0, lean=1.0)]  # fmt: skip
+    rng = np.random.default_rng(1)
+    rows = pd.DataFrame([{"label": c.label, "day": d.isoformat(), "excluded": False,
+                          "net_per_100": float(rng.normal(0.2, 1.0))} for c in cells for d in days])  # fmt: skip
+    admission = {"S-P": {"cell": cells[0].label}, "S-M": {"cell": cells[2].label}}
+    found = passive_dsr(rows, cells, days, 30, admission)
+    panel = rows.pivot_table(index="day", columns="label", values="net_per_100")
+    expected = deflated_sharpe_ratio(panel[cells[0].label].to_numpy(), 30, sharpe_variance(panel))
+    assert set(found) == {"S-P/net", "S-M/net"} and found["S-P/net"] == pytest.approx(expected.dsr)

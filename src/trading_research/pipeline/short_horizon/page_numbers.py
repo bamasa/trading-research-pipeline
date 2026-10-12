@@ -113,6 +113,28 @@ def fee_numbers(s: SlotDays, mask: np.ndarray) -> dict[str, Any]:
     return out
 
 
+def delta_b(s: SlotDays, b: date) -> dict[str, Any]:
+    """R's statistic for one slot as a measurement: Delta(b), the mean of the daily
+    series on F's usable days before ``b`` less its mean after, with its percentile
+    among Delta(d) at every admissible split day d != b (at least 20 usable days
+    before and 10 after), as R's own test forms them; reported whether or not the
+    slot passes on F-, the registration's measurement when it does not."""
+    days = list(s.days)
+
+    def mean_on(chosen: list[date]) -> float:
+        picked = _series(s, s.value, s.mask(chosen))
+        return float(picked.mean()) if len(picked) else 0.0
+
+    def delta(d: date) -> float:
+        return mean_on([x for x in days if x < d]) - mean_on([x for x in days if x > d])
+
+    admissible = [d for i, d in enumerate(days) if d != b and i >= 20 and len(days) - i - 1 >= 10]
+    found = delta(b)
+    others = np.array([delta(d) for d in admissible], dtype=np.float64)
+    return {"b": b.isoformat(), "delta_b": found, "admissible_days": len(admissible),
+            "percentile_among_admissible": _percentile(found, others)}  # fmt: skip
+
+
 def close_path(study: Study, label: str) -> Path:
     """The hourly close a read (or the rehearsal, under its label) kept."""
     return study.work / "reads" / label / CLOSE_FILE
@@ -183,6 +205,11 @@ def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]
         if block.name == "H":
             early = [d for d in s.days if d <= S25_WINDOW_END]
             numbers["h_before_0801_mean"] = slot_numbers(s, early)["mean"]
+        tested = (found.get("R") or {}).get(slot, {}).get("outcome", "not tested") != "not tested"
+        if block.name == "F" and split and split.get("b") and tested:
+            passes = (found.get("assessments") or {}).get(slot, {}).get("status") == "passes"
+            b = date.fromisoformat(str(split["b"]))
+            numbers["R_delta_b"] = delta_b(s, b) | {"passes_on_F_minus": passes}
         slots[slot] = numbers
     save_close(block)
     return {"slots": slots, "alarms": list(block.detector["alarms"]),
