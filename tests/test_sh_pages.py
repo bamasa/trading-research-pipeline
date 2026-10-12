@@ -70,6 +70,7 @@ def test_a_slots_numbers_are_the_ones_its_kills_read() -> None:
     draws = [float(row.mean()) for row in s.random]
     assert numbers["placebo_percentile"] == hl.percentile_of(numbers["mean"], draws)
     assert numbers["trades"] == 440 and len(numbers["values"]) == numbers["status_days"] == 44
+    assert numbers["window_days"] == 44
 
 
 def test_the_making_part_and_the_net_at_zero_fees_are_kept() -> None:

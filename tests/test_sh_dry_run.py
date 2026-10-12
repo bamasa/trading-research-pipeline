@@ -209,7 +209,8 @@ def test_each_read_keeps_the_numbers_the_pages_show(dry: dict[str, Any]) -> None
         numbers = results["pages"]
         assert "S25" in numbers["slots"] and set(numbers["slots"]) <= set(results["statuses"])
         for slot, found in numbers["slots"].items():
-            assert len(found["values"]) == found["status_days"] and "break_even_per_side" in found
+            assert len(found["values"]) == found["status_days"] <= found["window_days"]
+            assert "break_even_per_side" in found
             assert len(found["daily"]["days"]) == len(found["daily"]["value"])
             assert (block == "H") == ("h_before_0801_mean" in found), slot
         assert close_path(study, block).exists()

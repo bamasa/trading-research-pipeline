@@ -64,14 +64,17 @@ def _percentile(value: float, draws: np.ndarray) -> float:
 
 
 def slot_numbers(s: SlotDays, days: list[date]) -> dict[str, Any]:
-    """One slot's numbers on ``days``, computed as the status rules compute them."""
+    """One slot's numbers on ``days``, computed as the status rules compute them:
+    ``status_days`` counts the days with a value (a taker slot's days with a
+    trade), as the assessment's ``days`` does; ``window_days`` the window's days."""
     mask = s.mask(days)
     values = _series(s, s.value, mask)
     mean = float(values.mean()) if len(values) else NAN
     draws = np.array([_mean(_series(s, row, mask)) for row in s.random], dtype=np.float64)
     near = [np.nan_to_num(_mean(_series(s, row, mask)), nan=0.0) for row in s.neighbours]
     out: dict[str, Any] = {
-        "status_days": int(mask.sum()),
+        "status_days": len(values),
+        "window_days": int(mask.sum()),
         "values": [float(v) for v in values],
         "mean": mean,
         "trades": trade_count(s, mask),
