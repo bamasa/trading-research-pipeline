@@ -85,6 +85,20 @@ def test_stage_0_timed_the_code_and_passed_the_parity_gate(dry: dict[str, Any]) 
     assert record["parity"]["ok"] and record["parity"]["runs"]
     assert record["catalogue_sha256"] == shr.REGISTERED_CATALOGUE_SHA256
     assert record["projected_hours"]["total"] > 0 and record["replay_memory"]["measured"]
+    # the fold-level leakage test's CPU fits are projected, at the registered worker counts
+    assert record["projected_hours"]["1_fold_leakage"] > 0
+    assert record["projection_workers"]["general"] == 8 != record["workers"]
+
+
+def test_stage_1_ran_the_fold_level_test_on_the_production_path(dry: dict[str, Any]) -> None:
+    record = dry["study"].record("1")
+    fold = record["leakage"]["fold_level"][0]
+    for name in ("gbm/weights", "logistic/thresholds", "bound_ridge/weights", "gate_levels",
+                 "tcn/state_sha256", "tcn/inner_ic", "tcn/checkpoint_epoch"):  # fmt: skip
+        assert name in fold["artefacts"]
+    assert all(e["rows_outside_day"] is not None for e in record["days"].values() if e["usable"])
+    reader = record["reader_test"]["days"]
+    assert len(reader) == 3 and all(e["passes"] for e in reader.values())
 
 
 def test_the_trial_ledger_manifest_is_committed_and_its_parts_are_not(dry: dict[str, Any]) -> None:
@@ -127,10 +141,17 @@ def test_the_amendment_freezes_every_placeholder(dry: dict[str, Any]) -> None:
     study = dry["study"]
     record = study.record("E")
     assert record["dry_run"]["ran"] and record["dry_run"]["parity_repeated_ok"]
+    # H's stand-in, then F's and P's on the reader-test days, each read end to end
+    assert record["dry_run"]["read"] == dict.fromkeys(
+        ("stand_in_H", "stand_in_F", "stand_in_P"), "read"
+    )
     registration = shr.Registration.load(repo=study.repo).require_frozen()
     document = (study.repo / shr.DOCUMENT_PATH).read_text(encoding="utf-8")
     assert f"Frozen configuration sha256: `{sha256_bytes(registration.text.encode())}`" in document
     assert registration.weights_sha256 and registration.finalist_files_sha256
+    reader = registration.value(("data", "ob200_reader_test_result"))
+    assert set(reader["days"]) == {"2026-01-05", "2026-01-06", "2026-01-07"}
+    assert "The ob200 reader test against" in document
 
 
 def test_each_read_closes_its_session_with_registered_statuses(dry: dict[str, Any]) -> None:

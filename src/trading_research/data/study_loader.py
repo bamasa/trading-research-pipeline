@@ -13,7 +13,15 @@ repaired:
 - **sequence gaps**: more than ``max_sequence_gaps``, the 95th percentile of
   the development block's per-day counts rounded up (:func:`max_sequence_gaps`),
   one value for every block;
-- **no book file**: the day is not on disk (the fetch log says why).
+- **no book file**: the day is not on disk, or holds no row stamped inside it
+  (the fetch log says why).
+
+A replayed day's file may also hold rows stamped after its own midnight (the
+next day's first second). Only rows stamped in ``[midnight(day),
+midnight(day + 1))`` are kept, as the simulator's day loader
+(``market_making/events._read_book``) keeps them, so that no label, forward
+move, walk or flatten of a day reads the next day's book; the rows dropped are
+counted (:attr:`BookDay.rows_outside_day`).
 
 Every other finding of the report is kept by check and severity, so a day's
 record can be set beside another archive's.
@@ -146,6 +154,8 @@ class BookDay:
     exclusions: tuple[str, ...] = ()
     #: Kept facts that exclude nothing (a tick unlike the specification's).
     notes: tuple[str, ...] = ()
+    #: Rows of the file stamped outside the day, dropped before anything is read.
+    rows_outside_day: int = 0
 
     @property
     def usable(self) -> bool:
@@ -159,6 +169,22 @@ def _findings(report: Iterable[Any]) -> dict[str, dict[str, int]]:
         severity = str(finding.severity.value)
         by_severity[severity] = by_severity.get(severity, 0) + max(int(finding.count), 1)
     return out
+
+
+def within_day(frame: pd.DataFrame, day: date) -> tuple[pd.DataFrame, int]:
+    """The rows stamped in ``[midnight(day), midnight(day + 1))``, as
+    ``events._read_book`` keeps them, and the count of rows dropped."""
+    from trading_research.market_making.events import NS_PER_DAY, day_start_ns, to_ns
+
+    stamps = to_ns(frame["timestamp"])
+    start = day_start_ns(day)
+    keep = (stamps >= start) & (stamps < start + NS_PER_DAY)
+    dropped = int(len(keep) - keep.sum())
+    if not dropped:
+        return frame, 0
+    kept = frame.loc[keep].reset_index(drop=True)
+    kept.attrs = dict(frame.attrs)
+    return kept, dropped
 
 
 def _day_tick(frame: pd.DataFrame, depth: int) -> tuple[float | None, bool]:
@@ -186,7 +212,7 @@ def load_book_day(
     depth: int = 10,
     access: sa.StudyAccess | None = None,
 ) -> BookDay:
-    """Read one replayed book day and apply the exclusion rules.
+    """Read one replayed book day, cut to its own UTC day, and apply the exclusion rules.
 
     ``max_sequence_gaps`` is None only while it is being computed, on the
     development block itself; the gap count is then recorded but excludes
@@ -201,8 +227,11 @@ def load_book_day(
     path = book_path(symbol, day, root)
     if not path.exists() or path.stat().st_size == 0:
         return BookDay(symbol, day, None, None, None, exclusions=(NO_BOOK,))
-    frame = pd.read_parquet(path)
+    frame, outside = within_day(pd.read_parquet(path), day)
     gaps = int(frame.attrs.get("sequence_gaps", 0))
+    if frame.empty:
+        return BookDay(symbol, day, None, gaps, None, exclusions=(NO_BOOK,),
+                       rows_outside_day=outside)  # fmt: skip
     report = validate_book(frame, depth=depth, sampled=True)
     exclusions: list[str] = []
     notes: list[str] = []
@@ -219,7 +248,15 @@ def load_book_day(
     if max_sequence_gaps is not None and gaps > max_sequence_gaps:
         exclusions.append(SEQUENCE_GAPS)
     return BookDay(
-        symbol, day, frame, gaps, tick, _findings(report), tuple(exclusions), tuple(notes)
+        symbol,
+        day,
+        frame,
+        gaps,
+        tick,
+        _findings(report),
+        tuple(exclusions),
+        tuple(notes),
+        outside,
     )
 
 

@@ -8,7 +8,8 @@ of E, H, F or P):
    note (``docs/short_horizon_2025_code_freeze.md``) naming a commit after which
    no study code has changed.
 2. **The fetch** of W's and D's books, prints and funding, the three ``ob200``
-   reader-test days' books, and the hourly bars from 2024-12-01 to 2025-06-30,
+   reader-test days' books, prints and funding (the funding a span of its own),
+   and the hourly bars from 2024-12-01 to 2025-06-30,
    through :func:`trading_research.data.fetch_stage.run_stage`, which checks the
    disk first, retries every failure but a 404, and returns only when each day
    is on disk or terminally excluded. The fetch log is kept, so a stopped fetch
@@ -18,7 +19,9 @@ of E, H, F or P):
    (non-positive or off-grid prices), the simulator's day loader's refusals,
    a missing funding history, and the sequence-gap threshold, the 95th
    percentile of D's per-day gap counts, rounded up, with the days above it.
-   The reader-test days' stream statistics are recorded against it.
+   The ``ob200`` reader test (:func:`reader_test`): each reader-test day loaded
+   as a block day against that threshold, its findings and stream statistics
+   beside D's, for the amendment and H's gate.
 5. **The fitted values** on W, the feature stores, selection on January and the
    leakage tests (:mod:`.leakage`).
 """
@@ -26,6 +29,7 @@ of E, H, F or P):
 from __future__ import annotations
 
 import re
+import statistics
 from collections import Counter
 from datetime import date, timedelta
 from functools import partial
@@ -73,13 +77,20 @@ def code_freeze(study: Study) -> dict[str, str]:
 
 
 def development_plan(study: Study) -> StagePlan:
-    """Stage 1's days per plane: W and D, the reader-test books, D's hourly bars."""
+    """Stage 1's days per plane: W and D, the reader-test books and prints, D's hourly
+    bars; funding for W and D (the reader-test days' is :func:`reader_funding_plan`)."""
     days = tuple(sorted({*study.scale.days("W"), *study.scale.days("D")}))
     bars = tuple(
         BARS_SPAN[0] + timedelta(days=i) for i in range((BARS_SPAN[1] - BARS_SPAN[0]).days + 1)
     )
     reader = study.scale.days(sa.READER_TEST)
-    return StagePlan(book=days + reader, prints=days, bars=bars, funding=days)
+    return StagePlan(book=days + reader, prints=days + reader, bars=bars, funding=days)
+
+
+def reader_funding_plan(study: Study) -> StagePlan:
+    """The reader-test days' funding, for the dry run's F and P read: a span of its
+    own, since funding is fetched as one span and none may cross a held-out block."""
+    return StagePlan(funding=study.scale.days(sa.READER_TEST))
 
 
 def fetch(study: Study, book_workers: int) -> fl.FetchLog:
@@ -93,6 +104,7 @@ def fetch(study: Study, book_workers: int) -> fl.FetchLog:
     if opener is not None:
         present = opener.market.present()
         present["ob200"] = present["ob200"] | opener.reader_test_days
+        present["prints"] = present["prints"] | opener.reader_test_days
         book_workers, print_workers = 1, 1
     else:
         present = head_check_present(study.repo / HEAD_CHECK)
@@ -104,6 +116,9 @@ def fetch(study: Study, book_workers: int) -> fl.FetchLog:
     run_stage(study.symbol, plan, study.roots, log, budget=budget, book_workers=book_workers,
               print_workers=print_workers, expected_present=present, opener=opener,
               access=sa.development_access())  # fmt: skip
+    run_stage(study.symbol, reader_funding_plan(study), study.roots, log,
+              budget=stage_budget(book_days=0, print_archives_gb=0.0, workers=1), book_workers=1,
+              opener=opener, access=sa.development_access())  # fmt: skip
     if not log.complete():
         raise RuntimeError("the fetch returned with days neither on disk nor excluded")
     return log
@@ -129,6 +144,8 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
     excluded = log.excluded()
     days = sorted({*study.scale.days("W"), *study.scale.days("D")})
     gaps: dict[date, int] = {}
+    outside: dict[date, int] = {}
+    d_findings: dict[str, dict[str, int]] = {}
     found: dict[str, dict[str, Any]] = {}
     for day in days:
         reasons = [
@@ -142,6 +159,12 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
                                     spec_tick=spec.tick, access=access)  # fmt: skip
             reasons += list(book.exclusions)
             notes += list(book.notes)
+            outside[day] = book.rows_outside_day
+            if sa.block_of(day) == "D":
+                for check, severities in book.findings.items():
+                    for severity, count in severities.items():
+                        by = d_findings.setdefault(check, {})
+                        by[severity] = by.get(severity, 0) + count
             if book.sequence_gaps is not None:
                 gaps[day] = book.sequence_gaps
         if not reasons:
@@ -163,18 +186,55 @@ def validate(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument) -> dict[s
         entry["usable"] = not entry["reasons"]
         entry["cold"] = previous_day(day, usable) is None
         entry["sequence_gaps"] = gaps.get(day)
+        entry["rows_outside_day"] = outside.get(day)
     by_reason = Counter(r for e in found.values() for r in e["reasons"])
-    reader = {}
-    for day in study.scale.days(sa.READER_TEST):
-        record = log.get(sa.BOOK, day)
-        stats = dict(record.stats)
-        stats["status"] = record.status
-        stats["within_threshold"] = (
-            record.status == fl.ON_DISK and int(stats.get("sequence_gaps", 0)) <= threshold
-        )
-        reader[day.isoformat()] = stats
+    reader = reader_test(study, log, spec, threshold, d_findings)
     return {"days": found, "max_sequence_gaps": threshold, "excluded_by_reason": dict(by_reason),
             "reader_test": reader}  # fmt: skip
+
+
+#: The stream statistics the fetch records for a book day, compared across archives.
+STREAM = ("messages", "snapshots", "deltas", "median_interval_ms", "sequence_gaps", "rows")
+
+
+def _spread(values: list[Any]) -> dict[str, float | int | None]:
+    known = [float(v) for v in values if v is not None]
+    if not known:
+        return {"days": 0, "min": None, "median": None, "max": None}
+    return {"days": len(known), "min": min(known), "median": float(statistics.median(known)),
+            "max": max(known)}  # fmt: skip
+
+
+def reader_test(study: Study, log: fl.FetchLog, spec: sl.StudyInstrument, threshold: int,
+                d_findings: dict[str, dict[str, int]]) -> dict[str, Any]:  # fmt: skip
+    """The ``ob200`` reader test: each reader-test day loaded as the study's loader
+    loads a block day (no non-positive or off-grid price, gaps at most D's frozen
+    threshold), its exclusions, every finding by check and severity and its stream
+    statistics, beside D's statistics and findings. A day passes with no exclusion;
+    one excluded for its gap count alone is a property of the archive. The ledger
+    opens H only when no day failed otherwise."""
+    access = sa.development_access()
+    days: dict[str, dict[str, Any]] = {}
+    for day in study.scale.days(sa.READER_TEST):
+        record = log.get(sa.BOOK, day)
+        entry: dict[str, Any] = {"status": record.status,
+                                 "stream": {k: record.stats.get(k) for k in STREAM}}  # fmt: skip
+        if record.status == fl.ON_DISK:
+            book = sl.load_book_day(study.symbol, day, study.roots.book, max_sequence_gaps=threshold,
+                                    spec_tick=spec.tick, access=access)  # fmt: skip
+            entry |= {"exclusions": list(book.exclusions), "findings": book.findings,
+                      "notes": list(book.notes), "rows_outside_day": book.rows_outside_day}  # fmt: skip
+        else:
+            entry |= {"exclusions": [f"fetch: {record.status}"], "findings": {}, "notes": [],
+                      "rows_outside_day": None}  # fmt: skip
+        entry["passes"] = not entry["exclusions"]
+        entry["fails_on_gaps_alone"] = entry["exclusions"] == [sl.SEQUENCE_GAPS]
+        days[day.isoformat()] = entry
+    on_disk = [log.get(sa.BOOK, d) for d in study.scale.days("D")]
+    on_disk = [r for r in on_disk if r.status == fl.ON_DISK]
+    d_stream = {k: _spread([r.stats.get(k) for r in on_disk]) for k in STREAM}
+    return {"max_sequence_gaps": threshold, "days": days,
+            "D": {"stream": d_stream, "findings": d_findings}}  # fmt: skip
 
 
 def _book(study: Study, day: date, threshold: int | None) -> Any:

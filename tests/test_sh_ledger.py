@@ -63,16 +63,33 @@ def commit(repo: Path, message: str = "step") -> str:
     return git(repo, "rev-parse", "HEAD").strip()
 
 
+def reader_test(**days: list[str]) -> dict[str, Any]:
+    """The reader test's record, each day passing unless ``days`` names its exclusions."""
+    stream = {"messages": 1, "median_interval_ms": 10.0, "sequence_gaps": 0}
+    entries = {}
+    for day in sa.READER_TEST_DAYS:
+        exclusions = days.get(f"d{day.day}", [])
+        entries[day.isoformat()] = {
+            "status": "on_disk", "stream": stream, "exclusions": exclusions, "findings": {},
+            "passes": not exclusions, "fails_on_gaps_alone": exclusions == ["sequence_gaps"],
+        }  # fmt: skip
+    spread = {"days": 1, "min": 1, "median": 1, "max": 1}
+    return {"max_sequence_gaps": 3, "days": entries,
+            "D": {"stream": dict.fromkeys(stream, spread), "findings": {}}}  # fmt: skip
+
+
 def frozen_values() -> dict[tuple[str, ...], Any]:
     digests = {path: sha(data) for path, data in FROZEN_FILES.items()}
     return {
         ("data", "max_sequence_gaps"): 3,
         ("data", "excluded_days_D"): [],
         ("data", "instrument_spec"): {"tick": 0.1, "lot": 0.001},
+        ("data", "ob200_reader_test_result"): reader_test(),
         ("features", "selected"): ["ofi_1"],
         ("features", "fitted_values_sha256"): digests[shl.FITTED_VALUES_PATH],
         ("models", "weights_sha256"): {"gbm_h50": digests[shl.WEIGHTS_DIR / "gbm_h50"]},
         ("models", "checkpoint_epoch"): {"tcn_h20": 7},
+        ("models", "fits_lacking_a_class"): [],
         ("search", "result_trials"): {
             "N_trials": 2400, "N_eff": 300.0, "R_D": 1,
             "ledger_sha256": sha(TRIALS), "ledger_rows": 10, "hand_runs": [],
@@ -90,6 +107,7 @@ def frozen_values() -> dict[tuple[str, ...], Any]:
         ("detector", "alarm_rate_D"): 0.0,
         ("detector", "alarms_D"): [],
         ("detector", "r_untestable_declared"): False,
+        ("detector", "second_detector_D"): {"span": "D", "alarms": []},
         ("compute", "record"): {"workers": 4},
         ("amendment", "date"): date(2026, 11, 1),
         ("artefacts", "frozen_finalist_files_sha256"): {"S25": digests[shl.FINALISTS_DIR / "S25.json"]},
@@ -167,6 +185,30 @@ def test_h_needs_the_amendment_and_a_clean_tree(repo: Path) -> None:
         open_h(repo)
     with pytest.raises(ValueError, match="opens"):
         ledger(repo).open("D")
+
+
+def refreeze(repo: Path, values: dict[tuple[str, ...], Any]) -> None:
+    frozen = shr.freeze_text(TEXT, values)
+    write(repo, shr.CONFIG_PATH, frozen.encode())
+    write(
+        repo,
+        shr.DOCUMENT_PATH,
+        DOCUMENT.replace("None yet.", shr.frozen_hash_line(frozen)).encode(),
+    )
+    commit(repo, "frozen again")
+
+
+def test_h_waits_for_the_ob200_reader_test(repo: Path) -> None:
+    path = ("data", "ob200_reader_test_result")
+    refreeze(repo, {**frozen_values(), path: reader_test(d6=["off_grid_price"])})
+    with pytest.raises(HeldOutLocked, match=r"reader-test days failed.*2026-01-06"):
+        open_h(repo)
+    refreeze(repo, {**frozen_values(), path: reader_test(d5=["fetch: unreadable"])})
+    with pytest.raises(HeldOutLocked, match="2026-01-05"):
+        open_h(repo)
+    # a day over D's gap threshold alone is a property of the archive: H opens
+    refreeze(repo, {**frozen_values(), path: reader_test(d7=["sequence_gaps"])})
+    assert open_h(repo)["block"] == "H"
 
 
 def test_h_refuses_frozen_files_that_moved(repo: Path) -> None:

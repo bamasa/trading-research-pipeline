@@ -505,7 +505,8 @@ def test_the_document_states_the_configuration_s_null_placeholder_hash() -> None
     computed = prereg.sha256_bytes(prereg.unfrozen_text(text).encode())
     stated = re.search(r"with every placeholder `null`, has sha256 `([0-9a-f]{64})`", _document())
     assert stated is not None and stated.group(1) == computed
-    assert len(prereg.placeholder_lines(text)) == 24
+    # the ob200 reader test, the fits lacking a class and the second detector on D, 2026-10-12
+    assert len(prereg.placeholder_lines(text)) == 27
     assert ("features", "longest_lookback_minutes") not in prereg.placeholder_lines(text)
 
 
@@ -521,3 +522,59 @@ def test_every_new_value_is_fixed_not_a_placeholder() -> None:
         "search.hold_first_theta",
     ):
         assert key not in marked, key
+
+
+# ---------------------------------------------------------------------------
+# The clarifications the fixes of the study code called for (2026-10-12)
+# ---------------------------------------------------------------------------
+
+
+def test_the_registration_states_the_clarifications_the_fixes_called_for() -> None:
+    text, tree = _document(), _registered()
+    for phrase in (
+        "07-08 takes the tape of the last usable day at or before 07-31, never one from 08-01",
+        "The slot has one shifted series on H",
+        "a day the shift's own run flags stale is left out in turn",
+        "with each earlier run's on that run's own dates only",
+        "E's seven days enter no comparison",
+        "A result void on F or P keeps the status `void`",
+        "a fault in any run of the slot's read",
+        "K-cap reads the true run only",
+        "the share is the one the frozen \u03c3_D and MDE imply",
+        "P's first day, 2025-11-17, reads 2025-11-16 when that day is usable under the frozen threshold",
+        "the placebo means and the random draws' 95th percentile, with no precedence applied and no status",
+        "each read session's first simulated day runs alone to measure that peak",
+        "A tier pays a passive slot only when the slot's net is positive at that tier's own maker and taker fees together",
+        "an entry is a run of fills from a flat position to the next flat position",
+        "the entry notional is the filled part of the entry",
+        "a fill at the price is floored to the instrument's lot",
+        "only its taker exit is honoured, so an exit due before 23:59 is crossed when due",
+        "A day enters its 1 s stream when its book is on disk and its only exclusion is sequence gaps",
+        "D's run is made by stage C under the development access and frozen in the amendment",
+        "with the variance each is deflated against",
+        "the second detector's run over D under `detector.second_detector_D`",
+    ):
+        assert phrase in text, phrase
+    assert "steps_over" in tree["placebos"]["one_day_shift"]
+    assert "one shifted series per slot" in tree["placebos"]["one_day_shift"]["circle"]
+    for key in ("void_on_F_or_P", "R_void_scope"):
+        assert key in tree["statuses"], key
+    assert "measured_inside_reports" in tree["statuses"]["S25_signal_slots"]
+    for key in ("K-acct_simulator_slots", "K-cap_simulator_slots"):
+        assert key in tree["kill_conditions"], key
+    assert "P_first_day_history" in tree["blocks"]
+    assert "on_F_and_P_days_and_share" in tree["metrics"]["mde"]
+    for key in ("fill_at_the_price", "between_stop_and_flatten", "decisions_outside_hours"):
+        assert key in tree["common"]["passive_fill"], key
+    for key in ("passive_entry", "per_trade_denominator"):
+        assert key in tree["metrics"]["day_series"], key
+    assert "tier_pays_passive" in tree["measurements"]["fee_break_even"]
+    for key in ("day_enters_stream", "alarm_stamp", "runs_by", "within_one_day"):
+        assert key in tree["detector"]["reported_beside"]["changepoint"], key
+    assert "first simulated day runs alone" in tree["compute"]["machine"]["simulator_workers_max"]
+    marked = prereg.placeholder_lines(CONFIG.read_text("utf-8"))
+    assert ("models", "fits_lacking_a_class") in marked and (
+        "detector",
+        "second_detector_D",
+    ) in marked
+    assert "second detector" in " ".join(tree["amendment"]["records"])

@@ -58,13 +58,16 @@ def test_an_unknown_request_is_a_404_and_is_kept() -> None:
     assert venue.unknown == ["https://example.org/anything"]
 
 
-def test_reader_test_days_are_short_ob200_archives() -> None:
+def test_reader_test_days_are_ob200_archives_with_their_prints() -> None:
     day = sa.READER_TEST_DAYS[0]
     venue = syn.Venue(syn.SyntheticMarket(frozenset(), step_ms=60_000), frozenset({day}))
-    from trading_research.data import bybit
+    from trading_research.data import bybit, bybit_trades
 
     assert venue.body(bybit.archive_url("BTCUSDT", day)) is not None
     assert venue.body(bybit.archive_url("BTCUSDT", day, "ob500")) is None
+    # the dry run's F and P read needs the day's prints, as a block day's
+    assert venue.body(bybit_trades.archive_url("BTCUSDT", day)) is not None
+    assert venue.body(bybit_trades.archive_url("BTCUSDT", sa.READER_TEST_DAYS[1])) is None
 
 
 def test_no_socket_connects_while_the_venue_serves() -> None:

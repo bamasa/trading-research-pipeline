@@ -3,13 +3,16 @@
 * **Features** (K-leak): every timed feature of the set, and the tensor, through
   truncation and streaming parity (``validation/leakage_timed``) on a slice of a
   W day with its prints.
-* **The fold-level test** (K-leak): in every fold, one fit of each model at a
-  hold of 20 s (stratum C on the micro-selected inputs at a 0 bp label fee),
-  the hold-first thresholds at the four rates, the gate levels, and the
-  network trained for one epoch on the CPU with its inner validation scored,
-  compared by sha256 after every price, label, feature and gate input at a row
-  after the cutoff is mutated (``validation/fold_leakage.check_fold``). The
-  cutoff is the end of the fold's inner validation plus the hold.
+* **The fold-level test** (K-leak): in every fold, the production fit path run
+  twice, on stage 1's artefacts and on a scratch work root in which every
+  price, label, feature and gate input at a row after the cutoff is mutated
+  and the labels recomputed: one fit of each model at a hold of 20 s (stratum
+  C on the micro-selected inputs at a 0 bp label fee) with the hold-first
+  thresholds at the four rates, the gate levels, and the network trained for
+  one epoch on the CPU with its inner validation scored, compared by sha256
+  (``validation/fold_leakage``). The cutoff is the end of the fold's inner
+  validation plus the hold, or the last exit snapshot a target row before
+  that end reads, if later (:func:`cutoff_ns`).
 * **The flag-causality test** (K-flag-leak): in every fold, mutating every
   hourly bar after an hour leaves every flag the guard uses at or before it
   unchanged.
@@ -17,6 +20,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -25,15 +30,20 @@ import numpy as np
 import pandas as pd
 
 from trading_research.pipeline.short_horizon import features as ft
-from trading_research.pipeline.short_horizon.fits import RATES, thresholds
+from trading_research.pipeline.short_horizon.fits import (
+    Configuration,
+    FoldData,
+    NetworkJob,
+    fit_main_process,
+    fit_networks,
+)
 from trading_research.pipeline.short_horizon.inputs import Inputs
-from trading_research.pipeline.short_horizon.plan import NS_PER_S, Fold
-from trading_research.search_engine.market_gate import SPREAD_COLUMN, VOLATILITY_COLUMN
+from trading_research.pipeline.short_horizon.models import C_MODELS
+from trading_research.pipeline.short_horizon.plan import NS_PER_S, Fold, midnight_ns
+
+NS_PER_DAY = 86_400 * NS_PER_S
 
 HOLD_S = 20.0
-LABEL = ft.label_column(HOLD_S, 0.0)
-FORWARD = ft.forward_column(HOLD_S)
-PRICES = ("bid_price_0", "ask_price_0")
 
 
 class LeakError(AssertionError):
@@ -67,120 +77,187 @@ def feature_leakage(inputs: Inputs, day: date, rows_used: int, positions: int) -
     }
 
 
-def fold_frame(inputs: Inputs, fold: Fold) -> pd.DataFrame:
-    """The fold's training and inner-validation targets rows, with every input."""
-    parts = []
-    for day in (*fold.train, *fold.inner):
-        targets = inputs.targets(day)
-        x = inputs.features(day, inputs.columns("tensor+micro"), every_row=False).astype(np.float64)
-        book = inputs.book(day).iloc[targets["row"].to_numpy()]
-        frame = pd.concat([targets.reset_index(drop=True), x.reset_index(drop=True)], axis=1)
-        for column in PRICES:
-            frame[column] = book[column].to_numpy(dtype=np.float64)
-        parts.append(frame)
-    out = pd.concat(parts, ignore_index=True)
-    out["timestamp"] = pd.to_datetime(out[ft.TIME], unit="ns", utc=True)
-    return out
+def cutoff_ns(inputs: Inputs, fold: Fold, hold_s: float = HOLD_S) -> int:
+    """The fold's cutoff: the end of its inner validation plus the hold, or, where
+    later, the latest exit snapshot that a target row stamped before that end reads
+    (the 10 ms latency and the grid can put it a snapshot past). A day's book ends
+    at its midnight, so only the day the inner validation ends on can reach past."""
+    from trading_research.labels.taker_vwap import entry_exit_snapshots
+
+    end = fold.inner_end_ns(hold_s)
+    cutoff = end + round(hold_s * NS_PER_S)
+    for day in fold.inner:
+        if midnight_ns(day) + NS_PER_DAY <= cutoff:
+            continue
+        stamps = ft.stamps_ns(inputs.book(day))
+        rows = ft.target_rows(len(stamps))
+        rows = rows[stamps[rows] < end]
+        exits = entry_exit_snapshots(stamps, hold_s)[1][rows]
+        exits = exits[exits < len(stamps)]
+        if len(exits):
+            cutoff = max(cutoff, int(stamps[exits].max()))
+    return cutoff
 
 
-def network_fold(path: Path, columns: list[str], spans: tuple[int, int, int],
-                 params: dict[str, Any]) -> dict[str, Any]:  # fmt: skip
-    """The network's one-epoch fit on the CPU from a frame on disk; run in a fresh
-    process. ``spans`` are the training end, the inner validation's start and end."""
-    from trading_research.models.tcn import GaussianTCN
+def _redraw(frame: pd.DataFrame, after: np.ndarray, columns: Sequence[str], seed: int) -> None:
+    """Every value of ``columns`` at the rows ``after`` drawn anew, in place: from a
+    column's own few values, or from a normal three times as wide as its spread
+    (clipped to the stored dtype's range); a column with no value gets ones."""
+    rng = np.random.default_rng(seed)
+    count = int(after.sum())
+    if not count:
+        return
+    for column in columns:
+        values = frame[column].to_numpy(dtype=np.float64).copy()
+        finite = values[np.isfinite(values)]
+        distinct = pd.unique(finite)
+        if len(distinct) == 0:
+            drawn = np.ones(count)
+        elif len(distinct) <= 10:
+            drawn = rng.choice(distinct, size=count)
+        else:
+            drawn = rng.normal(float(finite.mean()), 3.0 * float(finite.std()) + 1.0, count)
+        values[after] = np.clip(drawn, -60_000.0, 60_000.0)
+        frame[column] = values.astype(frame[column].to_numpy().dtype)
 
-    train_end, inner_start, inner_end = spans
-    frame = pd.read_parquet(path)
-    stamps = ft.stamps_ns(frame)
-    known = np.isfinite(frame[FORWARD].to_numpy())
-    train = (stamps < train_end) & known
-    inner = (stamps >= inner_start) & (stamps < inner_end) & known
-    model = GaussianTCN(**{**params, "epochs": 1, "device": "cpu"})
-    model.fit(frame.loc[train, columns], frame.loc[train, FORWARD],
-              validation=(frame.loc[inner, columns], frame.loc[inner, FORWARD]))  # fmt: skip
-    history = [{k: float(v) for k, v in h.items()} for h in getattr(model, "history_", [])]
-    return {"weights": model.weights_sha256(), "history": history,
-            "checkpoint": int(model.checkpoint_epoch_ or 0)}  # fmt: skip
+
+def _write(frame: pd.DataFrame, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(target, compression="zstd", index=False)
 
 
-def fold_fit(inputs: Inputs, fold: Fold, scratch: Path, network: bool) -> Any:
-    """What the fold-level test compares: every fitted artefact of the fold at 20 s."""
-    from dataclasses import asdict
+def _link(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.symlink_to(source.resolve())
 
-    from trading_research.pipeline.short_horizon.models import (
-        C_MODELS,
-        bound_ridge,
-        classifier,
-        in_fresh_process,
-    )
-    from trading_research.pipeline.short_horizon.plan import midnight_ns
-    from trading_research.search_engine.market_gate import fit_gate_levels
 
-    scale = inputs.study.scale
-    micro = inputs.columns("micro")
-    wide = inputs.columns("tensor+micro")
-    spans = (fold.train_end_ns(HOLD_S), midnight_ns(fold.inner_start), fold.inner_end_ns(HOLD_S))
+def mutated_inputs(inputs: Inputs, fold: Fold, cutoff: int, root: Path) -> Inputs:
+    """Stage 1's artefacts as a scratch work root in which every row after
+    ``cutoff`` is mutated, of the fold's training, inner-validation and test days.
 
-    def fit(frame: pd.DataFrame) -> dict[str, Any]:
-        stamps = ft.stamps_ns(frame)
-        train = stamps < spans[0]
-        inner = (stamps >= spans[1]) & (stamps < spans[2])
-        complete = frame[micro].notna().all(axis=1).to_numpy()
-        labelled = train & complete & np.isfinite(frame[LABEL].to_numpy())
-        out: dict[str, Any] = {}
-        for name in C_MODELS:
-            model = classifier(name, scale).fit(
-                frame.loc[labelled, micro], frame.loc[labelled, LABEL]
-            )
-            out[name] = model
-            proba = np.asarray(model.predict_proba(frame.loc[inner & complete, micro]))
-            rules = thresholds(proba, max(1, len(fold.inner))) if len(proba) else {}
-            out[f"theta_{name}"] = {f"{r:g}": asdict(rules[r]) for r in RATES if r in rules}
-        moved = train & complete & np.isfinite(frame[FORWARD].to_numpy())
-        out["bound_ridge"] = bound_ridge(scale).fit(
-            frame.loc[moved, micro], frame.loc[moved, FORWARD]
-        )
-        out["gate"] = fit_gate_levels(
-            frame.loc[train, [VOLATILITY_COLUMN, SPREAD_COLUMN]]
-        ).to_dict()
-        if network:
-            path = scratch / f"{fold.name}.parquet"
-            frame.loc[:, [ft.TIME, FORWARD, *wide]].to_parquet(path, index=False)
-            params = scale.params("tcn")
-            out["tcn"] = in_fresh_process(network_fold, path, wide, spans, params)
-            out["tcn_inner_ic"] = [h.get("validation_ic") for h in out["tcn"]["history"]]
-        return out
+    A day wholly before the cutoff is linked unchanged. On the day the cutoff
+    falls on, every book price after it is moved (``validation/fold_leakage``'s
+    mutation) and the day's targets are recomputed from that book, as stage 1
+    computes them, so a target that read past the cutoff changes; its stored
+    features after the cutoff are drawn anew. A day wholly after it has every
+    target and feature drawn anew."""
+    from trading_research.data import study_loader as sl
+    from trading_research.validation.fold_leakage import mutate_after_cutoff
 
-    return fit
+    study = replace(inputs.study, work_root=root)
+    real = inputs.study.work / "1"
+    scratch = study.work / "1"
+    stores = [real / "features" / name for name in ("every_row", "every_tenth_row")]
+    holds = [float(h) for h in inputs.record["stores"]["holds_with_targets"]]
+    clip = sl.clip_for(study.symbol)
+    stamp = pd.Timestamp(cutoff, unit="ns", tz="UTC")
+    for k, day in enumerate(sorted({*fold.train, *fold.inner, *fold.test})):
+        name = f"{day.isoformat()}.parquet"
+        start = midnight_ns(day)
+        if start + NS_PER_DAY <= cutoff:
+            for folder in (real / "targets", *stores):
+                _link(folder / name, scratch / folder.relative_to(real) / name)
+            continue
+        if start > cutoff:
+            targets = pd.read_parquet(real / "targets" / name)
+            moved = [c for c in targets.columns if c not in ("row", ft.TIME)]
+            _redraw(targets, targets[ft.TIME].to_numpy() > cutoff, moved, seed=k)
+        else:
+            book = inputs.book(day)
+            prices = [c for c in book.columns if "_price_" in c]
+            book = mutate_after_cutoff(book, stamp, price_columns=prices, seed=k)
+            targets = ft.day_targets(book, holds, (0.0, 5.5), clip)
+        _write(targets, scratch / "targets" / name)
+        for folder in stores:
+            frame = pd.read_parquet(folder / name)
+            after = ft.stamps_ns(frame) > cutoff
+            _redraw(frame, after, [c for c in frame.columns if c != ft.TIME], seed=k + 1)
+            _write(frame, scratch / folder.relative_to(real) / name)
+    return Inputs(study, access=inputs.access, given=inputs.record)
+
+
+def leak_configurations(network: bool) -> tuple[Configuration, ...]:
+    """Each model once at 20 s: C's on the micro-selected inputs at a 0 bp label fee."""
+    out = [Configuration(f"fold-level|C|{m}|micro|hold_s=20|label_fee_bp=0", "C", m, "micro",
+                         HOLD_S, 0.0) for m in C_MODELS]  # fmt: skip
+    out.append(Configuration("fold-level|R|bound_ridge|micro|hold_s=20", "R", "bound_ridge",
+                             "micro", HOLD_S, 0.0))  # fmt: skip
+    if network:
+        out.append(Configuration("fold-level|R|tcn|tensor+micro|hold_s=20", "R", "tcn",
+                                 "tensor+micro", HOLD_S, 0.0))  # fmt: skip
+    return tuple(out)
+
+
+def production_fit(inputs: Inputs, fold: Fold, out: Path, network: bool) -> dict[str, Any]:
+    """What the fold-level test compares, from the code the study fits with: the
+    fold's training rows (``FoldData.load``), each C model and the bound ridge
+    (``fit_main_process``, C's thresholds on the inner validation at the four
+    rates), the gate levels (``FoldData.gate_levels``), and the network through
+    ``fit_networks`` (``window_days`` over the every-row store) for one epoch on
+    the CPU, in a process of its own, with no test day to predict."""
+    from trading_research.pipeline.short_horizon.models import in_fresh_process
+
+    configs = leak_configurations(network)
+    data = FoldData.load(inputs, fold.train, inputs.columns("micro"))
+    found: dict[str, Any] = {}
+    for cfg in configs:
+        if cfg.model == "tcn":
+            continue
+        _, entry = fit_main_process(inputs, fold, cfg, data)
+        found[f"{cfg.model}/weights"] = entry["weights_digest"]
+        found[f"{cfg.model}/rows"] = entry["rows"]
+        if cfg.stratum == "C":
+            found[f"{cfg.model}/thresholds"] = entry["thresholds"]
+            found[f"{cfg.model}/classes"] = entry.get("classes_present")
+    found["gate_levels"] = data.gate_levels(fold.train_end_ns(HOLD_S)).to_dict()
+    del data
+    networks = tuple(cfg for cfg in configs if cfg.model == "tcn")
+    if networks:
+        job = NetworkJob(inputs.study, replace(fold, test=()), networks, out / "network",
+                         epochs=1, device="cpu", record=inputs.record)  # fmt: skip
+        fitted = in_fresh_process(fit_networks, job)[networks[0].name]
+        found["tcn/weights_sha256"] = fitted["weights_sha256"]
+        found["tcn/state_sha256"] = fitted.get("state_sha256")
+        found["tcn/inner_ic"] = [h.get("validation_ic") for h in fitted.get("history", [])]
+        found["tcn/checkpoint_epoch"] = fitted["checkpoint_epoch"]
+    return found
 
 
 def fold_level(inputs: Inputs, folds: list[Fold], network: bool) -> list[dict[str, Any]]:
-    """The fold-level leakage test in every fold; raises on any change."""
-    from trading_research.validation.fold_leakage import assert_folds_causal, check_fold
+    """The fold-level leakage test in every fold, on the production fit path; raises
+    :class:`LeakError` on any change. Each fold is fitted twice, on stage 1's
+    artefacts and on a scratch work root with every row after its cutoff mutated
+    (:func:`mutated_inputs`), and every artefact is compared by sha256."""
+    import shutil
+
+    from trading_research.validation.fold_leakage import (
+        FoldLeakResult,
+        assert_folds_causal,
+        digest,
+    )
 
     scratch = inputs.study.dir("1", "fold_leakage")
-    results = []
+    results, out = [], []
     for fold in folds:
-        frame = fold_frame(inputs, fold)
-        cutoff = pd.Timestamp(
-            fold.inner_end_ns(HOLD_S) + round(HOLD_S * NS_PER_S), unit="ns", tz="UTC"
-        )
-        changed = [
-            LABEL,
-            FORWARD,
-            VOLATILITY_COLUMN,
-            SPREAD_COLUMN,
-            *inputs.columns("tensor+micro"),
-        ]
-        results.append(check_fold(fold_fit(inputs, fold, scratch, network), frame, cutoff,
-                                  price_columns=PRICES, label_columns=changed, fold=fold.name))  # fmt: skip
+        folder = scratch / fold.name
+        shutil.rmtree(folder, ignore_errors=True)
+        cutoff = cutoff_ns(inputs, fold)
+        real = production_fit(inputs, fold, folder / "real", network)
+        moved = production_fit(mutated_inputs(inputs, fold, cutoff, folder / "mutated"), fold,
+                               folder / "moved", network)  # fmt: skip
+        stamp = pd.Timestamp(cutoff, unit="ns", tz="UTC")
+        digests = {k: digest(v) for k, v in real.items()}
+        result = FoldLeakResult(fold.name, stamp, digests, {k: digest(v) for k, v in moved.items()})
+        results.append(result)
+        out.append({"fold": fold.name, "cutoff": str(stamp), "artefacts": digests,
+                    "past_inner_end_plus_hold_ns": cutoff - fold.inner_end_ns(HOLD_S)
+                    - round(HOLD_S * NS_PER_S)})  # fmt: skip
+        shutil.rmtree(folder, ignore_errors=True)
     try:
         assert_folds_causal(results)
     except AssertionError as exc:
         raise LeakError(f"K-leak: the fold-level leakage test failed: {exc}") from exc
-    return [
-        {"fold": r.fold, "artefacts": sorted(r.digests), "cutoff": str(r.cutoff)} for r in results
-    ]
+    return out
 
 
 def run(inputs: Inputs, network: bool) -> dict[str, Any]:

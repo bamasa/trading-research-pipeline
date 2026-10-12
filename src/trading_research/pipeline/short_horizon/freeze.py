@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -308,9 +308,11 @@ def detector_record(study: Study) -> dict[str, Any]:
     close = flags.hourly_close(study.symbol, study.roots.bars, d_end, sa.development_access())
     frozen = flags.frozen(close, d_end)
     alarms = flags.alarms_frame(frozen)
-    end = pd.Timestamp(d_end, tz="UTC") + pd.Timedelta(days=1)
-    rate = rf.alarm_rate(alarms, pd.Timestamp(d_start, tz="UTC"), end)
-    on_d = [a for a in frozen["alarms"] if pd.Timestamp(a["timestamp"]) < end]
+    start = pd.Timestamp(d_start, tz="UTC")
+    end = pd.Timestamp(d_end + timedelta(days=1), tz="UTC")
+    rate = rf.alarm_rate(alarms, start, end)
+    # the run starts on 2024-12-01; alarms_D is the registered span, 2025-01-01..06-30
+    on_d = [a for a in frozen["alarms"] if start <= pd.Timestamp(a["timestamp"]) < end]
     foldwise = {}
     for month in TEST_MONTHS:
         record = flags.saved_fold_flags(month, study.work / "A" / "flags")
@@ -369,6 +371,22 @@ def compute_record(study: Study) -> dict[str, Any]:
     }
 
 
+#: What each deflated Sharpe ratio is deflated against (``evaluation/overfitting``).
+TAKER_DSR_VARIANCE = ("N_trials with the simulator trials counted, and the variance of the Sharpe "
+                      "ratios of every taker cell's daily G on D's usable test days")  # fmt: skip
+PASSIVE_DSR_VARIANCE = ("N_trials with the simulator trials counted, and the variance of the Sharpe "
+                        "ratios of every S-P and S-M cell's daily net_per_100_clip_day simulated on "
+                        "D, over the days no run flagged, 0 on a day without a fill")  # fmt: skip
+#: Stage C's second detector on D when the stage's record does not carry it.
+SECOND_DETECTOR_NOT_RUN = {"span": "D", "alarms": [], "note": "not run by stage C at this commit"}
+
+
+def slot_dsr(found: dict[str, Any], name: str, series: tuple[str, ...], against: str) -> dict[str, Any]:  # fmt: skip
+    """A slot's deflated Sharpe ratios as a stage recorded them under ``<name>/<series>``
+    (None where none was computed), with what they are deflated against."""
+    return {s: found.get(f"{name}/{s}") for s in series} | {"deflated_against": against}
+
+
 def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, ...], Any]:
     """Every placeholder the D amendment fills, from the stages' records."""
     record1, record_b = study.record("1"), study.record("B")
@@ -377,8 +395,11 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
                 if not e["usable"]]  # fmt: skip
     excluded += [[date.fromisoformat(d), "flatten_stale"] for d in record_b["stale_days"]]
     slots, fits, mdes, trials = parts["slots"], parts["fits"], parts["mdes"], parts["trials"]
+    dsr = trials["overfitting"].get("dsr", {})  # at N_trials with the simulator trials counted
+    power = record_d.get("power_at_bar", {})
     admission = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null",
-                         "against_its_own_nulls": record_d["S25"]},
+                         "against_its_own_nulls": record_d["S25"],
+                         "dsr": slot_dsr(dsr, "S25", ("G", "net"), TAKER_DSR_VARIANCE)},
                  "S25-Z": {"status_on_D": "fixed before D; outside the family"}}  # fmt: skip
     for stratum, slot in (("C", "S-C"), ("R", "S-R")):
         admission[slot] = {
@@ -388,9 +409,14 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
             "nulls": record_d["nulls"][stratum],
             "pbo": record_d["overfitting"]["pbo"].get(stratum),
             "selection_premium": record_d["selection_premium"][stratum],
+            "dsr": slot_dsr(dsr, f"{stratum}*", ("G", "net"), TAKER_DSR_VARIANCE),
+            "power_at_bar": power.get(slot),
         }
+    passive_dsr = record_c.get("overfitting", {}).get("dsr", {})
     for slot in ("S-P", "S-M"):
-        admission[slot] = record_c["admission"][slot]
+        admission[slot] = dict(record_c["admission"][slot]) | {
+            "dsr": slot_dsr(passive_dsr, slot, ("net",), PASSIVE_DSR_VARIANCE)
+        }
     detector = parts["detector"]
     s25_cells = [k for k in slots["S25"]["neighbourhood"] if parse_key(k).stratum == "C"]
     c_cells = slots["S-C"]["neighbourhood"] if "S-C" in slots else []
@@ -398,10 +424,12 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
         ("data", "max_sequence_gaps"): int(record1["max_sequence_gaps"]),
         ("data", "excluded_days_D"): sorted(excluded),
         ("data", "instrument_spec"): record1["instrument_spec"],
+        ("data", "ob200_reader_test_result"): record1["reader_test"],
         ("features", "selected"): record1["selected"],
         ("features", "fitted_values_sha256"): parts["fitted_sha256"],
         ("models", "weights_sha256"): fits["weights_sha256"],
         ("models", "checkpoint_epoch"): fits["checkpoint_epoch"],
+        ("models", "fits_lacking_a_class"): record_d.get("fits_lacking_a_class", []),
         ("search", "result_trials"): {
             "N_trials": trials["N_trials"], "N_eff": trials["overfitting"]["N_eff"],
             "R_D": record_d["R_D"], "ledger_sha256": trials["ledger_sha256"],
@@ -422,6 +450,8 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
         ("detector", "alarm_rate_D"): detector["alarm_rate_D"],
         ("detector", "alarms_D"): detector["alarms_D"],
         ("detector", "r_untestable_declared"): detector["r_untestable_declared"],
+        ("detector", "second_detector_D"): record_c.get("second_detector_D")
+        or SECOND_DETECTOR_NOT_RUN,
         ("compute", "record"): compute_record(study),
         ("amendment", "date"): utc_today(),
         ("artefacts", "frozen_finalist_files_sha256"): parts["finalists"],
@@ -455,9 +485,79 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
         f"- p_search = {record_d['p_search']:.4g} (on development data, selected).",
         f"- Statuses set on D: {record_d['statuses_on_D']}.",
         f"- The fitted-values file's sha256 `{values[('features', 'fitted_values_sha256')]}`.",
+        *reader_test_lines(values[("data", "ob200_reader_test_result")]),
+        *overfitting_lines(values[("search", "result_admission")]),
+        lacking_a_class_line(values[("models", "fits_lacking_a_class")]),
+        second_detector_line(values[("detector", "second_detector_D")]),
         "",
     ]
     return "\n".join(lines)
+
+
+def _number(value: Any) -> str:
+    return "not computed" if value is None else f"{float(value):.4g}"
+
+
+def overfitting_lines(admission: dict[str, Any]) -> list[str]:
+    """The deflated Sharpe ratios of every finalist (S25 among them) with what they
+    are deflated against, and the power of the t >= 3 bar against each searched
+    slot's carry-forward estimate, as frozen under ``search.result_admission``."""
+    parts, against = [], set()
+    for slot in ("S25", "S-C", "S-R", "S-P", "S-M"):
+        dsr = admission.get(slot, {}).get("dsr")
+        if dsr is None:
+            continue
+        found = {k: v for k, v in dsr.items() if k != "deflated_against"}
+        parts.append(f"{slot} " + ", ".join(f"{k} {_number(v)}" for k, v in found.items()))
+        against.add(str(dsr["deflated_against"]))
+    lines = ["- Deflated Sharpe ratios: " + "; ".join(parts) + " (deflated against "
+             + "; ".join(sorted(against)) + ")."]  # fmt: skip
+    power = []
+    for slot in ("S-C", "S-R"):
+        found = admission.get(slot, {}).get("power_at_bar")
+        if found is not None:
+            power.append(f"{slot} {_number(found.get('power'))} against a carry-forward net of "
+                         f"{_number(found.get('carry_forward_net'))} bp (sigma_D "
+                         f"{_number(found.get('sigma_D'))}, n_eff {_number(found.get('n_eff'))})")  # fmt: skip
+    lines.append(
+        "- Power of the t >= 3 bar: " + ("; ".join(power) if power else "not computed") + "."
+    )
+    return lines
+
+
+def lacking_a_class_line(fits: list[dict[str, Any]]) -> str:
+    """The stage-A fits whose training labels lacked a class, with the side."""
+    if not fits:
+        return "- Fits that lacked a class: none."
+    found = "; ".join(f"{f.get('fold')} {f.get('configuration')} ({', '.join(f.get('side') or [])}"
+                      f"{' ' + f['note'] if f.get('note') else ''})" for f in fits)  # fmt: skip
+    return f"- Fits that lacked a class, with the side: {len(fits)}: {found}."
+
+
+def second_detector_line(found: dict[str, Any]) -> str:
+    """The second detector's run over D (``validation/changepoint.detect`` on the 1 s
+    grid), reported beside R and never defining ``b``."""
+    alarms = list(found.get("alarms", []))
+    first = f", the first at {alarms[0]['timestamp']}" if alarms else ""
+    note = f" ({found['note']})" if found.get("note") else ""
+    return (f"- The second detector on D: {len(alarms)} alarms over {found.get('days_read', 0)} "
+            f"days read{first}{note}.")  # fmt: skip
+
+
+def reader_test_lines(result: dict[str, Any]) -> list[str]:
+    """The ``ob200`` reader test in the amendment: each day's outcome and stream
+    statistics beside D's medians (every finding is in the frozen configuration)."""
+    d = result["D"]["stream"]
+    lines = [f"- The ob200 reader test against max_sequence_gaps = {result['max_sequence_gaps']} "
+             f"(D's medians: {d['messages']['median']} messages, {d['median_interval_ms']['median']} "
+             f"ms between messages, {d['sequence_gaps']['median']} sequence gaps):"]  # fmt: skip
+    for day, entry in sorted(result["days"].items()):
+        outcome = ("passes" if entry["passes"] else "fails on its gap count alone"
+                   if entry["fails_on_gaps_alone"] else f"fails: {entry['exclusions']}")  # fmt: skip
+        stream = entry["stream"]
+        lines.append(f"  {day}: {outcome}; {stream.get('messages')} messages, "
+                     f"{stream.get('median_interval_ms')} ms, {stream.get('sequence_gaps')} gaps.")  # fmt: skip
+    return lines
 
 
 def write_amendment(study: Study, values: dict[tuple[str, ...], Any]) -> dict[str, str]:
@@ -502,17 +602,51 @@ def lean_scales(study: Study, inputs: Any) -> dict[str, float]:
 STAND_IN_H = (date(2025, 5, 18), date(2025, 6, 30))
 
 
+class FrozenValues:
+    """The values the amendment will freeze, read as the frozen registration gives them."""
+
+    def __init__(self, values: dict[tuple[str, ...], Any]) -> None:
+        self.values = values
+
+    def value(self, path: tuple[str, ...]) -> Any:
+        return self.values[path]
+
+
+def rehearsal_read(block: Any, statuses: Any) -> dict[str, Any]:
+    """One stand-in block's read as ``reads.compute_results`` computes it: the
+    usable days under the frozen threshold (or the block unreadable), every
+    slot's series with its kills and placebos, the gap days put back, the MDEs,
+    the statuses from ``statuses(series, info, gaps)`` and the pages' numbers."""
+    from trading_research.pipeline.short_horizon.heldout import compute_block
+    from trading_research.pipeline.short_horizon.page_numbers import block_numbers
+
+    if block.validated["unreadable"]:
+        return {"unreadable": True, "excluded": block.validated["reasons"], "found": None}
+    series, info = compute_block(block)
+    gaps = (
+        compute_block(block.put_back(), days=block.gap_days, kills=False)[0]
+        if block.gap_days
+        else {}
+    )
+    mdes = block.value(("metrics", "mde", "value")) or {}
+    for slot, s in series.items():
+        s.mde = mdes.get(slot)
+    found = statuses(series, info, gaps)
+    found["pages"] = block_numbers(block, series, found)
+    return {"unreadable": False, "info": info, "found": found}
+
+
 def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> dict[str, Any]:
     """The registered dry run, before the amendment: the parity test repeated on the
-    2024 days (a failure is a bug, and D is re-run in full), then the block read's
-    whole computation on D's last 44 days standing in for H and the reader on the
-    three ``ob200`` reader-test days standing in for F and P, under the development
-    access. Its outputs are kept apart and never reported; the record says only
-    that it ran."""
+    2024 days (a failure is a bug, and D is re-run in full), then the block reads'
+    whole computation, under the development access, on D's last 44 days standing
+    in for H and on the three ``ob200`` reader-test days standing in for F and then
+    for P, each read on the stand-in before it (statuses, kills, placebos, R, P's
+    reading and the pages' numbers). Its outputs are kept apart and never
+    reported; the record says only that it ran."""
     from trading_research.data import study_access as sa
-    from trading_research.pipeline.short_horizon import statuses as st
-    from trading_research.pipeline.short_horizon.heldout import Block, compute_block
-    from trading_research.pipeline.short_horizon.page_numbers import block_numbers
+    from trading_research.pipeline.short_horizon import reads
+    from trading_research.pipeline.short_horizon.heldout import Block
     from trading_research.pipeline.short_horizon.stage0 import load_timing_day, parity
 
     holds = sorted({parse_key(k).hold_s for k in study.keys})
@@ -521,18 +655,33 @@ def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> d
         raise RuntimeError("the dry run's repeat of the walk-table parity test failed: a bug under "
                            "the amendment protocol, and D is re-run in full")  # fmt: skip
     access, end = sa.development_access(), sa.BLOCKS["D"][1]
+    frozen = FrozenValues(values)
     days = tuple(d for d in inputs.usable("D") if STAND_IN_H[0] <= d <= STAND_IN_H[1])
-    stand_in = Block(study, "H", access, days, values=values, end=end, label="rehearsal_H")
-    series, info = compute_block(stand_in)
-    found = st.family(series, {slot: s.mask(s.days) for slot, s in series.items()}, "H", {})
-    numbers = block_numbers(stand_in, series, {})
-    reader = Block(study, "F", access, study.scale.days(sa.READER_TEST), values=values, end=end,
-                   label="rehearsal_F_and_P")  # fmt: skip
-    outputs = {"stand_in_H": {"info": info, "statuses": {k: a.status for k, a in found.items()},
-                              "pages": numbers}, "stand_in_F_and_P": reader.validated}  # fmt: skip
+    reader = study.scale.days(sa.READER_TEST)
+
+    def block(name: str, planned: Any) -> Block:
+        return Block(
+            study, name, access, planned, values=values, end=end, label=f"rehearsal_{name}"
+        )
+
+    h_block, f_block, p_block = block("H", days), block("F", reader), block("P", reader)
+    h = rehearsal_read(h_block, lambda s, i, g: reads.statuses_h(study, s, i, g, h_block.flags_ns))
+    skipped: dict[str, Any] = {"unreadable": None, "found": None,
+                               "skipped": "the stand-in before it was unreadable"}  # fmt: skip
+    f, p = skipped, skipped
+    if h["found"] is not None:
+        f = rehearsal_read(f_block, lambda s, i, g: reads.statuses_f(
+            study, s, f_block.detector["alarms"], frozen, i, g, f_block.flags_ns, h=h["found"]))  # fmt: skip
+    if f["found"] is not None:
+        p = rehearsal_read(p_block, lambda s, i, g: reads.statuses_p(
+            study, s, i, g, p_block.flags_ns, f=f["found"]))  # fmt: skip
+    outputs = {"stand_in_H": h, "stand_in_F": f, "stand_in_P": p}
     save_json(study.dir("E", "rehearsal") / "discarded_outputs.json", outputs)
     return {"ran": True, "parity_repeated_ok": True, "stand_in_H_days": len(days),
-            "stand_in_F_and_P_days": len(reader.days_planned), "outputs": "discarded, never reported"}  # fmt: skip
+            "stand_in_F_and_P_days": len(reader),
+            "read": {name: ("unreadable" if out["unreadable"] else "skipped" if out["unreadable"] is None
+                            else "read") for name, out in outputs.items()},
+            "outputs": "discarded, never reported"}  # fmt: skip
 
 
 def run(study: Study) -> dict[str, Any]:

@@ -11,7 +11,12 @@
 # BTCUSDT alone on 9 October 2026, still before any data was read; the values
 # the study code fixed were written in the same day, still before any data was
 # read; the trial ledger's parts were moved under data/ beside a committed
-# manifest the same day, still before any data was read. They must agree.
+# manifest the same day, still before any data was read; clarified on 12
+# October 2026 after reviews of the study code against the document, the ob200
+# reader test's placeholder added, still before any data was read; clarified
+# again the same day for the fixes of the study code, with the placeholders for
+# the fits that lacked a class and the second detector's run on D, still before
+# any data was read. They must agree.
 #
 # The search block below is generic: its schema (clock, cluster, stages, axes,
 # catalogue, strata, slots, regime source, nulls, admission, budget) is meant
@@ -75,6 +80,7 @@ data:
     levels: 10
     grid_ms: 100
     rows: "data/bybit.reconstruct at grid_ms 100: at most one row per 100 ms interval, at its first update, stamped with that update's venue time; no row for an interval without an update; no forward fill"
+    day_rows: "a day is the rows stamped in [its midnight, the next midnight), as events.load_day keeps them; the study's loader drops the rest of the file (the next day's first second) before anything reads it and records the count"
     times: quantities in seconds are measured on row stamps; t + h is the first row stamped at or after t + h
     archives:
       ob500: {url: "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob500.data.zip", present: [2024-12-01, 2025-08-20]}
@@ -108,6 +114,7 @@ data:
   excluded_days_D: null  # [[day, reason]]; frozen by the D amendment
   off_grid_tick: "each day's own, from events.derive_tick as load_day derives it; every day whose tick differs from the specification's or is not a multiple of it is reported, and no day is excluded for that"
   instrument_spec: null  # {tick, lot} of BTCUSDT from the venue's instrument specification; frozen by the D amendment
+  ob200_reader_test_result: null  # {max_sequence_gaps, days: {day: {status, stream, exclusions, findings, notes, rows_outside_day, passes, fails_on_gaps_alone}}, D: {stream, findings}}: each reader-test day loaded as a block day against D's threshold, with its message counts, median interval, gap count and every finding by check and severity beside D's; the ledger opens H only when no reader-test day failed but on its gap count; frozen by the D amendment
 
 blocks:
   W: {role: warm_up, start: 2024-12-01, end: 2024-12-31, days: 31, archive: ob500, scored: false, reads: free}
@@ -121,6 +128,7 @@ blocks:
   days_independent: true  # flat at every midnight; rolling statistics read earlier days of the same block, and W before D and F before P; H and F start cold
   cold_start_days: [2025-07-08, 2025-08-21]  # rolling state rebuilt from the block's own rows
   cold_start_unscored: the first N minutes from each cold-start day's midnight, whatever days they span, N being features.longest_lookback_minutes
+  P_first_day_history: "2025-11-17 reads 2025-11-16 when that day is usable under the frozen threshold, which P's own read session checks again on the day's files (F's results file is not consulted for it); otherwise cold"
   cold_after_hole: "a day whose previous calendar day has no usable book (missing, unreadable, unfetchable or excluded by the loader) starts cold as the cold-start days do; nothing rolling reads across the hole"
   spent: H, F and P are spent for every configuration of this catalogue; successors use blocks after 2025-12-31
 
@@ -152,6 +160,7 @@ common:
   passive_fill:
     simulator: market_making/simulator.py
     rules: [R5, R6, R7]
+    fill_at_the_price: floored to the instrument's lot (a pro-rata share of a print smaller than a lot is no fill)
     clip_btc: common.clip_btc  # new setting; replaces clip_notional and clip_touch_share
     queue_priority: tail
     cancel_attribution: proportional
@@ -166,6 +175,8 @@ common:
     warmup_s: 60
     stop_quoting_at: "23:58"
     flatten_at: "23:59"
+    between_stop_and_flatten: "a quoter holding a position is still asked at each snapshot and only its taker exit is honoured: an exit due before 23:59 is crossed when due"
+    decisions_outside_hours: "a passive decision stamped outside 00:01..23:58 (the taker's entry hours) is not passed to the quoter"
     markout_horizons_s: [1, 5, 10, 30]
     decomposition_horizon_s: 5
     suspend_after_pause_s: 5  # no snapshot for 5 s pulls every resting order until the next one; also R16's flatten_stale threshold
@@ -183,6 +194,7 @@ common:
   market_maker:
     strategy: S1 with the signal lean (pipeline/market_making, lean > 0)
     S1: {skew_bp: 2, k: 0.5, min_edge_bp: 4}  # round one's frozen values, configs/mm_prereg.yaml
+    S1_on_the_visible_book: "kept at these values: the half-spread maker + min_edge_bp + k x sigma is at least 6 bp, beyond BTCUSDT's tenth visible level, and the simulator never quotes past the visible book (R11), so S-M posts only when the lean moves its reservation price past the half-spread, on one side at the touch; it will rarely post, K-trades will most likely leave it inconclusive, and guard_widen will rarely differ from guard_pull; stated before any data is read"
     sigma_ref_rule: "the median of the simulator's vol_bp_1m (its estimator, vol_half_life_s 60) over W's rows; in the fitted-values file"
     soft_limit_clips: 1
     lean: [0.5, 1, 2]  # the slot's neighbourhood; the cell is 1
@@ -249,10 +261,11 @@ models:
   control_network: same as tcn, trained on the control label
   windows: {rows: the 64 consecutive 100 ms rows ending at the decision row, same_in_training_and_inference: true, dataset: "lazy, built per batch, streamed per day from the every-row store (new code)", inference: batched}
   training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time}
-  training_rows_kept: "positions floor(i x total / 4000000) over the training days' every-tenth rows in day order"
+  training_rows_kept: "positions floor(i x total / 4000000) over the training days' every-tenth rows in day order, in integer arithmetic; total counts every such row stamped before the purge, labelled or not, and a kept row without a label is then dropped"
   frozen: {train: 2025-01-01..2025-06-23, thresholds_and_checkpoints: 2025-06-24..2025-06-30, fits: "every hold and label fee in the neighbourhood of C*, R* (admitted or not) and S25", max_fits: {gbm_and_logistic: 12, bound_ridge: 3, tcn: 4, control: 4}}  # gbm/logistic: 6 for C*'s holds and label fees, 6 for S25's; bound_ridge: R*'s holds
   weights_sha256: null  # {fit key: sha256} for every frozen fit; the only place they are written; frozen by the D amendment
   checkpoint_epoch: null  # {fit key: epoch} for the frozen network and control fits; the only place they are written; frozen by the D amendment
+  fits_lacking_a_class: null  # [{fold, configuration, missing, side, note}]: every stage-A classifier fit whose training labels lacked a class, with the side it lacked (search.stages A), or that had too few rows to fit; an empty list when none did; frozen by the D amendment
 
 search:
   clock: {rows: data.book.rows (100 ms), decisions: every row}
@@ -260,7 +273,7 @@ search:
   instruments: [BTCUSDT]
   blocks: {sandbox: [W, January], scored: "D's walk-forward test days, 2025-02..06 (150)", held_out: [H, F, P]}
   stages:
-    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05), the network's training batch and inference over a whole day's rows (a sample's figures kept beside them) and the replay's seconds and peak RSS on the two days' ob500 archives under data/timing_archives/; D's wall time projected; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
+    - {stage: 0, before: any 2025 fetch, what: "catalogue hash check; the code timed on 2024 days on disk (BTCUSDT 2024-02-11 and 2024-03-05), the network's training batch and inference over a whole day's rows (a sample's figures kept beside them) and the replay's seconds and peak RSS on the two days' ob500 archives under data/timing_archives/ (stage 0 refuses to run without both, and reads no other archive there); the fold-level leakage test's network on the CPU and a store day read and written; D's wall time projected, the fold-level test's fits included, at the registered worker counts (8, the simulator 6, the replay's measured), never --workers; cuts by budget.reduction_order if over budget.ceiling_days; the walk-table parity test (search.nulls.null_B.parity_test), whose failure blocks stage B until fixed by a dated amendment"}
     - {stage: 1, what: "fetch, replay and features for W and D; leakage, fold-level leakage and flag-causality tests; selection on January"}
     - {stage: A, what: "200 walk-forward fits; predictions on the test days; candidate-row tapes per signal configuration and test day; daily IC on all decision rows"}
     - {stage: B, what: "every taker cell on every test day from walk tables; one trial-ledger row per cell-day"}
@@ -368,10 +381,10 @@ d_procedure:
   stages: search.stages
   walk_forward:
     test_months: [2025-02, 2025-03, 2025-04, 2025-05, 2025-06]  # 150 test days
-    train: D days before the test month, except the last seven
+    train: "D's usable days before the test month, except those in the seven calendar days before it, which are the inner validation (its usable days among those seven, fewer when one is excluded; never filled from earlier days)"
     inner_validation_days: 7  # per-side theta from the target rate (reads no outcome) and the network's checkpoint by inner rank IC
     purge: hold plus the longest feature lookback, before the inner validation and before the test month  # experiments/grand_search.py's purge not used
-    fold_level_leakage_test: "mutating every price after fold m's cutoff, and every label at a row after it, leaves fold m's weights, theta, gate levels and checkpoint unchanged (sha256); the cutoff is the end of fold m's inner validation plus the hold, inside the purge before test month m; the precondition for nulls without refitting"
+    fold_level_leakage_test: "mutating every price after fold m's cutoff, and every label at a row after it, leaves fold m's weights, theta, gate levels and checkpoint unchanged (sha256); the cutoff is the end of fold m's inner validation plus the hold, or, where later, the last exit snapshot a target row before that end reads (the 10 ms latency and the grid can put it a snapshot past), inside the purge before test month m; run on the study's own fit code twice, on stage 1's artefacts and on a scratch copy with every row after the cutoff mutated and the labels recomputed from the mutated book; the precondition for nulls without refitting"
     fold_level_leakage_test_fits: {device: cpu, per_fold: "one fit of each model at hold_s 20 (C on micro inputs at label_fee_bp 0), with theta at the four rates and the gate levels", tcn: "epochs 1 with the inner validation scored; weights, that epoch's inner rank IC and the checkpoint epoch compared", reason: "bit-for-bit reproducible from the seed on the CPU (unit test); MPS promises no bitwise determinism", cost: "about 1 to 1.5 h a network fit on the CPU, timed at stage 0 and in D's projection"}
   candidate_tapes: "per signal configuration and test day, the rows at which the loosest cell could enter (theta at 240 a day; k 0 and beta 0; gate open; no guard), with scores, gate and guard states; at most 4 GB"
   walk_tables: "per day and hold, the long and short walked P&L at every 100 ms row from the taker executor's walk (10 ms latency, funding included); built in memory one day at a time, never stored"
@@ -380,7 +393,7 @@ d_procedure:
   admission: search.admission
   frozen_fit:
     train: 2025-01-01..2025-06-23
-    purge: hold plus the longest feature lookback before 2025-06-24
+    purge: "hold plus the longest feature lookback before 2025-06-24, and the same before 2025-07-01 at the end of the thresholds' and checkpoints' window, as in every walk-forward fold"
     inner_validation: 2025-06-24..2025-06-30
     fits: models.frozen
     thresholds: every (hold, trades_per_day, label_fee_bp) cell of each frozen C neighbourhood (C*'s and S25's)
@@ -440,7 +453,7 @@ slots:
     family: none  # statuses.S25-Z
   A0:
     signal: S25's
-    protocol: {train: 2025-01-01..2025-01-27, thresholds_on: 2025-01-28..2025-02-03, trades_per_day: 240, hold_s: 50, run_on: O}
+    protocol: {train: 2025-01-01..2025-01-27, thresholds_on: 2025-01-28..2025-02-03, trades_per_day: 240, hold_s: 50, run_on: O, purge: "hold plus the longest feature lookback before 2025-01-28 and before 2025-02-04, as in every walk-forward fold"}
     executions: [taker at zero_fee, passive under each FILL rule]
   regions:  # leaderboard measurements, no slot
     T1: {stratum: C, model: gbm, inputs: micro, label_fee_bp: 5.5, gate: open, regime: none}
@@ -455,6 +468,8 @@ metrics:
     taker: one value per day with a trade; the day's net USDT summed over round trips / their summed entry notional x 1e4  # S25, S-C, S-R
     S25-Z: one value per day with a trade; the day's gross USDT summed over round trips / their summed entry notional x 1e4; and the same for net at 0/0
     passive: every usable day; the day's net USDT x 100 / the clip's notional at each entry, summed; 0 for a day without a fill, written as a row into the table given to assess  # S-P, S-M
+    passive_entry: "S-P: the posted clip at its first fill's price; S-M: a run of fills from a flat position to the next, over the clip's notional at its first fill's price, the day's funding over the mean of its entries' notionals"
+    per_trade_denominator: "S25-Z's gross_bp_trade and net, and S-P's per-trade figures: over the filled entry notional (the maker fills on the entry's side at their prices), not the posted clip"
   computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
   ic: rank correlation of the score (p_long - p_short, or mu) with the mid move from the entry snapshot to the first snapshot at or after it + hold, per day over all decision rows, mean over days
   beside: [gross_bp_turnover, ic, fill_ratio, markouts_1_5_10_30s_by_path, spread_plus_adverse_5s, trades_per_day,
@@ -470,6 +485,7 @@ metrics:
     formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
     n_eff: 44 x the share of D's 150 test days with a trade at the chosen cell; 44 for S-P and S-M; 24 in place of 44 for a slot on S25's signal (statuses.S25_signal_slots)
     n_eff_on_F_and_P: the usable days of the series the status is assessed on (F- or all of F, or P) x the same share; sigma_D as frozen
+    on_F_and_P_days_and_share: "the days: the status window's usable days after the days flagged stale in any run are dropped (the days the series holds); the share: the one the frozen sigma_D and MDE imply, so the label is the frozen MDE x sqrt(44 / those days), 24 in place of 44 on S25's signal; no share estimated on a held-out block"
     searched_slots_also: sigma_D at the carry-forward estimate, with the power of the t >= 3 bar against it
     sigma_d: null  # per slot and S25-Z, over D's 150 walk-forward test days; frozen by the D amendment
     value: null  # per slot and S25-Z; frozen by the D amendment
@@ -493,12 +509,14 @@ statuses:
     R: not tested
     holm_on_F_and_P: p = 1
     measured_inside_information_set: "H 2025-08-01..08-20 and all of H, F as one whole block, and P only when P is opened for another slot; computed in the same read sessions with kills and placebos; labelled inside S25's information set"
+    measured_inside_reports: "every condition of the slot's kill list on those days, the placebo means and the random draws' 95th percentile; no precedence applied, no status"
   taken_to_F: [candidate, "inconclusive at precedence step 5, with or without the MDE label, with a positive mean (S25-Z: both claims' means positive)"]  # never a slot on S25's signal (S25_signal_slots); inconclusive (too few trades), step 2, is not taken to F whatever its sign
   F_split: {F_minus: F's usable days before the alarm's day, F_plus: F's usable days after it, alarm_day: neither}
   F_assessed_on: "F- when there is an alarm in F, F- has at least 20 usable days, R was not declared untestable on D and R is not void; otherwise all of F, labelled, and F is not split"
   F_plus_enters: only R
   P_read_for: slots that passed on F
   P_when_R_supported: "scored only as mean <= 0 (the break persisted) or > 0 (it did not last); no K-trades and no kill applied; void conditions applied (status void); a P series without a day with a trade has mean 0"
+  void_on_F_or_P: "status void (the precedence's first step, counted as killed), never killed on F or killed on P; F's table carries a void row; P not read for a slot void on F"
   first_significant_on_F: "exploratory: significant on F until P; P is its only confirmatory test; R not tested; never called a candidate"
   R_untestable_or_not_tested_reads_as: not supported
   unreadable:
@@ -506,6 +524,7 @@ statuses:
     F: the slot's status after H stands, marked F unreadable; P not read for it
     P: "statuses after F stand, marked P unreadable: a candidate that passed on F is candidate, not confirmed (P unreadable), whatever R showed; one first significant on F is exploratory: significant on F, not confirmed (P unreadable)"
   R_void: "a later detector run does not reproduce an earlier run's alarms (D's as the amendment records them, each block's as its results file does); R read as not supported; found at H's read, F assessed on all of F, labelled; found at F's read, b does not split F (all of F, labelled); found at P's read, F's statuses stand and P is scored with the full bar"
+  R_void_scope: "by timestamp and channel, each earlier run on its own dates only: D on 2025-01-01..06-30, each earlier block on its dates (H's read against D alone; F's against D and H; P's against D, H and F); E's and W's dates in no comparison, their alarms reported"
   not_taken_to_F: F reported as one whole block, never split at b
   read_failed: "a first read that fails again at the same stage with the same exception after a resumption at the same commit, or is unfinished after five resumptions, closes with every slot not assessed (<block> read failed), the stage reached and the exception; then as an unreadable block of the same letter (H: nothing taken to F, F read as measurements at the same commit, P not read; F: H's statuses stand, marked F read failed, P not read; P: as P unreadable); no code change"
   defect_after_read: "stated in a dated note, docs/short_horizon_2025_defects.md, naming the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read), counted as killed for routing and p = 1 in Holm on later blocks; Holm on a block already read recomputed from its committed results file with that p = 1; a status may only fall; later reads run on unchanged code and report it as measurements"
@@ -526,6 +545,8 @@ kill_conditions:
     S25-Z: {execution: signal-entry quoter at 0/0, series: [gross_bp_trade, net at 0/0], kills: [K1, K2, K-label, K-placebo with stale, K-drift, K-nbhd, K-days, K-queue, K-latency], exempt: [K-fee], beside: [net at the base tier on the same trades, fill decomposition]}
   void: [K-leak, K-flag-leak, K-units, K-acct, K-cap]  # K-leak (features or the fold-level test) voids every result; K-flag-leak every slot with a regime window above 0; K-units every slot whose gate or cost input (fee, walk, funding) it reaches, S25-Z included, and S-P and S-M when it reaches their signal's gate
   K-flag-leak: the flag-causality test fails (search.regime_source.flag_causality_test); found before D, fixed by a dated amendment
+  K-acct_simulator_slots: "S-P, S-M, S25-Z: a fault in any run of the slot's read (true run, placebo, neighbour cell, bracket, latency or shift re-run) voids the slot; the faulty run recorded"
+  K-cap_simulator_slots: "read from the true run only, the largest position its fills reach on any day; a placebo's or neighbour cell's position recorded, not read"
   K-cap: {taker_S-P_S25-Z: "|position| above one clip at any event (the quoter counts an order whose cancel is in flight as resting)", S-M: "|position| above the simulator's hard limit, soft_limit_clips + 1 = 2 clips", S-M_reported: time above one clip and the reduce-only taker orders back to the soft limit}
   status_only: {K-trades: 100, K-trades_counts: "round trips; for the quoter, entries with any fill, not the simulator's fill rows; for S-M, returns to a flat position", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0
@@ -543,7 +564,7 @@ placebo_percentile: 95
 placebos:
   sign_flipped: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z]}
   random_direction: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z], draws: 200, seeds: [0, 199]}
-  one_day_shift: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z], circular_within_block: true, source: "the previous usable day, stepping over excluded days"}
+  one_day_shift: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z], circular_within_block: true, source: "the previous usable day, stepping over excluded days", circle: "the block's usable days, except for a slot on S25's signal on H, whose status, kills and placebos wrap over its usable days 2025-07-08..07-31: 07-08 takes the tape of the last usable day at or before 07-31, never one from 08-01 (inside S25's information set); one shifted series per slot, which its measurement on all of H reads too (08-01 and later from their previous usable day)", steps_over: "every excluded day, a day flagged flatten_stale in any run included; a day a shift run flags stale is left out in turn and the shift retaken from the previous kept day until no day changes (the excluded set only grows)"}
   stale: {used_by: [S-P, S-M, S25-Z], delay: one hold}
   all_long_all_short: {used_by: [S25, S-C, S-R, S-P, S-M, S25-Z]}  # K-drift
   market_maker: each placebo replaces S-M's signal tape
@@ -585,7 +606,7 @@ measurements:
       queue: R5, R6 and R7  # the simulator's default
     fill_ratio: share of posted orders with any fill (backtest/maker.py fill_rate); filled over posted volume reported beside
     prediction: {on_touch_fill_ratio_min: 0.75, queue_fill_ratio_max: 0.50}
-  fee_break_even: {taker: gross_bp_turnover, passive: maker fee at zero net with the taker exit at 5.5 and at 1.5 bp}
+  fee_break_even: {taker: gross_bp_turnover, passive: maker fee at zero net with the taker exit at 5.5 and at 1.5 bp, tier_pays_passive: "net positive at the tier's own maker and taker fees together (exits at the tier's taker fee)", S-P_at_maker_0_and_minus_1_bp: with the taker exit at the base 5.5 bp}
   H_before_2025_08_01: {slots: every slot not on S25's signal, days: 2025-07-08..2025-07-31, label: sensitivity, status: none}  # for a slot on S25's signal these days are its status window and all of H is the measurement
   gap_days_included: every verdict's mean, t and median day with the gap-excluded days put back
   measured_rows: statuses.measured_rows
@@ -628,8 +649,9 @@ detector:
   alarms_D: null  # timestamp and channel of every alarm over 2025-01-01..06-30 from the frozen-profile run over 2024-12-01..2025-06-30, for the reproduction check (the fold-wise runs never enter it); frozen by the D amendment
   alarms_recorded: each block's run's alarms, with timestamp and channel, in that block's results file
   r_untestable_declared: null  # true or false; frozen by the D amendment
+  second_detector_D: null  # {span: D, rows, days, days_read, alarms: [{timestamp, statistic, direction, excursion, label}], note}: reported_beside.changepoint over D, run by stage C under the development access (its alarms stamped at the right label of the last grid row of the block that fired); reported beside R, never defining b; frozen by the D amendment
   reported_beside:
-    changepoint: {code: validation/changepoint.py detect, grid: "data/grid.to_grid, 1 s, label right", window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, runs: [continuous over D, restarted on 2025-07-08, continuous over H, restarted on 2025-08-21, continuous from F through P], label_within_one_day_of: 2025-08-21}
+    changepoint: {code: validation/changepoint.py detect, grid: "data/grid.to_grid, 1 s, label right", window: 2000, threshold: 20, reference: 40, minimum_gap: 20000, runs: [continuous over D, restarted on 2025-07-08, continuous over H, restarted on 2025-08-21, continuous from F through P], label_within_one_day_of: 2025-08-21, within_one_day: "within 24 h of 2025-08-21 00:00 UTC", day_enters_stream: "its book on disk and its only exclusion sequence gaps (the grid carries the last book across a gap); a day excluded for anything else left out, the stream running on", alarm_stamp: the right label of the last grid row of the block of rows that fired it, runs_by: "D by stage C under the development access (second_detector_D); H, F and P by their reads, P's span running on from F; the dry run's stand-ins on their own days"}
     earlier_daily_run: experiments/results/structural_breaks_BTCUSDT_breaks.csv  # public before this registration
 
 fetch:
@@ -654,7 +676,7 @@ fetch:
   ledger_records: sha256 and UTC download time of every fetched file
   open_refuses_if_on_disk: any book, print, funding or hourly-bar file of the block; for H also any hourly bar of E
   stages:
-    - {stage: 1, when: "after this registration and its code are merged, and after stage 0's amendment if it cuts anything", what: [W and D, funding for W and D only, hourly bars 2024-12-01..2025-06-30, ob200 reader-test days 2026-01-05..07], archives_gb: {book: 76.0, prints: 15.3}}  # book includes the reader-test days' 0.6 GB
+    - {stage: 1, when: "after this registration and its code are merged, and after stage 0's amendment if it cuts anything", what: [W and D, funding for W and D, hourly bars 2024-12-01..2025-06-30, "ob200 reader-test days 2026-01-05..07 with their prints and funding, for the dry run's F and P read"], archives_gb: {book: 76.0, prints: 15.3}}  # book includes the reader-test days' 0.6 GB; their prints (not checked by HEAD) are not in the print figure
     - {stage: 2, when: inside H's opened access after the amendment is committed, what: [H, H's funding, E's and H's hourly bars from daily archives], archives_gb: {book: 11.4, prints: 2.1}}
     - {stage: 3, when: inside F's opened access after H's results are committed, what: [F, F's funding, F's hourly bars from daily archives], archives_gb: {book: 15.8, prints: 5.9}}
     - {stage: 4, when: inside P's opened access after F's results are committed and only if the condition holds, what: [P, P's funding, P's hourly bars from daily archives], archives_gb: {book: 9.9, prints: 3.5}}
@@ -663,7 +685,7 @@ fetch:
   E_book_prints_funding_fetched: false
 
 compute:
-  machine: {cores: 10, memory_gb: 32, device: mps, workers: "runtime arguments, recorded in the ledger; outputs identical at 1 and N workers (tested); a resumption may use fewer", replay_workers_max: 4, simulator_workers_max: "6, while 6 x the peak RSS of one day stays within 24 GB", other_workers: 8, fits: one at a time on all cores; network fits queue on the MPS device}
+  machine: {cores: 10, memory_gb: 32, device: mps, workers: "runtime arguments, recorded in the ledger; outputs identical at 1 and N workers (tested); a resumption may use fewer", replay_workers_max: 4, simulator_workers_max: "6, while 6 x the peak RSS of one day stays within 24 GB; each read session's first simulated day runs alone to measure the peak, each later batch as many workers as the largest peak so far allows", other_workers: 8, fits: one at a time on all cores; network fits queue on the MPS device}
   unit_costs: {gbm_fit_1M_x_40_s: 15, gbm_fit_1M_x_100_s: 32, gbm_predict_day_s: 0.6, logistic_fit_1M_x_100_s: 2.2, tcn_batch_ms: {mps: 8.9, cpu: 557}, tcn_fit_min: [22, 44], entry_loop_ms_per_cell_day: 6, simulator_s_per_cell_day: {one_process: [5.6, 10.3], wall_on_6_workers: [0.85, 2.5]}, normaliser_s_per_day_28_columns: 49}  # measured on this machine, synthetic arrays and 2024 days on disk
   download_gb: {stage_1: 91.3, stage_2: 13.5, stage_3: 21.7, stage_4: 13.4, all_stages: 139.9, without_P: 126.5}  # archives, from the HEAD sums
   hours_by_stage: {"1": [4, 6], A: [10, 18], B: "under 1", D_choice_null_A_pbo_dsr: [2, 5], D_null_B: "at most about 82 CPU-hours at 6 ms per cell-day and shift (about 49 million re-pairings), about 10 h on 8 workers; less if vectorised, measured at stage 0", D_refit: "about 3-7 h: 80 gbm fits 1.3-2.9 h, 80 logistic fits, every test-day row re-predicted from the every-row store, C re-scored; timed at stage 0", C: [1.8, 5.4], C_at_9_to_27_s: [19, 58], E: [17, 33], D_total: [48, 85], D_total_with_C_at_9_to_27_s: [65, 138], A_also: "network inference on every row of the test days and inner-validation scoring at every epoch, timed at stage 0", D_total_above_ceiling_at_top: false}  # stage 0's projection decides the cuts
@@ -697,7 +719,7 @@ amendment:
   planned: 1
   before: the read of H
   stage_0: a dated amendment of its own before stage 1 if the projection cuts anything, with the new catalogue sha256, N_max, the configuration's new null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut; the code-freeze note follows it before stage 1
-  records: ["excluded days, max_sequence_gaps by its rule, tick and lot, selected features", reader-test days' message counts intervals and gaps, "the trial ledger's sha256 and row count, N_trials, N_eff, R_D and the hand-run log", chosen cells with neighbourhoods S and peaks, "every replication of the placebo search: A per stratum under Null A, Null B and the refit, seeds, shifts, quantiles, p-values", "admission decisions with reasons, carry-forward estimates, PBO, DSR, selection premium", S-P's signal, sigma_D and MDEs per slot, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the fold-wise flag lists, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every frozen finalist file's sha256, every threshold, every checkpoint epoch, "the entry point, committed before the stage 1 fetch", "the compute record, with peak memory, worker counts, the device and the stores' sizes", fits that lacked a class with the side, the frozen YAML sha256]
+  records: ["excluded days, max_sequence_gaps by its rule, tick and lot, selected features", reader-test days' message counts intervals and gaps, "the trial ledger's sha256 and row count, N_trials, N_eff, R_D and the hand-run log", chosen cells with neighbourhoods S and peaks, "every replication of the placebo search: A per stratum under Null A, Null B and the refit, seeds, shifts, quantiles, p-values", "admission decisions with reasons, carry-forward estimates, PBO, DSR (each finalist's, S25's included, at N_trials with the simulator trials counted, with the variance it is deflated against: taker slots and S25 against every taker cell's daily G on D, S-P and S-M against every S-P and S-M cell simulated on D), the power of the t >= 3 bar against each searched slot's carry-forward estimate, selection premium", S-P's signal, sigma_D and MDEs per slot, A0 and FILL on O, detector alarm rate on D with every alarm's timestamp and channel and any untestable declaration, the fold-wise flag lists, the detector's 24-value hour-of-day profile fitted on D, the fitted-values file's sha256, every frozen weight file's sha256, every frozen finalist file's sha256, every threshold, every checkpoint epoch, "the entry point, committed before the stage 1 fetch", "the compute record, with peak memory, worker counts, the device and the stores' sizes", fits that lacked a class with the side, "the second detector's run over D with every alarm's timestamp and statistic", the frozen YAML sha256]
   hash_line: "Frozen configuration sha256: `<hash>`"
   date: null  # frozen by the D amendment
 

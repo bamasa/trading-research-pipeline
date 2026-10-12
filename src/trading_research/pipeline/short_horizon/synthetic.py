@@ -305,12 +305,12 @@ class Venue:
             day = self._day(path.rsplit("/", 1)[-1][:10])
             if day is None or not path.endswith(f"_{bybit.archive_kind(day)}.data.zip"):
                 return None
-            if day in self.reader_test_days:
-                return self.market.book_archive(day, hours=2)
-            return self.market.book_archive(day) if day in self.market.days else None
+            known = day in self.market.days or day in self.reader_test_days
+            return self.market.book_archive(day) if known else None
         if parsed.netloc == "public.bybit.com":
             day = self._day(path.rsplit(SYMBOL, 1)[-1][:10])
-            return self.market.prints_archive(day) if day in self.market.days else None
+            known = day in self.market.days or day in self.reader_test_days
+            return self.market.prints_archive(day) if day is not None and known else None
         if parsed.netloc == "data.binance.vision":
             if "/daily/klines/" not in path or not path.endswith(".zip"):
                 return None  # monthly archives and checksums do not exist here

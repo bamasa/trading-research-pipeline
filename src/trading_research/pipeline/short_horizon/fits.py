@@ -106,23 +106,21 @@ class FoldData:
             raise RuntimeError("a fold has no training day")
         return cls(pd.concat(xs, ignore_index=True), pd.concat(ts, ignore_index=True))
 
-    def rows(self, target: str, before_ns: int, max_rows: int) -> np.ndarray:
-        """Positions with the target, stamped before ``before_ns``, evenly thinned."""
-        ok = (self.targets[ft.TIME].to_numpy() < before_ns) & np.isfinite(
-            self.targets[target].to_numpy()
-        )
-        at = np.flatnonzero(ok)
-        if len(at) > max_rows:
-            at = at[np.floor(np.arange(max_rows) * len(at) / max_rows).astype(np.int64)]
-        return at
+    def rows(self, before_ns: int, max_rows: int) -> np.ndarray:
+        """The training rows' positions: every row stamped before ``before_ns``,
+        thinned evenly in time to at most ``max_rows`` (:func:`thin_positions`).
+        A kept row without a label is dropped by the fit, not replaced."""
+        at = np.flatnonzero(self.targets[ft.TIME].to_numpy() < before_ns)
+        return at[thin_positions(len(at), max_rows)]
 
     def shifted(self, target: str, start_ns: int, end_ns: int, days: int) -> np.ndarray:
-        """The training labels moved ``days`` later around ``[start_ns, end_ns)``: the
-        label at stamp ``t`` becomes the one at the last training row at or before
-        ``t - days`` (wrapped by the span when that falls before its start), within
-        twice the rows' median spacing, else missing. Event-time rows never repeat
-        a stamp a whole number of days apart, so the source is matched as of its
-        time rather than on an exact stamp."""
+        """The training labels moved ``days`` later, circularly within ``[start_ns,
+        end_ns)``: the label at stamp ``t`` becomes the one at the last training row
+        at or before ``start + ((t - start - days) mod span)``, within twice the
+        rows' median spacing, else missing. On a span shorter than ``days`` the
+        shift wraps as often as it takes (``days`` mod the span). Event-time rows
+        never repeat a stamp a whole number of days apart, so the source is matched
+        as of its time rather than on an exact stamp."""
         stamps = self.targets[ft.TIME].to_numpy()
         values = self.targets[target].to_numpy(dtype=np.float64)
         inside = np.flatnonzero((stamps >= start_ns) & (stamps < end_ns))
@@ -130,8 +128,8 @@ class FoldData:
         if len(inside) < 2:
             return out
         times = stamps[inside]
-        source = times - days * 86_400 * NS_PER_S
-        source = np.where(source < start_ns, source + (end_ns - start_ns), source)
+        lag = days * 86_400 * NS_PER_S
+        source = start_ns + np.mod(times - start_ns - lag, end_ns - start_ns)
         at = np.searchsorted(times, source, side="right") - 1
         tolerance = 2 * float(np.median(np.diff(times)))
         ok = (at >= 0) & (source - times[np.maximum(at, 0)] <= tolerance)
@@ -141,6 +139,16 @@ class FoldData:
     def gate_levels(self, before_ns: int) -> GateLevels:
         keep = self.targets[ft.TIME].to_numpy() < before_ns
         return fit_gate_levels(self.targets.loc[keep, [VOLATILITY_COLUMN, SPREAD_COLUMN]])
+
+
+def thin_positions(total: int, max_rows: int) -> np.ndarray:
+    """Positions ``floor(i * total / max_rows)`` for ``i < max_rows``, in integer
+    arithmetic; every position when ``total`` is at most ``max_rows``."""
+    if max_rows < 1:
+        raise ValueError(f"max_rows must be at least 1, got {max_rows}")
+    if total <= max_rows:
+        return np.arange(total, dtype=np.int64)
+    return (np.arange(max_rows, dtype=np.int64) * np.int64(total)) // np.int64(max_rows)
 
 
 def thresholds(proba: np.ndarray, days: int) -> dict[float, HoldFirstRule]:
@@ -217,16 +225,19 @@ def window_days(
             if target_dir is None
             else pd.read_parquet(target_dir / f"{day}.parquet")
         )
-        ok = np.isfinite(frame[target].to_numpy())
+        ok = np.ones(len(frame), dtype=bool)
         if before_ns is not None:
             ok &= frame[ft.TIME].to_numpy() < before_ns
         picked.append(frame["row"].to_numpy()[ok])
-        targets.append(frame[target].to_numpy()[ok])
+        targets.append(frame[target].to_numpy(dtype=np.float64)[ok])
     if target is not None:
+        # thinned over every row of the span, then the rows without a target dropped
         kept = thin_evenly(picked, max_rows)
         positions = [np.searchsorted(p, k) for p, k in zip(picked, kept, strict=True)]
-        targets = [t[i] for t, i in zip(targets, positions, strict=True) if t is not None]
-        picked = list(kept)
+        values = [t[i] for t, i in zip(targets, positions, strict=True) if t is not None]
+        known = [np.isfinite(v) for v in values]
+        picked = [k[f] for k, f in zip(kept, known, strict=True)]
+        targets = [v[f] for v, f in zip(values, known, strict=True)]
     out = []
     for k, day in enumerate(days):
         follows = k > 0 and (day - days[k - 1]).days == 1 and not inputs.cold(day)
@@ -258,6 +269,10 @@ class NetworkJob:
     epochs: int | None = None
     #: Train on the control label kept here, rather than on the configuration's own.
     control_dir: Path | None = None
+    #: The device, when not the registered one (the fold-level leakage test's CPU).
+    device: str | None = None
+    #: Stage 1's record while stage 1 is still running (its fold-level leakage test).
+    record: dict[str, Any] | None = None
 
 
 def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
@@ -265,7 +280,7 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
     write its mean and log-variance on every row of every test day."""
     from trading_research.pipeline.short_horizon.models import network, save
 
-    inputs = Inputs(job.study)
+    inputs = Inputs(job.study, given=job.record)
     fold, scale = job.fold, job.study.scale
     found: dict[str, dict[str, Any]] = {}
     for cfg in job.configurations:
@@ -280,7 +295,9 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
                             scale.max_training_rows, job.control_dir)  # fmt: skip
         inner = window_days(inputs, fold.inner, columns, ft.forward_column(cfg.hold_s),
                             fold.inner_end_ns(cfg.hold_s), scale.max_training_rows)  # fmt: skip
-        changes = {} if job.epochs is None else {"epochs": job.epochs}
+        changes: dict[str, Any] = {} if job.epochs is None else {"epochs": job.epochs}
+        if job.device is not None:
+            changes["device"] = job.device
         known = sum(int(np.isfinite(d.targets).sum()) for d in train if d.targets is not None)
         if known < 100:  # too few targets to fit on: no score, no decision this fold
             folder.mkdir(parents=True, exist_ok=True)
@@ -300,7 +317,8 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
             strict=True,
         ):
             np.savez(folder / f"{day}.npz", mu=mu, log_variance=log_variance)
-        record = {"weights_sha256": sha, "checkpoint_epoch": int(model.checkpoint_epoch_ or 0),
+        record = {"weights_sha256": sha, "state_sha256": model.weights_sha256(),
+                  "checkpoint_epoch": int(model.checkpoint_epoch_ or 0),
                   "history": [{k: float(v) for k, v in h.items()} for h in getattr(model, "history_", [])]}  # fmt: skip
         save_json(record_path, record)
         found[cfg.name] = record
@@ -339,7 +357,7 @@ def fit_main_process(
     labels = data.targets[cfg.target].to_numpy(dtype=np.float64)
     if shift_days is not None:
         labels = data.shifted(cfg.target, midnight_ns(fold.train[0]), end, shift_days)
-    rows = data.rows(cfg.target, end, scale.max_training_rows)
+    rows = data.rows(end, scale.max_training_rows)
     rows = rows[np.isfinite(labels[rows])]
     from trading_research.models.base import clean
 

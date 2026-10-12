@@ -19,7 +19,8 @@ the registration's stricter protocol (``## Who may read what``):
   sha256.
 
 H opens only with the frozen configuration recorded by the amendment and
-committed, every frozen weight file, finalist file and the fitted-values file
+committed, the ``ob200`` reader test recorded with no reader-test day failing
+but on its gap count, every frozen weight file, finalist file and the fitted-values file
 at the amendment's sha256, the trial ledger's manifest committed with the
 amendment's sha256 and row count and every part on disk matching it (the parts
 stay under ``data/``, never committed), the catalogue at its registered (or amended)
@@ -328,6 +329,30 @@ class Ledger:
                 f"({manifest['sha256']}, {manifest['rows']})"
             )
 
+    def verify_reader_test(self, registration: shr.Registration) -> None:
+        """The ``ob200`` replay proven before H: the amendment records the reader
+        test, and every reader-test day passed as a block day or failed on its gap
+        count alone (a property of the archive, recorded, and the study goes on).
+        Any other failure is first checked as a reader fault, corrected under the
+        amendment protocol, before H is opened."""
+        result = registration.value(("data", "ob200_reader_test_result"))
+        if not result or not result.get("days"):
+            raise HeldOutLocked("the amendment records no ob200 reader test; H waits for it")
+        days = result["days"]
+        missing = [d.isoformat() for d in sa.READER_TEST_DAYS if d.isoformat() not in days]
+        if missing:
+            raise HeldOutLocked(f"the ob200 reader test records no result for {missing}")
+        failed = {
+            day: list(entry.get("exclusions", []))
+            for day, entry in days.items()
+            if not entry.get("passes") and not entry.get("fails_on_gaps_alone")
+        }
+        if failed:
+            raise HeldOutLocked(
+                f"ob200 reader-test days failed as block days: {failed}; the reader is checked "
+                "and a fault corrected under the amendment protocol before H is opened"
+            )
+
     def files_on_disk(self, block: str) -> list[Path]:
         """Files of ``block``'s opening already on disk (for H, E's hourly bars too)."""
         days = sa.opening_days(block)
@@ -410,6 +435,7 @@ class Ledger:
                     f"the catalogue's sha256 {catalogue_sha256} is not the registered or "
                     f"amended {registration.catalogue_sha256}"
                 )
+            self.verify_reader_test(registration)
         else:
             self._after_read(sa.HELD_OUT[sa.HELD_OUT.index(block) - 1], committed)
         self.verify_trials(registration)
