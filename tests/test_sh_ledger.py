@@ -89,6 +89,7 @@ def frozen_values() -> dict[tuple[str, ...], Any]:
         ("features", "fitted_values_sha256"): digests[shl.FITTED_VALUES_PATH],
         ("models", "weights_sha256"): {"gbm_h50": digests[shl.WEIGHTS_DIR / "gbm_h50"]},
         ("models", "checkpoint_epoch"): {"tcn_h20": 7},
+        ("models", "fits_lacking_a_class"): [],
         ("search", "result_trials"): {
             "N_trials": 2400, "N_eff": 300.0, "R_D": 1,
             "ledger_sha256": sha(TRIALS), "ledger_rows": 10, "hand_runs": [],
@@ -106,6 +107,7 @@ def frozen_values() -> dict[tuple[str, ...], Any]:
         ("detector", "alarm_rate_D"): 0.0,
         ("detector", "alarms_D"): [],
         ("detector", "r_untestable_declared"): False,
+        ("detector", "second_detector_D"): {"span": "D", "alarms": []},
         ("compute", "record"): {"workers": 4},
         ("amendment", "date"): date(2026, 11, 1),
         ("artefacts", "frozen_finalist_files_sha256"): {"S25": digests[shl.FINALISTS_DIR / "S25.json"]},

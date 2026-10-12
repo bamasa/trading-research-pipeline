@@ -371,6 +371,22 @@ def compute_record(study: Study) -> dict[str, Any]:
     }
 
 
+#: What each deflated Sharpe ratio is deflated against (``evaluation/overfitting``).
+TAKER_DSR_VARIANCE = ("N_trials with the simulator trials counted, and the variance of the Sharpe "
+                      "ratios of every taker cell's daily G on D's usable test days")  # fmt: skip
+PASSIVE_DSR_VARIANCE = ("N_trials with the simulator trials counted, and the variance of the Sharpe "
+                        "ratios of every S-P and S-M cell's daily net_per_100_clip_day simulated on "
+                        "D, over the days no run flagged, 0 on a day without a fill")  # fmt: skip
+#: Stage C's second detector on D when the stage's record does not carry it.
+SECOND_DETECTOR_NOT_RUN = {"span": "D", "alarms": [], "note": "not run by stage C at this commit"}
+
+
+def slot_dsr(found: dict[str, Any], name: str, series: tuple[str, ...], against: str) -> dict[str, Any]:  # fmt: skip
+    """A slot's deflated Sharpe ratios as a stage recorded them under ``<name>/<series>``
+    (None where none was computed), with what they are deflated against."""
+    return {s: found.get(f"{name}/{s}") for s in series} | {"deflated_against": against}
+
+
 def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, ...], Any]:
     """Every placeholder the D amendment fills, from the stages' records."""
     record1, record_b = study.record("1"), study.record("B")
@@ -379,8 +395,11 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
                 if not e["usable"]]  # fmt: skip
     excluded += [[date.fromisoformat(d), "flatten_stale"] for d in record_b["stale_days"]]
     slots, fits, mdes, trials = parts["slots"], parts["fits"], parts["mdes"], parts["trials"]
+    dsr = trials["overfitting"].get("dsr", {})  # at N_trials with the simulator trials counted
+    power = record_d.get("power_at_bar", {})
     admission = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null",
-                         "against_its_own_nulls": record_d["S25"]},
+                         "against_its_own_nulls": record_d["S25"],
+                         "dsr": slot_dsr(dsr, "S25", ("G", "net"), TAKER_DSR_VARIANCE)},
                  "S25-Z": {"status_on_D": "fixed before D; outside the family"}}  # fmt: skip
     for stratum, slot in (("C", "S-C"), ("R", "S-R")):
         admission[slot] = {
@@ -390,9 +409,14 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
             "nulls": record_d["nulls"][stratum],
             "pbo": record_d["overfitting"]["pbo"].get(stratum),
             "selection_premium": record_d["selection_premium"][stratum],
+            "dsr": slot_dsr(dsr, f"{stratum}*", ("G", "net"), TAKER_DSR_VARIANCE),
+            "power_at_bar": power.get(slot),
         }
+    passive_dsr = record_c.get("overfitting", {}).get("dsr", {})
     for slot in ("S-P", "S-M"):
-        admission[slot] = record_c["admission"][slot]
+        admission[slot] = dict(record_c["admission"][slot]) | {
+            "dsr": slot_dsr(passive_dsr, slot, ("net",), PASSIVE_DSR_VARIANCE)
+        }
     detector = parts["detector"]
     s25_cells = [k for k in slots["S25"]["neighbourhood"] if parse_key(k).stratum == "C"]
     c_cells = slots["S-C"]["neighbourhood"] if "S-C" in slots else []
@@ -405,6 +429,7 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
         ("features", "fitted_values_sha256"): parts["fitted_sha256"],
         ("models", "weights_sha256"): fits["weights_sha256"],
         ("models", "checkpoint_epoch"): fits["checkpoint_epoch"],
+        ("models", "fits_lacking_a_class"): record_d.get("fits_lacking_a_class", []),
         ("search", "result_trials"): {
             "N_trials": trials["N_trials"], "N_eff": trials["overfitting"]["N_eff"],
             "R_D": record_d["R_D"], "ledger_sha256": trials["ledger_sha256"],
@@ -425,6 +450,8 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
         ("detector", "alarm_rate_D"): detector["alarm_rate_D"],
         ("detector", "alarms_D"): detector["alarms_D"],
         ("detector", "r_untestable_declared"): detector["r_untestable_declared"],
+        ("detector", "second_detector_D"): record_c.get("second_detector_D")
+        or SECOND_DETECTOR_NOT_RUN,
         ("compute", "record"): compute_record(study),
         ("amendment", "date"): utc_today(),
         ("artefacts", "frozen_finalist_files_sha256"): parts["finalists"],
@@ -459,9 +486,62 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
         f"- Statuses set on D: {record_d['statuses_on_D']}.",
         f"- The fitted-values file's sha256 `{values[('features', 'fitted_values_sha256')]}`.",
         *reader_test_lines(values[("data", "ob200_reader_test_result")]),
+        *overfitting_lines(values[("search", "result_admission")]),
+        lacking_a_class_line(values[("models", "fits_lacking_a_class")]),
+        second_detector_line(values[("detector", "second_detector_D")]),
         "",
     ]
     return "\n".join(lines)
+
+
+def _number(value: Any) -> str:
+    return "not computed" if value is None else f"{float(value):.4g}"
+
+
+def overfitting_lines(admission: dict[str, Any]) -> list[str]:
+    """The deflated Sharpe ratios of every finalist (S25 among them) with what they
+    are deflated against, and the power of the t >= 3 bar against each searched
+    slot's carry-forward estimate, as frozen under ``search.result_admission``."""
+    parts, against = [], set()
+    for slot in ("S25", "S-C", "S-R", "S-P", "S-M"):
+        dsr = admission.get(slot, {}).get("dsr")
+        if dsr is None:
+            continue
+        found = {k: v for k, v in dsr.items() if k != "deflated_against"}
+        parts.append(f"{slot} " + ", ".join(f"{k} {_number(v)}" for k, v in found.items()))
+        against.add(str(dsr["deflated_against"]))
+    lines = ["- Deflated Sharpe ratios: " + "; ".join(parts) + " (deflated against "
+             + "; ".join(sorted(against)) + ")."]  # fmt: skip
+    power = []
+    for slot in ("S-C", "S-R"):
+        found = admission.get(slot, {}).get("power_at_bar")
+        if found is not None:
+            power.append(f"{slot} {_number(found.get('power'))} against a carry-forward net of "
+                         f"{_number(found.get('carry_forward_net'))} bp (sigma_D "
+                         f"{_number(found.get('sigma_D'))}, n_eff {_number(found.get('n_eff'))})")  # fmt: skip
+    lines.append(
+        "- Power of the t >= 3 bar: " + ("; ".join(power) if power else "not computed") + "."
+    )
+    return lines
+
+
+def lacking_a_class_line(fits: list[dict[str, Any]]) -> str:
+    """The stage-A fits whose training labels lacked a class, with the side."""
+    if not fits:
+        return "- Fits that lacked a class: none."
+    found = "; ".join(f"{f.get('fold')} {f.get('configuration')} ({', '.join(f.get('side') or [])}"
+                      f"{' ' + f['note'] if f.get('note') else ''})" for f in fits)  # fmt: skip
+    return f"- Fits that lacked a class, with the side: {len(fits)}: {found}."
+
+
+def second_detector_line(found: dict[str, Any]) -> str:
+    """The second detector's run over D (``validation/changepoint.detect`` on the 1 s
+    grid), reported beside R and never defining ``b``."""
+    alarms = list(found.get("alarms", []))
+    first = f", the first at {alarms[0]['timestamp']}" if alarms else ""
+    note = f" ({found['note']})" if found.get("note") else ""
+    return (f"- The second detector on D: {len(alarms)} alarms over {found.get('days_read', 0)} "
+            f"days read{first}{note}.")  # fmt: skip
 
 
 def reader_test_lines(result: dict[str, Any]) -> list[str]:

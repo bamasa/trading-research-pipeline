@@ -57,7 +57,7 @@ RESULTS_PATHS: dict[str, Path] = {
 }
 
 #: The sha256 of the YAML as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "cbae8c75e636596f63d0f14f401a0941d37d375a3f1429a9ac257a8d5e2899b7"
+REGISTERED_SHA256 = "b2feab72b2c8174ef950d4fab882483055f105495d3e6fc33b95b9a1be4d23c2"
 #: The registered catalogue's sha256 (``search.catalogue.sha256``).
 REGISTERED_CATALOGUE_SHA256 = "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d"
 #: The break-detector library's locked commit (``detector.library.commit``).
@@ -79,6 +79,7 @@ PLACEHOLDERS: tuple[tuple[str, ...], ...] = (
     ("features", "fitted_values_sha256"),
     ("models", "weights_sha256"),
     ("models", "checkpoint_epoch"),
+    ("models", "fits_lacking_a_class"),
     ("search", "result_trials"),
     ("search", "result_choice"),
     ("search", "result_admission"),
@@ -93,6 +94,7 @@ PLACEHOLDERS: tuple[tuple[str, ...], ...] = (
     ("detector", "alarm_rate_D"),
     ("detector", "alarms_D"),
     ("detector", "r_untestable_declared"),
+    ("detector", "second_detector_D"),
     ("compute", "record"),
     ("amendment", "date"),
     ("artefacts", "frozen_finalist_files_sha256"),
@@ -311,6 +313,30 @@ def _reader_test(value: Any, where: str) -> None:
     _mapping(result.get("D"), f"{where}.D")
 
 
+def _fits_lacking_a_class(value: Any, where: str) -> None:
+    """Every stage-A fit whose training labels lacked a class, with the side it lacked
+    (or that had too few rows to fit); an empty list when none did."""
+    _require(isinstance(value, list), f"{where} is a list of fits")
+    for fit in value:
+        _require(
+            isinstance(fit, Mapping) and {"fold", "configuration", "side"} <= set(fit),
+            f"{where} records each fit's fold, configuration and side",
+        )
+
+
+def _second_detector(value: Any, where: str) -> None:
+    """The second detector's run over D: its span and alarms, each with its timestamp
+    and statistic (``validation/changepoint.detect`` on the 1 s grid)."""
+    found = _mapping(value, where)
+    _require(found.get("span") == "D", f"{where}.span is D")
+    _require(isinstance(found.get("alarms"), list), f"{where}.alarms is a list")
+    for alarm in found["alarms"]:
+        _require(
+            isinstance(alarm, Mapping) and {"timestamp", "statistic"} <= set(alarm),
+            f"{where} records each alarm's timestamp and statistic",
+        )
+
+
 def _boolean(value: Any, where: str) -> None:
     _require(isinstance(value, bool), f"{where} must be true or false")
 
@@ -333,6 +359,7 @@ FROZEN_KINDS: dict[tuple[str, ...], Any] = {
     ("features", "fitted_values_sha256"): lambda v, w: _require(_is_sha256(v), f"{w} is a sha256"),
     ("models", "weights_sha256"): _hashes,
     ("models", "checkpoint_epoch"): _epochs,
+    ("models", "fits_lacking_a_class"): _fits_lacking_a_class,
     ("search", "result_trials"): _result_trials,
     ("search", "result_choice"): lambda v, w: _mapping(v, w, keys=("C*", "R*")),
     ("search", "result_admission"): lambda v, w: _mapping(v, w, keys=SLOTS),
@@ -347,6 +374,7 @@ FROZEN_KINDS: dict[tuple[str, ...], Any] = {
     ("detector", "alarm_rate_D"): _non_negative,
     ("detector", "alarms_D"): _alarms,
     ("detector", "r_untestable_declared"): _boolean,
+    ("detector", "second_detector_D"): _second_detector,
     ("compute", "record"): _any_mapping,
     ("amendment", "date"): _a_date,
     ("artefacts", "frozen_finalist_files_sha256"): lambda v, w: _hashes(v, w, keys=SLOTS),

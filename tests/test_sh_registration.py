@@ -37,6 +37,9 @@ VALUES: dict[tuple[str, ...], Any] = {
     ("features", "fitted_values_sha256"): "a" * 64,
     ("models", "weights_sha256"): {"gbm_micro_h50_f0": "b" * 64},
     ("models", "checkpoint_epoch"): {"tcn_h20": 7},
+    ("models", "fits_lacking_a_class"): [
+        {"fold": "2025-02", "configuration": "x", "missing": ["short"], "side": ["short"]}
+    ],
     ("search", "result_trials"): {
         "N_trials": 2400,
         "N_eff": 310.5,
@@ -58,6 +61,10 @@ VALUES: dict[tuple[str, ...], Any] = {
     ("detector", "alarm_rate_D"): 0.03,
     ("detector", "alarms_D"): [{"timestamp": "2025-03-01T00:00:00Z", "channel": "scale"}],
     ("detector", "r_untestable_declared"): False,
+    ("detector", "second_detector_D"): {
+        "span": "D",
+        "alarms": [{"timestamp": "2025-04-01T00:00:00+00:00", "statistic": "mid_cusum"}],
+    },
     ("compute", "record"): {"replay_peak_rss_gb": 3.1},
     ("amendment", "date"): date(2026, 11, 1),
     ("artefacts", "frozen_finalist_files_sha256"): {"S25": "e" * 64},
@@ -155,6 +162,7 @@ def test_a_partly_frozen_file_is_inconsistent() -> None:
         (("features", "fitted_values_sha256"), "abc"),
         (("models", "weights_sha256"), {}),
         (("models", "checkpoint_epoch"), {"tcn": 21}),
+        (("models", "fits_lacking_a_class"), [{"fold": "2025-02"}]),
         (("search", "result_trials"), {"N_trials": 1}),
         (("search", "result_choice"), {"C": {}}),
         (("slots", "S25", "thresholds"), {CELL: {"theta_long": 0.6}}),
@@ -163,6 +171,7 @@ def test_a_partly_frozen_file_is_inconsistent() -> None:
         (("detector", "hour_profile"), [1.0] * 23),
         (("detector", "alarms_D"), [{"timestamp": "x"}]),
         (("detector", "r_untestable_declared"), "no"),
+        (("detector", "second_detector_D"), {"span": "H", "alarms": []}),
         (("amendment", "date"), "2026-11-01"),
         (("artefacts", "frozen_finalist_files_sha256"), {"S25": "e" * 63}),
     ],
