@@ -60,7 +60,7 @@ order is pulled and nothing is quoted until the next snapshot. A day the
 stored book reports sequence gaps for, whose flatten found no fresh book, or
 that has no funding plane, is flagged and excluded from verdicts. The
 accounting identity is checked after every change to the account and once more
-at the end. The full set of rules, each with the direction it biases a result and the
+at the end, with each side's turnover against the sum of its fills' notionals. The full set of rules, each with the direction it biases a result and the
 test that pins it, is in ``docs/market_making_simulator.md``.
 """
 
@@ -1034,6 +1034,7 @@ class _Day:
             raise IdentityError(
                 f"decomposition net {decomposition['net']!r} differs from cash {equity!r}"
             )
+        check_turnover(fills, account.maker_turnover, account.taker_turnover)
 
         orders = pd.DataFrame(
             [
@@ -1114,6 +1115,17 @@ class _Day:
             oracle=oracle,
             flags=tuple(flags),
         )
+
+
+def check_turnover(fills: pd.DataFrame, maker_turnover: float, taker_turnover: float) -> None:
+    """Raise :class:`IdentityError` unless each side's turnover is the sum of its
+    fills' notionals (the registration's K-acct: turnover equals the fills)."""
+    for maker, booked in ((True, maker_turnover), (False, taker_turnover)):
+        mine = fills[fills["maker"].to_numpy(dtype=bool) == maker]
+        found = float((mine["price"] * mine["size"]).sum()) if len(mine) else 0.0
+        if not abs(found - booked) <= 1e-9 * max(1.0, booked):
+            side = "maker" if maker else "taker"
+            raise IdentityError(f"{side} turnover {booked!r} is not its fills' notional {found!r}")
 
 
 def _time_ns(moment: time) -> int:
