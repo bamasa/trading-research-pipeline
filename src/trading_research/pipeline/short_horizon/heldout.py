@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from functools import cached_property, partial
 from pathlib import Path
 from typing import Any
@@ -181,7 +181,7 @@ class Block:
         from dataclasses import replace
 
         view = replace(self, gaps_put_back=True)
-        for name in ("registration", "fitted", "validated", "detector"):
+        for name in ("registration", "fitted", "validated", "detector", "history"):
             if name in self.__dict__:
                 view.__dict__[name] = self.__dict__[name]
         return view
@@ -220,8 +220,33 @@ class Block:
     def flags_ns(self) -> np.ndarray:
         return np.asarray(self.detector["flags_ns"], dtype=np.int64)
 
+    @cached_property
+    def history(self) -> list[date]:
+        """The earlier block's last day when it is usable and adjacent with the same
+        archive (F's for P, F before P), which the rolling state of the block's
+        first day may read; none for H and F, whose first days start cold."""
+        from trading_research.market_making.events import DayUnavailable
+
+        last = self.days_planned[0] - timedelta(days=1) if self.days_planned else None
+        if self.name != "P" or last is None or sa.block_of(last) != "F":
+            return []
+        try:
+            book = sl.load_book_day(self.study.symbol, last, self.study.roots.book,
+                                    max_sequence_gaps=int(self.value(("data", "max_sequence_gaps"))),
+                                    access=self.access)  # fmt: skip
+            usable = not list(book.exclusions)
+            if usable:
+                self.events(last)
+        except (DayUnavailable, FileNotFoundError):
+            return []
+        return [last] if usable else []
+
+    def previous(self, day: date) -> date | None:
+        """The day whose rolling state ``day`` reads (the earlier block's for P's first day)."""
+        return ft.previous_day(day, [*self.history, *self.usable])
+
     def cold(self, day: date) -> bool:
-        return ft.previous_day(day, self.usable) is None
+        return self.previous(day) is None
 
     def features(self, day: date) -> pd.DataFrame:
         """The day's every-row inputs as the stores hold them (raw sizes scaled, cast
@@ -230,7 +255,7 @@ class Block:
         from trading_research.features.lob_tensor import TensorCalibration
 
         def build() -> pd.DataFrame:
-            previous = ft.previous_day(day, self.usable)
+            previous = self.previous(day)
             history = None if previous is None else (self.book(previous), self.prints(previous))
             calibration = TensorCalibration.from_dict(self.fitted["tensor"])
             frame = ft.day_frame(self.book(day), self.prints(day), calibration, history)
@@ -304,7 +329,7 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
         out.mkdir(parents=True, exist_ok=True)
         model = load(path, kind="tcn") if path.exists() else None
         control = load(control_path, kind="tcn") if model and control_path.exists() else None
-        for k, day in enumerate(days):
+        for day in days:
             target = out / f"{day}.npz"
             if target.exists():
                 continue
@@ -312,14 +337,13 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
             if model is None:
                 np.savez(target, mu=np.full(rows, np.nan), log_variance=np.full(rows, np.nan))
                 continue
-            follows = k > 0 and (day - days[k - 1]).days == 1 and not block.cold(day)
+            previous = block.previous(day)
 
             def values(d: date = day) -> np.ndarray:
                 return block.features(d)[columns].to_numpy(dtype=np.float32)
 
-            sequence = [Day(str(day), values, np.arange(rows), None, follows)]
-            if follows:
-                previous = days[k - 1]
+            sequence = [Day(str(day), values, np.arange(rows), None, previous is not None)]
+            if previous is not None:
                 n = len(block.features(previous))
                 sequence.insert(
                     0, Day(str(previous), partial(values, previous), np.arange(n), None, False)

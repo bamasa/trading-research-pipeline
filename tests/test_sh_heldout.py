@@ -237,3 +237,34 @@ def test_s25_z_carries_its_net_claim_with_every_variants_net() -> None:
     assert s.net_claim.latency.tolist() == [5.0, 15.0, 25.0, 35.0]
     kept = np.array([True, False, True, True])
     assert st.subset(s, kept).net_claim.value.tolist() == [10.0, 30.0, 40.0]
+
+
+def test_ps_first_day_reads_fs_last_day_when_it_is_usable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from trading_research.data import study_loader as sl
+
+    p_days = (date(2025, 11, 17), date(2025, 11, 18))
+    exclusions: dict[date, list[str]] = {date(2025, 11, 16): []}
+    seen: list[date] = []
+
+    def load(_symbol: str, day: date, _root: Any, **_: Any) -> Any:
+        seen.append(day)
+        return SimpleNamespace(exclusions=exclusions[day])
+
+    monkeypatch.setattr(sl, "load_book_day", load)
+    study = SimpleNamespace(symbol="BTCUSDT", roots=SimpleNamespace(book="book"))
+
+    def block(name: str, days: tuple[date, ...]) -> Any:
+        found = ho.Block(study, name, None, days, values={("data", "max_sequence_gaps"): 3})  # type: ignore[arg-type]
+        found.__dict__["validated"] = {"usable": list(days), "gap_days": []}
+        monkeypatch.setattr(found, "events", lambda _day: None)
+        return found
+
+    p = block("P", p_days)
+    assert (
+        p.history == [date(2025, 11, 16)] and not p.cold(p_days[0]) and seen == [date(2025, 11, 16)]
+    )
+    assert p.previous(p_days[0]) == date(2025, 11, 16) and p.put_back().history == p.history
+    exclusions[date(2025, 11, 16)] = [sl.SEQUENCE_GAPS]
+    assert block("P", p_days).cold(p_days[0])
+    f = block("F", (date(2025, 8, 21), date(2025, 8, 22)))
+    assert f.history == [] and f.cold(date(2025, 8, 21)) and not f.cold(date(2025, 8, 22))
