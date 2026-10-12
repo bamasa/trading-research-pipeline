@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from trading_research.market_making.fill_rules import QUEUE_AT_MOST, TOUCH_AT_LEAST
+from trading_research.reporting.edge_ladder import NOT_READ, NOT_RECORDED
 from trading_research.reporting.leaderboard import SELECTED
 from trading_research.reporting.plots import COLOURS, _pyplot
 
@@ -242,6 +243,11 @@ def marginals_chart(marginals: pd.DataFrame, path: Path | str, *, title: str = "
     return _save(fig, path, title, DEVELOPMENT)
 
 
+def _missing(label: str) -> str:
+    """Why a ladder row has no value: its block is not read yet, or it gave none."""
+    return NOT_RECORDED if NOT_RECORDED in str(label) else NOT_READ
+
+
 def edge_ladder_chart(ladder: pd.DataFrame, path: Path | str, *, title: str = "") -> Path:
     """S25's edge ladder (``reporting.edge_ladder``): each step's values in bp
     of traded notional, and the break-even per side against every tier.
@@ -271,7 +277,8 @@ def edge_ladder_chart(ladder: pd.DataFrame, path: Path | str, *, title: str = ""
         label="inside S25's information set",
     )
     for i in np.flatnonzero(~np.isfinite(values)):
-        left.text(0.0, i, " not read yet", va="center", fontsize=7.5, color=COLOURS["neutral"])
+        left.text(0.0, i, f" {_missing(bars['label'].iloc[i])}", va="center", fontsize=7.5,
+                  color=COLOURS["neutral"])  # fmt: skip
     blocks = bars["block"].str.replace("H before 2025-08-01", "H to 07-31", regex=False)
     labels = [f"{s}. {r} ({b})" for s, r, b in zip(bars["step"], bars["row"], blocks, strict=True)]
     left.set_yticks(y, labels, fontsize=7.5)
@@ -301,7 +308,7 @@ def edge_ladder_chart(ladder: pd.DataFrame, path: Path | str, *, title: str = ""
         right.text(
             0.98,
             0.02,
-            "break-even not read yet",
+            f"break-even: {_missing(tiers['label'].iloc[0])}",
             transform=right.transAxes,
             ha="right",
             fontsize=8,

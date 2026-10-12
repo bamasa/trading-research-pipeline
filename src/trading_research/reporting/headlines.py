@@ -12,7 +12,8 @@ Choices the registration leaves open, made here:
 
 * a bracket with nothing to report is filled with ``none`` (the kill) and
   ``n/a`` (its value and reference), so a slot with no kill keeps the whole
-  sentence;
+  sentence; a number that does not exist (a making part without a passive
+  fill, a break-even without a trade) is written ``n/a`` too;
 * ``[R_D] D runs`` is filled with the number, whatever its grammar;
 * the payoff sentence is written once for each admitted slot;
 * a void R is read as not supported, as the registration reads it;
@@ -225,11 +226,12 @@ _KILL_FREE = re.compile(
 
 
 def _p(value: float) -> str:
-    return f"{value:.3g}"
+    return f"{value:.3g}" if math.isfinite(value) else "n/a"
 
 
 def _bp(value: float) -> str:
-    return f"{value:.2f}"
+    """A number of bp to two places; ``n/a`` when there is none (no trade, no fill)."""
+    return f"{value:.2f}" if math.isfinite(value) else "n/a"
 
 
 def search_on_d(

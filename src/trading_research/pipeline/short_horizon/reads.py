@@ -13,9 +13,14 @@ is committed and pushed by hand before anything of the block is fetched.
    they are committed (``require_fetch_committed``), so a first ``read``
    returns after the fetch and a second one, after the commit, computes;
 3. every slot's per-day values (:mod:`.heldout`), every status and kill
-   (:mod:`.statuses`), the measurements and the headline sentences, written to
-   ``experiments/results/short_horizon_2025_<block>.json``, whose sha256
-   closes the session.
+   (:mod:`.statuses`), the measurements, the headline sentences and the
+   numbers the pages show beside the statuses (:mod:`.page_numbers`), written
+   to ``experiments/results/short_horizon_2025_<block>.json``, whose sha256
+   closes the session;
+4. the pages, written again from everything computed so far (:mod:`.pages`):
+   the sentences, the finalists page, the S25 page, the regime map's file and
+   the figures. A failure there is recorded in the block's record and never
+   reopens the closed session; ``pages`` writes them again.
 
 A failure is recorded in the ledger; a read that must close as failed (the same
 stage failing twice with the same exception, or past five resumptions) writes
@@ -328,8 +333,10 @@ def unreadable_results(study: Study, block: str, why: str) -> dict[str, Any]:
 
 
 def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
-    """Everything the block's read produces, statuses and kills included."""
+    """Everything the block's read produces, statuses and kills included, and the
+    numbers the pages show beside them (:mod:`.page_numbers`)."""
     from trading_research.pipeline.short_horizon.heldout import Block, compute_block
+    from trading_research.pipeline.short_horizon.page_numbers import block_numbers
 
     blk = Block(study, block, session.access, study.scale.days(block))
     head = {"block": block, "session": list(session.key), "stamp": session.stamp,
@@ -346,6 +353,7 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
              "P": lambda: statuses_p(study, series)}[block]()  # fmt: skip
     found["sentences"] = sentences(block, found["statuses"], found["assessments"])
     found["regime_map"] = regime_segments(series, blk.detector["alarms"], block)
+    found["pages"] = block_numbers(blk, series, found)
     return head | {"unreadable": False, "info": info} | found
 
 
@@ -364,6 +372,7 @@ def read_block(study: Study, block: str, commit: Any = None) -> dict[str, Any]:
     """The block's read session; ``commit`` (the dry run's) commits the fetch records,
     which the author commits and pushes by hand in the registered study."""
     from trading_research.pipeline import short_horizon_registration as shr
+    from trading_research.pipeline.short_horizon.pages import publish_or_note
 
     state = study.state
     if state.complete(block):
@@ -396,5 +405,6 @@ def read_block(study: Study, block: str, commit: Any = None) -> dict[str, Any]:
     path = write_results(study, block, results)
     digest = session.close(path.relative_to(study.repo))
     summary = {"block": block, "results": shr.RESULTS_PATHS[block].as_posix(), "results_sha256": digest,
-               "statuses": results.get("statuses", {}), "next": "commit the results file and the ledger"}  # fmt: skip
+               "statuses": results.get("statuses", {}), "pages": publish_or_note(study),
+               "next": "commit the results file, the pages, their figures and the ledger"}  # fmt: skip
     return state.finish(block, summary)

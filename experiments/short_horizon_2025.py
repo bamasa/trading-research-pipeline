@@ -16,6 +16,7 @@ complete, and resumes from its own checkpoints when it stopped part way::
     .venv/bin/python -m experiments.short_horizon_2025 open H
     .venv/bin/python -m experiments.short_horizon_2025 read H --workers 8
     .venv/bin/python -m experiments.short_horizon_2025 status
+    .venv/bin/python -m experiments.short_horizon_2025 pages
 
 What each stage does is in ``trading_research.pipeline.short_horizon``. Between
 the steps the author commits what the registration has committed: the code
@@ -26,7 +27,10 @@ computation, and its results file after it.
 
 ``open`` writes a block's open entry into the study's ledger; ``read`` runs the
 block's read session (fetch, every slot, statuses and kills) and closes it,
-returning after the fetch until its records are committed. ``--run`` numbers a
+returning after the fetch until its records are committed. ``pages`` writes the
+pages again from what has been computed (stage E and every read write them
+too): the headline sentences, the finalists page, the S25 page with the edge
+ladder, the regime map's file and the figures in both themes. ``--run`` numbers a
 complete D run (R_D counts them); the worker count is a runtime argument the
 ledger records, never part of the configuration.
 
@@ -44,7 +48,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from trading_research.pipeline.short_horizon import reads, runner
+from trading_research.pipeline.short_horizon import pages, reads, runner
 from trading_research.pipeline.short_horizon.context import Study
 from trading_research.pipeline.short_horizon.plan import REGISTERED
 from trading_research.pipeline.short_horizon.state import READS, STAGES
@@ -56,7 +60,7 @@ def parser() -> argparse.ArgumentParser:
     found = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
-    found.add_argument("command", nargs="?", choices=[*STAGES, "open", "read", "status"])
+    found.add_argument("command", nargs="?", choices=[*STAGES, "open", "read", "status", "pages"])
     found.add_argument("block", nargs="?", choices=READS, help="the block to open or read")
     found.add_argument("--workers", type=int, default=1)
     found.add_argument("--run", type=int, default=1, help="the complete D run's number (R_D)")
@@ -74,10 +78,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True, default=str))
         return 0
     if args.command is None:
-        parser().error("name a stage, open, read or status (or pass --dry-run)")
+        parser().error("name a stage, open, read, status or pages (or pass --dry-run)")
     study = Study(REPO, REGISTERED, run=args.run, workers=args.workers)
     if args.command == "status":
         result: object = runner.status(study)
+    elif args.command == "pages":
+        result = pages.publish(study)
     elif args.command in ("open", "read"):
         if args.block is None:
             parser().error(f"{args.command} needs a block: {', '.join(READS)}")

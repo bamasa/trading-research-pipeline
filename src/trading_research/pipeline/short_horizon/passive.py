@@ -151,6 +151,13 @@ def day_values(cell: SimCell, quoter: Any, result: Any, clip: float, mid: float)
     for name in ("exit_late_snapshot", "flatten_beyond_visible_book", "time_above_one_clip_s",
                  "entries_cancelled_by_flag", "feed_pauses"):  # fmt: skip
         row[name] = float(result.counters.get(name, 0.0))
+    orders = result.orders  # what FILL reads: the posted orders and their fills
+    posted = len(orders)
+    row |= {"orders_posted": float(posted),
+            "orders_filled": float((orders["filled"] > 0).sum()) if posted else 0.0,
+            "volume_posted": float(orders["size"].sum()) if posted else 0.0,
+            "volume_filled": float(orders["filled"].sum()) if posted else 0.0,
+            "notional_filled": float((orders["filled"] * orders["price"]).sum()) if posted else 0.0}  # fmt: skip
     if cell.kind == "entry":
         table = quoter.attempts(fills)
         filled = table[table["filled"]] if len(table) else table
@@ -428,7 +435,8 @@ def a0_and_fill(study: Any, inputs: Any) -> dict[str, Any]:
         )
         trades = result.trades
         crossing.append({"day": day.isoformat(), "trades": len(trades), "gross": float(trades["gross"].sum()),
-                         "net": float(trades["net"].sum()), "turnover": float(result.turnover)})  # fmt: skip
+                         "net": float(trades["net"].sum()), "turnover": float(result.turnover),
+                         "notional": float(trades["notional"].sum()), "net_bp": result.day_bp("net")})  # fmt: skip
         ic[day.isoformat()] = rank_ic(
             proba[:, 2] - proba[:, 0], forward_move_bp(book, 50.0).to_numpy()
         )
