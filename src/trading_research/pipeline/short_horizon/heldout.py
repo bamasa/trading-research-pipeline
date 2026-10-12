@@ -880,6 +880,13 @@ def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[Passive
             return stale, rows
 
 
+def unreadable(block: Block, stale: set[date]) -> bool:
+    """More than a quarter of the block's planned days excluded: the loader's
+    exclusions and the days any run of the read flagged stale, each day once."""
+    excluded = (set(block.days_planned) - set(block.validated["usable"])) | stale
+    return bool(sl.block_unreadable(len(excluded), max(1, len(block.days_planned))))
+
+
 def flag_sets(block: Block, days: list[date]) -> tuple[int, list[np.ndarray]]:
     """The regime attribution's random flag sets over ``days``: how many flags the
     block has inside them, and the registered number of sets for a taker slot
@@ -971,7 +978,7 @@ def compute_block(block: Block, *, days: list[date] | None = None,
     )
     info = {"usable_days": [d.isoformat() for d in days], "stale_days": sorted(d.isoformat() for d in stale),
             "one_day_shift_from": shift if kills else {},
-            "excluded": block.validated["reasons"], "unreadable": block.validated["unreadable"],
+            "excluded": block.validated["reasons"], "unreadable": unreadable(block, stale),
             "gap_days": [d.isoformat() for d in block.validated["gap_days"]],
             "alarms_in_block": in_block, "passive_runs": len(rows),
             "flag_days": [d.isoformat() for d in usable], "flags_in_block": n_flags,

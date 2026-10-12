@@ -388,6 +388,9 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
         return head | {"unreadable": True, "excluded": blk.validated["reasons"]} | unreadable_results(
             study, block, "unreadable")  # fmt: skip
     series, info = compute_block(blk)
+    if info["unreadable"]:  # the days flagged stale in the read's runs counted too
+        return head | {"unreadable": True, "excluded": blk.validated["reasons"],
+                       "stale_days": info["stale_days"]} | unreadable_results(study, block, "unreadable")  # fmt: skip
     gaps = compute_block(blk.put_back(), days=blk.gap_days, kills=False)[0] if blk.gap_days else {}
     mdes = blk.value(("metrics", "mde", "value")) or {}
     for slot, s in series.items():
