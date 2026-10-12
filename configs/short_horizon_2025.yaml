@@ -546,7 +546,7 @@ kill_conditions:
   void: [K-leak, K-flag-leak, K-units, K-acct, K-cap]  # K-leak (features or the fold-level test) voids every result; K-flag-leak every slot with a regime window above 0; K-units every slot whose gate or cost input (fee, walk, funding) it reaches, S25-Z included, and S-P and S-M when it reaches their signal's gate
   K-flag-leak: the flag-causality test fails (search.regime_source.flag_causality_test); found before D, fixed by a dated amendment
   K-acct_simulator_slots: "S-P, S-M, S25-Z: a fault in any run of the slot's read (true run, placebo, neighbour cell, bracket, latency or shift re-run) voids the slot; the faulty run recorded"
-  K-cap_simulator_slots: "read from the true run only, the largest position its fills reach on any day; a placebo's or neighbour cell's position counted, not read"
+  K-cap_simulator_slots: "read from the true run only, the largest position its fills reach on any day; a placebo's or neighbour cell's position recorded, not read"
   K-cap: {taker_S-P_S25-Z: "|position| above one clip at any event (the quoter counts an order whose cancel is in flight as resting)", S-M: "|position| above the simulator's hard limit, soft_limit_clips + 1 = 2 clips", S-M_reported: time above one clip and the reduce-only taker orders back to the soft limit}
   status_only: {K-trades: 100, K-trades_counts: "round trips; for the quoter, entries with any fill, not the simulator's fill rows; for S-M, returns to a flat position", K-MDE: "below the minimum detectable effect, only when no kill fired"}
   K1: the mean of the daily series on the block <= 0

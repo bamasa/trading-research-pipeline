@@ -1511,7 +1511,7 @@ Void conditions; the slot is recorded as `void`:
   is in flight counts as resting, so its position never exceeds one clip.
   For the simulator slots K-cap reads the true run only, the largest
   position its fills reach on any day; a placebo's or a neighbour cell's
-  position is not the slot's claim, and is counted, not read.
+  position is not the slot's claim, and is recorded, not read.
 
 Kill conditions:
 
@@ -2972,7 +2972,7 @@ text left a gap:
 ---
 
 The configuration as registered, with every placeholder `null`, has sha256
-`b2feab72b2c8174ef950d4fab882483055f105495d3e6fc33b95b9a1be4d23c2`.
+`23751a848ddb6e1ee652139b36de085d589bb2be827c9b9a0e49365c6c4308c4`.
 (Earlier versions of this file on its unmerged branch had other hashes, all
 superseded drafts that do not count:
 `e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`

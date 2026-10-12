@@ -57,7 +57,7 @@ RESULTS_PATHS: dict[str, Path] = {
 }
 
 #: The sha256 of the YAML as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "b2feab72b2c8174ef950d4fab882483055f105495d3e6fc33b95b9a1be4d23c2"
+REGISTERED_SHA256 = "23751a848ddb6e1ee652139b36de085d589bb2be827c9b9a0e49365c6c4308c4"
 #: The registered catalogue's sha256 (``search.catalogue.sha256``).
 REGISTERED_CATALOGUE_SHA256 = "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d"
 #: The break-detector library's locked commit (``detector.library.commit``).
