@@ -13,19 +13,25 @@ On the two 2024 days already on disk (BTCUSDT 2024-02-11, a quiet day, and
    with XGBoost): a training batch and inference per row, each over as many
    rows as the busier timing day holds, as D trains on whole days streamed
    from the store and scores whole test days; a sample's figures are kept
-   beside them.
-2. **The projection** of D's wall time (:func:`projection`), Null B at full size
-   and the refit included, against the six-day ceiling; over it, the
+   beside them. The fold-level leakage test's network is timed on the CPU, a
+   training batch and inference per row, and a day of a float16 store read and
+   written, the unit of the test's mutated scratch root.
+2. **The projection** of D's wall time (:func:`projection`), Null B at full size,
+   the refit and the fold-level leakage test's fits (twice per fold, the network
+   one epoch on the CPU) included, at the registered worker counts (8, the
+   simulator 6, the replay's as measured) whatever ``--workers`` says, against
+   the six-day ceiling; over it, the
    registered reduction order cuts the 120 s hold, then stratum C's
    micro+tensor inputs, then the ``quiet_out`` gate, until it fits. Cuts are
    not made here: they are written into the record with the cut catalogue's
    sha256, which a dated amendment must register before stage 1 runs.
 3. **The walk-table parity test** (``search_engine.null_b.stage0_parity``) on
    both days at every hold; a failure blocks stage B.
-4. **The replay's peak memory and seconds**, each 2024 book archive under
-   ``data/timing_archives/`` replayed alone in a fresh process, and the replay
-   worker count the largest peak allows; the slower archive's seconds stand
-   for a day in the projection, in place of the registered 2-3 minutes.
+4. **The replay's peak memory and seconds**, the two registered timing days'
+   archives under ``data/timing_archives/`` (no other), each replayed alone in
+   a fresh process, and the replay worker count the largest peak allows; the
+   slower archive's seconds stand for a day in the projection, in place of the
+   registered 2-3 minutes. Stage 0 refuses to run without both archives.
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -294,21 +301,68 @@ def network_costs(params: dict[str, Any], rows: int, width: int, day_rows: int) 
     }
 
 
+def cpu_network_costs(params: dict[str, Any], rows: int, width: int) -> dict[str, float]:
+    """The fold-level leakage test's network on the CPU, where it is fitted for one
+    epoch: a training batch and inference per row over ``rows`` random rows. The
+    CPU has no device start-up for a whole day's rows to spread, so a sample's
+    times stand for a fit's. Run in a fresh process."""
+    from trading_research.models.tcn import GaussianTCN
+
+    rng = np.random.default_rng(1)
+    columns = [f"f{i}" for i in range(width)]
+    x = pd.DataFrame(rng.normal(size=(rows, width)).astype(np.float32), columns=columns)
+    y = pd.Series(rng.normal(size=rows))
+    model = GaussianTCN(**{**params, "epochs": 1, "device": "cpu"})
+    fit_s, _ = timed(partial(model.fit, x, y))
+    predict_s, _ = timed(partial(model.predict_gaussian, x))
+    return {
+        "cpu_batch_s": fit_s / max(1, -(-rows // int(model.batch_size))),
+        "cpu_inference_row_s": predict_s / rows,
+    }
+
+
+def store_day_cost(folder: Path, rows: int, width: int) -> float:
+    """Reading and writing one day of a float16 store of ``rows`` x ``width``: the
+    fold-level test's unit for each day it mutates on its scratch root."""
+    import shutil
+
+    rng = np.random.default_rng(2)
+    frame = pd.DataFrame(rng.normal(size=(rows, width)).astype(np.float16))
+    frame.columns = [f"f{i}" for i in range(width)]
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "day.parquet"
+
+    def copy() -> None:
+        frame.to_parquet(path, compression="zstd", index=False)
+        pd.read_parquet(path)
+
+    seconds, _ = timed(copy)
+    shutil.rmtree(folder, ignore_errors=True)
+    return seconds
+
+
+def timing_archives(study: Study) -> list[Path]:
+    """The two registered timing days' ``ob500`` archives under ``data/timing_archives/``;
+    stage 0 refuses to run without both, and reads no other archive there."""
+    folder = study.roots.archives.parent / "timing_archives"
+    wanted = [folder / f"{study.symbol}-{day}-ob500.zip" for day in study.scale.timing_days]
+    missing = [path.name for path in wanted if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"stage 0 measures the replay on the registered timing days' archives; "
+            f"missing under {folder.name}/: {missing}"
+        )
+    return wanted
+
+
 def replay_memory(study: Study) -> dict[str, Any]:
-    """The replay's peak memory and seconds on each 2024 archive on disk, and the
-    workers the largest peak allows. The seconds are ``reconstruct`` alone in a
-    fresh process (the fetch's zip test, message scan and parquet write are not
-    in them), the peak that process's resident memory after the day."""
+    """The replay's peak memory and seconds on each registered 2024 timing archive,
+    and the workers the largest peak allows. The seconds are ``reconstruct`` alone
+    in a fresh process (the fetch's zip test, message scan and parquet write are
+    not in them), the peak that process's resident memory after the day."""
     from trading_research.data.fetch_stage import replay_peak_rss, replay_workers
 
-    folder = study.roots.archives.parent / "timing_archives"
-    found = sorted(folder.glob(f"{study.symbol}-*-ob500.zip")) if folder.exists() else []
-    if not found:
-        return {
-            "measured": False,
-            "workers": 1,
-            "note": f"no 2024 book archive under {folder.name}/",
-        }
+    found = timing_archives(study)
     peaks = {}
     seconds = {}
     for archive in found:
@@ -322,8 +376,12 @@ def replay_memory(study: Study) -> dict[str, Any]:
 #: The registered study's simulator cell-days on D (stage C) and on H's read, on 150 test days.
 SIMULATOR_CELL_DAYS_C = 7_750
 SIMULATOR_CELL_DAYS_H = 31_300
-REPLAY_DAY_S = 150.0  # the registered 2-3 minutes a day, when no archive was timed
 FOLDS = 5
+#: The registered worker counts the projection uses, whatever ``--workers`` says:
+#: 8 for everything but the replay and the simulator, at most 6 for the simulator;
+#: the replay's are measured (:func:`replay_memory`).
+GENERAL_WORKERS = 8
+SIMULATOR_WORKERS = 6
 
 
 @dataclass(frozen=True)
@@ -339,6 +397,8 @@ class Sizes:
     epochs: int
     inner_days: int
     shifts: int
+    #: Folds the fold-level leakage test fits in, twice each.
+    leakage_folds: int = FOLDS
 
     @classmethod
     def of(cls, study: Study, rows_per_day: int) -> Sizes:
@@ -351,7 +411,8 @@ class Sizes:
         epochs = int(study.scale.params("tcn").get("max_epochs", 20))
         training = min(study.scale.max_training_rows, rows_per_day // 10 * development)
         return cls(len(test), development, rows_per_day, training, epochs, inner,
-                   len(study.scale.null_b_shifts(len(test))))  # fmt: skip
+                   len(study.scale.null_b_shifts(len(test))),
+                   min(FOLDS, study.scale.leakage_folds or FOLDS))  # fmt: skip
 
     @property
     def share(self) -> float:
@@ -376,8 +437,9 @@ def counts(keys: Sequence[str]) -> dict[str, int]:
 def projection(
     costs: dict[str, float], n: dict[str, int], size: Sizes, workers: int, null_a_draws: int
 ) -> dict[str, float]:
-    """D's wall time in hours per stage, from unit costs, the catalogue's counts and sizes."""
-    w, sim_w = max(1, workers), max(1, min(6, workers))
+    """D's wall time in hours per stage, from unit costs, the catalogue's counts and sizes;
+    ``workers`` the general count, the simulator's at most :data:`SIMULATOR_WORKERS`."""
+    w, sim_w = max(1, workers), max(1, min(SIMULATOR_WORKERS, workers))
     fit = {
         m: costs[f"{m}_fit_row_s"] * size.training_rows for m in ("gbm", "logistic", "bound_ridge")
     }
@@ -391,8 +453,24 @@ def projection(
     scored_rows = (size.test_days + FOLDS * size.inner_days) * size.rows_per_day
     tables_s = costs["walk_table_s"] + n["holds"] * costs["hold_table_s"]
     cell_days = n["cells"] * size.test_days
+    # the fold-level leakage test: per fold, its fits twice (the network one epoch on
+    # the CPU), and the scratch root's mutated days (a test month and the cutoff's day)
+    cpu_network = (n["tcn"] > 0) * (
+        size.training_rows / costs["network_batch_size"] * costs["network_cpu_batch_s"]
+        + inner_rows * costs["network_cpu_inference_row_s"]
+    )
+    leak_fits = (
+        cpu_network
+        + fit["gbm"]
+        + fit["logistic"]
+        + fit["bound_ridge"]
+        + inner_rows * (predict["gbm"] + predict["logistic"])
+    )
+    month_days = size.test_days / FOLDS
+    leak_root = 1.1 * month_days * costs["store_day_s"] + n["holds"] * costs["labels_s"]
     stage = {
         "1": size.development_days * (costs["replay_day_s"] / costs["replay_workers"] + costs["features_s"] / w),
+        "1_fold_leakage": size.leakage_folds * (2 * leak_fits + leak_root),
         "A": sum(FOLDS * n[m] * fit[m] + n[m] * scored_rows * predict[m] for m in fit)
         + size.development_days * n["holds"] * costs["labels_s"],
         "B": (cell_days * costs["cell_day_s"] + size.test_days * tables_s) / w,
@@ -422,6 +500,15 @@ def choose_cuts(
     return list(REDUCTION_ORDER), hours
 
 
+def projected(
+    keys: Sequence[str], costs: dict[str, float], size: Sizes, null_a_draws: int
+) -> tuple[list[str], dict[str, float], dict[str, float]]:
+    """The cuts, the hours after them and the uncut hours, at the registered worker
+    counts: the command line's ``--workers`` runs a stage and never enters here."""
+    cuts, hours = choose_cuts(keys, costs, size, GENERAL_WORKERS, null_a_draws)
+    return cuts, hours, projection(costs, counts(keys), size, GENERAL_WORKERS, null_a_draws)
+
+
 def run(study: Study) -> dict[str, Any]:
     """Stage 0's record: unit costs, the projection and its cuts, parity, replay memory."""
     from trading_research.pipeline.short_horizon.models import in_fresh_process
@@ -429,6 +516,7 @@ def run(study: Study) -> dict[str, Any]:
     registration = study.registration
     catalogue = study.catalogue()
     keys = study.keys
+    timing_archives(study)  # refused before anything is timed if either archive is missing
     holds = sorted({parse_key(k).hold_s for k in keys})
     loaded = [load_timing_day(study, day) for day in study.scale.timing_days]
     frames = [frame for frame, _, _ in loaded]
@@ -458,13 +546,18 @@ def run(study: Study) -> dict[str, Any]:
     costs["network_batch_sample_s"] = network["batch_sample_s"]
     costs["network_inference_sample_row_s"] = network["inference_sample_row_s"]
     costs["network_batch_size"] = float(params.get("batch_size", 512))
+    cpu_rows = min(50_000, study.scale.max_training_rows)
+    cpu = in_fresh_process(cpu_network_costs, params, cpu_rows, 70)
+    costs["network_cpu_rows"] = float(cpu_rows)
+    costs["network_cpu_batch_s"] = cpu["cpu_batch_s"]
+    costs["network_cpu_inference_row_s"] = cpu["cpu_inference_row_s"]
+    costs["store_day_s"] = store_day_cost(study.dir("0", "store_timing"), day_rows, 70)
     memory = replay_memory(study)
     costs["replay_workers"] = float(memory["workers"])
-    costs["replay_day_s"] = max(memory["replay_s"].values()) if memory["measured"] else REPLAY_DAY_S
+    costs["replay_day_s"] = max(memory["replay_s"].values())
     size = Sizes.of(study, max(len(frame) for frame in frames))
     draws = study.scale.null_a_draws
-    cuts, hours = choose_cuts(catalogue.keys, costs, size, study.workers, draws)
-    uncut = projection(costs, counts(catalogue.keys), size, study.workers, draws)
+    cuts, hours, uncut = projected(catalogue.keys, costs, size, draws)
     return {
         "scale": study.scale.name,
         "commit": study.commit(),
@@ -473,6 +566,11 @@ def run(study: Study) -> dict[str, Any]:
         "cells_scored": len(keys),
         "timing_days": [d.isoformat() for d in study.scale.timing_days],
         "workers": study.workers,
+        "projection_workers": {
+            "general": GENERAL_WORKERS,
+            "simulator": SIMULATOR_WORKERS,
+            "replay": memory["workers"],
+        },
         "unit_costs": costs,
         "sizes": asdict(size),
         "projected_hours": uncut,
