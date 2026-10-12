@@ -184,16 +184,13 @@ def neighbourhood_median(s: SlotDays, mask: np.ndarray) -> float:
 
 def placebo_means(s: SlotDays, mask: np.ndarray) -> dict[str, float]:
     """Each placebo's mean on the masked days, the random draws' 95th percentile among them."""
-    from trading_research.market_making.verdicts import exceeds_placebos
-
-    v = _series(s, s.value, mask)
-    draws = [float(_series(s, row, mask).mean()) if mask.any() else math.nan for row in s.random]
+    draws = np.array([_mean(_series(s, row, mask)) for row in s.random], dtype=np.float64)
+    draws = draws[np.isfinite(draws)]
     named = {"flipped": s.flipped, "shifted": s.shifted, "long_only": s.long_only,
              "short_only": s.short_only, **({} if s.stale is None else {"stale": s.stale})}  # fmt: skip
     found = {name: _mean(_series(s, x, mask)) for name, x in named.items()}
-    return found | {
-        "random_p95": exceeds_placebos(float(v.mean()) if len(v) else math.nan, draws)[0]
-    }
+    level = float(np.percentile(draws, PLACEBO_PERCENTILE)) if len(draws) else math.nan
+    return found | {"random_p95": level}
 
 
 def fee_check(s: SlotDays, mask: np.ndarray) -> KillCheck:
