@@ -269,6 +269,10 @@ class NetworkJob:
     epochs: int | None = None
     #: Train on the control label kept here, rather than on the configuration's own.
     control_dir: Path | None = None
+    #: The device, when not the registered one (the fold-level leakage test's CPU).
+    device: str | None = None
+    #: Stage 1's record while stage 1 is still running (its fold-level leakage test).
+    record: dict[str, Any] | None = None
 
 
 def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
@@ -276,7 +280,7 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
     write its mean and log-variance on every row of every test day."""
     from trading_research.pipeline.short_horizon.models import network, save
 
-    inputs = Inputs(job.study)
+    inputs = Inputs(job.study, given=job.record)
     fold, scale = job.fold, job.study.scale
     found: dict[str, dict[str, Any]] = {}
     for cfg in job.configurations:
@@ -291,7 +295,9 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
                             scale.max_training_rows, job.control_dir)  # fmt: skip
         inner = window_days(inputs, fold.inner, columns, ft.forward_column(cfg.hold_s),
                             fold.inner_end_ns(cfg.hold_s), scale.max_training_rows)  # fmt: skip
-        changes = {} if job.epochs is None else {"epochs": job.epochs}
+        changes: dict[str, Any] = {} if job.epochs is None else {"epochs": job.epochs}
+        if job.device is not None:
+            changes["device"] = job.device
         known = sum(int(np.isfinite(d.targets).sum()) for d in train if d.targets is not None)
         if known < 100:  # too few targets to fit on: no score, no decision this fold
             folder.mkdir(parents=True, exist_ok=True)
@@ -311,7 +317,8 @@ def fit_networks(job: NetworkJob) -> dict[str, dict[str, Any]]:
             strict=True,
         ):
             np.savez(folder / f"{day}.npz", mu=mu, log_variance=log_variance)
-        record = {"weights_sha256": sha, "checkpoint_epoch": int(model.checkpoint_epoch_ or 0),
+        record = {"weights_sha256": sha, "state_sha256": model.weights_sha256(),
+                  "checkpoint_epoch": int(model.checkpoint_epoch_ or 0),
                   "history": [{k: float(v) for k, v in h.items()} for h in getattr(model, "history_", [])]}  # fmt: skip
         save_json(record_path, record)
         found[cfg.name] = record
