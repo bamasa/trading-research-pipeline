@@ -507,7 +507,7 @@ class _Day:
         rule = self.config.fill_rule
         for order in list(self.resting[side]):
             filled, path = on_print_rule(
-                order, price, available, aggressor, rule=rule, ts=t, growth=growth
+                order, price, available, aggressor, rule=rule, ts=t, growth=growth, lot=self.lot
             )
             if filled > 0.0:
                 self._fill(order, filled, path, t)
