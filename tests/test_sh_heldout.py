@@ -196,7 +196,7 @@ def test_run_passive_without_kills_is_the_true_run_of_each_slot(
                             fitted={"sigma_ref": 1.0})  # fmt: skip
     block.work = Path("work")
     own = SimpleNamespace(stamps_ns=np.zeros(0, dtype=np.int64), side=np.zeros(0, dtype=np.int64),
-                          strength_bp=np.zeros(0))  # fmt: skip
+                          strength_bp=np.zeros(0), event=None)  # fmt: skip
     p = ho.PassiveSlot("S-P", SimCell("S-P", C_KEY, "entry", 50.0, policy="pull_4h"), [],
                        [("regime/none", SimCell("S-P", S25, "entry", 50.0))],
                        decisions={C_KEY: [own, own], S25: [own, own]}, flagged=[[own, own]])  # fmt: skip

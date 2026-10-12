@@ -564,8 +564,7 @@ def passive_decisions(ctx: DayContext, key: str, rules: dict[str, dict[float, An
                       lean_scale: dict[str, float], flags_ns: np.ndarray | None = None) -> Any:  # fmt: skip
     """A passive cell's decisions on the day under the frozen thresholds (its guard
     reading ``flags_ns`` instead of the block's when given: a random flag set)."""
-    from trading_research.pipeline.short_horizon.passive import Decisions
-    from trading_research.search_engine.cells import cell_sides
+    from trading_research.pipeline.short_horizon.passive import Decisions, tape_decisions
 
     cell = parse_key(key)
     tape = ctx.tapes[cell.configuration]
@@ -576,17 +575,7 @@ def passive_decisions(ctx: DayContext, key: str, rules: dict[str, dict[float, An
     )
     if cell.stratum == "C" and rule is None:
         return Decisions(np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0))
-    side, events = cell_sides(tape, cell, rule)
-    taken = np.flatnonzero(side != 0)
-    if events is not None and len(taken):
-        taken = taken[np.r_[True, events[taken][1:] != events[taken][:-1]]]
-    if cell.stratum == "R":
-        strength = tape.scores["mu_bp"][taken]
-    else:
-        strength = side[taken] * float(lean_scale.get(f"{cell.hold_s:g}", 0.0))
-    return Decisions(
-        tape.stamps[taken], side[taken].astype(np.int64), np.asarray(strength, dtype=np.float64)
-    )
+    return tape_decisions(tape, cell, rule, float(lean_scale.get(f"{cell.hold_s:g}", 0.0)), ctx.day)
 
 
 @dataclass

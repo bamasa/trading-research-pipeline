@@ -26,7 +26,11 @@ One attempt, from the post to the return to a flat book:
 * **One position at a time.** A new decision is taken only when the position
   is flat and no own order is out; **an order whose cancel is in flight counts
   as resting** until the cancel lands or the order fills. A decision that
-  arrives meanwhile is skipped (``skipped_busy``), not queued.
+  arrives meanwhile is skipped (``skipped_busy``, once per event), not queued.
+* **One entry per event.** With an event tape (:func:`entry_tapes`'s
+  ``event``: the EV gate's runs of open rows, every row of each passed), an
+  event that opened while busy enters at its first free row, and an event that
+  has entered gives no other entry.
 
 The quoter is told its own orders and the opening time through the simulator's
 ``observe`` hook, and keeps a log of attempts for :meth:`attempts`. Stateful:
@@ -51,23 +55,33 @@ from trading_research.market_making.quoters import (
 )
 from trading_research.market_making.signals import SignalTape
 
-#: The decision's stamp in epoch seconds, and its side (+1 buy, -1 sell).
+#: The decision's stamp in epoch seconds, its side (+1 buy, -1 sell) and its event.
 ENTRY_SIGNAL = "entry_decision_s"
 ENTRY_SIDE_SIGNAL = "entry_side"
+ENTRY_EVENT_SIGNAL = "entry_event"
 
 
-def entry_tapes(decision_ns: np.ndarray, side: np.ndarray) -> dict[str, SignalTape]:
-    """The two tapes the quoter reads, each row stamped at its decision row's stamp."""
+def entry_tapes(
+    decision_ns: np.ndarray, side: np.ndarray, event: np.ndarray | None = None
+) -> dict[str, SignalTape]:
+    """The tapes the quoter reads, each row stamped at its decision row's stamp; with
+    ``event``, each row's event id (one entry per event)."""
     ts = np.asarray(decision_ns, dtype=np.int64)
     sides = np.asarray(side, dtype=np.float64)
     if len(ts) != len(sides):
         raise ValueError("one side per decision")
     if not np.isin(sides, (-1.0, 1.0)).all():
         raise ValueError("a side is +1 (buy) or -1 (sell)")
-    return {
+    tapes = {
         ENTRY_SIGNAL: SignalTape(ENTRY_SIGNAL, ts, ts / 1e9),
         ENTRY_SIDE_SIGNAL: SignalTape(ENTRY_SIDE_SIGNAL, ts.copy(), sides),
     }
+    if event is not None:
+        if len(event) != len(ts):
+            raise ValueError("one event per decision")
+        values = np.asarray(event, dtype=np.float64)
+        tapes[ENTRY_EVENT_SIGNAL] = SignalTape(ENTRY_EVENT_SIGNAL, ts.copy(), values)
+    return tapes
 
 
 @dataclass
@@ -99,6 +113,9 @@ class SignalEntryQuoter:
     _opened_ns: int = field(default=-1, repr=False, compare=False)
     _acted: float = field(default=math.nan, repr=False, compare=False)
     _attempt: _Attempt | None = field(default=None, repr=False, compare=False)
+    #: The last event entered and the last skipped while busy (NaN: none).
+    _entered: float = field(default=math.nan, repr=False, compare=False)
+    _skipped: float = field(default=math.nan, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.hold_s > 0:
@@ -117,17 +134,20 @@ class SignalEntryQuoter:
         fresh = decision == decision and decision != self._acted
         if fresh:
             self._acted = decision
+        event = view.signals.get(ENTRY_EVENT_SIGNAL, math.nan)
+        if fresh and event == self._entered:  # NaN never equals: no event tape
+            fresh = False
         attempt = self._attempt
         if attempt is not None and self._update(attempt, position, now):
             self._attempt = attempt = None
         if attempt is not None:
             if fresh:
-                self._count("skipped_busy")
+                self._busy(event)
             return self._quotes(attempt, view, position, now)
         if not fresh:
             return NO_QUOTES
         if position != 0.0 or self._own:
-            self._count("skipped_busy")
+            self._busy(event)
             return NO_QUOTES
         if now - decision > self.hold_s:
             self._count("expired_unseen")
@@ -136,9 +156,16 @@ class SignalEntryQuoter:
         price = view.best_bid if side > 0 else view.best_ask
         attempt = _Attempt(decision, side, int(price), now)
         self._attempt = attempt
+        self._entered = event
         self._count("attempts")
         self.log.append((decision, side, view.ts, price * view.tick, view.clip))
         return self._quotes(attempt, view, position, now)
+
+    def _busy(self, event: float) -> None:
+        """A decision skipped while busy: counted once per event."""
+        if event != self._skipped:  # NaN (no event tape) always counts
+            self._count("skipped_busy")
+        self._skipped = event
 
     def _update(self, a: _Attempt, position: float, now: float) -> bool:
         """Close the entry when its time is up or it is done; True when the attempt is over."""

@@ -159,7 +159,10 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
 
     def sided(side: np.ndarray, stamps: np.ndarray | None = None) -> Decisions:
         return Decisions(
-            own.stamps_ns if stamps is None else stamps, side.astype(np.int64), side * magnitude
+            own.stamps_ns if stamps is None else stamps,
+            side.astype(np.int64),
+            side * magnitude,
+            own.event,
         )
 
     runs = [Run(slot, "true", cell, own), Run(slot, "flipped", cell, sided(-own.side)),
@@ -167,7 +170,14 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
             Run(slot, "short_only", cell, sided(-np.ones_like(own.side))),
             Run(slot, "stale", cell, sided(own.side, own.stamps_ns + round(cell.hold_s * 1e9)))]  # fmt: skip
     shifted = previous.stamps_ns - previous_start + day_start
-    runs.append(Run(slot, "shifted", cell, Decisions(shifted, previous.side, previous.strength_bp)))
+    runs.append(
+        Run(
+            slot,
+            "shifted",
+            cell,
+            Decisions(shifted, previous.side, previous.strength_bp, previous.event),
+        )
+    )
     for k in range(draws):
         runs.append(
             Run(

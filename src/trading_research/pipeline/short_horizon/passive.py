@@ -71,11 +71,52 @@ class SimCell:
 
 @dataclass(frozen=True)
 class Decisions:
-    """A cell's decisions on one day: stamps, sides and the lean's signed strength in bp."""
+    """A cell's decisions on one day: stamps, sides and the lean's signed strength in bp,
+    and in stratum R each row's EV-gate event (one entry per event)."""
 
     stamps_ns: np.ndarray
     side: np.ndarray
     strength_bp: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    event: np.ndarray | None = None
+
+
+def entry_hours(day: date) -> tuple[int, int]:
+    """The day's entry hours in epoch ns, [00:01, 23:58] as the taker executor's."""
+    from trading_research.backtest.taker import TakerSettings
+
+    settings = TakerSettings()
+    midnight = pd.Timestamp(day.isoformat(), tz="UTC").value
+
+    def at(moment: Any) -> int:
+        return midnight + (moment.hour * 3600 + moment.minute * 60 + moment.second) * 10**9
+
+    return at(settings.no_entry_before), at(settings.no_entry_after)
+
+
+def tape_decisions(tape: Any, cell: Any, rule: Any, scale_bp: float, day: date) -> Decisions:
+    """A cell's decisions on ``day`` from its tape after its own rule, gate and guard:
+    the rows inside the entry hours, and in stratum R every row of each EV-gate event
+    with its event id (the quoter enters an event once, at its first free row); the
+    lean's strength is mu in R and the side times ``scale_bp`` in C."""
+    from trading_research.search_engine.cells import cell_sides
+
+    side, events = cell_sides(tape, cell, rule)
+    stamps = np.asarray(tape.stamps, dtype=np.int64)
+    first, last = entry_hours(day)
+    taken = np.flatnonzero((side != 0) & (stamps >= first) & (stamps <= last))
+    strength = tape.scores["mu_bp"][taken] if cell.stratum == "R" else side[taken] * scale_bp
+    event = None if events is None else np.asarray(events[taken], dtype=np.int64)
+    return Decisions(stamps[taken], side[taken].astype(np.int64),
+                     np.asarray(strength, dtype=np.float64), event)  # fmt: skip
+
+
+def first_of_events(decided: Decisions) -> Decisions:
+    """Each event's first row only (the market maker's lean reads one row an event)."""
+    if decided.event is None or not len(decided.event):
+        return decided
+    first = np.r_[True, decided.event[1:] != decided.event[:-1]]
+    strength = decided.strength_bp[first] if len(decided.strength_bp) else decided.strength_bp
+    return Decisions(decided.stamps_ns[first], decided.side[first], strength, decided.event[first])
 
 
 @dataclass(frozen=True)
@@ -113,9 +154,10 @@ def quoter_and_tapes(
     tapes: dict[str, Any] = flag_tape(flags_ns) if cell.policy != "none" else {}
     if cell.kind == "entry":
         config = _config(cell, max_gaps, flagged)
-        tapes |= entry_tapes(decided.stamps_ns, decided.side)
+        tapes |= entry_tapes(decided.stamps_ns, decided.side, decided.event)
         return SignalEntryQuoter(cell.hold_s, passive_exit=cell.passive_exit), config, tapes
     config = _config(cell, max_gaps, False)
+    decided = first_of_events(decided)
     plan = lean_plan(config, sigma_ref, lean=cell.lean, hold_s=cell.hold_s,
                      policy=RegimePolicy.parse(cell.policy))  # fmt: skip
     tapes |= signal_tapes(decided.stamps_ns, decided.strength_bp)
@@ -274,12 +316,11 @@ def slot_cells(keys: list[str], record_d: dict[str, Any]) -> list[SimCell]:
 def cell_decisions(
     inputs: Any, key: str, day: date, record: dict[str, Any], tapes: Path
 ) -> Decisions:
-    """A cell's decisions on one test day: its tape rows after its own rule, gate and
-    guard (an EV-gate event's first row only), with the lean's signed strength."""
+    """A cell's decisions on one test day (:func:`tape_decisions`), the lean's scale in
+    C the median absolute forward move over the fold's training days."""
     from trading_research.pipeline.short_horizon import features as ft
     from trading_research.pipeline.short_horizon.fits import rules_from
     from trading_research.search_engine.catalogue import parse_key
-    from trading_research.search_engine.cells import cell_sides
     from trading_research.search_engine.tapes import read_tape, tape_path
 
     cell = parse_key(key)
@@ -289,23 +330,14 @@ def cell_decisions(
     rule = None
     if cell.stratum == "C":
         rule = rules_from(record["fits"][cell.configuration]["thresholds"])[cell.trades_per_day]
-    side, events = cell_sides(tape, cell, rule)
-    taken = np.flatnonzero(side != 0)
-    if events is not None and len(taken):
-        first = np.r_[True, events[taken][1:] != events[taken][:-1]]
-        taken = taken[first]
-    if cell.stratum == "R":
-        strength = tape.scores["mu_bp"][taken]
-    else:
+    scale = 0.0
+    if cell.stratum != "R":
         moves = [
             inputs.targets(d)[ft.forward_column(cell.hold_s)].to_numpy()
             for d in record["days"]["train"]
         ]
         scale = float(np.nanmedian(np.abs(np.concatenate(moves)))) if moves else 0.0
-        strength = side[taken] * scale
-    return Decisions(
-        tape.stamps[taken], side[taken].astype(np.int64), np.asarray(strength, dtype=np.float64)
-    )
+    return tape_decisions(tape, cell, rule, scale, day)
 
 
 def simulate_all(study: Any, inputs: Any, cells: list[SimCell], days: list[date]) -> pd.DataFrame:
