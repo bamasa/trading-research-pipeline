@@ -200,3 +200,18 @@ def test_the_mde_on_f_and_p_uses_the_usable_days_of_the_series_assessed() -> Non
     assert st.block_mde(s, s.mask(f_days), "H") == 1.0
     s.on_s25_signal = True
     assert st.block_mde(s, s.mask(f_days[:6]), "P") == pytest.approx(2.0)  # 1.0 x sqrt(24 / 6)
+
+
+def test_a_void_result_on_f_is_void_since_killed_on_f_names_a_kill_that_fired() -> None:
+    from trading_research.market_making.verdicts import KillCheck
+    from trading_research.reporting.headlines import HeadlineError, slot_on_block
+
+    void = st.family({"S-C": slot_days(void=("K-cap",))}, {"S-C": np.ones(44, bool)}, "F", {})[
+        "S-C"
+    ]
+    assert void.status == "void" and void.kills == [] and st.after_f("candidate", void) == "void"
+    assert "void" in slot_on_block("S-C", "F", "void", void.kills)
+    with pytest.raises(HeadlineError):  # a void result has no kill evaluated to name
+        slot_on_block("S-C", "F", "killed on F", void.kills)
+    k1 = KillCheck("S-C", "K1", "mean <= 0", -1.0, 0.0, True)
+    assert "K1" in slot_on_block("S-C", "F", "killed on F", [k1])
