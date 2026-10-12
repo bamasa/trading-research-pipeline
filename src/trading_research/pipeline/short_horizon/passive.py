@@ -427,11 +427,17 @@ def cell_decisions(
     return tape_decisions(tape, cell, rule, scale, day)
 
 
-def simulate_all(study: Any, inputs: Any, cells: list[SimCell], days: list[date]) -> pd.DataFrame:
-    """Every cell on every day, a day per worker process; days on disk are kept."""
-    from concurrent.futures import ProcessPoolExecutor
-    from multiprocessing import get_context
+def simulate_day_measured(job: DayJob) -> tuple[Path, int]:
+    """:func:`simulate_day` in a fresh worker, with that process's peak memory after it."""
+    from trading_research.data.study_fetch import peak_rss_bytes
 
+    return simulate_day(job), peak_rss_bytes()
+
+
+def simulate_all(study: Any, inputs: Any, cells: list[SimCell], days: list[date]) -> pd.DataFrame:
+    """Every cell on every day, a day per worker process (at most 6, and fewer while
+    6 x one day's peak resident memory would pass 24 GB, sized as the reads size
+    theirs: ``heldout_passive.simulate_batched``); days on disk are kept."""
     from trading_research.pipeline.short_horizon import flags
     from trading_research.pipeline.short_horizon.scoring import test_folds
 
@@ -460,8 +466,9 @@ def simulate_all(study: Any, inputs: Any, cells: list[SimCell], days: list[date]
         for job in jobs:
             simulate_day(job)
     else:
-        with ProcessPoolExecutor(max_workers=workers, mp_context=get_context("spawn")) as pool:
-            list(pool.map(simulate_day, jobs))
+        from trading_research.pipeline.short_horizon.heldout_passive import simulate_batched
+
+        simulate_batched(jobs, simulate_day_measured, workers)
     return pd.concat([pd.read_parquet(out / f"{d}.parquet") for d in days], ignore_index=True)
 
 

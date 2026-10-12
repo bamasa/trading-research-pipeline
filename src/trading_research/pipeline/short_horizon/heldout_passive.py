@@ -28,6 +28,7 @@ A day's runs share one load of the day's events and run in a worker process.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -195,6 +196,29 @@ def run_measured(job: VariantJob) -> tuple[Path, int]:
     from trading_research.data.study_fetch import peak_rss_bytes
 
     return run_variants(job), peak_rss_bytes()
+
+
+def simulate_batched(jobs: Sequence[Any], measure: Callable[[Any], tuple[Any, int]],
+                     requested: int) -> tuple[list[Any], int, int]:  # fmt: skip
+    """``measure`` over ``jobs``, a job per worker process, each returning its result
+    and that process's peak resident memory: at most 6 workers, and fewer while 6 x
+    one job's peak would pass 24 GB. The first job runs alone in a fresh process to
+    measure that peak; each later batch runs in fresh processes as many as the
+    largest peak so far allows. The results in order, the peak and the last count."""
+    from concurrent.futures import ProcessPoolExecutor
+    from multiprocessing import get_context
+
+    requested = max(1, min(SIMULATOR_WORKERS_MAX, requested))
+    results: list[Any] = []
+    peak, workers = 0, 1
+    while len(results) < len(jobs):
+        batch = list(jobs[len(results) : len(results) + workers])
+        with ProcessPoolExecutor(max_workers=len(batch), mp_context=get_context("spawn")) as pool:
+            done = list(pool.map(measure, batch))
+        results += [found for found, _ in done]
+        peak = max(peak, *(rss for _, rss in done))
+        workers = simulator_workers(requested, peak)
+    return results, peak, workers
 
 
 def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_start: int,

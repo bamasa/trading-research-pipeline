@@ -100,6 +100,35 @@ def test_simulator_workers_keep_six_peaks_within_24_gb() -> None:
     assert hp.simulator_workers(3, int(1e9)) == 3 and hp.simulator_workers(8, 0) == 6
 
 
+def test_simulate_batched_sizes_each_batch_by_the_largest_peak_so_far(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The batching stage C's simulate_all and the reads share: one job alone first."""
+    import concurrent.futures
+
+    batches: list[int] = []
+
+    class Inline:
+        def __init__(self, max_workers: int, **_: Any) -> None:
+            batches.append(max_workers)
+
+        def __enter__(self) -> Inline:
+            return self
+
+        def __exit__(self, *_: Any) -> None:
+            return None
+
+        def map(self, fn: Any, jobs: list[Any]) -> list[Any]:
+            return [fn(job) for job in jobs]
+
+    monkeypatch.setattr(concurrent.futures, "ProcessPoolExecutor", Inline)
+    found = hp.simulate_batched(
+        list(range(5)), lambda j: (j * 10, int(7e9) if j == 0 else int(5e9)), 8
+    )
+    assert found == ([0, 10, 20, 30, 40], int(7e9), 3) and batches == [1, 3, 1]
+    assert hp.simulate_batched([], lambda j: (j, 0), 6) == ([], 0, 1)
+
+
 def test_the_first_day_measures_the_peak_and_sizes_every_later_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

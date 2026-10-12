@@ -810,26 +810,15 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
 
 def simulate_jobs(block: Block, jobs: list[Any]) -> list[Path]:
     """Each day's simulated runs, a day per worker process: at most 6 workers, and
-    fewer while 6 x one day's peak resident memory would pass 24 GB. The first day
-    runs alone in a fresh process to measure that peak; each later batch of days
-    runs in fresh processes as many as the largest peak so far allows."""
-    from concurrent.futures import ProcessPoolExecutor
-    from multiprocessing import get_context
-
+    fewer while 6 x one day's peak resident memory would pass 24 GB
+    (:func:`heldout_passive.simulate_batched`: the first day alone to measure the
+    peak, each later batch as many as the largest peak so far allows)."""
     from trading_research.pipeline.short_horizon import heldout_passive as hp
 
     requested = max(1, min(hp.SIMULATOR_WORKERS_MAX, block.study.workers))
     if requested == 1:
         return [hp.run_variants(job) for job in jobs]
-    paths: list[Path] = []
-    peak, workers = 0, 1
-    while len(paths) < len(jobs):
-        batch = jobs[len(paths) : len(paths) + workers]
-        with ProcessPoolExecutor(max_workers=len(batch), mp_context=get_context("spawn")) as pool:
-            done = list(pool.map(hp.run_measured, batch))
-        paths += [path for path, _ in done]
-        peak = max(peak, *(rss for _, rss in done))
-        workers = hp.simulator_workers(requested, peak)
+    paths, peak, workers = hp.simulate_batched(jobs, hp.run_measured, requested)
     block.notes.append(f"simulator: peak {peak} bytes for one day, {workers} workers")
     return paths
 
