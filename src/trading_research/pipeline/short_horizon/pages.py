@@ -39,8 +39,8 @@ Choices the registration leaves open, made here:
   over the filled notional under each fill rule (O's days pooled); S25's D
   gross is the leaderboard's, blank until the trial ledger records a gross;
 * the regime map's charts keep units apart: the taker slots in bp of traded
-  notional, S-P and S-M per 100 USDT of clip a day; S25-Z, whose series is a
-  gross, is in the file and not on a chart.
+  notional, S-P and S-M per 100 USDT of clip a day; S25-Z, whose net is at
+  0/0, is in the file and not on a chart.
 """
 
 from __future__ import annotations

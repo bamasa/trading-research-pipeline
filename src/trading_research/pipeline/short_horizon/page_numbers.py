@@ -172,9 +172,11 @@ def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]
     frozen detector's alarms, FILL for S-P's and S25-Z's streams, and (written
     beside, not returned) the hourly close."""
     split = found.get("split")
+    taken = found.get("after_F")  # on F: the slots taken there; the others on all of F
     slots: dict[str, Any] = {}
     for slot, s in series.items():
-        numbers = slot_numbers(s, status_days(block.name, s, split))
+        cut = split if taken is None or slot in taken else None
+        numbers = slot_numbers(s, status_days(block.name, s, cut))
         numbers["daily"] = {"days": [d.isoformat() for d in s.days],
                             "value": [float(v) for v in s.value]}  # fmt: skip
         numbers["window_h"] = int(s.window_h)
@@ -192,10 +194,12 @@ def _d_days(study: Study) -> list[date]:
 
 
 def d_daily(study: Study) -> dict[str, pd.Series]:
-    """Each slot's walk-forward daily series on D's usable test days: the taker
-    slots' ``net_bp_trade`` from the trial ledger (NaN without a trade), S-P's and
-    S-M's ``net_per_100_clip_day`` and S25-Z's ``gross_bp_trade`` from stage C."""
+    """Each slot's walk-forward daily net on D's usable test days: the taker slots'
+    ``net_bp_trade`` from the trial ledger (NaN without a trade), S-P's and S-M's
+    ``net_per_100_clip_day`` and S25-Z's net at 0/0 (``net_bp_trade``) from stage C,
+    on the days no simulated run flagged."""
     from trading_research.pipeline.short_horizon.freeze import d_series
+    from trading_research.pipeline.short_horizon.passive import kept_rows
     from trading_research.reporting.search_keys import S25_KEY
 
     record_d, record_c = study.record("D"), study.record("C")
@@ -206,14 +210,14 @@ def d_daily(study: Study) -> dict[str, pd.Series]:
     for slot, key in taker.items():
         if key is not None and key in study.keys:
             out[slot] = d_series(study, key, days)
-    rows = pd.read_parquet(study.work / "C" / "cells.parquet")
+    rows = kept_rows(pd.read_parquet(study.work / "C" / "cells.parquet"))
     passive = {"S-P": record_c["admission"]["S-P"]["cell"], "S-M": record_c["admission"]["S-M"]["cell"],
                "S25-Z": f"S25-Z|{S25_KEY}|entry|fees=zero"}  # fmt: skip
     for slot, label in passive.items():
-        mine = rows[(rows["label"] == label) & ~rows["excluded"].astype(bool)]
+        mine = rows[rows["label"] == label]
         if mine.empty:
             continue
-        column = "gross_bp_trade" if slot == "S25-Z" else "net_per_100"
+        column = "net_bp_trade" if slot == "S25-Z" else "net_per_100"
         index = [date.fromisoformat(str(d)) for d in mine["day"]]
         out[slot] = pd.Series(mine[column].to_numpy(np.float64), index=index).reindex(days)
     return out

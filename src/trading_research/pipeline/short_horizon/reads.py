@@ -334,7 +334,7 @@ def sentences(block: str, statuses: dict[str, str], assessments: dict[str, Any])
 def regime_segments(
     series: dict[str, Any], alarms: list[dict[str, Any]], block: str
 ) -> list[dict[str, Any]]:
-    """Each slot's daily series cut at the frozen detector's alarms: a measurement."""
+    """Each slot's daily net cut at the frozen detector's alarms: a measurement."""
     import pandas as pd
 
     from trading_research.reporting.regime_map import regime_map
@@ -342,7 +342,10 @@ def regime_segments(
     stamps = [pd.Timestamp(a["timestamp"]) for a in alarms]
     rows: list[dict[str, Any]] = []
     for slot, s in series.items():
-        daily = pd.Series(s.value, index=pd.Index(s.days))
+        net = (
+            s.second if s.kind == "zero" and s.second is not None else s.value
+        )  # S25-Z: net at 0/0
+        daily = pd.Series(net, index=pd.Index(s.days))
         frame = regime_map(daily, stamps, blocks=dict.fromkeys(s.days, block), slot=slot)
         rows += json.loads(frame.to_json(orient="records", date_format="iso"))
     return rows
