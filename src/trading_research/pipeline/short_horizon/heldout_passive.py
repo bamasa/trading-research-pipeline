@@ -6,7 +6,8 @@ accounting:
 
 * placebos on its decisions: the sign flipped, random directions (one seed per
   draw), the previous usable day's decisions at the same times of day
-  (circularly over the block), the decisions delayed by one hold (stale), and
+  (circularly over the block, stepping over a day any run flags stale:
+  ``heldout.step_over_stale``), the decisions delayed by one hold (stale), and
   all-long and all-short (K-drift);
 * its neighbourhood (S-P and S25-Z: the other cells of the signal's grid; S-M:
   the leans 0.5 and 2);
@@ -166,8 +167,7 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
             Run(slot, "long_only", cell, sided(np.ones_like(own.side))),
             Run(slot, "short_only", cell, sided(-np.ones_like(own.side))),
             Run(slot, "stale", cell, sided(own.side, own.stamps_ns + round(cell.hold_s * 1e9)))]  # fmt: skip
-    shifted = previous.stamps_ns - previous_start + day_start
-    runs.append(Run(slot, "shifted", cell, Decisions(shifted, previous.side, previous.strength_bp)))
+    runs.append(shifted_run(slot, cell, previous, day_start, previous_start))
     for k in range(draws):
         runs.append(
             Run(
@@ -183,6 +183,13 @@ def variants(slot: str, cell: SimCell, own: Decisions, previous: Decisions, day_
     runs.append(Run(slot, "latency", cell, own, dict(LATENCY_110_MS)))
     runs += [Run(slot, f"neighbour/{other.label}", other, decided) for other, decided in neighbours]
     return runs
+
+
+def shifted_run(slot: str, cell: SimCell, previous: Decisions, day_start: int,
+                previous_start: int) -> Run:  # fmt: skip
+    """The one-day shift: another day's decisions at the same times of day."""
+    shifted = previous.stamps_ns - previous_start + day_start
+    return Run(slot, "shifted", cell, Decisions(shifted, previous.side, previous.strength_bp))
 
 
 def measured_runs(slot: str, cell: SimCell, own: Decisions, measured: list[tuple[str, SimCell, Decisions]],
