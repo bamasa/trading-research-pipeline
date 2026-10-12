@@ -679,8 +679,11 @@ def passive_dsr(rows: pd.DataFrame, cells: list[SimCell], days: list[date], n_tr
 
 
 def run(study: Any) -> dict[str, Any]:
-    """Stage C's record: every simulated cell-day, S-P's and S-M's admission, A0 and FILL."""
+    """Stage C's record: every simulated cell-day, S-P's and S-M's admission, A0 and
+    FILL, and the second detector over D (reported beside R, run in development)."""
+    from trading_research.data import study_access as sa
     from trading_research.pipeline.short_horizon.inputs import Inputs
+    from trading_research.pipeline.short_horizon.second_detector import run_span
 
     record_d = study.record("D")
     inputs = Inputs(study)
@@ -704,4 +707,5 @@ def run(study: Any) -> dict[str, Any]:
         "a0_and_fill": measured,
         "trials": recorded,
         "overfitting": {"dsr": passive_dsr(rows, cells, days, recorded["n_trials"], admission)},
+        "second_detector_D": run_span(study, "D", sa.development_access()),
     }

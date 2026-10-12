@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from trading_research.pipeline.short_horizon import page_numbers as pn
+from trading_research.pipeline.short_horizon import second_detector as sd
 from trading_research.pipeline.short_horizon import statuses as st
 from trading_research.pipeline.short_horizon.reads import regime_segments
 
@@ -28,6 +29,7 @@ def test_only_the_slots_taken_to_f_are_numbered_on_f_minus(monkeypatch: pytest.M
     S25, never taken to F, on all of F."""
     monkeypatch.setattr(pn, "save_close", lambda _: None)
     monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
+    monkeypatch.setattr(sd, "beside_r", lambda _: {"second_detector": None, "mean_channel": []})
     block = SimpleNamespace(name="F", detector={"alarms": []})
     found = {"split": {"b": F_DAYS[24].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"}}
     series = {"S-C": _slot("S-C"), "S25": _slot("S25")}
@@ -58,6 +60,7 @@ def test_delta_b_is_reported_with_its_percentile_among_the_admissible_days() -> 
 def test_f_numbers_carry_delta_b_for_a_slot_tested_for_r(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pn, "save_close", lambda _: None)
     monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
+    monkeypatch.setattr(sd, "beside_r", lambda _: {"second_detector": None, "mean_channel": []})
     block = SimpleNamespace(name="F", detector={"alarms": []})
     found = {"split": {"b": F_DAYS[25].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"},
              "R": {"S-C": {"outcome": "not supported"}}, "assessments": {"S-C": {"status": "killed"}}}  # fmt: skip

@@ -191,8 +191,9 @@ def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
 
 def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]) -> dict[str, Any]:
     """Every slot's numbers on its status days, its whole daily series, the
-    frozen detector's alarms, FILL for S-P's and S25-Z's streams, and (written
-    beside, not returned) the hourly close."""
+    frozen detector's alarms and its mean channel, the second detector's span,
+    FILL for S-P's and S25-Z's streams, and (written beside, not returned) the
+    hourly close."""
     split = found.get("split")
     taken = found.get("after_F")  # on F: the slots taken there; the others on all of F
     slots: dict[str, Any] = {}
@@ -211,9 +212,11 @@ def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]
             b = date.fromisoformat(str(split["b"]))
             numbers["R_delta_b"] = delta_b(s, b) | {"passes_on_F_minus": passes}
         slots[slot] = numbers
+    from trading_research.pipeline.short_horizon import second_detector
+
     save_close(block)
     return {"slots": slots, "alarms": list(block.detector["alarms"]),
-            "fill_rules": fill_rule_summary(block)}  # fmt: skip
+            "fill_rules": fill_rule_summary(block)} | second_detector.beside_r(block)  # fmt: skip
 
 
 def _d_days(study: Study) -> list[date]:
