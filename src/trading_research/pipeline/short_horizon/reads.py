@@ -30,7 +30,7 @@ its results file with every slot ``not assessed (<block> read failed)``.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -197,7 +197,8 @@ def preset_on_d(study: Study) -> dict[str, str]:
 
 
 def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,
-               gaps: dict[str, Any] | None = None, flags_ns: Any = None) -> dict[str, Any]:  # fmt: skip
+               gaps: dict[str, Any] | None = None, flags_ns: Any = None,
+               alarms: list[dict[str, Any]] | None = None, registration: Any = None) -> dict[str, Any]:  # fmt: skip
     """H: the family on H (slots on S25's signal on H's days to 07-31), S25-Z alone,
     what is taken to F, and every slot's numbers on all of H as measurements."""
     from trading_research.pipeline.short_horizon import statuses as st
@@ -219,26 +220,52 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
             measurements[slot]["H_before_2025_08_01"] = measured(
                 s, [d for d in s.days if d <= st.S25_WINDOW_END]
             )
+    void = None if registration is None else r_void(registration, alarms or [])
     return {"assessments": out, "statuses": {slot: a["status"] for slot, a in out.items()},
-            "taken_to_F": taken, "measurements": measurements}  # fmt: skip
+            "taken_to_F": taken, "measurements": measurements, "R_void": void}  # fmt: skip
 
 
-def r_void(registration: Any, alarms: list[dict[str, Any]]) -> bool:
-    """R is void when this run of the frozen detector does not reproduce D's alarms
-    as the amendment records them (by time and channel)."""
+def _alarm_keys(alarms: list[dict[str, Any]], block: str) -> set[tuple[Any, str]]:
+    """The alarms stamped inside ``block``'s dates, by time and channel."""
     import pandas as pd
 
-    recorded = {
-        (pd.Timestamp(a["timestamp"]), a["channel"])
-        for a in registration.value(("detector", "alarms_D"))
-    }
-    end = pd.Timestamp(sa.BLOCKS["D"][1], tz="UTC") + pd.Timedelta(days=1)
-    again = {
-        (pd.Timestamp(a["timestamp"]), a["statistic"])
-        for a in alarms
-        if pd.Timestamp(a["timestamp"]) < end
-    }
-    return recorded != again
+    first, last = sa.BLOCKS[block]
+    start = pd.Timestamp(first.isoformat(), tz="UTC")
+    end = pd.Timestamp((last + timedelta(days=1)).isoformat(), tz="UTC")
+    found = set()
+    for a in alarms:
+        stamp = pd.Timestamp(a["timestamp"])
+        stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp
+        if start <= stamp < end:
+            found.add((stamp, str(a.get("channel", a.get("statistic")))))
+    return found
+
+
+def r_void(registration: Any, alarms: list[dict[str, Any]],
+           earlier: dict[str, list[dict[str, Any]]] | None = None) -> bool:  # fmt: skip
+    """R is void when this run of the frozen detector does not reproduce an earlier
+    run's alarms by time and channel: D's (2025-01-01 to 06-30) as the amendment
+    records them, and each earlier block's (``earlier``) as its results file
+    records them, each compared on that block's dates."""
+    if _alarm_keys(list(registration.value(("detector", "alarms_D"))), "D") != _alarm_keys(
+        alarms, "D"
+    ):
+        return True
+    return any(_alarm_keys(recorded, block) != _alarm_keys(alarms, block)
+               for block, recorded in (earlier or {}).items())  # fmt: skip
+
+
+def recorded_alarms(study: Study, blocks: tuple[str, ...]) -> dict[str, list[dict[str, Any]]]:
+    """Each earlier block's alarms as its results file records them (a block read
+    with nothing computed, unreadable or failed, records none to compare)."""
+    out = {}
+    for block in blocks:
+        info = (
+            read_results(study, block).get("info") if results_path(study, block).exists() else None
+        )
+        if info is not None and "alarms_in_block" in info:
+            out[block] = list(info["alarms_in_block"])
+    return out
 
 
 def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]], registration: Any,
@@ -261,7 +288,7 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
         if pd.Timestamp(a["timestamp"]).date() >= f_start
     )
     untestable = bool(registration.value(("detector", "r_untestable_declared")))
-    void = r_void(registration, alarms)
+    void = bool(h.get("R_void")) or r_void(registration, alarms, recorded_alarms(study, ("H",)))
     split = st.split_f(days, in_f[0] if in_f else None, untestable, void)
     preset = {slot: "not taken to F" for slot in FAMILY if slot not in taken}
     masks = {slot: series[slot].mask(split.minus) for slot in taken if slot in series}
@@ -274,6 +301,12 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
         )
         if before[slot] != "candidate":
             r[slot] = {"outcome": "not tested", "reason": "not a candidate on H"}
+            continue
+        if void:  # read as not supported, never tested
+            r[slot] = {
+                "outcome": "void",
+                "reason": "the detector did not reproduce an earlier run's alarms",
+            }
             continue
 
         def passes_before(d: date, slot: str = slot) -> bool:
@@ -295,14 +328,22 @@ def statuses_f(study: Study, series: dict[str, Any], alarms: list[dict[str, Any]
 
 
 def statuses_p(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,
-               gaps: dict[str, Any] | None = None, flags_ns: Any = None) -> dict[str, Any]:  # fmt: skip
-    """P: the slots that passed on F (scored only by their mean when R is supported)."""
+               gaps: dict[str, Any] | None = None, flags_ns: Any = None,
+               alarms: list[dict[str, Any]] | None = None, registration: Any = None) -> dict[str, Any]:  # fmt: skip
+    """P: the slots that passed on F (scored only by their mean when R is supported).
+    R found void when P is read leaves F's statuses as committed and P is scored
+    with the full bar, R read as not supported."""
     from trading_research.evaluation.family import FAMILY
     from trading_research.pipeline.short_horizon import statuses as st
 
     f = read_results(study, "F")
     qualifying = list(f["qualifying_for_P"])
-    supported = [s for s in qualifying if f["R"].get(s, {}).get("outcome") == "supported"]
+    void = registration is not None and r_void(
+        registration, alarms or [], recorded_alarms(study, ("H", "F"))
+    )
+    supported = [
+        s for s in qualifying if f["R"].get(s, {}).get("outcome") == "supported" and not void
+    ]
     preset = {slot: "not read on P" for slot in FAMILY if slot not in qualifying}
     preset |= dict.fromkeys(supported, "scored on P only by its mean")
     masks = {slot: series[slot].mask(series[slot].days) for slot in qualifying if slot in series}
@@ -316,7 +357,7 @@ def statuses_p(study: Study, series: dict[str, Any], info: dict[str, Any] | None
             assessment.void = st.void_reasons(series[slot], ())
             assessment.status = "void" if assessment.void else ""
         final[slot] = st.after_p(f["after_F"][slot].split(",")[0], assessment, slot in supported)
-    return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": final,
+    return {"assessments": {s: a.record() for s, a in found.items()}, "statuses": final, "R_void": void,
             "measurements": beside("P", series, info or NO_INFO, gaps or {}, flags_ns, {})}  # fmt: skip
 
 
@@ -396,9 +437,10 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
     for slot, s in series.items():
         s.mde = mdes.get(slot)
     flags = blk.flags_ns
-    found = {"H": lambda: statuses_h(study, series, info, gaps, flags),
-             "F": lambda: statuses_f(study, series, blk.detector["alarms"], blk.registration, info, gaps, flags),
-             "P": lambda: statuses_p(study, series, info, gaps, flags)}[block]()  # fmt: skip
+    alarms, registration = blk.detector["alarms"], blk.registration
+    found = {"H": lambda: statuses_h(study, series, info, gaps, flags, alarms, registration),
+             "F": lambda: statuses_f(study, series, alarms, registration, info, gaps, flags),
+             "P": lambda: statuses_p(study, series, info, gaps, flags, alarms, registration)}[block]()  # fmt: skip
     found["sentences"] = sentences(block, found["statuses"], found["assessments"])
     if block == "H":
         found["sentences"] += regime_sentences(found["measurements"])
