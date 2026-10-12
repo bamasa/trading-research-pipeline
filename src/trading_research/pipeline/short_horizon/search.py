@@ -260,17 +260,25 @@ def overfitting(
 
 
 def write_reports(
-    study: Study, grid: Grid, cells: CellDays, tables: list[pd.DataFrame], n_trials: int
+    study: Study,
+    grid: Grid,
+    cells: CellDays,
+    tables: list[pd.DataFrame],
+    n_trials: int,
+    days: list[date],
 ) -> dict[str, str]:
-    """The leaderboard, marginals and nulls files; their sha256s."""
+    """The leaderboard (with each cell's gross over the usable test days ``days``),
+    marginals and nulls files; their sha256s."""
     from trading_research.pipeline.short_horizon.models import file_sha256
+    from trading_research.pipeline.short_horizon.scoring import gross_bp
     from trading_research.reporting.leaderboard import leaderboard, write_leaderboard
     from trading_research.reporting.marginals import marginals, write_marginals
     from trading_research.reporting.nulls import write_nulls
     from trading_research.reporting.search_keys import catalogue_table
 
     table = catalogue_table(grid.keys)
-    board = leaderboard(table, cells, grid.index, ic=daily_ic(study, grid))
+    gross = gross_bp(study.work / "B" / "days", days, grid.keys)
+    board = leaderboard(table, cells, grid.index, gross_bp=gross, ic=daily_ic(study, grid))
     planned = len(study.catalogue())
     paths = {
         "leaderboard": write_leaderboard(board, study.results("leaderboard.csv"), planned=planned,
@@ -329,7 +337,7 @@ def run(study: Study) -> dict[str, Any]:
         s25_record |= {"A": a_obs,
                        "p_A": ps.placebo_p(ps.exceedances(a_s25.maximum, a_obs), a_s25.replications),
                        "p_B": ps.placebo_p(ps.exceedances(b_s25.maximum, a_obs), b_s25.replications)}  # fmt: skip
-    files = write_reports(study, grid, cells, tables, n_trials)
+    files = write_reports(study, grid, cells, tables, n_trials, days)
     statuses = {
         SLOT_OF[s]: d_status(s, choice, conditions[s], carry[s], results[s], hand)
         for s in grid.strata

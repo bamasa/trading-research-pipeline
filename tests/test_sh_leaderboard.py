@@ -124,3 +124,25 @@ def test_the_file_round_trips_with_its_header(board: pd.DataFrame, tmp_path: Pat
     np.testing.assert_allclose(back["S"], board["S"], rtol=1e-5)
     with pytest.raises(ChoiceError):
         write_leaderboard(board, tmp_path / "x.csv", planned=2400, scored=2399, skipped=0)
+
+
+def test_stage_b_keeps_each_trades_gross_and_the_leaderboard_reads_it(tmp_path: Path) -> None:
+    """Two cells on two days: the day's gross over its entry notional, NaN without a trade."""
+    from datetime import date
+
+    from trading_research.pipeline.short_horizon.scoring import gross_bp
+
+    days = [date(2025, 2, 3), date(2025, 2, 4)]
+    for day, rows in ((days[0], [("a", 2.0, 100.0), ("a", -1.0, 100.0), ("b", 0.5, 50.0)]),
+                      (days[1], [("b", 1.0, 100.0)])):  # fmt: skip
+        folder = tmp_path / day.isoformat()
+        folder.mkdir()
+        stamp = pd.Timestamp(f"{day.isoformat()} 03:00", tz="UTC")
+        pd.DataFrame({"key": [k for k, _, _ in rows], "time": [stamp.value] * len(rows),
+                      "side": [1] * len(rows), "notional": [n for _, _, n in rows],
+                      "pnl_long_bp": 0.0, "pnl_short_bp": 0.0,
+                      "gross": [g for _, g, _ in rows]}).to_parquet(folder / "trades.parquet")  # fmt: skip
+    found = gross_bp(tmp_path, days, ["a", "b", "c"])
+    np.testing.assert_allclose(found[0], [1.0 / 200.0 * 1e4, np.nan])
+    np.testing.assert_allclose(found[1], [1e2, 1e2])
+    assert np.isnan(found[2]).all()

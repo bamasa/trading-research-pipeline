@@ -37,7 +37,7 @@ Choices the registration leaves open, made here:
   statistics in its row, and its measured numbers are in a table of their own;
 * the ladder's A0 rows are A0's mean daily net at 0/0 crossing, and its net
   over the filled notional under each fill rule (O's days pooled); S25's D
-  gross is the leaderboard's, blank until the trial ledger records a gross;
+  gross is the leaderboard's (stage B keeps each trade's gross);
 * the regime map's charts keep units apart: the taker slots in bp of traded
   notional, S-P and S-M per 100 USDT of clip a day; S25-Z, whose net is at
   0/0, is in the file and not on a chart.

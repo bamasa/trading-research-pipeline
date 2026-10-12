@@ -114,8 +114,9 @@ class HoldTable:
     """One day and hold: the executor's round trip for a decision at every row.
 
     Arrays have one value per row (the decision row); ``net``, ``notional`` and
-    ``pnl_bp`` are ``(2, rows)``, long first. Where no entry is possible
-    (``has_entry`` false) the money is NaN.
+    ``pnl_bp`` are ``(2, rows)``, long first, and so is ``gross`` (before fees and
+    funding, in USDT). Where no entry is possible (``has_entry`` false) the money
+    is NaN.
     """
 
     walk: WalkTable
@@ -131,6 +132,7 @@ class HoldTable:
     net: np.ndarray
     notional: np.ndarray
     pnl_bp: np.ndarray
+    gross: np.ndarray | None = None
 
     @property
     def rows(self) -> int:
@@ -184,6 +186,7 @@ def hold_table(walk: WalkTable, hold_ns: int, settings: TakerSettings | None = N
     marks = walk.mid[np.searchsorted(ts, walk.funding_ts, side="left") - 1]
     net = np.full((2, n), np.nan)
     notional = np.full((2, n), np.nan)
+    gross_usdt = np.full((2, n), np.nan)
     skip = np.zeros((2, n), dtype=bool)
     sides = ((LONG, 1, walk.buy_vwap, walk.sell_vwap, walk.buy_exceeds),
              (SHORT, -1, walk.sell_vwap, walk.buy_vwap, walk.sell_exceeds))  # fmt: skip
@@ -200,10 +203,11 @@ def hold_table(walk: WalkTable, hold_ns: int, settings: TakerSettings | None = N
         value = gross - fees + funding
         notional[index] = np.where(known, entry_price * clip, np.nan)
         net[index] = np.where(known, value, np.nan)
+        gross_usdt[index] = np.where(known, gross, np.nan)
         skip[index] = known & exceeds[e]
     pnl_bp = net / notional * 1e4
     return HoldTable(walk, int(hold_ns), settings, np.where(known, entry, n), x, exit_ts,
-                     free_row, allowed, stale, skip, net, notional, pnl_bp)  # fmt: skip
+                     free_row, allowed, stale, skip, net, notional, pnl_bp, gross_usdt)  # fmt: skip
 
 
 #: The executor's decision counters a table run reports.
@@ -230,6 +234,8 @@ class TableTrades:
     pnl_short_bp: np.ndarray
     stale: bool
     counters: dict[str, int]
+    #: Each trade's gross in USDT (before fees and funding), when the table kept it.
+    gross: np.ndarray | None = None
 
     @property
     def trades(self) -> int:
@@ -278,6 +284,7 @@ def take(
         table.pnl_bp[SHORT, rows],
         bool(table.stale[rows].any()),
         counters,
+        None if table.gross is None else table.gross[own, rows],
     )
 
 
