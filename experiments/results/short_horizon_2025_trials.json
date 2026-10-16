@@ -1,0 +1,25 @@
+{
+  "catalogue_sha256": "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d",
+  "file": "short_horizon_2025_trials.parquet",
+  "hand_runs": [],
+  "n_trials": 2400,
+  "n_trials_simulator": 0,
+  "n_trials_taker": 2400,
+  "parts": [
+    {
+      "file": "short_horizon_2025_trials.parquet",
+      "rows": 360000,
+      "sha256": "4ed26ea54939cf5421a8431cbda95536e685f1cfb2ce427af6b6f469739b492a"
+    }
+  ],
+  "rows": 360000,
+  "runs": {
+    "1": {
+      "commit": "4bbaba540c1368b92c8743dc0c0e485be38417b9",
+      "days": 150,
+      "keys": 2400,
+      "rows": 360000
+    }
+  },
+  "sha256": "4ed26ea54939cf5421a8431cbda95536e685f1cfb2ce427af6b6f469739b492a"
+}
