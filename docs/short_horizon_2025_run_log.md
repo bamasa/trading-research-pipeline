@@ -46,3 +46,11 @@ when, so that the gaps between stages can be read later without guessing.
 - Stage D launched at 09:28; Null B done, the refit running at 13:48 MSK.
 - Low-power sleep from 13:07 to 13:48 MSK (battery at 0%); stage D resumed on
   mains after the wake.
+- Stage D's refit reached its third fold by 15:49 MSK; the machine went to
+  battery again in the late afternoon and dozed from about 16:00 MSK, so the
+  refit made no progress overnight.
+
+## 2026-10-17
+
+- 02:16 MSK: still on battery (66%), stage D paused on the refit's third fold,
+  no error in any stage log; the chain to C and E is waiting on D.
