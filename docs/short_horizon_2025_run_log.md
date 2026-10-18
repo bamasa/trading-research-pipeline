@@ -54,3 +54,14 @@ when, so that the gaps between stages can be read later without guessing.
 
 - 02:16 MSK: still on battery (66%), stage D paused on the refit's third fold,
   no error in any stage log; the chain to C and E is waiting on D.
+- Mains power returned in the morning; the refit finished its five folds and
+  stage D completed at 10:54 (13:54 MSK): p_search 0.007 against the placebo
+  search, C* chosen at hold 120 s with a carry-forward G of +2.1 bp and a net
+  of −8.9 bp per trade, no admissible R cell; the leaderboard, marginals and
+  nulls files written. Stage C launched at 10:54.
+- Low-power sleep from 14:09 MSK on 2026-10-17 to 16:43 MSK on 2026-10-18
+  (battery), so stage C ran for about a quarter of an hour before the sleep.
+
+## 2026-10-18
+
+- Woke at 16:43 MSK on mains; stage C resumed (the passive slots on D).
