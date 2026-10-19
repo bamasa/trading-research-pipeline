@@ -1,7 +1,7 @@
 # N planned: 2400
 # N scored: 2400
 # N skipped: 0
-# N trials: 2400
+# N trials: 2435
 # every number: on development data, selected, biased upward; never quoted as a result
 key,gross,net,G,trades_per_day,day_t,ic,S,A,admissible,rank_in_stratum,rank_overall,region,S25_badge
 BTCUSDT|C|gbm|micro+tensor|open|hold_s=120|trades_per_day=100|label_fee_bp=0|regime=none,1.338,-9.66208,1.35137,74.8267,-35.3004,0.0685273,-10.1001,3.91495,True,465,1153,,

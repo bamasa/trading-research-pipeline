@@ -3018,3 +3018,24 @@ earlier rounds' loaders do.
 ## Amendments
 
 None yet.
+
+### 2026-10-18: the D amendment
+
+Written by the entry point (`experiments/short_horizon_2025.py`, stage E) and reviewed
+before it is committed. Every frozen value is in the configuration's placeholders.
+
+Frozen configuration sha256: `e9cb5e0355e4506e6e450356135836b6106a6f3c6ecaa76aa6a07d0733acbdef`
+
+- Complete D runs: R_D = 1; N_trials = 2435 (2400 taker cells and 35 simulator trials); trial ledger sha256 `5ce9e8dead514100dd05e254b2222e564737e194d5cd706afe97c22578be1f9b`, 364742 rows.
+- C*: `BTCUSDT|C|logistic|micro|open|hold_s=120|trades_per_day=25|label_fee_bp=0|regime=pull_120h`; R*: `None` (selected, biased upward).
+- p_search = 0.007246 (on development data, selected).
+- Statuses set on D: {'S-C': 'not admitted on D (i, ii)', 'S-R': 'not run (no admissible cell on D)'}.
+- The fitted-values file's sha256 `ca327600da8e231edd5296d4ee9ee7ca93472001ca1536de1e513d6af109a6b9`.
+- The ob200 reader test against max_sequence_gaps = 0 (D's medians: 863963.0 messages, 100.0 ms between messages, 0.0 sequence gaps):
+  2026-01-05: passes; 863876 messages, 100.0 ms, 0 gaps.
+  2026-01-06: passes; 863617 messages, 100.0 ms, 0 gaps.
+  2026-01-07: passes; 863117 messages, 100.0 ms, 0 gaps.
+- Deflated Sharpe ratios: S25 G 0, net 0; S-C G 0, net 0; S-R G not computed, net not computed; S-P net 0; S-M net 0 (deflated against N_trials with the simulator trials counted, and the variance of the Sharpe ratios of every S-P and S-M cell's daily net_per_100_clip_day simulated on D, over the days no run flagged, 0 on a day without a fill; N_trials with the simulator trials counted, and the variance of the Sharpe ratios of every taker cell's daily G on D's usable test days).
+- Power of the t >= 3 bar: S-C 2.929e-11 against a carry-forward net of -8.895 bp (sigma_D 12.22, n_eff 23.76).
+- Fits that lacked a class: none.
+- The second detector on D: 722 alarms over 181 days read, the first at 2025-01-02T14:53:22+00:00.
