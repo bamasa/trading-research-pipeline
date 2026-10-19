@@ -82,3 +82,8 @@ when, so that the gaps between stages can be read later without guessing.
 - Committed the amendment and the results (19:40 MSK). Two registration test
   modules assumed the unfrozen file; they now read the registered text in
   either state (tests only, no study code changed).
+- The full suite after the commit found the dry run refusing to start: it
+  copied the now-frozen configuration. Corrected in `dry_run.py` (it copies the
+  registration as registered) and recorded as a dated amendment before H is
+  read; no development number changes, D is not re-run. The dry-run tests pass
+  again (18 of 18).
