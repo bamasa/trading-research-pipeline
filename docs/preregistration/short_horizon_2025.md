@@ -3017,8 +3017,6 @@ earlier rounds' loaders do.
 
 ## Amendments
 
-None yet.
-
 ### 2026-10-18: the D amendment
 
 Written by the entry point (`experiments/short_horizon_2025.py`, stage E) and reviewed
@@ -3039,3 +3037,17 @@ Frozen configuration sha256: `e9cb5e0355e4506e6e450356135836b6106a6f3c6ecaa76aa6
 - Power of the t >= 3 bar: S-C 2.929e-11 against a carry-forward net of -8.895 bp (sigma_D 12.22, n_eff 23.76).
 - Fits that lacked a class: none.
 - The second detector on D: 722 alarms over 181 days read, the first at 2025-01-02T14:53:22+00:00.
+
+### 2026-10-19: a correction to the dry run, before H is read
+
+The dry run copied the committed configuration and this document into its
+temporary repository. After the D amendment the configuration is frozen, so the
+rehearsal refused to start ("already frozen") and its tests failed. The dry run
+now copies the registration as registered: the configuration with every
+placeholder reset (the registered null-placeholder hash) and this document with
+its amendments section as it stood before stage E. The change is in
+`pipeline/short_horizon/dry_run.py` alone; the dry run computes no development
+number and reads no market data, so no number of D changes and D is not
+re-run; R_D stays 1. Two test modules that read the committed configuration
+were changed in the same way. The stray "None yet." left above the D
+amendment by stage E is removed.

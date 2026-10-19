@@ -17,8 +17,18 @@ from trading_research.market_making.prereg import (
 from trading_research.pipeline import short_horizon_registration as shr
 
 ROOT = Path(__file__).resolve().parents[1]
-TEXT = (ROOT / shr.CONFIG_PATH).read_text(encoding="utf-8")
-DOCUMENT = (ROOT / shr.DOCUMENT_PATH).read_text(encoding="utf-8")
+#: The configuration as committed: unfrozen until the D amendment, frozen after it.
+LIVE = (ROOT / shr.CONFIG_PATH).read_text(encoding="utf-8")
+#: The registered text, every placeholder null, whichever state the file is in.
+TEXT = unfrozen_text(LIVE)
+LIVE_DOCUMENT = (ROOT / shr.DOCUMENT_PATH).read_text(encoding="utf-8")
+#: The registered document: its amendments section as it stood before stage E.
+DOCUMENT = (
+    LIVE_DOCUMENT.partition("\n" + shr.AMENDMENTS_HEADING + "\n")[0]
+    + "\n"
+    + shr.AMENDMENTS_HEADING
+    + "\n\nNone yet.\n"
+)
 
 CELL = "hold_s=50|trades_per_day=240|label_fee_bp=0"
 VALUES: dict[tuple[str, ...], Any] = {
@@ -71,17 +81,25 @@ VALUES: dict[tuple[str, ...], Any] = {
 }
 
 
-def test_the_registered_file_loads_unfrozen_with_its_hashes() -> None:
+def test_the_registered_file_loads_with_its_hashes() -> None:
+    """Before the D amendment the file is the registered one; after it, the file is
+    frozen, resets to the registered hash, and the document records its hash."""
     registration = shr.Registration.load(repo=ROOT)
-    assert registration.sha256 == shr.REGISTERED_SHA256
-    assert not registration.frozen
+    assert sha256_bytes(TEXT.encode()) == shr.REGISTERED_SHA256
     registration.require_consistent()
     assert tuple(placeholder_lines(TEXT)) == shr.PLACEHOLDERS
     assert set(shr.FROZEN_KINDS) == set(shr.PLACEHOLDERS)
     assert f"`{shr.REGISTERED_SHA256}`" in DOCUMENT
     assert registration.catalogue_sha256 == shr.REGISTERED_CATALOGUE_SHA256
-    assert registration.max_sequence_gaps is None and registration.weights_sha256 == {}
-    assert shr.amendments_text(DOCUMENT).strip() == "None yet."
+    if registration.frozen:
+        registration.require_frozen()
+        assert registration.sha256 == sha256_bytes(LIVE.encode())
+        assert shr.frozen_hash_line(LIVE) in LIVE_DOCUMENT
+        assert shr.amendments_text(LIVE_DOCUMENT).strip() != "None yet."
+    else:
+        assert registration.sha256 == shr.REGISTERED_SHA256
+        assert registration.max_sequence_gaps is None and registration.weights_sha256 == {}
+        assert shr.amendments_text(LIVE_DOCUMENT).strip() == "None yet."
 
 
 def test_a_change_outside_the_placeholders_is_refused() -> None:

@@ -28,6 +28,7 @@ from trading_research.data import fetch_log as fl
 from trading_research.data import study_access as sa
 from trading_research.data.disk import StageBudget
 from trading_research.data.fetch_stage import StagePlan, run_stage
+from trading_research.market_making.prereg import unfrozen_text
 from trading_research.pipeline import short_horizon_registration as shr
 from trading_research.pipeline.short_horizon import synthetic as syn
 from trading_research.pipeline.short_horizon.context import Study
@@ -54,12 +55,25 @@ def commit(repo: Path, message: str) -> str:
     return head.stdout.strip()
 
 
+def registered_text(relative: Path, text: str) -> str:
+    """A file of the registration as it was registered: the configuration with every
+    placeholder reset (it is frozen after the D amendment), the document with its
+    amendments section as it stood before stage E."""
+    if Path(relative) == Path(shr.CONFIG_PATH):
+        return unfrozen_text(text)
+    heading = "\n" + shr.AMENDMENTS_HEADING + "\n"
+    head, found, _ = text.partition(heading)
+    return head + heading + "\nNone yet.\n" if found else text
+
+
 def make_repository(source: Path, target: Path) -> Path:
-    """The registration under git, then the code-freeze note naming that commit."""
+    """The registration as registered under git, then the code-freeze note naming that
+    commit; the rehearsal runs the same whether or not the D amendment is committed."""
     target.mkdir(parents=True, exist_ok=True)
     for relative in COPIED:
         (target / relative).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source / relative, target / relative)
+        text = (source / relative).read_text(encoding="utf-8")
+        (target / relative).write_text(registered_text(relative, text), encoding="utf-8")
     (target / ".gitignore").write_text(GITIGNORE, encoding="utf-8")
     (target / "experiments" / "results").mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=target, check=True, capture_output=True)

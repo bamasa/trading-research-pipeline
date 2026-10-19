@@ -19,13 +19,22 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 
 from trading_research.data import study_access as sa
-from trading_research.market_making.prereg import HeldOutLocked
+from trading_research.market_making.prereg import HeldOutLocked, unfrozen_text
 from trading_research.pipeline import short_horizon_ledger as shl
 from trading_research.pipeline import short_horizon_registration as shr
 
 ROOT = Path(__file__).resolve().parents[1]
-TEXT = (ROOT / shr.CONFIG_PATH).read_text(encoding="utf-8")
-DOCUMENT = (ROOT / shr.DOCUMENT_PATH).read_text(encoding="utf-8")
+#: The registered configuration, every placeholder null, frozen or not on disk.
+TEXT = unfrozen_text((ROOT / shr.CONFIG_PATH).read_text(encoding="utf-8"))
+#: The registered document: its amendments section as it stood before stage E.
+DOCUMENT = (
+    (ROOT / shr.DOCUMENT_PATH)
+    .read_text(encoding="utf-8")
+    .partition("\n" + shr.AMENDMENTS_HEADING + "\n")[0]
+    + "\n"
+    + shr.AMENDMENTS_HEADING
+    + "\n\nNone yet.\n"
+)
 CELL = "hold_s=50|trades_per_day=240|label_fee_bp=0"
 FROZEN_FILES = {
     shl.WEIGHTS_DIR / "gbm_h50": b"weights",
