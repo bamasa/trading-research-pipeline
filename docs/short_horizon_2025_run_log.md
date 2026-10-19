@@ -65,3 +65,20 @@ when, so that the gaps between stages can be read later without guessing.
 ## 2026-10-18
 
 - Woke at 16:43 MSK on mains; stage C resumed (the passive slots on D).
+- Stage C (the passive slots on D) completed at 15:02 (18:02 MSK): S-P and
+  S-M not admitted on D (conditions i and ii); the market maker's making part
+  was −0.43 bp per fill; 35 simulator trials added to the ledger
+  (N_trials 2,435). Stage E launched at 15:02.
+
+## 2026-10-19
+
+- Stage E completed at 01:25 (04:25 MSK): the D amendment written into the
+  registration with the frozen configuration (sha256 `e9cb5e03…`), which
+  resets to the registered null-placeholder hash; the finalist file sets of
+  S25, S25-Z, S-C, S-P and S-M hashed; the ob200 reader test passed on
+  2026-01-05 to 07 with no sequence gap; the pages and figures written. The
+  development period is complete.
+- Low-power sleep 12:35–13:52 MSK, idle.
+- Committed the amendment and the results (19:40 MSK). Two registration test
+  modules assumed the unfrozen file; they now read the registered text in
+  either state (tests only, no study code changed).
