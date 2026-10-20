@@ -87,3 +87,11 @@ when, so that the gaps between stages can be read later without guessing.
   registration as registered) and recorded as a dated amendment before H is
   read; no development number changes, D is not re-run. The dry-run tests pass
   again (18 of 18).
+
+## 2026-10-20
+
+- Nothing run. The development period is complete and committed; H is not
+  opened yet. The registration asks that H's open entry be committed and
+  pushed before the fetch, and the owner keeps intermediate work off the public
+  repository, so the way the open entry is recorded is waiting on the owner's
+  decision. No 2025 file of H, F or P is on disk.
