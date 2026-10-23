@@ -106,7 +106,8 @@ data:
   reader_test_result: null  # {venue: {day: {status, stream, findings, passes}}}: each day loaded as a block day, with message counts, median interval, sequence gaps and every finding; frozen by the D amendment
   exclusions_unit: day and venue  # a day excluded on a venue is excluded from every series of that venue's slots
   exclusions_bybit: [more book sequence gaps than max_sequence_gaps, a positive_prices error in validate_book's report, an off-grid price (the day's own tick from events.derive_tick), missing plane (HTTP 404 only), unreadable archive, unfetchable day, flatten_stale in any run of the block's read]
-  exclusions_binance: [missing file (HTTP 404 only), a day without a print, an off-grid price, unreadable file, unfetchable day, flatten_stale under the print rule in any run of the block's read]
+  exclusions_binance: [missing file (HTTP 404 only), a day without a print, an off-grid price, unreadable file, unfetchable day]  # an order with no later print of its side is counted (common.print_fill.no_later_print), never an exclusion
+  exclusions_both: [fee not sourced]  # a day the fee table does not cover at every instant
   max_sequence_gaps_rule: "95th percentile of D's per-day gap counts on Bybit's spot book, numpy linear interpolation over every D day whose book replayed, rounded to 9 decimals, then up; the same value on every block (data/study_loader.max_sequence_gaps)"
   max_sequence_gaps: null  # one value, by the rule above; frozen by the D amendment
   excluded_days_D: null  # {instrument: [[day, reason]]}; frozen by the D amendment
@@ -194,26 +195,30 @@ common:
     inventory_pnl: "the held clip marked from the day's first print to its last; reported separately, never in net_bp_trade, a kill or a status"
     long_only_measured: short decisions dropped before the one-position rule; K-drift's all-long version is its comparator
     margin_borrow: not modelled
-  book_fill: {slots: [S25-BB, S25-T, S25-PB by the book walk], executor: "the 2025 event-time taker executor (backtest/taker.execute_day), unchanged: ten-level walk, entry skip beyond the visible depth, late-snapshot counters, flatten_stale (R16)", funding: none, fee: the fill's from the fee table}
+  book_fill: {slots: [S25-BB, S25-T, S25-PB by the book walk], executor: "the 2025 event-time taker executor (backtest/taker.execute_day), unchanged: ten-level walk, entry skip beyond the visible depth, late-snapshot counters, flatten_stale (R16)", funding: none, fee: the fill's from the fee table, settings: "built only by this study's costs.py from the fee table; a run given the executor's default settings (5.5 bp taker) is refused; tested"}
+  book_levels: {walk: 10, features: 10, stage_0_check: "share of reader-test snapshots in which the clip exceeds ten levels on either side", above: 0.001, then: "the clip walks all 200 levels; features keep ten; recorded in the amendment"}
   print_fill:
     slots: [S25-PF, S25-PB, S25-PFT]
     arrival: decision + 10 ms
     buy: the first buyer-initiated print stamped at or after arrival
     sell: the first seller-initiated print stamped at or after arrival
-    clip: "walks that print and the other same-side prints with the same stamp, in archive order, at their volume-weighted price; any part beyond that sweep at the sweep's last price, counted (fill_beyond_sweep)"
+    unreachable_prints: "stage 0 checks each print archive for an RPI flag or equivalent; flagged prints never filled against, kept in the features; their share recorded"
+    clip: "walks that print and the other same-side prints with the same stamp, in archive order, at their volume-weighted price; the part beyond that sweep at the sweep's last price, counted (fill_beyond_sweep)"
+    stage_0_sweep: the median sweep against the clip, recorded
     skips: none  # no entry skipped for depth or for wait
     late_print_s: 1  # a fill whose print comes later after arrival is counted (entry_late_print, exit_late_print); no day excluded
-    exit_decision: "the first row stamped at or after t + hold, t the entry decision, or 23:59 if that comes first; never fills on a print before the entry's fill"
+    exit_decision: "as the print label: the first row stamped at or after the entry fill's print + hold, or 23:59 if that comes first; never fills on a print before the entry's fill"  # a registered change from S25's executor (decision + hold)
     next_decision: at a row stamped at or after the exit's fill print
-    no_print_before_day_end: "priced at the last print of its side before the order; the day flagged flatten_stale and excluded from every series of the venue's block when that print is more than flatten_stale_s older than the order; no print of the next day read"
-    flatten_stale_s: 60
+    no_later_print: {entry: "not made, counted (entries_no_print)", exit: "priced at the last print of its side before it, counted with its age (exits_no_print)", excludes_a_day: false, next_day_read: false}
+    reported_beside: [entry wait distribution, realised hold (entry fill to exit fill), entries_no_print, exits_no_print and ages, fill_beyond_sweep share, unreachable print share]
     same_function_for_label_and_executor: true
     brackets:
       optimistic: the whole clip at the first print's price
-      pessimistic_depth: the part beyond the sweep walks later prints of the same side
+      pessimistic_depth: "the part beyond the sweep at the worst price of a same-side print stamped in the 60 s after the fill's print and before 23:59; the sweep's last price if none"
       stale: the last print of the same side stamped at or before the decision row
       worse_of_two: per fill the worse of the rule's price and the stale price, with pessimistic depth
-    K-fill_bracket: worse_of_two
+    K-fill_bracket: worse_of_two  # less the thinned calibration's advantage (kill_conditions.K-fill)
+    brackets_are_bounds: false  # four registered rules; none bounds a real account's fill
 
 slots:
   S25:
