@@ -333,7 +333,7 @@ models:
   thresholds: null  # {slot or measured row: {cell: {theta_long, theta_short}}} for every frozen cell; frozen by the D amendment
 
 d_procedure:
-  stage_0: "on the reader-test days: the spot readers proven on synthetic fixtures and the three days; Bybit's ob200 replayed as a block day (no positive_prices error, no off-grid price), message counts, median interval and gaps recorded; Bybit's print columns, units and side strings checked; Binance's side flag mapped as documented; fetch, replay, label, fits and scoring timed; print walk tables equal to the print executor entry by entry; a failure fixed by a dated amendment before stage 1"
+  stage_0: "on the reader-test days: the spot readers proven on synthetic fixtures and the three days; Bybit's ob200 replayed as a block day (no positive_prices error, no off-grid price), message counts, median interval and gaps recorded; Bybit's print columns, units and side strings checked; Binance's side flag mapped as documented; fetch, replay, label, fits and scoring timed; print walk tables equal to the print executor entry by entry, on runs whose busy periods depend on the side; stage 0's labels, fits and scores discarded and never reported, only timings, reader checks and parity to the amendment; a failure fixed by a dated amendment before stage 1"
   stage_1: fetch, replay and features of W and D; no H or P file on disk before its read
   code_freeze: docs/spot_2026_code_freeze.md, before the stage 1 fetch
   stages_after: [leakage tests, the fits, scoring of every slot, measured row and neighbourhood cell on June and July, S25-T on the same days, the calibration on Bybit, sigma_D and the MDEs, "a dry run with July standing in for H, outputs discarded", the amendment]
@@ -407,8 +407,11 @@ placebos:
   random_direction: {used_by: family, draws: 200, seeds: [0, 199]}
   one_day_shift: {used_by: family, source: "the previous usable day's signal tape at the same time of day", circular_within_block: true, steps_over_excluded_days: true}
   all_long_all_short: {used_by: family}  # K-drift
-  positions: each placebo on the true slot's entry decision times; a taker's exit time does not depend on its side, so none is skipped
-  walk_tables: {book: from the 2025 executor's walk, prints: "from the print rule's fill function, proven equal to the print executor at stage 0"}
+  positions: each placebo on the true slot's entry decision times
+  book_slots: a taker's exit time does not depend on its side on a book, so no decision is skipped, as in 2025
+  print_slots: "each placebo, K-drift's all-long and all-short runs and Null A's hour flips re-apply the print executor's one-position rule to their own fills: a true decision arriving while the run's own position is open (before its exit fill's print) is skipped, counted and reported; K-cap holds in every run"
+  walk_tables: {book: from the 2025 executor's walk, prints: "from the print rule's fill function, storing per decision row both sides' entry fill print, exit fill print and busy-until time; proven equal to the print executor at stage 0, side-dependent busy periods included"}
+  print_neighbourhood_and_latency: full runs of the print executor's rule on the rows passing theta
 
 hypotheses:
   S25-PF: {block: H, claim: net_bp_trade > 0 at regular, kills: kill_conditions.per_slot.S25-PF, prediction: killed by K1}
