@@ -34,7 +34,7 @@ computed_before_registration: none  # no spot book, print, trade or bar of any y
 
 prior_information:
   - "BTC's daily price path to 2026-09-30, in the README's break figure (Binance BTCUSDT daily futures bars on disk); the shorter-memory setting's scale breaks 2026-02-06 up and 2026-08-14 down, named in the README; the second inside H; neither set any value"
-  - the author worked on BTC/FDUSD in 2025  # an information-set fact; nothing more is stated
+  - "BTC/FDUSD: the author worked on this pair in 2025"  # an information-set fact; nothing more is stated
   - "the 2025 study's registration, configuration and code, S25's coordinates and frozen-file sha256s, and its D amendment of 2026-10-18 (development numbers on Bybit's BTCUSDT perpetual, 2025-01..06); S25's coordinates set every coordinate of the three slots; the sha256s are checked, not chosen; the D amendment's numbers set nothing here; S25 was named on 2026-10-08, when 61 of H's 75 days had passed (information_set); its held-out results will be known before this study's D is read and change nothing here"
   - "the 2025 study's reader-test days 2026-01-05..07 (Bybit linear ob200), read for message counts; in no block here"
   - this repository's earlier studies on perpetuals, documented in docs/findings.md; the reason for the prior
@@ -197,7 +197,12 @@ common:
     k_inv_checks: [fees booked in quote (fees.booking), "each fee deducted in the asset received, the day starting with 2 clips of BTC (the second covers 1,000 buys at 10 bp)"]
     margin_borrow: not modelled
   book_fill: {slots: [S25-BB, S25-T, S25-PB by the book walk], executor: "the 2025 event-time taker executor (backtest/taker.execute_day), unchanged: ten-level walk, entry skip beyond the visible depth, late-snapshot counters, flatten_stale (R16)", funding: none, fee: the fill's from the fee table, settings: "built only by this study's costs.py from the fee table; a run given the executor's default settings (5.5 bp taker) is refused; tested"}
-  book_levels: {walk: 10, features: 10, stage_0_check: "share of reader-test snapshots in which the clip exceeds ten levels on either side", above: 0.001, then: "the clip walks all 200 levels; features keep ten; recorded in the amendment"}
+  book_levels:
+    features: 10
+    stage_0_check: share of reader-test snapshots in which the clip exceeds ten levels on either side
+    walk_rule: "10 levels; 200 if the stage-0 share is above walk_threshold; features keep ten"
+    walk_threshold: 0.001
+    walk: null  # 10 or 200 by walk_rule; frozen by the D amendment
   print_fill:
     slots: [S25-PF, S25-PB, S25-PFT]
     arrival: decision + 10 ms
@@ -448,7 +453,7 @@ fetch:
 
 compute:
   estimate: "about 200 book days replayed at 2-3 minutes on at most 4 workers; 42 boosted fits at 1-2 minutes; scoring, placebos and neighbourhoods from walk tables; under a day for D, a few hours for each later read"
-  record: null  # stage 0's timings, the replay's peak memory, worker counts and store sizes; frozen by the D amendment
+  record: null  # stage 0's timings and checks (ten-level share, unreachable-print share, median sweep against the clip), free disk at each stage's start, the replay's peak memory, worker counts and store sizes; frozen by the D amendment
 
 access:
   development: {allows: [reader_test, W, D], venues: both, refuses: "every other day of both instruments, 2025 and 2026 alike"}
@@ -463,7 +468,7 @@ access:
   spent: blocks.spent
 
 amendment:
-  D_amendment: {when: after D and before H, written_by: the entry point, reviewed_before_commit: true, records: [excluded days by venue and reason, max_sequence_gaps, tick and lot, reader-test results, every frozen fit's sha256, each slot's frozen file sha256, the fitted-values file's sha256, every theta, sigma_D and the MDEs, D summaries against the nulls (development), FILL-S on D, the compute record, "Frozen configuration sha256: `<hash>`"]}
+  D_amendment: {when: after D and before H, written_by: the entry point, reviewed_before_commit: true, records: [excluded days by venue and reason, max_sequence_gaps, tick and lot, reader-test results, every frozen fit's sha256, each slot's frozen file sha256, the fitted-values file's sha256, every theta, sigma_D and the MDEs, D summaries against the nulls (development), FILL-S and FILL-S_thinned on D, common.book_levels.walk, the compute record, "Frozen configuration sha256: `<hash>`"]}
   placeholder_comment: frozen by the D amendment
   corrections_before_H: "a dated amendment stating the fault; D re-run in full if it could change a D number; complete D runs numbered; every change to the study code after the code-freeze note is one"
   forbidden_reasons: [a D number, a result of the 2025 study, anything seen on spot data, except a fault the amendment names]
