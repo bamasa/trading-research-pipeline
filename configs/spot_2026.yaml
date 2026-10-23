@@ -55,7 +55,8 @@ information_set:
 expected_outcome:
   verdict_taker_bp: {binance_spot_BTCFDUSD: 10.0, bybit_spot_BTCUSDT: 10.0}
   taker_round_trip_bp: 20.0  # a slot pays at the verdict tier only with a gross edge above 10 bp of turnover
-  cheapest_published_taker_bp: {binance_vip9: 2.3, bybit_supreme_vip: 4.5, bybit_pro6_institutional: 1.5}
+  cheapest_dated_taker_bp: {binance_vip9: 2.3, bybit_vip5: 5.0}  # with a dated source for the blocks' days
+  undated_taker_bp: {bybit_supreme_vip: 4.5, bybit_pro6_institutional: 1.5, read: 2026-10-22..23}  # Y3, Y5 live; no earlier date
   predictions:
     S25-PF: killed by K1 on H
     S25-BB: killed by K1 on H
@@ -114,29 +115,37 @@ data:
   gap_days_included_reported: true  # each Bybit verdict also with the gap-excluded days put back, as a measurement
 
 fees:
-  rule: "every fill pays the fee of its venue's sourced interval at the fill's time, in bp of the fill's notional, charged in the quote; a day is covered when it lies wholly inside one sourced interval of its venue; the read refuses to open a block holding a day no interval covers"
+  rule: "every fill pays the fee of the sourced interval of its venue in force at the fill's time, in bp of the fill's notional; a day is covered when every instant of it lies in a sourced interval of its venue (intervals may split a day); a day not covered is excluded on that venue, reason fee not sourced"
+  booking: "in the quote at the fill price, a convention: the venues deduct a fee in the asset received (a buy's in BTC) unless a discount token pays it; equal in value; K-inv checked both ways (common.short_side)"
   verdict_tier: {binance_spot_BTCFDUSD: regular, bybit_spot_BTCUSDT: non_vip}  # the tier an account holds with no 30-day volume, coin holdings or programme membership
-  discounts_applied: none  # the sources do not say whether BNB's discount applied to a Regular account's BTC/FDUSD taker fee; Bybit's MNT discount does not apply to API orders
+  discounts_applied: none  # a discount needs BNB or MNT held, a coin holding outside the verdict tier; the sources do not say whether BNB's discount applied to BTC/FDUSD's taker fee at all
   other_tiers: measurements, labelled with what they require; a zero fee at a tier labelled "conditional on <tier> eligibility"
   tier_values: "[maker_bp, taker_bp]"
   intervals:
     binance_spot_BTCFDUSD:
-      - {start: "2024-04-25T06:00:00Z", end: "2026-01-29T00:00:00Z", sources: [B3, B4], tiers: {regular: [0.0, 10.0], vip1: [0.0, 10.0], vip2_to_vip9: [0.0, 0.0], spot_liquidity_provider: [0.0, 0.0]}, notes: "Regular and VIP 1 volume on the pair counted toward the VIP tier, VIP 2-9 volume did not; covers no block"}
-      - {start: "2026-01-29T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [B4, B5, B6, B7, B8], tiers: {regular: [0.0, 10.0], vip3: [0.0, 6.0], vip9: [0.0, 2.3]}, notes: "maker 0 for every account, taker each tier's standard taker; the pair's volume counts toward VIP tiers; end: the live capture of 2026-10-22; only the tiers the sources state for the pair"}
+      - {start: "2024-04-25T06:00:00Z", end: "2026-01-29T00:00:00Z", sources: [B3, B4, B6, B8], tiers: {regular: [0.0, 10.0], vip1: [0.0, 10.0], vip2_to_vip9: [0.0, 0.0], spot_liquidity_provider: [0.0, 0.0]}, notes: "Regular and VIP 1 volume on the pair counted toward the VIP tier, VIP 2-9 volume did not; covers no block"}
+      - {start: "2026-01-29T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [B4, B5, B6, B7, B8], tiers: {regular: [0.0, 10.0], vip3: [0.0, 6.0], vip9: [0.0, 2.3]}, notes: "maker 0 for every account, taker each tier's standard taker; the pair's volume counts toward VIP tiers; end: the live capture of 2026-10-22; only the tiers the sources state for the pair; B8 20260110, 20260324, 20260830 and live agree on VIP 3 and VIP 9, so the interval runs across B12's threshold change of 2026-03-18"}
     bybit_spot_BTCUSDT:
-      - {start: "2025-01-31T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [Y1, Y2, Y3, Y5, Y6], tiers: {non_vip: [10.0, 10.0], vip1: [6.75, 8.0], vip2: [6.5, 7.75], vip3: [6.25, 7.5], vip4: [5.0, 6.0], vip5: [4.0, 5.0], supreme_vip: [3.0, 4.5], pro6_institutional: [0.5, 1.5]}, notes: "identical in the captures of 2025-01-30, 2025-08-15, 2026-01-13 and 2026-06-11 and live on 2026-10-22, with no fee change or zero-fee offer on BTC spot in the announcements of 2024-11..2026-10; taken to hold between captures on that ground; starts on the first whole day after the first capture"}
+      - {start: "2025-01-31T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [Y1, Y2, Y6], tiers: {non_vip: [10.0, 10.0], vip1: [6.75, 8.0], vip2: [6.5, 7.75], vip3: [6.25, 7.5], vip4: [5.0, 6.0], vip5: [4.0, 5.0]}, notes: "identical in the captures of 2025-01-30, 2025-08-15, 2026-01-13 and 2026-06-11 and live on 2026-10-22, with no fee change or zero-fee offer on BTC spot in the announcements of 2024-11..2026-10; taken to hold between captures on that ground; starts on the first whole day after the first capture"}
+  undated_cells:
+    bybit_spot_BTCUSDT: {read: 2026-10-22..23, sources: [Y3, Y5], tiers: {supreme_vip: [3.0, 4.5], pro6_institutional: [0.5, 1.5]}, covers: no day of any block}  # quoted only as the schedule read then
   requirements:
     binance_vip2_2025: ">= 5M USD of 30-day spot volume and >= 100 BNB (B10)"
     binance_2026_thresholds: not transcribed (B12); no tier other than Regular is said to be within a slot's reach
   slot_volume_reported: true  # every slot's own 30-day traded volume beside the tier rows; never moves the verdict tier
   not_covered: [regional entities of either venue, fees an account negotiated]
-  P_days: not covered; a dated fee amendment adds intervals for them before P opens, and adds nothing else
+  P_days: not covered; a dated fee amendment adds intervals for them by fees.P_procedure, by blocks.P.deadline and before P opens, and adds nothing else
+  P_procedure:
+    sources: {binance: [B5 live, B7 live, B6 captures, B8 captures, "announcements of B3 and B4's kind in Binance's announcement list for the pair"], bybit: [Y1 captures, Y2 live, Y6 scan]}
+    retrieved: between 2027-01-01 and the fee amendment's commit
+    conflict: the higher verdict-tier fee on each side at that instant
+    between_sources: the schedule holds between two dated sources that agree with no fee announcement for the pair between them, on both venues
   sources:
     binance_announcement: "https://www.binance.com/en/support/announcement/detail/{code}, read through https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query?articleCode={code}"
     B3: {announcement: 3d8514bbc817423eba52fb23483bcbed, dated: 2024-04-17, what: "the pair's terms from 2024-04-25 06:00"}
-    B4: {announcement: 4856a6d4e4014d4e8a5a29ec5fb44857, dated: 2026-01-15, what: "the zero taker fee ends for every account on 2026-01-29 00:00"}
+    B4: {announcement: 4856a6d4e4014d4e8a5a29ec5fb44857, dated: 2026-01-15, what: "the zero taker fee for VIP 2-9 and Spot Liquidity Provider accounts ends on 2026-01-29 00:00"}
     B5: {url: "https://www.binance.com/bapi/accounts/v1/public/commission/symbol-activity-list?currentPage=1&pageSize=500", also: "https://www.binance.com/en/fee/tradingPromote", retrieved: 2026-10-22}
-    B6: {what: "B5's endpoint in web.archive.org captures 20240418..20261002, about monthly"}
+    B6: {what: "B5's endpoint in web.archive.org captures", captures: [20240418104827, 20241002101447, 20250101172920, 20250201193444, 20250302084123, 20250311092840, 20250413120429, 20250504030612, 20250601144417, 20250707123021, 20250803084207, 20250902195812, 20251001083945, 20251101001651, 20251202190348, 20260102213736, 20260127234017, 20260130063053, 20260226155955, 20260404220420, 20260505173725, 20260601115622, 20260712063105, 20260801085657, 20260901093918, 20261002084516], empty: [20240426125251]}
     B7: {url: "https://www.binance.com/en/fee/trading", retrieved: 2026-10-22}
     B8: {url: "https://www.binance.com/bapi/composite/v1/public/commission/trade-level/get", captures: [20250312, 20250612, 20260110, 20260324, 20260830]}
     B10: {announcement: 024a848244a84511a70e6e6f60ba4c85, what: the VIP table from 2024-10-14}
@@ -145,8 +154,8 @@ fees:
     B20: {url: "https://www.binance.com/bapi/margin/v1/public/margin/vip/spec/history-interest-rate?asset=BTC&vipLevel=0", what: BTC borrow rates; not used}
     Y1: {url: "https://www.bybit.com/en/help-center/article/Trading-Fee-Structure", captures: [20250130161525, 20250815213430, 20260113201131, 20260611041408]}
     Y2: {url: "https://www.bybit.com/en/fee/spot", retrieved: 2026-10-22}
-    Y3: {url: "https://www.bybit.com/en/help-center/article/Benefits-of-the-VIP-Program"}
-    Y5: {url: "https://www.bybit.com/en/fee/spot/pro"}
+    Y3: {url: "https://www.bybit.com/en/help-center/article/Benefits-of-the-VIP-Program", retrieved: 2026-10-22..23, capture: none}
+    Y5: {url: "https://www.bybit.com/en/fee/spot/pro", retrieved: 2026-10-22..23, capture: none}
     Y6: {url: "https://api.bybit.com/v5/announcements/index?locale=en-US", scanned: 2024-11..2026-10}
     Y7: {url: "https://api.bybit.com/v5/spot-margin-trade/data?currency=BTC", what: BTC borrow rate and limit on 2026-10-23; not used}
 
@@ -440,7 +449,7 @@ amendment:
   placeholder_comment: frozen by the D amendment
   corrections_before_H: "a dated amendment stating the fault; D re-run in full if it could change a D number; complete D runs numbered; every change to the study code after the code-freeze note is one"
   forbidden_reasons: [a D number, a result of the 2025 study, anything seen on spot data, except a fault the amendment names]
-  fee_amendment: {only_after_H: true, adds: "intervals for P's days, from sources of the kinds in fees.sources, before P opens", changes: nothing else}
+  fee_amendment: {only_after_H: true, adds: "intervals for P's days, by fees.P_procedure, by blocks.P.deadline and before P opens", changes: nothing else}
   after_H: nothing changed and nothing re-run under another rule; a defect can only lower a status (statuses.defect_after_read)
   ledger_rule: only reads through the ledger count; a number computed on H or P outside it is not a result
   date: null  # the D amendment's date; frozen by the D amendment

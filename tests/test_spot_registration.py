@@ -19,7 +19,7 @@ CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
 #: The configuration as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "98eb928d702d927eac6ad8d35648175d4676c3e19ea012b1a7080d83ada4a593"
+REGISTERED_SHA256 = "e26f8330f9e24de8c1f5816bad8ff994210dd715e3cae230fd1002b5ea8770d6"
 PLACEHOLDERS = (
     ("data", "reader_test_result"), ("data", "max_sequence_gaps"), ("data", "excluded_days_D"),
     ("data", "instrument_spec"), ("features", "fitted_values_sha256"),
@@ -41,14 +41,18 @@ def _venues(block: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _covered(instrument: str, day: date) -> bool:
-    """A day is covered when it lies wholly inside one sourced interval."""
-    start = datetime.combine(day, time(), tzinfo=UTC)
-    for interval in CONFIG["fees"]["intervals"][instrument]:
-        lo = datetime.fromisoformat(interval["start"])
-        hi = datetime.fromisoformat(interval["end"])
-        if lo <= start and start + timedelta(days=1) <= hi:
-            return True
-    return False
+    """A day is covered when every instant of it lies in a sourced interval with the verdict tier."""
+    tier = CONFIG["fees"]["verdict_tier"][instrument]
+    spans = sorted(
+        (datetime.fromisoformat(i["start"]), datetime.fromisoformat(i["end"]))
+        for i in CONFIG["fees"]["intervals"][instrument]
+        if tier in i["tiers"]
+    )
+    reached = datetime.combine(day, time(), tzinfo=UTC)
+    for lo, hi in spans:
+        if lo <= reached < hi:
+            reached = hi
+    return reached >= datetime.combine(day, time(), tzinfo=UTC) + timedelta(days=1)
 
 
 def test_registered_hash_is_the_documents() -> None:
@@ -126,8 +130,9 @@ def test_verdict_tier_is_ten_bp_taker_on_both_venues() -> None:
     fees = CONFIG["fees"]
     for instrument, tier in fees["verdict_tier"].items():
         for interval in fees["intervals"][instrument]:
-            if tier in interval["tiers"]:
-                assert interval["tiers"][tier][1] == 10.0
+            assert interval["tiers"][tier][1] == 10.0  # present in every interval, never zero
+        undated = fees["undated_cells"].get(instrument, {"tiers": {}})
+        assert tier not in undated["tiers"]  # an undated cell never sets the verdict
     assert CONFIG["kill_conditions"]["K-fee"]["taker_bp"] == 10.0
 
 
