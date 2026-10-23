@@ -281,7 +281,7 @@ slots:
       BTCUSDT__C__gbm__micro__hold_s=120__label_fee_bp=0.pkl: be8e7ead202f79c79e92ba2923866e27d2e308a01ad16e45b843c827b68eda11
       BTCUSDT__C__gbm__micro__hold_s=120__label_fee_bp=5.5.pkl: c6b7354d497ab9ab19928d491f8003cde0dd51866819bf0fd55360367a581bed
 
-measured_rows:  # no status, no place in Holm; every kill evaluated and reported, no precedence
+measured_rows:  # no status, no place in Holm, no precedence; kills reported: [K1, K-label, K-placebo, K-drift, K-days, K-fee, K-latency, K-fill]; K-nbhd not computed (own cell only)
   S25-PB: {instrument: bybit_spot_BTCUSDT, recipe: S25-PF's, on: "Bybit's spot prints", fits: its own cell only (3), priced_by: [common.print_fill, common.book_fill], blocks: [D, H, P]}
   S25-PFT: {instrument: binance_spot_BTCFDUSD, recipe: S25-PF's, inputs: "features.print_members + features.touch_proxy_members", fits: its own cell only (3), blocks: [D, H, P]}
   per_slot: [long-only variant, gross at zero fees, every tier of the fee table, the inventory's own P&L]
@@ -345,7 +345,7 @@ metrics:
   net_bp_trade: "a round trip's P&L in quote (a long's exit value less its entry value, a short's entry value less its exit value) over the entry notional x 1e4, less both sides' fees in bp of the entry notional"
   day_series: one value per day with a trade; the day's net in quote summed over its round trips over their summed entry notionals x 1e4
   gross_bp_trade: the same before fees; reported, labelled "conditional on a zero-fee venue"
-  gross_bp_turnover: gross over both sides' notional x 1e4, the break-even per side, against every tier
+  gross_bp_turnover: "per day, the day's gross over its turnover (both sides' notional) x 1e4; on a block, the mean over the series' days; the break-even per side, against every tier"
   ic: {book: "rank correlation of p_long - p_short with the mid move from the entry snapshot to the first snapshot at or after it + hold, as in 2025", prints: "the same from the mid proxy at the entry fill to the mid proxy at the first row stamped at or after the fill + hold", aggregate: mean over days}
   computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
   significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, fewer_than_two_days: fails the day count; p = 1}
@@ -356,17 +356,21 @@ metrics:
     n_eff: 75 x the share of D's 61 test days with a trade; on P, P's usable days in place of 75, sigma_D and the share as frozen
     sigma_d: null  # {slot: sigma} over D's 61 test days; frozen by the D amendment
     value: null  # {slot: mde}; frozen by the D amendment
-  beside: [trades_per_day, share_days_positive, median_day, max_drawdown, net_quote_a_day, every_tier, by_side, long_only, inventory_pnl, slot_30_day_volume, entries_skipped, late_snapshots, late_prints, fill_beyond_sweep, beyond_tenth_level, print_brackets, prints_a_day]
+  beside: [trades_per_day, share_days_positive, median_day, max_drawdown, net_quote_a_day, every_tier, by_side, long_only, inventory_pnl, slot_30_day_volume, entries_skipped, late_snapshots, late_prints, fill_beyond_sweep, beyond_tenth_level, print_brackets, prints_a_day, capacity_ratio, grid_row_share_traded, entry_waits, realised_hold, entries_no_print, exits_no_print]
 
 family: [S25-PF, S25-BB, S25-T]
 statuses:
   holm: {alpha: 0.05, sided: one, m: 3, m_fixed_on_every_block: true, code: market_making/verdicts.holm, enter_with_p_1: [void, killed, "inconclusive (too few trades)", not assessed, not taken to the block]}
   holm_first_step_t: {df_74: 2.17, df_19: 2.29, df_9: 2.51}  # below 3: the t >= 3 bar binds
   bar: [no kill, Holm passes with m = 3, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on P"]
-  precedence: ["void (K-leak, K-units, K-acct, K-cap, K-inv)", "inconclusive (too few trades): K-trades; nothing below evaluated", killed (any kill), candidate on H or passes on P, "inconclusive (below the minimum detectable effect when the mean is smaller in size than the MDE)"]
+  precedence: ["void (K-leak, K-units, K-acct, K-cap, K-inv)", "inconclusive (too few trades): K-trades; nothing below evaluated", killed (any kill), "inconclusive (fill beyond sweep) or inconclusive (capacity): the bar met but a cap applies", "candidate on H or passes on P: the bar met, no cap", "inconclusive (below the minimum detectable effect when the mean is smaller in size than the MDE)"]
   void_counts_as_killed: true
   taken_to_P: candidate only
-  after_H: [candidate, "candidate (H inside S25's information set)", inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not assessed (H unreadable on <venue>)", "not assessed (H read failed)", "void (defect found after the H read)"]
+  caps:
+    fill_beyond_sweep: {slots: print slots, share_of_fills_above: 0.10, status: inconclusive (fill beyond sweep)}
+    capacity: {slots: every slot, median_day_ratio_above: 0.02, ratio: measurements.capacity, status: inconclusive (capacity)}
+    applied: after Holm; no p-value changes
+  after_H: [candidate, "candidate (H inside S25's information set)", inconclusive, inconclusive (fill beyond sweep), inconclusive (capacity), "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not assessed (H unreadable on <venue>)", "not assessed (H read failed)", "void (defect found after the H read)"]
   after_P: {passes: confirmed, no_pass_no_kill: "candidate, not confirmed", kill: killed on P, void: void, unreadable: "candidate, not confirmed (P unreadable)", read_failed: "candidate, not confirmed (P read failed)", not_read_by_deadline: "candidate, not confirmed (P not read by its deadline)", before_deadline: "candidate (P not yet read)"}  # under information_set.fallback each carries "(H inside S25's information set)"
   unreadable: "a venue's block with more than a quarter of its days excluded; on H that venue's slots not assessed, the other venue's assessed, H spent"
   read_failed: "resumed at the same commit; the same stage failing again with the same exception, or five resumptions unfinished, closes the session: on H every slot not assessed (H read failed); on P every candidate 'candidate, not confirmed (P read failed)' and every measurement not assessed"
@@ -376,12 +380,12 @@ statuses:
 
 kill_conditions:
   per_slot:
-    S25-PF: {execution: taker, print rule, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-fill], beside: [every bracket, the calibration on Bybit (S25-PB), waits and late prints]}
+    S25-PF: {execution: taker, print rule, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-fill], beside: [every bracket, both calibrations on Bybit (S25-PB), waits, realised holds, late and missing prints, the share of fills beyond the sweep]}
     S25-BB: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [the gap-excluded days put back]}
     S25-T: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [its trade rate against 240 a day]}
   void: [K-leak, K-units, K-acct, K-cap, K-inv]
   K-leak: a feature fails validation/leakage.py or the fold-level leakage test fails; every result void
-  K-units: a cost (fee, book walk, print fill) or the hold-first rule's input reaches the result through a normalised column
+  K-units: "a cost (fee, book walk, print fill) or the hold-first rule's input reaches the result through a normalised column; or any fill's fee in bp of its notional differs from the fee table's cell for its venue, tier and time (every fill of every run)"
   K-acct: the accounting identity fails on any day, or turnover differs from the sum of fill notionals, in any run of the slot's read
   K-cap: the traded position beyond one clip either way at any event
   K-inv: either coin's balance below zero at any event
@@ -391,9 +395,9 @@ kill_conditions:
   K-drift: the true mean does not exceed the larger of the all-long and all-short means at the same entry times
   K-nbhd: {statistic: median over the 12 neighbourhood cells of each cell's mean on the block, kills_at_or_below: 0, cell_without_trade: 0, runs: frozen fits and theta only}
   K-days_share_positive_max: 0.5
-  K-fee: {statistic: gross_bp_turnover, kills_at_or_below: the verdict tier's taker fee, taker_bp: 10.0}
+  K-fee: {statistic: "metrics.gross_bp_turnover on the block: the mean of the daily values", kills_at_or_below: the verdict tier's taker fee, taker_bp: 10.0}  # weights days as K1 does; can differ from K1 near zero
   K-latency: {latency_ms: 110, kills: a positive result that is <= 0 there, book: one more 100 ms row, prints: the arrival moved by 100 ms}
-  K-fill: {slots: [S25-PF], kills: a positive result not positive under common.print_fill.brackets.worse_of_two}
+  K-fill: {slots: [S25-PF], kills: "a positive result whose worse_of_two daily series has a mean <= 0 once every buy is also charged max(0, a_buy) and every sell max(0, a_sell) bp of its notional", a_buy_a_sell: measurements.FILL-S_thinned on Bybit's days of the same block}
   needs_positive_result: [K-latency, K-fill]
   status_only: {K-trades: 100, K-trades_counts: round trips over the block, K-MDE: "below the minimum detectable effect, only when no kill fired"}
 
@@ -413,6 +417,8 @@ hypotheses:
 
 measurements:
   FILL-S: {what: "the print rule's calibration: S25-PB's and S25-BB's decisions on Bybit priced by the print rule (primary and every bracket) and by the book walk", blocks: [D, H], reported: "per side, the mean and median fill-price difference in bp of mid, the share of late prints, each slot's net_bp_trade both ways", beside: S25-PF, status: never moves one}
+  FILL-S_thinned: {blocks: [D, H, P if read], thinning: "per day, Bybit's spot prints drawn at random to BTC/FDUSD's count of aggregated prints that day (all kept if fewer); a day excluded on either venue unused", seeds: [0, 9], decisions: S25-PB's on the full prints, priced_by: [common.print_fill and every bracket on the thinned prints, common.book_fill], reported: per side and seed, mean and median advantage over the book walk in bp of mid (positive when better for the account), a_buy_a_sell: the worse_of_two mean advantage per side over every fill of the ten seeds; read by K-fill}
+  capacity: {per_day: "the larger over sides of the slot's taker volume over the venue's taker volume on that side, from its prints", statistic: median over the block's days, beside: [every slot, S25-PB, FILL-S_thinned on the thinned prints], caps_status_above: 0.02}
   measured_rows: measured_rows
   activity_beside_series: each venue's prints a day
   edge_ladder: ["S25-T on spot books (no refit)", "S25-BB (refit on spot books)", "S25-PB by the book walk, then by the print rule", "S25-PF (the other venue)", "each at zero fees, at the verdict tier and at the cheapest tier with a dated source for the block's days"]
