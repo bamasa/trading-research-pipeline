@@ -19,7 +19,7 @@ CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
 #: The configuration as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "49683eca67e371f7961e6ccf0d656163aacfac016fa1423e10e8b4c5beb3ec64"
+REGISTERED_SHA256 = "98eb928d702d927eac6ad8d35648175d4676c3e19ea012b1a7080d83ada4a593"
 PLACEHOLDERS = (
     ("data", "reader_test_result"), ("data", "max_sequence_gaps"), ("data", "excluded_days_D"),
     ("data", "instrument_spec"), ("features", "fitted_values_sha256"),
@@ -29,6 +29,7 @@ PLACEHOLDERS = (
 )  # fmt: skip
 INSTRUMENTS = tuple(CONFIG["instruments"])
 BLOCKS = CONFIG["blocks"]
+ALL = ("W", "D", "E", "H", "P")
 
 
 def _days(start: date, end: date) -> list[date]:
@@ -60,7 +61,7 @@ def test_every_placeholder_is_null_and_listed() -> None:
     assert unfrozen_text(TEXT) == TEXT
 
 
-@pytest.mark.parametrize("name", ["W", "D", "E", "H", "Z", "P"])
+@pytest.mark.parametrize("name", ["W", "D", "E", "H", "P"])
 def test_block_lengths(name: str) -> None:
     block = BLOCKS[name]
     assert len(_days(block["start"], block["end"])) == block["days"]
@@ -75,7 +76,8 @@ def test_blocks_follow_each_other_and_the_information_set() -> None:
     info = CONFIG["information_set"]
     end = info["binance_spot_BTCFDUSD"]["taken_to_end"]
     assert all(BLOCKS[name]["start"] > end for name in ("W", "D", "H", "P"))
-    assert BLOCKS["Z"]["end"] <= end and BLOCKS["Z"]["venues"] == ["binance_spot_BTCFDUSD"]
+    # The 2025 registration confines a 2026 confirmation of S25 to dates after 2025-12-31.
+    assert "Z" not in BLOCKS and all(BLOCKS[n]["start"] > date(2025, 12, 31) for n in ALL)
     assert BLOCKS["D"]["start"] == info["first_fitted_day"]
     first_test_month = BLOCKS["D"]["test_months"][0]
     assert info["first_scored_day"].isoformat() == f"{first_test_month}-01"
@@ -104,14 +106,14 @@ def test_h_is_blind_only_under_a_confirmed_information_set() -> None:
 
 
 def test_reader_test_days_lie_in_no_block() -> None:
-    blocks = [BLOCKS[name] for name in ("W", "D", "E", "H", "Z", "P")]
+    blocks = [BLOCKS[name] for name in ALL]
     used = {day for b in blocks for day in _days(b["start"], b["end"])}
     assert not used & (set(BLOCKS["reader_test"]["days"]) | set(BLOCKS["never_in_a_block"]))
     assert BLOCKS["reader_test"]["days"] == CONFIG["data"]["reader_test_days"]
 
 
 def test_every_day_read_before_p_has_a_sourced_fee_and_p_none_yet() -> None:
-    for name in ("W", "D", "H", "Z"):
+    for name in ("W", "D", "H"):
         block = BLOCKS[name]
         for day in _days(block["start"], block["end"]):
             assert all(_covered(i, day) for i in _venues(block)), (name, day)

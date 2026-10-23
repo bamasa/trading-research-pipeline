@@ -50,7 +50,7 @@ information_set:
   first_fitted_day: 2026-05-01
   first_scored_day: 2026-06-01
   held_out_start: 2026-08-08
-  days_of_2025: inside the author's information set; block Z only, described and never tested
+  days_of_2025: never read  # the 2025 registration's spent-blocks rule confines a 2026 confirmation of S25 to dates after 2025-12-31
 
 expected_outcome:
   verdict_taker_bp: {binance_spot_BTCFDUSD: 10.0, bybit_spot_BTCUSDT: 10.0}
@@ -85,7 +85,7 @@ data:
     side: is_buyer_maker true is a seller-initiated print (aggressor -1), false a buyer-initiated one (+1)
     fetch: daily files only
   binance_book: none  # no bookTicker or bookDepth for spot, any symbol or period
-  not_fetched: [Binance raw trades, Binance klines, any Bybit spot day of 2025, E]  # spot has no funding
+  not_fetched: [Binance raw trades, Binance klines, any day of 2025 on either venue, E]  # spot has no funding
   print_grid: "one row per 100 ms interval holding at least one print, stamped at its first print and carrying the state right after every print with that stamp; later prints of the interval belong to the next row; no row without a print"
   print_alignment: "backward: row t holds the prints in (s_t-1, s_t]"
   head_check:
@@ -101,7 +101,6 @@ data:
     D: {bybit_ob200: 5.451, bybit_prints: 0.386, binance_aggtrades: 0.093, largest_ob200_day_mb: 153}
     E: {bybit_ob200: 0.296, bybit_prints: 0.018, binance_aggtrades: 0.003, fetched: false}
     H: {bybit_ob200: 3.813, bybit_prints: 0.339, binance_aggtrades: 0.064, largest_ob200_day_mb: 114}
-    Z: {binance_aggtrades: 2.825}
   reader_test_days: [2026-03-03, 2026-03-04, 2026-03-05]  # both venues; outside every block; for the readers' proof, stage 0's timing and the dry run only
   reader_test_result: null  # {venue: {day: {status, stream, findings, passes}}}: each day loaded as a block day, with message counts, median interval, sequence gaps and every finding; frozen by the D amendment
   exclusions_unit: day and venue  # a day excluded on a venue is excluded from every series of that venue's slots
@@ -122,7 +121,7 @@ fees:
   tier_values: "[maker_bp, taker_bp]"
   intervals:
     binance_spot_BTCFDUSD:
-      - {start: "2024-04-25T06:00:00Z", end: "2026-01-29T00:00:00Z", sources: [B3, B4], tiers: {regular: [0.0, 10.0], vip1: [0.0, 10.0], vip2_to_vip9: [0.0, 0.0], spot_liquidity_provider: [0.0, 0.0]}, notes: "Regular and VIP 1 volume on the pair counted toward the VIP tier, VIP 2-9 volume did not; covers Z"}
+      - {start: "2024-04-25T06:00:00Z", end: "2026-01-29T00:00:00Z", sources: [B3, B4], tiers: {regular: [0.0, 10.0], vip1: [0.0, 10.0], vip2_to_vip9: [0.0, 0.0], spot_liquidity_provider: [0.0, 0.0]}, notes: "Regular and VIP 1 volume on the pair counted toward the VIP tier, VIP 2-9 volume did not; covers no block"}
       - {start: "2026-01-29T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [B4, B5, B6, B7, B8], tiers: {regular: [0.0, 10.0], vip3: [0.0, 6.0], vip9: [0.0, 2.3]}, notes: "maker 0 for every account, taker each tier's standard taker; the pair's volume counts toward VIP tiers; end: the live capture of 2026-10-22; only the tiers the sources state for the pair"}
     bybit_spot_BTCUSDT:
       - {start: "2025-01-31T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [Y1, Y2, Y3, Y5, Y6], tiers: {non_vip: [10.0, 10.0], vip1: [6.75, 8.0], vip2: [6.5, 7.75], vip3: [6.25, 7.5], vip4: [5.0, 6.0], vip5: [4.0, 5.0], supreme_vip: [3.0, 4.5], pro6_institutional: [0.5, 1.5]}, notes: "identical in the captures of 2025-01-30, 2025-08-15, 2026-01-13 and 2026-06-11 and live on 2026-10-22, with no fee change or zero-fee offer on BTC spot in the announcements of 2024-11..2026-10; taken to hold between captures on that ground; starts on the first whole day after the first capture"}
@@ -157,16 +156,16 @@ blocks:
   D: {role: development, start: 2026-05-01, end: 2026-07-31, days: 92, venues: both, test_months: [2026-06, 2026-07], test_days: 61, reads: free}
   E: {role: embargo, start: 2026-08-01, end: 2026-08-07, days: 7, fetched: false}
   H: {role: held_out, start: 2026-08-08, end: 2026-10-21, days: 75, venues: both, slots: [S25-PF, S25-BB, S25-T], reads: 1, read_after: the D amendment is committed}
-  Z: {role: descriptive, start: 2025-10-01, end: 2025-12-31, days: 92, venues: [binance_spot_BTCFDUSD], reads: 1, read_after: "H's results are committed", status: none, label: "inside the author's information set; descriptive"}
-  P: {role: prospective, start: 2026-11-01, end: 2026-12-31, days: 61, venues: both, reads: 1, condition: a slot is a candidate on H, read_after: "Z's results are committed, P's last day is published on both venues and the fee amendment covers P's days"}
+  P: {role: prospective, start: 2026-11-01, end: 2026-12-31, days: 61, venues: both, reads: 1, condition: a slot is a candidate on H, read_after: "H's results are committed, P's last day is published on both venues and the fee amendment covers P's days", deadline: "the later of 2027-01-31 and 30 days after H's results are committed; the fee amendment and P's read both by then; no P read opens after it"}
   P_embargo: [2026-10-22, 2026-10-31]  # holds the registration day
   set_by: "BTC/FDUSD's fall in activity after 2026-01-28: every 2026 block after it; one calendar for both venues"
   days_independent: true  # flat at every midnight; a day is the rows stamped in [its midnight, the next)
   rolling_reads: earlier days of the same block, and W before D
-  cold_start: [H's first day, Z's first day, P's first day, a day whose previous calendar day has no usable plane on that venue]
+  cold_start: [H's first day, P's first day, a day whose previous calendar day has no usable plane on that venue]
   cold_start_unscored_minutes: 61  # a 60 s window plus 3,600 s of winsorising, rounded up
   never_in_a_block: [2026-01-05, 2026-01-06, 2026-01-07]  # the 2025 study's reader-test days; not read here
-  spent: "H, Z and P, for these slots; a successor uses days after 2026-12-31 and never this study's reader-test days"
+  spent: "H and P, for these slots; a successor uses days after 2026-12-31 and never this study's reader-test days"
+  no_block_in_2025: "the 2025 registration spends its H, F and P for every configuration of its catalogue and confines a 2026 confirmation to dates after 2025-12-31, read by date"
 
 common:
   clip_btc: 0.010  # every slot, no sizing
@@ -188,7 +187,7 @@ common:
     margin_borrow: not modelled
   book_fill: {slots: [S25-BB, S25-T, S25-PB by the book walk], executor: "the 2025 event-time taker executor (backtest/taker.execute_day), unchanged: ten-level walk, entry skip beyond the visible depth, late-snapshot counters, flatten_stale (R16)", funding: none, fee: the fill's from the fee table}
   print_fill:
-    slots: [S25-PF, S25-PB, S25-PFT, Z-PF]
+    slots: [S25-PF, S25-PB, S25-PFT]
     arrival: decision + 10 ms
     buy: the first buyer-initiated print stamped at or after arrival
     sell: the first seller-initiated print stamped at or after arrival
@@ -271,12 +270,11 @@ slots:
 measured_rows:  # no status, no place in Holm; every kill evaluated and reported, no precedence
   S25-PB: {instrument: bybit_spot_BTCUSDT, recipe: S25-PF's, on: "Bybit's spot prints", fits: its own cell only (3), priced_by: [common.print_fill, common.book_fill], blocks: [D, H, P]}
   S25-PFT: {instrument: binance_spot_BTCFDUSD, recipe: S25-PF's, inputs: "features.print_members + features.touch_proxy_members", fits: its own cell only (3), blocks: [D, H, P]}
-  Z-PF: {instrument: binance_spot_BTCFDUSD, recipe: S25-PF's, block: Z, walk_forward: {train_1: [2025-10-01, 2025-10-24], theta_1: [2025-10-25, 2025-10-31], test_1: 2025-11, train_2: [2025-10-01, 2025-11-23], theta_2: [2025-11-24, 2025-11-30], test_2: 2025-12}, fees: [regular, vip2_to_vip9], label: "inside the author's information set; descriptive"}
   per_slot: [long-only variant, gross at zero fees, every tier of the fee table, the inventory's own P&L]
 
 labels:
   print:
-    slots: [S25-PF, S25-PB, S25-PFT, Z-PF]
+    slots: [S25-PF, S25-PB, S25-PFT]
     entry: the print rule at t + 10 ms
     exit: "the label's exit order decided at the first row stamped at or after the entry fill's print + hold, filled by the print rule"
     normalised_by: the mid proxy at the entry fill
@@ -322,7 +320,7 @@ models:
 
 d_procedure:
   stage_0: "on the reader-test days: the spot readers proven on synthetic fixtures and the three days; Bybit's ob200 replayed as a block day (no positive_prices error, no off-grid price), message counts, median interval and gaps recorded; Bybit's print columns, units and side strings checked; Binance's side flag mapped as documented; fetch, replay, label, fits and scoring timed; print walk tables equal to the print executor entry by entry; a failure fixed by a dated amendment before stage 1"
-  stage_1: fetch, replay and features of W and D; no H, Z or P file on disk before its read
+  stage_1: fetch, replay and features of W and D; no H or P file on disk before its read
   code_freeze: docs/spot_2026_code_freeze.md, before the stage 1 fetch
   stages_after: [leakage tests, the fits, scoring of every slot, measured row and neighbourhood cell on June and July, S25-T on the same days, the calibration on Bybit, sigma_D and the MDEs, "a dry run with July standing in for H, outputs discarded", the amendment]
   nulls_descriptive: {null_a: "hour-block sign flips, 999 draws, seeds 0-998", null_b: "day re-pairing over every shift 7 <= s <= 54 of the 61 test days", applied_to: each slot's fixed cell, gates: nothing}
@@ -355,11 +353,11 @@ statuses:
   void_counts_as_killed: true
   taken_to_P: candidate only
   after_H: [candidate, "candidate (H inside S25's information set)", inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not assessed (H unreadable on <venue>)", "not assessed (H read failed)", "void (defect found after the H read)"]
-  after_P: {passes: confirmed, no_pass_no_kill: "candidate, not confirmed", kill: killed on P, void: void, unreadable_or_failed: "candidate, not confirmed (P unreadable)", not_read: "candidate (P not read)"}
+  after_P: {passes: confirmed, no_pass_no_kill: "candidate, not confirmed", kill: killed on P, void: void, unreadable: "candidate, not confirmed (P unreadable)", read_failed: "candidate, not confirmed (P read failed)", not_read_by_deadline: "candidate, not confirmed (P not read by its deadline)", before_deadline: "candidate (P not yet read)"}  # under information_set.fallback each carries "(H inside S25's information set)"
   unreadable: "a venue's block with more than a quarter of its days excluded; on H that venue's slots not assessed, the other venue's assessed, H spent"
-  read_failed: "resumed at the same commit; the same stage failing again with the same exception, or five resumptions unfinished, closes the session with every slot of the block not assessed (<block> read failed)"
+  read_failed: "resumed at the same commit; the same stage failing again with the same exception, or five resumptions unfinished, closes the session: on H every slot not assessed (H read failed); on P every candidate 'candidate, not confirmed (P read failed)' and every measurement not assessed"
   defect_after_read: "stated in docs/spot_2026_defects.md with the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read)"
-  measurements_never_described_as_working: [any tier other than the verdict tier, zero fees, any print bracket, long-only, gap-excluded days put back, any measured row, Z, the inventory's P&L]
+  measurements_never_described_as_working: [any tier other than the verdict tier, zero fees, any print bracket, long-only, gap-excluded days put back, any measured row, the inventory's P&L]
   no_zero_taker_cell: "no account could trade either pair at zero taker fees on any day of W, D or H as far as the sources show"
 
 kill_conditions:
@@ -403,7 +401,7 @@ measurements:
   FILL-S: {what: "the print rule's calibration: S25-PB's and S25-BB's decisions on Bybit priced by the print rule (primary and every bracket) and by the book walk", blocks: [D, H], reported: "per side, the mean and median fill-price difference in bp of mid, the share of late prints, each slot's net_bp_trade both ways", beside: S25-PF, status: never moves one}
   measured_rows: measured_rows
   activity_beside_series: each venue's prints a day
-  edge_ladder: ["S25-T on spot books (no refit)", "S25-BB (refit on spot books)", "S25-PB by the book walk, then by the print rule", "S25-PF (the other venue)", "each at zero fees, at the verdict tier and at the cheapest tier", "Z-PF, inside the author's information set"]
+  edge_ladder: ["S25-T on spot books (no refit)", "S25-BB (refit on spot books)", "S25-PB by the book walk, then by the print rule", "S25-PF (the other venue)", "each at zero fees, at the verdict tier and at the cheapest tier with a dated source for the block's days"]
   result_D: null  # {slot: {series summary, nulls, theta trade rate}, FILL-S: {...}, labelled development}; frozen by the D amendment
 
 fetch:
@@ -413,9 +411,8 @@ fetch:
     0: {when: "after this registration and its code are committed and after the 2025 study's last read", what: reader-test days, gb: {bybit_ob200: 0.286, bybit_prints: 0.035, binance_aggtrades: 0.010}}
     1: {when: after stage 0 and the code-freeze note, what: [W, D], gb: {bybit_ob200: 7.363, bybit_prints: 0.564, binance_aggtrades: 0.136}}
     2: {when: "inside H's opened access, after the amendment", what: H, gb: {bybit_ob200: 3.813, bybit_prints: 0.339, binance_aggtrades: 0.064}}
-    3: {when: "inside Z's opened access, after H's results are committed", what: Z, gb: {binance_aggtrades: 2.825}}
-    4: {when: "inside P's opened access, only for a candidate", what: P, gb_estimated: {bybit_ob200: 3.6, bybit_prints: 0.26, binance_aggtrades: 0.06}}  # at D's daily means; P's own HEAD check records the sizes
-  total_gb_stages_0_to_3: 15.435
+    3: {when: "inside P's opened access, only for a candidate", what: P, gb_estimated: {bybit_ob200: 3.6, bybit_prints: 0.26, binance_aggtrades: 0.06}}  # at D's daily means; P's own HEAD check records the sizes
+  total_gb_stages_0_to_2: 12.610
   failures: "the 2025 fetch plan's: every day listed as present fetched; any failure other than HTTP 404 retried with backoff; a stage complete only when every such day is on disk or excluded by a terminal rule (unreadable archive, unfetchable day); checksums checked before reading"
   replay_workers_max: 4
   disk_peak_gb: [12, 19]  # books at 40-60 MB a replayed day (the 2024 perpetual figure; stage 0 measures spot)
@@ -429,13 +426,12 @@ compute:
 access:
   development: {allows: [reader_test, W, D], venues: both, refuses: "every other day of both instruments, 2025 and 2026 alike"}
   ledger: experiments/results/spot_2026_ledger.json
-  guards: [H, Z, P]
+  guards: [H, P]
   H_opens_if: ["the amendment records this file's sha256 and the file on disk has it and is committed", the tree clean but for the ledger, "every frozen fit's, frozen slot file's and the fitted-values file's sha256 equal the amendment's", "the 2025 files S25-T loads equal slots.S25-T's sha256s", no file of H on disk]
   every_open_and_process: ["git diff --name-only <session's commit>..HEAD lists nothing but the ledger", the environment fingerprint equals the one H's open entry records]
   open_entry: "committed before the block's fetch begins: block, session commit, configuration sha256, fingerprint, UTC time; every later process and open refuses unless it is in HEAD's history"
   session: "bound to (block, commit, configuration sha256, fingerprint); closes by writing experiments/results/spot_2026_<block>.json and its sha256 into the ledger"
-  Z_opens_if: "H's results file committed unchanged; the diff since H's read lists only README.md, paths under experiments/results/ and paths under docs/ outside docs/preregistration/"
-  P_opens_if: "a candidate on H; Z's conditions against Z's read, except that the fee amendment may add P's intervals to the document's amendments and to fees.intervals and nothing else (this file with those intervals removed has H's sha256)"
+  P_opens_if: "a candidate on H, by blocks.P.deadline; H's results file committed unchanged; the diff since H's read lists only README.md, paths under experiments/results/ and paths under docs/ outside docs/preregistration/, except that the fee amendment may add P's intervals to the document's amendments and to fees.intervals and nothing else (this file with those intervals removed has H's sha256)"
   second_read: raises unless forced; stamped second read; cannot change a status
   spent: blocks.spent
 
@@ -446,18 +442,17 @@ amendment:
   forbidden_reasons: [a D number, a result of the 2025 study, anything seen on spot data, except a fault the amendment names]
   fee_amendment: {only_after_H: true, adds: "intervals for P's days, from sources of the kinds in fees.sources, before P opens", changes: nothing else}
   after_H: nothing changed and nothing re-run under another rule; a defect can only lower a status (statuses.defect_after_read)
-  ledger_rule: only reads through the ledger count; a number computed on H, Z or P outside it is not a result
+  ledger_rule: only reads through the ledger count; a number computed on H or P outside it is not a result
   date: null  # the D amendment's date; frozen by the D amendment
 
 artefacts:
-  files: [experiments/results/spot_2026_ledger.json, experiments/results/spot_2026_H.json, experiments/results/spot_2026_Z.json, experiments/results/spot_2026_P.json]
+  files: [experiments/results/spot_2026_ledger.json, experiments/results/spot_2026_H.json, experiments/results/spot_2026_P.json]
   page: one row per slot and measured row (status, first kill against its reference, mean, t, Newey-West t, median day, trades, MDE, placebo percentile, K-nbhd median, break-even per side against every tier, brackets, calibration) and the edge ladder
   headline_sentences:
     each_slot_on_H: "[slot] on H, [venue] spot [pair]: [status]; first kill [K-x] at [value] against [reference]."
     S25-PF: "S25's prints-only variant on Binance BTC/FDUSD, August to October 2026: gross edge [x] bp of turnover against the 10 bp taker fee a Regular account paid; break-even [y] bp per side; [status]."
     S25-T: "S25 as frozen on Bybit's perpetual, unchanged on Bybit's spot book: [n] trades a day against 240 registered; [status]."
     calibration: "On Bybit's spot book, the print rule priced buys [x] bp and sells [y] bp [better / worse] than the book walk."
-    Z: "On the last quarter of 2025, inside the author's information set and described only, the prints-only recipe's gross edge was [x] bp of turnover."
     P: "[slot] on P: [status]."
   first_kill: the first that fires in the order of the slot's kills
   d_numbers_quoted_as_results: false
