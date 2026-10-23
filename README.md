@@ -1346,6 +1346,12 @@ basis points against an 11 bp taker round trip at the base tier.
 - [ ] Development period: the search, the placebo search and the amendment
       that freezes the finalists
 - [ ] The held-out read, then the boundary block and the break
+- [ ] **Spot.** S25 on Binance BTC/FDUSD, prints only since the venue publishes
+      no book, and on Bybit's spot BTCUSDT book, at the fee charged on each day
+      to an account without volume, registered on 2026 blocks before any spot
+      file is fetched ([`docs/preregistration/spot_2026.md`](docs/preregistration/spot_2026.md),
+      [`configs/spot_2026.yaml`](configs/spot_2026.yaml)); its code, development
+      block and held-out read follow the 2025 study's last read
 
 **Step 10: deployment.** Nothing here runs live, and the gap is not the model:
 
