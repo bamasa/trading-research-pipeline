@@ -161,3 +161,103 @@ blocks:
   cold_start_unscored_minutes: 61  # a 60 s window plus 3,600 s of winsorising, rounded up
   never_in_a_block: [2026-01-05, 2026-01-06, 2026-01-07]  # the 2025 study's reader-test days; not read here
   spent: "H, Z and P, for these slots; a successor uses days after 2026-12-31 and never this study's reader-test days"
+
+common:
+  clip_btc: 0.010  # every slot, no sizing
+  max_position_clips: 1  # one position at a time
+  latency_ms: 10
+  times: quantities in seconds measured on row stamps; t + h is the first row stamped at or after t + h
+  day: {no_entry_before: "00:01", no_entry_after: "23:58", flatten_at: "23:59"}
+  funding: none
+  accounting_identity: checked at every day's end; turnover equal to the sum of fill notionals
+  report_per_100_quote_of_clip: true
+  short_side:
+    mode: inventory  # shorts from held inventory
+    day_start: {base_clips: 1, quote_clips_at_first_print: 3}
+    long: buys a clip with quote and sells it at its exit
+    short: sells the held clip and buys it back at its exit
+    trade_pnl: a long's or a short's of one clip, fees and turnover included
+    inventory_pnl: "the held clip marked from the day's first print to its last; reported separately, never in net_bp_trade, a kill or a status"
+    long_only_measured: short decisions dropped before the one-position rule; K-drift's all-long version is its comparator
+    margin_borrow: not modelled
+  book_fill: {slots: [S25-BB, S25-T, S25-PB by the book walk], executor: "the 2025 event-time taker executor (backtest/taker.execute_day), unchanged: ten-level walk, entry skip beyond the visible depth, late-snapshot counters, flatten_stale (R16)", funding: none, fee: the fill's from the fee table}
+  print_fill:
+    slots: [S25-PF, S25-PB, S25-PFT, Z-PF]
+    arrival: decision + 10 ms
+    buy: the first buyer-initiated print stamped at or after arrival
+    sell: the first seller-initiated print stamped at or after arrival
+    clip: "walks that print and the other same-side prints with the same stamp, in archive order, at their volume-weighted price; any part beyond that sweep at the sweep's last price, counted (fill_beyond_sweep)"
+    skips: none  # no entry skipped for depth or for wait
+    late_print_s: 1  # a fill whose print comes later after arrival is counted (entry_late_print, exit_late_print); no day excluded
+    exit_decision: "the first row stamped at or after t + hold, t the entry decision, or 23:59 if that comes first; never fills on a print before the entry's fill"
+    next_decision: at a row stamped at or after the exit's fill print
+    no_print_before_day_end: "priced at the last print of its side before the order; the day flagged flatten_stale and excluded from every series of the venue's block when that print is more than flatten_stale_s older than the order; no print of the next day read"
+    flatten_stale_s: 60
+    same_function_for_label_and_executor: true
+    brackets:
+      optimistic: the whole clip at the first print's price
+      pessimistic_depth: the part beyond the sweep walks later prints of the same side
+      stale: the last print of the same side stamped at or before the decision row
+      worse_of_two: per fill the worse of the rule's price and the stale price, with pessimistic depth
+    K-fill_bracket: worse_of_two
+
+slots:
+  S25:
+    on: binance_spot_BTCFDUSD
+    status: not run (no book on the venue)  # 31 of its 40 inputs read a book; its label and executor walk one; no number stands in for it
+  S25-PF:
+    role: primary
+    instrument: binance_spot_BTCFDUSD
+    grid: print
+    inputs: features.print_members
+    label: print label at label_fee_bp 0
+    model: gbm, repository defaults, seed 42, fitted on D (models.fits)
+    fitted_values: none  # no input in raw size units
+    hold_s: 50
+    rule: hold_first
+    trades_per_day: 240
+    gate: open
+    regime: none
+    execution: taker in, taker out after hold, common.print_fill
+    short_side: common.short_side
+    verdict: net_bp_trade at regular (0 / 10 bp)
+    neighbourhood: {hold_s: [20, 50, 120], trades_per_day: [100, 240], label_fee_bp: [0, 10]}  # 12 cells, 6 frozen fits
+  S25-BB:
+    instrument: bybit_spot_BTCUSDT
+    grid: book
+    inputs: features.s25_selected
+    label: walked_taker at label_fee_bp 0 (the 2025 label, unchanged)
+    model: gbm, repository defaults, seed 42, fitted on D (models.fits)
+    fitted_values: "the median touch size of Bybit's spot book on W, for ofi_1 and ofi_20"
+    hold_s: 50
+    rule: hold_first
+    trades_per_day: 240
+    gate: open
+    regime: none
+    execution: taker in, taker out after hold, common.book_fill
+    short_side: common.short_side
+    verdict: net_bp_trade at non_vip (10 / 10 bp)
+    neighbourhood: {hold_s: [20, 50, 120], trades_per_day: [100, 240], label_fee_bp: [0, 10]}  # 12 cells, 6 frozen fits
+  S25-T:
+    instrument: bybit_spot_BTCUSDT
+    grid: book
+    inputs: "features.s25_selected, computed as the 2025 study computes them, ofi_1 and ofi_20 divided by the 2025 study's own touch size"
+    model: the 2025 study's frozen fit, unchanged; nothing fitted
+    frozen_files_2025: {slot_file_S25: 8ddf4ff5b2e25ee2696da4cff2bd1ec862bd9caf9a112fe30e237963f87e4a2d, fitted_values: ca327600da8e231edd5296d4ee9ee7ca93472001ca1536de1e513d6af109a6b9}  # sha256s from configs/short_horizon_2025.yaml, checked before H opens
+    thresholds: "configs/short_horizon_2025.yaml slots.S25.thresholds, the cells at regime none, unchanged"
+    hold_s: 50
+    rule: hold_first
+    trades_per_day: 240  # as registered in 2025; the frozen theta may trade at another rate on spot, which is measured
+    gate: open
+    regime: none
+    execution: taker in, taker out after hold, common.book_fill
+    short_side: common.short_side
+    verdict: net_bp_trade at non_vip (10 / 10 bp)
+    neighbourhood: {hold_s: [20, 50, 120], trades_per_day: [100, 240], label_fee_bp: [0, 5.5]}  # 12 cells on the 2025 frozen fits below
+    neighbourhood_fits_2025:
+      BTCUSDT__C__gbm__micro__hold_s=20__label_fee_bp=0.pkl: 23edb21803a80589b782493ebd39ae78e92e69e7a9a4682a7728ec882fa400bf
+      BTCUSDT__C__gbm__micro__hold_s=20__label_fee_bp=5.5.pkl: 0b007d35d846533f5d93bbd3df46b3217c7273a0015f6d2383ba56d8da359f3a
+      BTCUSDT__C__gbm__micro__hold_s=50__label_fee_bp=0.pkl: 4364cf9d22df8aa592adfb6509f3a802374aa0ee8628601c394086e9093cc0d1
+      BTCUSDT__C__gbm__micro__hold_s=50__label_fee_bp=5.5.pkl: 5b6c57fd50687dfd0ef565fa7fd7440bd88b5213e7832c11e836762fc83d9031
+      BTCUSDT__C__gbm__micro__hold_s=120__label_fee_bp=0.pkl: be8e7ead202f79c79e92ba2923866e27d2e308a01ad16e45b843c827b68eda11
+      BTCUSDT__C__gbm__micro__hold_s=120__label_fee_bp=5.5.pkl: c6b7354d497ab9ab19928d491f8003cde0dd51866819bf0fd55360367a581bed
