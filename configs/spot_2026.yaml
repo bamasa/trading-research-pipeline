@@ -12,7 +12,9 @@
 # records the sha256 of this file after that write; the study's ledger refuses
 # to open a held-out block unless the file on disk has it and is committed and
 # clean. Nothing else here changes, except under the document's amendment
-# protocol (the fee amendment may add intervals under fees for P's days).
+# protocol (the owner's information-set amendment may set
+# information_set.confirmed before stage 0; the fee amendment may add
+# intervals under fees for P's days).
 #
 # Conventions of the 2025 study hold: units in the key's suffix (_bp, _ms, _s,
 # _btc, _gb, _mb), UTC dates inclusive, seed ranges inclusive. Instruments are
@@ -476,6 +478,7 @@ amendment:
   after_H: nothing changed and nothing re-run under another rule; a defect can only lower a status (statuses.defect_after_read)
   ledger_rule: only reads through the ledger count; a number computed on H or P outside it is not a result
   date: null  # the D amendment's date; frozen by the D amendment
+  information_set_amendment: {when: before stage 0 and before any spot file is fetched, by: the owner, sets: information_set.confirmed, records: the configuration's new sha256, changes: nothing else, absent: information_set.fallback holds}
 
 artefacts:
   files: [experiments/results/spot_2026_ledger.json, experiments/results/spot_2026_H.json, experiments/results/spot_2026_P.json]
