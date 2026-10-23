@@ -321,3 +321,74 @@ d_procedure:
   stages_after: [leakage tests, the fits, scoring of every slot, measured row and neighbourhood cell on June and July, S25-T on the same days, the calibration on Bybit, sigma_D and the MDEs, "a dry run with July standing in for H, outputs discarded", the amendment]
   nulls_descriptive: {null_a: "hour-block sign flips, 999 draws, seeds 0-998", null_b: "day re-pairing over every shift 7 <= s <= 54 of the 61 test days", applied_to: each slot's fixed cell, gates: nothing}
   hand_runs: logged with date and days read; nothing can be chosen, and no amendment may cite one
+
+metrics:
+  primary: {S25-PF: net_bp_trade, S25-BB: net_bp_trade, S25-T: net_bp_trade}
+  net_bp_trade: "a round trip's P&L in quote (a long's exit value less its entry value, a short's entry value less its exit value) over the entry notional x 1e4, less both sides' fees in bp of the entry notional"
+  day_series: one value per day with a trade; the day's net in quote summed over its round trips over their summed entry notionals x 1e4
+  gross_bp_trade: the same before fees; reported, labelled "conditional on a zero-fee venue"
+  gross_bp_turnover: gross over both sides' notional x 1e4, the break-even per side, against every tier
+  ic: {book: "rank correlation of p_long - p_short with the mid move from the entry snapshot to the first snapshot at or after it + hold, as in 2025", prints: "the same from the mid proxy at the entry fill to the mid proxy at the first row stamped at or after the fill + hold", aggregate: mean over days}
+  computed_on_day_series: [mean, t, newey_west_t, median_day, K1, K-days, placebos, K-nbhd, sigma_d, mde]  # never on trade rows
+  significance: {code: evaluation/significance.py assess, input: one row per day, cluster: day, fewer_than_two_days: fails the day count; p = 1}
+  p_value: market_making/verdicts.day_t(daily series).p_one_sided
+  newey_west: {kernel: bartlett, lag_days: 5, lag_counts: positions in the daily series}
+  mde:
+    formula: (3 + 0.84) * sigma_D / sqrt(n_eff)
+    n_eff: 75 x the share of D's 61 test days with a trade; on P, P's usable days in place of 75, sigma_D and the share as frozen
+    sigma_d: null  # {slot: sigma} over D's 61 test days; frozen by the D amendment
+    value: null  # {slot: mde}; frozen by the D amendment
+  beside: [trades_per_day, share_days_positive, median_day, max_drawdown, net_quote_a_day, every_tier, by_side, long_only, inventory_pnl, slot_30_day_volume, entries_skipped, late_snapshots, late_prints, fill_beyond_sweep, beyond_tenth_level, print_brackets, prints_a_day]
+
+family: [S25-PF, S25-BB, S25-T]
+statuses:
+  holm: {alpha: 0.05, sided: one, m: 3, m_fixed_on_every_block: true, code: market_making/verdicts.holm, enter_with_p_1: [void, killed, "inconclusive (too few trades)", not assessed, not taken to the block]}
+  holm_first_step_t: {df_74: 2.17, df_19: 2.29, df_9: 2.51}  # below 3: the t >= 3 bar binds
+  bar: [no kill, Holm passes with m = 3, day t >= 3, Newey-West t >= 2, median day > 0, "days with a trade: at least 20 on H, at least 10 on P"]
+  precedence: ["void (K-leak, K-units, K-acct, K-cap, K-inv)", "inconclusive (too few trades): K-trades; nothing below evaluated", killed (any kill), candidate on H or passes on P, "inconclusive (below the minimum detectable effect when the mean is smaller in size than the MDE)"]
+  void_counts_as_killed: true
+  taken_to_P: candidate only
+  after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not assessed (H unreadable on <venue>)", "not assessed (H read failed)"]
+  after_P: {passes: confirmed, no_pass_no_kill: "candidate, not confirmed", kill: killed on P, void: void, unreadable_or_failed: "candidate, not confirmed (P unreadable)", not_read: "candidate (P not read)"}
+  unreadable: "a venue's block with more than a quarter of its days excluded; on H that venue's slots not assessed, the other venue's assessed, H spent"
+  read_failed: "resumed at the same commit; the same stage failing again with the same exception, or five resumptions unfinished, closes the session with every slot of the block not assessed (<block> read failed)"
+  defect_after_read: "stated in docs/spot_2026_defects.md with the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read)"
+  measurements_never_described_as_working: [any tier other than the verdict tier, zero fees, any print bracket, long-only, gap-excluded days put back, any measured row, Z, the inventory's P&L]
+  no_zero_taker_cell: "no account could trade either pair at zero taker fees on any day of W, D, H or P as far as the sources show"
+
+kill_conditions:
+  per_slot:
+    S25-PF: {execution: taker, print rule, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency, K-fill], beside: [every bracket, the calibration on Bybit (S25-PB), waits and late prints]}
+    S25-BB: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [the gap-excluded days put back]}
+    S25-T: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [its trade rate against 240 a day]}
+  void: [K-leak, K-units, K-acct, K-cap, K-inv]
+  K-leak: a feature fails validation/leakage.py or the fold-level leakage test fails; every result void
+  K-units: a cost (fee, book walk, print fill) or the hold-first rule's input reaches the result through a normalised column
+  K-acct: the accounting identity fails on any day, or turnover differs from the sum of fill notionals, in any run of the slot's read
+  K-cap: the traded position beyond one clip either way at any event
+  K-inv: either coin's balance below zero at any event
+  K1: the mean of the daily series on the block <= 0
+  K-label: the signal's IC on the block <= 0
+  K-placebo: "the true mean does not exceed each of the 95th percentile of the random-direction draws, the sign-flipped mean and the one-day-shifted mean"
+  K-drift: the true mean does not exceed the larger of the all-long and all-short means at the same entry times
+  K-nbhd: {statistic: median over the 12 neighbourhood cells of each cell's mean on the block, kills_at_or_below: 0, cell_without_trade: 0, runs: frozen fits and theta only}
+  K-days_share_positive_max: 0.5
+  K-fee: {statistic: gross_bp_turnover, kills_at_or_below: the verdict tier's taker fee, taker_bp: 10.0}
+  K-latency: {latency_ms: 110, kills: a positive result that is <= 0 there, book: one more 100 ms row, prints: the arrival moved by 100 ms}
+  K-fill: {slots: [S25-PF], kills: a positive result not positive under common.print_fill.brackets.worse_of_two}
+  needs_positive_result: [K-latency, K-fill]
+  status_only: {K-trades: 100, K-trades_counts: round trips over the block, K-MDE: "below the minimum detectable effect, only when no kill fired"}
+
+placebo_percentile: 95
+placebos:
+  sign_flipped: {used_by: family}
+  random_direction: {used_by: family, draws: 200, seeds: [0, 199]}
+  one_day_shift: {used_by: family, source: "the previous usable day's signal tape at the same time of day", circular_within_block: true, steps_over_excluded_days: true}
+  all_long_all_short: {used_by: family}  # K-drift
+  positions: each placebo on the true slot's entry decision times; a taker's exit time does not depend on its side, so none is skipped
+  walk_tables: {book: from the 2025 executor's walk, prints: "from the print rule's fill function, proven equal to the print executor at stage 0"}
+
+hypotheses:
+  S25-PF: {block: H, claim: net_bp_trade > 0 at regular, kills: kill_conditions.per_slot.S25-PF, prediction: killed by K1}
+  S25-BB: {block: H, claim: net_bp_trade > 0 at non_vip, kills: kill_conditions.per_slot.S25-BB, prediction: killed by K1}
+  S25-T: {block: H, claim: net_bp_trade > 0 at non_vip with the 2025 frozen fit unchanged, kills: kill_conditions.per_slot.S25-T, prediction: "killed by K1, or inconclusive (too few trades)"}
