@@ -261,3 +261,63 @@ slots:
       BTCUSDT__C__gbm__micro__hold_s=50__label_fee_bp=5.5.pkl: 5b6c57fd50687dfd0ef565fa7fd7440bd88b5213e7832c11e836762fc83d9031
       BTCUSDT__C__gbm__micro__hold_s=120__label_fee_bp=0.pkl: be8e7ead202f79c79e92ba2923866e27d2e308a01ad16e45b843c827b68eda11
       BTCUSDT__C__gbm__micro__hold_s=120__label_fee_bp=5.5.pkl: c6b7354d497ab9ab19928d491f8003cde0dd51866819bf0fd55360367a581bed
+
+measured_rows:  # no status, no place in Holm; every kill evaluated and reported, no precedence
+  S25-PB: {instrument: bybit_spot_BTCUSDT, recipe: S25-PF's, on: "Bybit's spot prints", fits: its own cell only (3), priced_by: [common.print_fill, common.book_fill], blocks: [D, H, P]}
+  S25-PFT: {instrument: binance_spot_BTCFDUSD, recipe: S25-PF's, inputs: "features.print_members + features.touch_proxy_members", fits: its own cell only (3), blocks: [D, H, P]}
+  Z-PF: {instrument: binance_spot_BTCFDUSD, recipe: S25-PF's, block: Z, walk_forward: {train_1: [2025-10-01, 2025-10-24], theta_1: [2025-10-25, 2025-10-31], test_1: 2025-11, train_2: [2025-10-01, 2025-11-23], theta_2: [2025-11-24, 2025-11-30], test_2: 2025-12}, fees: [regular, vip2_to_vip9], label: "inside the author's information set; descriptive"}
+  per_slot: [long-only variant, gross at zero fees, every tier of the fee table, the inventory's own P&L]
+
+labels:
+  print:
+    slots: [S25-PF, S25-PB, S25-PFT, Z-PF]
+    entry: the print rule at t + 10 ms
+    exit: "the label's exit order decided at the first row stamped at or after the entry fill's print + hold, filled by the print rule"
+    normalised_by: the mid proxy at the entry fill
+    long_bp: (exit sell price - entry buy price) / mid proxy x 1e4 - 2 x label fee
+    short_bp: symmetric
+    classes: "long if long_bp > 0, short if short_bp > 0, the larger when both are, hold on a tie or otherwise"
+    no_label: a row without an entry or exit fill before its day ends; not a training row
+    label_fee_bp: [0, 10]  # 0 for the slot; the neighbourhood's two values
+    horizon: hold  # the label declares h; the purge is derived from it
+  walked_taker: {slots: [S25-BB], definition: the 2025 registration's walked-book label, unchanged, label_fee_bp: [0, 10]}
+
+features:
+  s25_selected: [queue_imbalance, depth_imbalance, log_depth_ratio, concentration_imbalance, impact_imbalance_bp, microprice_dev_bp, ofi_20, slope_imbalance, ofi_20_norm, imbalance_slope_10, ask_impact_bp, ask_concentration, bid_concentration, bid_impact_bp, ask_slope_bp, ofi_1, bid_slope_bp, ask0_log_change_bp_1s, micro_drift_5, mid_return_20_bp, flow_persistence_24, flow_imbalance_24, flow_imbalance_6, mid_return_1_bp, vwap_deviation_bp, trade_run_length_60s, ask0_log_change_bp_5s, size_shock_10, flow_imbalance_120, realized_vol_50_bp, turn_count_10s, realised_vol_20, turn_count_5s, trade_intensity_120, trade_intensity_6, trade_intensity_24, volatility_1s_bp, spread_bp, turn_count_2s, quote_intensity_20]  # configs/short_horizon_2025.yaml features.selected; not selected again
+  print_members: [flow_imbalance_6, flow_imbalance_24, flow_imbalance_120, trade_intensity_6, trade_intensity_24, trade_intensity_120, flow_persistence_24, vwap_deviation_bp, trade_run_length_60s]
+  touch_proxy_members: [spread_bp, quote_intensity_20, mid_return_1_bp, mid_return_20_bp, realized_vol_50_bp, realised_vol_20, volatility_1s_bp, turn_count_2s, turn_count_5s, turn_count_10s, ask0_log_change_bp_1s, ask0_log_change_bp_5s]  # S25-PFT only
+  touch_proxies: {ask: the last buyer-initiated print's price, bid: the last seller-initiated print's price, mid: their mean}
+  dropped_on_prints: 19  # the size and depth members; no analogue on prints
+  print_windows: the 6, 24 and 120 rows of the flow builder count rows of the print grid  # a registered change of meaning
+  vwap_deviation_on_prints: "a row's volume-weighted print price over the previous row's mid proxy, in place of the book's mid"
+  winsorising: {quantiles: [0.001, 0.999], window_s: 3600, on: each feature's own trailing values on row stamps}  # as in 2025
+  raw_size_columns: {S25-BB: [ofi_1, ofi_20], S25-T: [ofi_1, ofi_20], print_members: none}
+  touch_size_S25-BB: "median of bid_size_0 and ask_size_0 pooled over every W row of Bybit's spot book"
+  registry: the print members in a registry of their own, never the global features.REGISTRY
+  leakage_check: "validation/leakage.py on every feature before any D run, prints cut at a time strictly inside a row interval (K-leak)"
+  longest_lookback_minutes: 61
+  stores: {dtype: float16, rows: every tenth row, format: one zstd parquet per day, every_row: computed per day for predictions, never stored}
+  fitted_values: the touch size of S25-BB and any other fitted constant, in one file
+  fitted_values_sha256: null  # the sha256 of that file; checked by the H and P gates; frozen by the D amendment
+
+models:
+  gbm: {code: models/gbm.py, classes: 3, settings: repository defaults, seed: 42, cores: all, fits_at_once: 1}
+  training_rows: {targets_every_nth_row: 10, max_rows_per_fit: 4000000, sampling: evenly in time, as in 2025}
+  thresholds_rule: "the 2025 hold-first rule: per side, the n-th largest probability over the inner validation's every row, n = round(rate / 2 x days), half to even, at least one"
+  purge: hold plus 61 minutes before each inner validation and each test month
+  fits:
+    june: {train: [2026-05-01, 2026-05-24], theta: [2026-05-25, 2026-05-31], scored: 2026-06}
+    july: {train: [2026-05-01, 2026-06-23], theta: [2026-06-24, 2026-06-30], scored: 2026-07}
+    frozen: {train: [2026-05-01, 2026-07-24], theta: [2026-07-25, 2026-07-31], scored: [H, P]}
+  fits_per_slot: {S25-PF: 18, S25-BB: 18, S25-PB: 3, S25-PFT: 3, S25-T: 0}  # every hold and label fee of the neighbourhood on every fold for the slots; 42 in all
+  fold_leakage_test: "S25-PF and S25-BB, every fold: mutating every price after the fold's cutoff leaves weights and theta unchanged, by sha256"
+  weights_sha256: null  # {fit key: sha256} for every frozen fit; frozen by the D amendment
+  thresholds: null  # {slot: {cell: {theta_long, theta_short}}} for every frozen neighbourhood cell; frozen by the D amendment
+
+d_procedure:
+  stage_0: "on the reader-test days: the spot readers proven on synthetic fixtures and the three days; Bybit's ob200 replayed as a block day (no positive_prices error, no off-grid price), message counts, median interval and gaps recorded; Bybit's print columns, units and side strings checked; Binance's side flag mapped as documented; fetch, replay, label, fits and scoring timed; print walk tables equal to the print executor entry by entry; a failure fixed by a dated amendment before stage 1"
+  stage_1: fetch, replay and features of W and D; no H, Z or P file on disk before its read
+  code_freeze: docs/spot_2026_code_freeze.md, before the stage 1 fetch
+  stages_after: [leakage tests, the fits, scoring of every slot, measured row and neighbourhood cell on June and July, S25-T on the same days, the calibration on Bybit, sigma_D and the MDEs, "a dry run with July standing in for H, outputs discarded", the amendment]
+  nulls_descriptive: {null_a: "hour-block sign flips, 999 draws, seeds 0-998", null_b: "day re-pairing over every shift 7 <= s <= 54 of the 61 test days", applied_to: each slot's fixed cell, gates: nothing}
+  hand_runs: logged with date and days read; nothing can be chosen, and no amendment may cite one
