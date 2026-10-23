@@ -107,3 +107,57 @@ data:
   instrument_spec: null  # {instrument: {tick, lot}} from each venue's spot specification; frozen by the D amendment
   unreadable_block: more than a quarter of a block's days excluded on a venue; that venue's slots not assessed, nothing retuned
   gap_days_included_reported: true  # each Bybit verdict also with the gap-excluded days put back, as a measurement
+
+fees:
+  rule: "every fill pays the fee of its venue's sourced interval at the fill's time, in bp of the fill's notional, charged in the quote; a day is covered when it lies wholly inside one sourced interval of its venue; the read refuses to open a block holding a day no interval covers"
+  verdict_tier: {binance_spot_BTCFDUSD: regular, bybit_spot_BTCUSDT: non_vip}  # the tier an account holds with no 30-day volume, coin holdings or programme membership
+  discounts_applied: none  # the sources do not say whether BNB's discount applied to a Regular account's BTC/FDUSD taker fee; Bybit's MNT discount does not apply to API orders
+  other_tiers: measurements, labelled with what they require; a zero fee at a tier labelled "conditional on <tier> eligibility"
+  tier_values: "[maker_bp, taker_bp]"
+  intervals:
+    binance_spot_BTCFDUSD:
+      - {start: "2024-04-25T06:00:00Z", end: "2026-01-29T00:00:00Z", sources: [B3, B4], tiers: {regular: [0.0, 10.0], vip1: [0.0, 10.0], vip2_to_vip9: [0.0, 0.0], spot_liquidity_provider: [0.0, 0.0]}, notes: "Regular and VIP 1 volume on the pair counted toward the VIP tier, VIP 2-9 volume did not; covers Z"}
+      - {start: "2026-01-29T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [B4, B5, B6, B7, B8], tiers: {regular: [0.0, 10.0], vip3: [0.0, 6.0], vip9: [0.0, 2.3]}, notes: "maker 0 for every account, taker each tier's standard taker; the pair's volume counts toward VIP tiers; end: the live capture of 2026-10-22; only the tiers the sources state for the pair"}
+    bybit_spot_BTCUSDT:
+      - {start: "2025-01-31T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [Y1, Y2, Y3, Y5, Y6], tiers: {non_vip: [10.0, 10.0], vip1: [6.75, 8.0], vip2: [6.5, 7.75], vip3: [6.25, 7.5], vip4: [5.0, 6.0], vip5: [4.0, 5.0], supreme_vip: [3.0, 4.5], pro6_institutional: [0.5, 1.5]}, notes: "identical in the captures of 2025-01-30, 2025-08-15, 2026-01-13 and 2026-06-11 and live on 2026-10-22, with no fee change or zero-fee offer on BTC spot in the announcements of 2024-11..2026-10; taken to hold between captures on that ground; starts on the first whole day after the first capture"}
+  requirements:
+    binance_vip2_2025: ">= 5M USD of 30-day spot volume and >= 100 BNB (B10)"
+    binance_2026_thresholds: not transcribed (B12); no tier other than Regular is said to be within a slot's reach
+  slot_volume_reported: true  # every slot's own 30-day traded volume beside the tier rows; never moves the verdict tier
+  not_covered: [regional entities of either venue, fees an account negotiated]
+  P_days: not covered; a dated fee amendment adds intervals for them before P opens, and adds nothing else
+  sources:
+    binance_announcement: "https://www.binance.com/en/support/announcement/detail/{code}, read through https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query?articleCode={code}"
+    B3: {announcement: 3d8514bbc817423eba52fb23483bcbed, dated: 2024-04-17, what: "the pair's terms from 2024-04-25 06:00"}
+    B4: {announcement: 4856a6d4e4014d4e8a5a29ec5fb44857, dated: 2026-01-15, what: "the zero taker fee ends for every account on 2026-01-29 00:00"}
+    B5: {url: "https://www.binance.com/bapi/accounts/v1/public/commission/symbol-activity-list?currentPage=1&pageSize=500", also: "https://www.binance.com/en/fee/tradingPromote", retrieved: 2026-10-22}
+    B6: {what: "B5's endpoint in web.archive.org captures 20240418..20261002, about monthly"}
+    B7: {url: "https://www.binance.com/en/fee/trading", retrieved: 2026-10-22}
+    B8: {url: "https://www.binance.com/bapi/composite/v1/public/commission/trade-level/get", captures: [20250312, 20250612, 20260110, 20260324, 20260830]}
+    B10: {announcement: 024a848244a84511a70e6e6f60ba4c85, what: the VIP table from 2024-10-14}
+    B12: {announcement: 4f379b9ab6314eff8fe02babfe255825, what: VIP thresholds from 2026-03-18}
+    B17: {announcement: fe2b0d2853004943aba45f2e87a4081c, what: "BTC/U at zero fees for every account, 2026-04-17..07-16; not used"}
+    B20: {url: "https://www.binance.com/bapi/margin/v1/public/margin/vip/spec/history-interest-rate?asset=BTC&vipLevel=0", what: BTC borrow rates; not used}
+    Y1: {url: "https://www.bybit.com/en/help-center/article/Trading-Fee-Structure", captures: [20250130161525, 20250815213430, 20260113201131, 20260611041408]}
+    Y2: {url: "https://www.bybit.com/en/fee/spot", retrieved: 2026-10-22}
+    Y3: {url: "https://www.bybit.com/en/help-center/article/Benefits-of-the-VIP-Program"}
+    Y5: {url: "https://www.bybit.com/en/fee/spot/pro"}
+    Y6: {url: "https://api.bybit.com/v5/announcements/index?locale=en-US", scanned: 2024-11..2026-10}
+    Y7: {url: "https://api.bybit.com/v5/spot-margin-trade/data?currency=BTC", what: BTC borrow rate and limit on 2026-10-23; not used}
+
+blocks:
+  reader_test: {days: [2026-03-03, 2026-03-04, 2026-03-05], venues: both, use: "the spot readers' proof, stage 0's timing and the dry run; nothing else", reads: free}
+  W: {role: warm_up, start: 2026-04-01, end: 2026-04-30, days: 30, venues: both, scored: false, use: "Bybit spot's touch size; rolling history", reads: free}
+  D: {role: development, start: 2026-05-01, end: 2026-07-31, days: 92, venues: both, test_months: [2026-06, 2026-07], test_days: 61, reads: free}
+  E: {role: embargo, start: 2026-08-01, end: 2026-08-07, days: 7, fetched: false}
+  H: {role: held_out, start: 2026-08-08, end: 2026-10-21, days: 75, venues: both, slots: [S25-PF, S25-BB, S25-T], reads: 1, read_after: the D amendment is committed}
+  Z: {role: descriptive, start: 2025-10-01, end: 2025-12-31, days: 92, venues: [binance_spot_BTCFDUSD], reads: 1, read_after: "H's results are committed", status: none, label: "inside the author's information set; descriptive"}
+  P: {role: prospective, start: 2026-11-01, end: 2026-12-31, days: 61, venues: both, reads: 1, condition: a slot is a candidate on H, read_after: "Z's results are committed, P's last day is published on both venues and the fee amendment covers P's days"}
+  P_embargo: [2026-10-22, 2026-10-31]  # holds the registration day
+  set_by: "BTC/FDUSD's fall in activity after 2026-01-28: every 2026 block after it; one calendar for both venues"
+  days_independent: true  # flat at every midnight; a day is the rows stamped in [its midnight, the next)
+  rolling_reads: earlier days of the same block, and W before D
+  cold_start: [H's first day, Z's first day, P's first day, a day whose previous calendar day has no usable plane on that venue]
+  cold_start_unscored_minutes: 61  # a 60 s window plus 3,600 s of winsorising, rounded up
+  never_in_a_block: [2026-01-05, 2026-01-06, 2026-01-07]  # the 2025 study's reader-test days; not read here
+  spent: "H, Z and P, for these slots; a successor uses days after 2026-12-31 and never this study's reader-test days"
