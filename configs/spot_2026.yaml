@@ -194,6 +194,7 @@ common:
     trade_pnl: a long's or a short's of one clip, fees and turnover included
     inventory_pnl: "the held clip marked from the day's first print to its last; reported separately, never in net_bp_trade, a kill or a status"
     long_only_measured: short decisions dropped before the one-position rule; K-drift's all-long version is its comparator
+    k_inv_checks: [fees booked in quote (fees.booking), "each fee deducted in the asset received, the day starting with 2 clips of BTC (the second covers 1,000 buys at 10 bp)"]
     margin_borrow: not modelled
   book_fill: {slots: [S25-BB, S25-T, S25-PB by the book walk], executor: "the 2025 event-time taker executor (backtest/taker.execute_day), unchanged: ten-level walk, entry skip beyond the visible depth, late-snapshot counters, flatten_stale (R16)", funding: none, fee: the fill's from the fee table, settings: "built only by this study's costs.py from the fee table; a run given the executor's default settings (5.5 bp taker) is refused; tested"}
   book_levels: {walk: 10, features: 10, stage_0_check: "share of reader-test snapshots in which the clip exceeds ten levels on either side", above: 0.001, then: "the clip walks all 200 levels; features keep ten; recorded in the amendment"}
@@ -223,7 +224,7 @@ common:
 slots:
   S25:
     on: binance_spot_BTCFDUSD
-    status: not run (no book on the venue)  # 31 of its 40 inputs read a book; its label and executor walk one; no number stands in for it
+    status: not run (no book on the venue)  # 31 of its 40 inputs are book features and a 32nd, vwap_deviation_bp, divides by the book's mid; its label and executor walk a book; no number stands in for it
   S25-PF:
     role: primary
     instrument: binance_spot_BTCFDUSD
@@ -262,7 +263,9 @@ slots:
     grid: book
     inputs: "features.s25_selected, computed as the 2025 study computes them, ofi_1 and ofi_20 divided by the 2025 study's own touch size"
     model: the 2025 study's frozen fit, unchanged; nothing fitted
-    frozen_files_2025: {slot_file_S25: 8ddf4ff5b2e25ee2696da4cff2bd1ec862bd9caf9a112fe30e237963f87e4a2d, fitted_values: ca327600da8e231edd5296d4ee9ee7ca93472001ca1536de1e513d6af109a6b9}  # sha256s from configs/short_horizon_2025.yaml, checked before H opens
+    frozen_files_2025: {slot_file_S25: 8ddf4ff5b2e25ee2696da4cff2bd1ec862bd9caf9a112fe30e237963f87e4a2d, fitted_values: ca327600da8e231edd5296d4ee9ee7ca93472001ca1536de1e513d6af109a6b9}  # sha256s from configs/short_horizon_2025.yaml; checked at the D stage, the H gate and the P gate
+    frozen_paths_2025: {slot_file_S25: models/short_horizon_2025/finalists/S25.json, weights: "models/short_horizon_2025/weights/<fit key>", fitted_values: models/short_horizon_2025/fitted_values.json}  # ignored by git; read in place, read-only, in the checkout the study runs in; copied elsewhere with each sha256 checked at the copy
+    config_2025_sha256: e9cb5e0355e4506e6e450356135836b6106a6f3c6ecaa76aa6a07d0733acbdef  # configs/short_horizon_2025.yaml as frozen by its D amendment; checked with the files, so the thresholds below are bound by hash
     thresholds: "configs/short_horizon_2025.yaml slots.S25.thresholds, the cells at regime none, unchanged"
     hold_s: 50
     rule: hold_first
@@ -307,12 +310,12 @@ features:
   touch_proxies: {ask: the last buyer-initiated print's price, bid: the last seller-initiated print's price, mid: their mean}
   dropped_on_prints: 19  # the size and depth members; no analogue on prints
   print_windows: the 6, 24 and 120 rows of the flow builder count rows of the print grid  # a registered change of meaning
-  vwap_deviation_on_prints: "a row's volume-weighted print price over the previous row's mid proxy, in place of the book's mid"
+  vwap_deviation_on_prints: "a row's volume-weighted print price over the previous row's mid proxy: two registered changes of meaning, the mid proxy for the book's mid and row t-1 for row t"
   winsorising: {quantiles: [0.001, 0.999], window_s: 3600, on: each feature's own trailing values on row stamps}  # as in 2025
   raw_size_columns: {S25-BB: [ofi_1, ofi_20], S25-T: [ofi_1, ofi_20], print_members: none}
   touch_size_S25-BB: "median of bid_size_0 and ask_size_0 pooled over every W row of Bybit's spot book"
   registry: the print members in a registry of their own, never the global features.REGISTRY
-  leakage_check: "validation/leakage.py on every feature before any D run, prints cut at a time strictly inside a row interval (K-leak)"
+  leakage_check: "validation/leakage_timed.check_timed_causal (prints cut at a time strictly inside a row interval) and check_streaming_parity on every print member and touch proxy before any D run; validation/leakage.py only for features on the row registry (K-leak)"
   longest_lookback_minutes: 61
   stores: {dtype: float16, rows: every tenth row, format: one zstd parquet per day, every_row: computed per day for predictions, never stored}
   fitted_values: the touch size of S25-BB and any other fitted constant, in one file
@@ -384,7 +387,7 @@ kill_conditions:
     S25-BB: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [the gap-excluded days put back]}
     S25-T: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [its trade rate against 240 a day]}
   void: [K-leak, K-units, K-acct, K-cap, K-inv]
-  K-leak: a feature fails validation/leakage.py or the fold-level leakage test fails; every result void
+  K-leak: a feature fails its leakage check (features.leakage_check) or the fold-level leakage test fails; every result void
   K-units: "a cost (fee, book walk, print fill) or the hold-first rule's input reaches the result through a normalised column; or any fill's fee in bp of its notional differs from the fee table's cell for its venue, tier and time (every fill of every run)"
   K-acct: the accounting identity fails on any day, or turnover differs from the sum of fill notionals, in any run of the slot's read
   K-cap: the traded position beyond one clip either way at any event
@@ -450,7 +453,7 @@ access:
   development: {allows: [reader_test, W, D], venues: both, refuses: "every other day of both instruments, 2025 and 2026 alike"}
   ledger: experiments/results/spot_2026_ledger.json
   guards: [H, P]
-  H_opens_if: ["the amendment records this file's sha256 and the file on disk has it and is committed", the tree clean but for the ledger, "every frozen fit's, frozen slot file's and the fitted-values file's sha256 equal the amendment's", "the 2025 files S25-T loads equal slots.S25-T's sha256s", no file of H on disk]
+  H_opens_if: ["the amendment records this file's sha256 and the file on disk has it and is committed", the tree clean but for the ledger, "every frozen fit's, frozen slot file's and the fitted-values file's sha256 equal the amendment's", "the 2025 files S25-T loads equal slots.S25-T's sha256s, and configs/short_horizon_2025.yaml equals slots.S25-T.config_2025_sha256", no file of H on disk]
   every_open_and_process: ["git diff --name-only <session's commit>..HEAD lists nothing but the ledger", the environment fingerprint equals the one H's open entry records]
   open_entry: "committed before the block's fetch begins: block, session commit, configuration sha256, fingerprint, UTC time; every later process and open refuses unless it is in HEAD's history"
   session: "bound to (block, commit, configuration sha256, fingerprint); closes by writing experiments/results/spot_2026_<block>.json and its sha256 into the ledger"

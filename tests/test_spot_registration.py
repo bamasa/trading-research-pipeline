@@ -19,7 +19,7 @@ CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
 #: The configuration as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "e26f8330f9e24de8c1f5816bad8ff994210dd715e3cae230fd1002b5ea8770d6"
+REGISTERED_SHA256 = "52ae7aae558143c71d6d325516dafd3b02dc17b4e65bc734cb13efdb42ba9c0c"
 PLACEHOLDERS = (
     ("data", "reader_test_result"), ("data", "max_sequence_gaps"), ("data", "excluded_days_D"),
     ("data", "instrument_spec"), ("features", "fitted_values_sha256"),
@@ -134,6 +134,18 @@ def test_verdict_tier_is_ten_bp_taker_on_both_venues() -> None:
         undated = fees["undated_cells"].get(instrument, {"tiers": {}})
         assert tier not in undated["tiers"]  # an undated cell never sets the verdict
     assert CONFIG["kill_conditions"]["K-fee"]["taker_bp"] == 10.0
+
+
+def test_s25_t_binds_the_2025_frozen_files_by_hash() -> None:
+    path = ROOT / "configs" / "short_horizon_2025.yaml"
+    slot = CONFIG["slots"]["S25-T"]
+    assert sha256_bytes(path.read_bytes()) == slot["config_2025_sha256"]
+    frozen = yaml.safe_load(path.read_text(encoding="utf-8"))
+    finalists = frozen["artefacts"]["frozen_finalist_files_sha256"]
+    assert slot["frozen_files_2025"]["slot_file_S25"] == finalists["S25"]
+    assert slot["frozen_files_2025"]["fitted_values"] == frozen["features"]["fitted_values_sha256"]
+    weights = frozen["models"]["weights_sha256"]
+    assert all(weights[key] == digest for key, digest in slot["neighbourhood_fits_2025"].items())
 
 
 def test_family_and_neighbourhoods() -> None:
