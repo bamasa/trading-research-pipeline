@@ -11,13 +11,15 @@ import yaml
 
 from trading_research.market_making.prereg import placeholder_lines, sha256_bytes, unfrozen_text
 
+FALLBACK = "candidate (H inside S25's information set)"
+
 ROOT = Path(__file__).resolve().parents[1]
 TEXT = (ROOT / "configs" / "spot_2026.yaml").read_text(encoding="utf-8")
 CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
 #: The configuration as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "b19beadc6d7e8a70769e279eb9f9d2935587f6035e7b826586e9b6c98b51f5dc"
+REGISTERED_SHA256 = "49683eca67e371f7961e6ccf0d656163aacfac016fa1423e10e8b4c5beb3ec64"
 PLACEHOLDERS = (
     ("data", "reader_test_result"), ("data", "max_sequence_gaps"), ("data", "excluded_days_D"),
     ("data", "instrument_spec"), ("features", "fitted_values_sha256"),
@@ -70,11 +72,32 @@ def test_blocks_follow_each_other_and_the_information_set() -> None:
     assert BLOCKS["D"]["end"] + one == BLOCKS["E"]["start"]
     assert BLOCKS["E"]["end"] + one == BLOCKS["H"]["start"]
     assert BLOCKS["P_embargo"] == [BLOCKS["H"]["end"] + one, BLOCKS["P"]["start"] - one]
-    end = CONFIG["information_set"]["taken_to_end"]
+    info = CONFIG["information_set"]
+    end = info["binance_spot_BTCFDUSD"]["taken_to_end"]
     assert all(BLOCKS[name]["start"] > end for name in ("W", "D", "H", "P"))
     assert BLOCKS["Z"]["end"] <= end and BLOCKS["Z"]["venues"] == ["binance_spot_BTCFDUSD"]
-    assert BLOCKS["D"]["start"] == CONFIG["information_set"]["first_scored_day"]
-    assert BLOCKS["H"]["start"] == CONFIG["information_set"]["held_out_start"]
+    assert BLOCKS["D"]["start"] == info["first_fitted_day"]
+    first_test_month = BLOCKS["D"]["test_months"][0]
+    assert info["first_scored_day"].isoformat() == f"{first_test_month}-01"
+    assert BLOCKS["H"]["start"] == info["held_out_start"]
+
+
+def h_is_blind() -> bool:
+    """H is blind only when the owner confirmed all three end dates before H's first day."""
+    confirmed = CONFIG["information_set"]["confirmed"]
+    return confirmed is not None and all(d < BLOCKS["H"]["start"] for d in confirmed.values())
+
+
+def test_h_is_blind_only_under_a_confirmed_information_set() -> None:
+    info = CONFIG["information_set"]
+    named, start = info["s25_coordinates"]["named"], BLOCKS["H"]["start"]
+    assert (named - start).days == info["s25_coordinates"]["h_days_elapsed_when_named"] == 61
+    assert FALLBACK in CONFIG["statuses"]["after_H"] and FALLBACK in info["fallback"]
+    assert FALLBACK in DOCUMENT
+    if info["confirmed"] is None:
+        assert not h_is_blind()  # as registered: the fallback holds
+    else:
+        assert set(info["confirmed"]) == {"s25_coordinates", *INSTRUMENTS}
     data = CONFIG["data"]
     last = {data[k]["present"][1] for k in ("bybit_book", "bybit_prints", "binance_prints")}
     assert last == {BLOCKS["H"]["end"]}  # H ends on the last day published at registration

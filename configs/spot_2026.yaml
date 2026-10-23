@@ -33,18 +33,22 @@ instruments:
 computed_before_registration: none  # no spot book, print, trade or bar of any year fetched or opened by this repository
 
 prior_information:
-  - "BTC's daily price path to 2026-09-30, in the README's break figure (Binance BTCUSDT daily futures bars on disk); the shorter-memory setting's scale breaks 2026-02-06 up and 2026-08-14 down, named in the README; the second inside H; neither set a boundary"
+  - "BTC's daily price path to 2026-09-30, in the README's break figure (Binance BTCUSDT daily futures bars on disk); the shorter-memory setting's scale breaks 2026-02-06 up and 2026-08-14 down, named in the README; the second inside H; neither set any value"
   - the author worked on BTC/FDUSD in 2025  # an information-set fact; nothing more is stated
-  - "the 2025 study's registration, configuration and code, S25's coordinates and frozen-file sha256s, and its D amendment of 2026-10-18 (development numbers on Bybit's BTCUSDT perpetual, 2025-01..06); none sets a value here; its held-out results will be known before this study's D is read and change nothing here"
+  - "the 2025 study's registration, configuration and code, S25's coordinates and frozen-file sha256s, and its D amendment of 2026-10-18 (development numbers on Bybit's BTCUSDT perpetual, 2025-01..06); S25's coordinates set every coordinate of the three slots; the sha256s are checked, not chosen; the D amendment's numbers set nothing here; S25 was named on 2026-10-08, when 61 of H's 75 days had passed (information_set); its held-out results will be known before this study's D is read and change nothing here"
   - "the 2025 study's reader-test days 2026-01-05..07 (Bybit linear ob200), read for message counts; in no block here"
-  - this repository's earlier studies on perpetuals were killed (docs/findings.md); the reason for the prior
+  - this repository's earlier studies on perpetuals, documented in docs/findings.md; the reason for the prior
   - "fee schedules sourced on 2026-10-22..23 (fees block); Binance BTC/U at zero fees for every account 2026-04-17..07-16; BTC margin borrow rates on both venues; FDUSD's departure from its peg on 2025-04-02 (public news)"
-  - "HTTP HEAD and directory listings on 2026-10-22: every Bybit spot ob200 day 2025-04-01..2026-10-22, every Bybit spot daily print file, the S3 listings of Binance spot BTCFDUSD (and BTCUSDT, BTCUSDC for reference), 71 HEADs on Binance's archives (the 66 on listed files matched the listed sizes), no Binance spot book; sizes seen"
+  - "HTTP HEAD and directory listings on 2026-10-22: every Bybit spot ob200 day 2025-04-01..2026-10-22, every Bybit spot daily print file, the S3 listings of Binance spot BTCFDUSD (and BTCUSDT, BTCUSDC for reference), 72 HEADs on Binance's archives (the 66 on listed files matched the listed sizes), no Binance spot book; sizes seen, H's included (data.head_check)"
 information_set:
-  pair: binance_spot_BTCFDUSD
-  statement: the author worked on this pair in 2025
-  taken_to_end: 2025-12-31
-  first_scored_day: 2026-05-01
+  s25_coordinates: {named: 2026-10-08, by: "the 2025 registration, commit f7cf0bc", h_days_elapsed_when_named: 61, stated_end: none}  # not claimed chosen without knowledge of market conditions after 2025-08-01
+  binance_spot_BTCFDUSD: {statement: the author worked on this pair in 2025, taken_to_end: 2025-12-31}
+  bybit_spot_BTCUSDT: {statement: none}
+  confirmed: null  # {s25_coordinates, binance_spot_BTCFDUSD, bybit_spot_BTCUSDT}: the end dates the owner confirms, set only by one dated amendment committed before stage 0; null: not confirmed
+  blind_if: every confirmed end date before held_out_start  # preferably before first_fitted_day
+  fallback: "unless blind_if holds: H inside S25's information set; each slot's best status on H is 'candidate (H inside S25's information set)'; P the only confirmatory block; every status of statuses.after_P carries '(H inside S25's information set)'"
+  first_fitted_day: 2026-05-01
+  first_scored_day: 2026-06-01
   held_out_start: 2026-08-08
   days_of_2025: inside the author's information set; block Z only, described and never tested
 
@@ -87,6 +91,8 @@ data:
   head_check:
     date: 2026-10-22
     method: HTTP HEAD and directory listings only; no file read
+    file: experiments/results/spot_2026_head_check.csv  # one row per day, 2025-01-01..2026-10-22: status, size and Last-Modified per archive
+    file_sha256: 47116745192b01b4b3cec52fbfaf81da0f8da643524226c5d8e41e12e61ca010
     set_from_it: "the block boundaries (every 2026 block after BTC/FDUSD's fall in activity), the fetch sizes and the disk budget; nothing else"
     activity_fall: {instrument: binance_spot_BTCFDUSD, after: 2026-01-28, factor: about 30, settled_from: 2026-05, trades_mb_a_day_settled: about 1}
   sizes_gb:
@@ -348,7 +354,7 @@ statuses:
   precedence: ["void (K-leak, K-units, K-acct, K-cap, K-inv)", "inconclusive (too few trades): K-trades; nothing below evaluated", killed (any kill), candidate on H or passes on P, "inconclusive (below the minimum detectable effect when the mean is smaller in size than the MDE)"]
   void_counts_as_killed: true
   taken_to_P: candidate only
-  after_H: [candidate, inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not assessed (H unreadable on <venue>)", "not assessed (H read failed)"]
+  after_H: [candidate, "candidate (H inside S25's information set)", inconclusive, "inconclusive (too few trades)", "inconclusive, below the minimum detectable effect", killed, void, "not assessed (H unreadable on <venue>)", "not assessed (H read failed)", "void (defect found after the H read)"]
   after_P: {passes: confirmed, no_pass_no_kill: "candidate, not confirmed", kill: killed on P, void: void, unreadable_or_failed: "candidate, not confirmed (P unreadable)", not_read: "candidate (P not read)"}
   unreadable: "a venue's block with more than a quarter of its days excluded; on H that venue's slots not assessed, the other venue's assessed, H spent"
   read_failed: "resumed at the same commit; the same stage failing again with the same exception, or five resumptions unfinished, closes the session with every slot of the block not assessed (<block> read failed)"
