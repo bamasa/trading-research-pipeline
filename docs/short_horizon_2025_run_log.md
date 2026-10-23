@@ -95,3 +95,13 @@ when, so that the gaps between stages can be read later without guessing.
   pushed before the fetch, and the owner keeps intermediate work off the public
   repository, so the way the open entry is recorded is waiting on the owner's
   decision. No 2025 file of H, F or P is on disk.
+
+## 2026-10-22 to 2026-10-24
+
+- A private repository was created to hold H's open entry with a server-side
+  timestamp; adding it as a remote and pushing is waiting on the owner, so H is
+  not opened yet. No 2025 file of H, F or P is on disk.
+- A spot study was registered as a draft on the separate local branch
+  `spot/prereg` (Binance BTC/FDUSD prints and Bybit spot BTCUSDT book, blind
+  blocks in 2026); it touches none of this study's frozen code and fetches
+  nothing before this study's last read.
