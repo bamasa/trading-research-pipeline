@@ -392,3 +392,67 @@ hypotheses:
   S25-PF: {block: H, claim: net_bp_trade > 0 at regular, kills: kill_conditions.per_slot.S25-PF, prediction: killed by K1}
   S25-BB: {block: H, claim: net_bp_trade > 0 at non_vip, kills: kill_conditions.per_slot.S25-BB, prediction: killed by K1}
   S25-T: {block: H, claim: net_bp_trade > 0 at non_vip with the 2025 frozen fit unchanged, kills: kill_conditions.per_slot.S25-T, prediction: "killed by K1, or inconclusive (too few trades)"}
+
+measurements:
+  FILL-S: {what: "the print rule's calibration: S25-PB's and S25-BB's decisions on Bybit priced by the print rule (primary and every bracket) and by the book walk", blocks: [D, H], reported: "per side, the mean and median fill-price difference in bp of mid, the share of late prints, each slot's net_bp_trade both ways", beside: S25-PF, status: never moves one}
+  measured_rows: measured_rows
+  activity_beside_series: each venue's prints a day
+  edge_ladder: ["S25-T on spot books (no refit)", "S25-BB (refit on spot books)", "S25-PB by the book walk, then by the print rule", "S25-PF (the other venue)", "each at zero fees, at the verdict tier and at the cheapest tier", "Z-PF, inside the author's information set"]
+  result_D: null  # {slot: {series summary, nulls, theta trade rate}, FILL-S: {...}, labelled development}; frozen by the D amendment
+
+fetch:
+  via: this study's fetch (new code, on data/ensure.py's pattern)  # only missing days; archives deleted after replay or conversion
+  root: data/spot/<venue>/<plane>/<symbol>/  # never data/{book,trades,bars,funding}/BTCUSDT
+  stages:
+    0: {when: "after this registration and its code are committed and after the 2025 study's last read", what: reader-test days, gb: {bybit_ob200: 0.286, bybit_prints: 0.035, binance_aggtrades: 0.010}}
+    1: {when: after stage 0 and the code-freeze note, what: [W, D], gb: {bybit_ob200: 7.363, bybit_prints: 0.564, binance_aggtrades: 0.136}}
+    2: {when: "inside H's opened access, after the amendment", what: H, gb: {bybit_ob200: 3.813, bybit_prints: 0.339, binance_aggtrades: 0.064}}
+    3: {when: "inside Z's opened access, after H's results are committed", what: Z, gb: {binance_aggtrades: 2.825}}
+    4: {when: "inside P's opened access, only for a candidate", what: P, gb_estimated: {bybit_ob200: 3.6, bybit_prints: 0.26, binance_aggtrades: 0.06}}  # at D's daily means; P's own HEAD check records the sizes
+  total_gb_stages_0_to_3: 15.435
+  failures: "the 2025 fetch plan's: every day listed as present fetched; any failure other than HTTP 404 retried with backoff; a stage complete only when every such day is on disk or excluded by a terminal rule (unreadable archive, unfetchable day); checksums checked before reading"
+  replay_workers_max: 4
+  disk_peak_gb: [13, 19]  # books at 40-60 MB a replayed day (the 2024 perpetual figure; stage 0 measures spot)
+  disk_margin_gb: 10  # free disk must exceed each stage's budget by this much
+  not_before: "the 2025 study's last read has committed its results (the two disk peaks do not fit together on the machine: 66 GiB free on 2026-10-22 against the 2025 study's registered 46-53 GB)"
+
+compute:
+  estimate: "about 200 book days replayed at 2-3 minutes on at most 4 workers; 42 boosted fits at 1-2 minutes; scoring, placebos and neighbourhoods from walk tables; under a day for D, a few hours for each later read"
+  record: null  # stage 0's timings, the replay's peak memory, worker counts and store sizes; frozen by the D amendment
+
+access:
+  development: {allows: [reader_test, W, D], venues: both, refuses: "every other day of both instruments, 2025 and 2026 alike"}
+  ledger: experiments/results/spot_2026_ledger.json
+  guards: [H, Z, P]
+  H_opens_if: ["the amendment records this file's sha256 and the file on disk has it and is committed", the tree clean but for the ledger, "every frozen fit's, frozen slot file's and the fitted-values file's sha256 equal the amendment's", "the 2025 files S25-T loads equal slots.S25-T's sha256s", no file of H on disk]
+  every_open_and_process: ["git diff --name-only <session's commit>..HEAD lists nothing but the ledger", the environment fingerprint equals the one H's open entry records]
+  open_entry: "committed before the block's fetch begins: block, session commit, configuration sha256, fingerprint, UTC time; every later process and open refuses unless it is in HEAD's history"
+  session: "bound to (block, commit, configuration sha256, fingerprint); closes by writing experiments/results/spot_2026_<block>.json and its sha256 into the ledger"
+  Z_opens_if: "H's results file committed unchanged; the diff since H's read lists only README.md, paths under experiments/results/ and paths under docs/ outside docs/preregistration/"
+  P_opens_if: "a candidate on H; Z's conditions against Z's read, except that the fee amendment may add P's intervals to the document's amendments and to fees.intervals and nothing else (this file with those intervals removed has H's sha256)"
+  second_read: raises unless forced; stamped second read; cannot change a status
+  spent: blocks.spent
+
+amendment:
+  D_amendment: {when: after D and before H, written_by: the entry point, reviewed_before_commit: true, records: [excluded days by venue and reason, max_sequence_gaps, tick and lot, reader-test results, every frozen fit's sha256, each slot's frozen file sha256, the fitted-values file's sha256, every theta, sigma_D and the MDEs, D summaries against the nulls (development), FILL-S on D, the compute record, "Frozen configuration sha256: `<hash>`"]}
+  placeholder_comment: frozen by the D amendment
+  corrections_before_H: "a dated amendment stating the fault; D re-run in full if it could change a D number; complete D runs numbered; every change to the study code after the code-freeze note is one"
+  forbidden_reasons: [a D number, a result of the 2025 study, anything seen on spot data, except a fault the amendment names]
+  fee_amendment: {only_after_H: true, adds: "intervals for P's days, from sources of the kinds in fees.sources, before P opens", changes: nothing else}
+  after_H: nothing changed and nothing re-run under another rule; a defect can only lower a status (statuses.defect_after_read)
+  ledger_rule: only reads through the ledger count; a number computed on H, Z or P outside it is not a result
+  date: null  # the D amendment's date; frozen by the D amendment
+
+artefacts:
+  files: [experiments/results/spot_2026_ledger.json, experiments/results/spot_2026_H.json, experiments/results/spot_2026_Z.json, experiments/results/spot_2026_P.json]
+  page: one row per slot and measured row (status, first kill against its reference, mean, t, Newey-West t, median day, trades, MDE, placebo percentile, K-nbhd median, break-even per side against every tier, brackets, calibration) and the edge ladder
+  headline_sentences:
+    each_slot_on_H: "[slot] on H, [venue] spot [pair]: [status]; first kill [K-x] at [value] against [reference]."
+    S25-PF: "S25's prints-only variant on Binance BTC/FDUSD, August to October 2026: gross edge [x] bp of turnover against the 10 bp taker fee a Regular account paid; break-even [y] bp per side; [status]."
+    S25-T: "S25 as frozen on Bybit's perpetual, unchanged on Bybit's spot book: [n] trades a day against 240 registered; [status]."
+    calibration: "On Bybit's spot book, the print rule priced buys [x] bp and sells [y] bp [better / worse] than the book walk."
+    Z: "On the last quarter of 2025, inside the author's information set and described only, the prints-only recipe's gross edge was [x] bp of turnover."
+    P: "[slot] on P: [status]."
+  first_kill: the first that fires in the order of the slot's kills
+  d_numbers_quoted_as_results: false
+  frozen_slot_files_sha256: null  # {slot: sha256} of each frozen slot file (configuration, weights, theta, fitted values); checked by the H and P gates; frozen by the D amendment
