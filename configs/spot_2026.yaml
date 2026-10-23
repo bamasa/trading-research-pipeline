@@ -35,11 +35,11 @@ computed_before_registration: none  # no spot book, print, trade or bar of any y
 prior_information:
   - "BTC's daily price path to 2026-09-30, in the README's break figure (Binance BTCUSDT daily futures bars on disk); the shorter-memory setting's scale breaks 2026-02-06 up and 2026-08-14 down, named in the README; the second inside H; neither set a boundary"
   - the author worked on BTC/FDUSD in 2025  # an information-set fact; nothing more is stated
-  - "the 2025 study's registration, configuration and code, S25's coordinates and frozen-file sha256s, and its D amendment of 2026-10-18 (development numbers on Bybit's BTCUSDT perpetual, 2025-01..06); none sets a value here; its H, F and P results will be known before this study's D is read and change nothing here"
+  - "the 2025 study's registration, configuration and code, S25's coordinates and frozen-file sha256s, and its D amendment of 2026-10-18 (development numbers on Bybit's BTCUSDT perpetual, 2025-01..06); none sets a value here; its held-out results will be known before this study's D is read and change nothing here"
   - "the 2025 study's reader-test days 2026-01-05..07 (Bybit linear ob200), read for message counts; in no block here"
   - this repository's earlier studies on perpetuals were killed (docs/findings.md); the reason for the prior
   - "fee schedules sourced on 2026-10-22..23 (fees block); Binance BTC/U at zero fees for every account 2026-04-17..07-16; BTC margin borrow rates on both venues; FDUSD's departure from its peg on 2025-04-02 (public news)"
-  - "HTTP HEAD and directory listings on 2026-10-22: every Bybit spot ob200 day 2025-04-01..2026-10-22, every Bybit spot daily print file, the S3 listings of Binance spot BTCFDUSD (and BTCUSDT, BTCUSDC for reference), 71 HEADs matching the listings, no Binance spot book; sizes seen"
+  - "HTTP HEAD and directory listings on 2026-10-22: every Bybit spot ob200 day 2025-04-01..2026-10-22, every Bybit spot daily print file, the S3 listings of Binance spot BTCFDUSD (and BTCUSDT, BTCUSDC for reference), 71 HEADs on Binance's archives (the 66 on listed files matched the listed sizes), no Binance spot book; sizes seen"
 information_set:
   pair: binance_spot_BTCFDUSD
   statement: the author worked on this pair in 2025
@@ -312,7 +312,7 @@ models:
   fits_per_slot: {S25-PF: 18, S25-BB: 18, S25-PB: 3, S25-PFT: 3, S25-T: 0}  # every hold and label fee of the neighbourhood on every fold for the slots; 42 in all
   fold_leakage_test: "S25-PF and S25-BB, every fold: mutating every price after the fold's cutoff leaves weights and theta unchanged, by sha256"
   weights_sha256: null  # {fit key: sha256} for every frozen fit; frozen by the D amendment
-  thresholds: null  # {slot: {cell: {theta_long, theta_short}}} for every frozen neighbourhood cell; frozen by the D amendment
+  thresholds: null  # {slot or measured row: {cell: {theta_long, theta_short}}} for every frozen cell; frozen by the D amendment
 
 d_procedure:
   stage_0: "on the reader-test days: the spot readers proven on synthetic fixtures and the three days; Bybit's ob200 replayed as a block day (no positive_prices error, no off-grid price), message counts, median interval and gaps recorded; Bybit's print columns, units and side strings checked; Binance's side flag mapped as documented; fetch, replay, label, fits and scoring timed; print walk tables equal to the print executor entry by entry; a failure fixed by a dated amendment before stage 1"
@@ -354,7 +354,7 @@ statuses:
   read_failed: "resumed at the same commit; the same stage failing again with the same exception, or five resumptions unfinished, closes the session with every slot of the block not assessed (<block> read failed)"
   defect_after_read: "stated in docs/spot_2026_defects.md with the mechanism by which it could raise a result; every status it could affect becomes void (defect found after the <block> read)"
   measurements_never_described_as_working: [any tier other than the verdict tier, zero fees, any print bracket, long-only, gap-excluded days put back, any measured row, Z, the inventory's P&L]
-  no_zero_taker_cell: "no account could trade either pair at zero taker fees on any day of W, D, H or P as far as the sources show"
+  no_zero_taker_cell: "no account could trade either pair at zero taker fees on any day of W, D or H as far as the sources show"
 
 kill_conditions:
   per_slot:
@@ -412,7 +412,7 @@ fetch:
   total_gb_stages_0_to_3: 15.435
   failures: "the 2025 fetch plan's: every day listed as present fetched; any failure other than HTTP 404 retried with backoff; a stage complete only when every such day is on disk or excluded by a terminal rule (unreadable archive, unfetchable day); checksums checked before reading"
   replay_workers_max: 4
-  disk_peak_gb: [13, 19]  # books at 40-60 MB a replayed day (the 2024 perpetual figure; stage 0 measures spot)
+  disk_peak_gb: [12, 19]  # books at 40-60 MB a replayed day (the 2024 perpetual figure; stage 0 measures spot)
   disk_margin_gb: 10  # free disk must exceed each stage's budget by this much
   not_before: "the 2025 study's last read has committed its results (the two disk peaks do not fit together on the machine: 66 GiB free on 2026-10-22 against the 2025 study's registered 46-53 GB)"
 
