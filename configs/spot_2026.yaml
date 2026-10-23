@@ -118,7 +118,7 @@ data:
   gap_days_included_reported: true  # each Bybit verdict also with the gap-excluded days put back, as a measurement
 
 fees:
-  rule: "every fill pays the fee of the sourced interval of its venue in force at the fill's time, in bp of the fill's notional; a day is covered when every instant of it lies in a sourced interval of its venue (intervals may split a day); a day not covered is excluded on that venue, reason fee not sourced"
+  rule: "every fill pays the fee of the sourced interval of its venue in force at the fill's time, in bp of the fill's notional; a day is covered when every instant of it lies in a sourced interval of its venue (intervals may split a day; on such a day, possible only in P, the book executor, which charges one fee a day, runs at the day's higher fee of each tier); a day not covered is excluded on that venue, reason fee not sourced"
   booking: "in the quote at the fill price, a convention: the venues deduct a fee in the asset received (a buy's in BTC) unless a discount token pays it; equal in value; K-inv checked both ways (common.short_side)"
   verdict_tier: {binance_spot_BTCFDUSD: regular, bybit_spot_BTCUSDT: non_vip}  # the tier an account holds with no 30-day volume, coin holdings or programme membership
   discounts_applied: none  # a discount needs BNB or MNT held, a coin holding outside the verdict tier; the sources do not say whether BNB's discount applied to BTC/FDUSD's taker fee at all
@@ -395,7 +395,7 @@ kill_conditions:
     S25-T: {execution: taker, book walk, series: net_bp_trade, kills: [K1, K-label, K-placebo, K-drift, K-nbhd, K-days, K-fee, K-latency], beside: [its trade rate against 240 a day]}
   void: [K-leak, K-units, K-acct, K-cap, K-inv]
   K-leak: a feature fails its leakage check (features.leakage_check) or the fold-level leakage test fails; every result void
-  K-units: "a cost (fee, book walk, print fill) or the hold-first rule's input reaches the result through a normalised column; or any fill's fee in bp of its notional differs from the fee table's cell for its venue, tier and time (every fill of every run)"
+  K-units: "a cost (fee, book walk, print fill) or the hold-first rule's input reaches the result through a normalised column; or any fill's fee in bp of its notional differs from the fee fees.rule assigns it from the table for its venue, tier and time (every fill of every run)"
   K-acct: the accounting identity fails on any day, or turnover differs from the sum of fill notionals, in any run of the slot's read
   K-cap: the traded position beyond one clip either way at any event
   K-inv: either coin's balance below zero at any event

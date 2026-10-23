@@ -19,7 +19,7 @@ CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
 #: The configuration as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "9372e2cd651072fb366fb32346308fdc5c48c1deca8b9d1c6e08dd2a7661d2cc"
+REGISTERED_SHA256 = "1206d6b71c2f0ad2e76d65b0e91019899f9ceb6c53607fca46dbfec7235e17da"
 PLACEHOLDERS = (
     ("data", "reader_test_result"), ("data", "max_sequence_gaps"), ("data", "excluded_days_D"),
     ("data", "instrument_spec"), ("common", "book_levels", "walk"),
