@@ -1,0 +1,109 @@
+# S25 on spot, Binance BTC/FDUSD and Bybit BTCUSDT, on 2026 data: the
+# machine-readable half of the pre-registration.
+#
+# docs/preregistration/spot_2026.md is the other half: it says what each value
+# means and why it was chosen. The two were committed together on 23 October
+# 2026, on the local branch spot/prereg, before any spot book, print, trade or
+# bar file of any year was fetched for this study. They must agree.
+#
+# Every value here is fixed now, except those set to null with the comment
+# "frozen by the D amendment". Those are set on block D and written into this
+# file by the single dated amendment, before block H is read. The amendment
+# records the sha256 of this file after that write; the study's ledger refuses
+# to open a held-out block unless the file on disk has it and is committed and
+# clean. Nothing else here changes, except under the document's amendment
+# protocol (the fee amendment may add intervals under fees for P's days).
+#
+# Conventions of the 2025 study hold: units in the key's suffix (_bp, _ms, _s,
+# _btc, _gb, _mb), UTC dates inclusive, seed ranges inclusive. Instruments are
+# keyed by venue and market, never by symbol alone.
+#
+# No code reads this file yet. The loader arrives with the study's ledger;
+# until then it is a record, not an input.
+
+name: spot_2026_preregistration
+registered: 2026-10-23
+registered_against: "1a317b1"  # sh2025/prereg, the branch this one starts from
+document: docs/preregistration/spot_2026.md
+registers: a confirmation of S25 on spot; three slots under Holm with m = 3
+searched: false  # no value chosen on an outcome; no catalogue, no placebo search
+instruments:
+  binance_spot_BTCFDUSD: {id: "binance-spot:BTCFDUSD", venue: binance, market: spot, symbol: BTCFDUSD, quote: FDUSD, role: primary, book: none}
+  bybit_spot_BTCUSDT: {id: "bybit-spot:BTCUSDT", venue: bybit, market: spot, symbol: BTCUSDT, quote: USDT, role: secondary, book: ob200}
+computed_before_registration: none  # no spot book, print, trade or bar of any year fetched or opened by this repository
+
+prior_information:
+  - "BTC's daily price path to 2026-09-30, in the README's break figure (Binance BTCUSDT daily futures bars on disk); the shorter-memory setting's scale breaks 2026-02-06 up and 2026-08-14 down, named in the README; the second inside H; neither set a boundary"
+  - the author worked on BTC/FDUSD in 2025  # an information-set fact; nothing more is stated
+  - "the 2025 study's registration, configuration and code, S25's coordinates and frozen-file sha256s, and its D amendment of 2026-10-18 (development numbers on Bybit's BTCUSDT perpetual, 2025-01..06); none sets a value here; its H, F and P results will be known before this study's D is read and change nothing here"
+  - "the 2025 study's reader-test days 2026-01-05..07 (Bybit linear ob200), read for message counts; in no block here"
+  - this repository's earlier studies on perpetuals were killed (docs/findings.md); the reason for the prior
+  - "fee schedules sourced on 2026-10-22..23 (fees block); Binance BTC/U at zero fees for every account 2026-04-17..07-16; BTC margin borrow rates on both venues; FDUSD's departure from its peg on 2025-04-02 (public news)"
+  - "HTTP HEAD and directory listings on 2026-10-22: every Bybit spot ob200 day 2025-04-01..2026-10-22, every Bybit spot daily print file, the S3 listings of Binance spot BTCFDUSD (and BTCUSDT, BTCUSDC for reference), 71 HEADs matching the listings, no Binance spot book; sizes seen"
+information_set:
+  pair: binance_spot_BTCFDUSD
+  statement: the author worked on this pair in 2025
+  taken_to_end: 2025-12-31
+  first_scored_day: 2026-05-01
+  held_out_start: 2026-08-08
+  days_of_2025: inside the author's information set; block Z only, described and never tested
+
+expected_outcome:
+  verdict_taker_bp: {binance_spot_BTCFDUSD: 10.0, bybit_spot_BTCUSDT: 10.0}
+  taker_round_trip_bp: 20.0  # a slot pays at the verdict tier only with a gross edge above 10 bp of turnover
+  cheapest_published_taker_bp: {binance_vip9: 2.3, bybit_supreme_vip: 4.5, bybit_pro6_institutional: 1.5}
+  predictions:
+    S25-PF: killed by K1 on H
+    S25-BB: killed by K1 on H
+    S25-T: "killed by K1 on H, or inconclusive (too few trades)"
+    every_slot: gross_bp_turnover below 10, so K-fee fires too
+    not_predicted: [the sign of any gross edge at zero fees, the size of the print rule's bias]
+
+data:
+  bybit_book:
+    instrument: bybit_spot_BTCUSDT
+    url: "https://quote-saver.bycsi.com/orderbook/spot/{symbol}/{day}_{symbol}_ob200.data.zip"
+    present: [2025-04-29, 2026-10-21]  # 2025-04-01..04-28 return 404; no gap after
+    levels: 10
+    grid_ms: 100
+    rows: "data/bybit.reconstruct at grid_ms 100, source tag bybit-spot-ob200: at most one row per 100 ms interval, at its first update, stamped with that update's venue time; no forward fill"
+    message_shape: unverified until the reader test  # Bybit documents a 100 ms push for spot level 200, RPI orders excluded
+  bybit_prints:
+    instrument: bybit_spot_BTCUSDT
+    url: "https://public.bybit.com/spot/{symbol}/{symbol}_{day}.csv.gz"
+    present: [2022-11-10, 2026-10-21]
+    columns: unverified until the reader test; a new parser, never data/bybit_trades.parse
+  binance_prints:
+    instrument: binance_spot_BTCFDUSD
+    url: "https://data.binance.vision/data/spot/daily/aggTrades/{symbol}/{symbol}-aggTrades-{day}.zip"
+    present: [2023-08-04, 2026-10-21]
+    checksum: the published .CHECKSUM file
+    side: is_buyer_maker true is a seller-initiated print (aggressor -1), false a buyer-initiated one (+1)
+    fetch: daily files only
+  binance_book: none  # no bookTicker or bookDepth for spot, any symbol or period
+  not_fetched: [Binance raw trades, Binance klines, any Bybit spot day of 2025, E]  # spot has no funding
+  print_grid: "one row per 100 ms interval holding at least one print, stamped at its first print and carrying the state right after every print with that stamp; later prints of the interval belong to the next row; no row without a print"
+  print_alignment: "backward: row t holds the prints in (s_t-1, s_t]"
+  head_check:
+    date: 2026-10-22
+    method: HTTP HEAD and directory listings only; no file read
+    set_from_it: "the block boundaries (every 2026 block after BTC/FDUSD's fall in activity), the fetch sizes and the disk budget; nothing else"
+    activity_fall: {instrument: binance_spot_BTCFDUSD, after: 2026-01-28, factor: about 30, settled_from: 2026-05, trades_mb_a_day_settled: about 1}
+  sizes_gb:
+    reader_test_days: {bybit_ob200: 0.286, bybit_prints: 0.035, binance_aggtrades: 0.010}
+    W: {bybit_ob200: 1.912, bybit_prints: 0.178, binance_aggtrades: 0.043}
+    D: {bybit_ob200: 5.451, bybit_prints: 0.386, binance_aggtrades: 0.093, largest_ob200_day_mb: 153}
+    E: {bybit_ob200: 0.296, bybit_prints: 0.018, binance_aggtrades: 0.003, fetched: false}
+    H: {bybit_ob200: 3.813, bybit_prints: 0.339, binance_aggtrades: 0.064, largest_ob200_day_mb: 114}
+    Z: {binance_aggtrades: 2.825}
+  reader_test_days: [2026-03-03, 2026-03-04, 2026-03-05]  # both venues; outside every block; for the readers' proof, stage 0's timing and the dry run only
+  reader_test_result: null  # {venue: {day: {status, stream, findings, passes}}}: each day loaded as a block day, with message counts, median interval, sequence gaps and every finding; frozen by the D amendment
+  exclusions_unit: day and venue  # a day excluded on a venue is excluded from every series of that venue's slots
+  exclusions_bybit: [more book sequence gaps than max_sequence_gaps, a positive_prices error in validate_book's report, an off-grid price (the day's own tick from events.derive_tick), missing plane (HTTP 404 only), unreadable archive, unfetchable day, flatten_stale in any run of the block's read]
+  exclusions_binance: [missing file (HTTP 404 only), a day without a print, an off-grid price, unreadable file, unfetchable day, flatten_stale under the print rule in any run of the block's read]
+  max_sequence_gaps_rule: "95th percentile of D's per-day gap counts on Bybit's spot book, numpy linear interpolation over every D day whose book replayed, rounded to 9 decimals, then up; the same value on every block (data/study_loader.max_sequence_gaps)"
+  max_sequence_gaps: null  # one value, by the rule above; frozen by the D amendment
+  excluded_days_D: null  # {instrument: [[day, reason]]}; frozen by the D amendment
+  instrument_spec: null  # {instrument: {tick, lot}} from each venue's spot specification; frozen by the D amendment
+  unreadable_block: more than a quarter of a block's days excluded on a venue; that venue's slots not assessed, nothing retuned
+  gap_days_included_reported: true  # each Bybit verdict also with the gap-excluded days put back, as a measurement
