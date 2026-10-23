@@ -95,7 +95,7 @@ data:
     file: experiments/results/spot_2026_head_check.csv  # one row per day, 2025-01-01..2026-10-22: status, size and Last-Modified per archive
     file_sha256: 47116745192b01b4b3cec52fbfaf81da0f8da643524226c5d8e41e12e61ca010
     set_from_it: "the block boundaries (every 2026 block after BTC/FDUSD's fall in activity), the fetch sizes and the disk budget; nothing else"
-    activity_fall: {instrument: binance_spot_BTCFDUSD, after: 2026-01-28, factor: about 30, settled_from: 2026-05, trades_mb_a_day_settled: about 1}
+    activity_fall: {instrument: binance_spot_BTCFDUSD, after: 2026-01-28, factor: about 30, settled_from: 2026-05, raw_trades_mb_a_day_settled: about 1}  # the raw trades archive, not fetched; aggTrades run 10-25% smaller
   sizes_gb:
     reader_test_days: {bybit_ob200: 0.286, bybit_prints: 0.035, binance_aggtrades: 0.010}
     W: {bybit_ob200: 1.912, bybit_prints: 0.178, binance_aggtrades: 0.043}
@@ -442,8 +442,9 @@ fetch:
   failures: "the 2025 fetch plan's: every day listed as present fetched; any failure other than HTTP 404 retried with backoff; a stage complete only when every such day is on disk or excluded by a terminal rule (unreadable archive, unfetchable day); checksums checked before reading"
   replay_workers_max: 4
   disk_peak_gb: [12, 19]  # books at 40-60 MB a replayed day (the 2024 perpetual figure; stage 0 measures spot)
-  disk_margin_gb: 10  # free disk must exceed each stage's budget by this much
-  not_before: "the 2025 study's last read has committed its results (the two disk peaks do not fit together on the machine: 66 GiB free on 2026-10-22 against the 2025 study's registered 46-53 GB)"
+  disk_margin_gb: 10  # free disk, measured when each stage starts (stage 0 included), must exceed the stage's budget by this much; otherwise the stage waits; each measurement recorded
+  free_disk_gib: {2026-10-22: 66, 2026-10-24: 59}
+  not_before: "the 2025 study's last read has committed its results: its registered 46-53 GB is its peak on D; after H it deletes W's and D's features and keeps its books, prints, models and results, which may serve a defect check; this study deletes nothing of it"
 
 compute:
   estimate: "about 200 book days replayed at 2-3 minutes on at most 4 workers; 42 boosted fits at 1-2 minutes; scoring, placebos and neighbourhoods from walk tables; under a day for D, a few hours for each later read"
@@ -476,7 +477,7 @@ artefacts:
   page: one row per slot and measured row (status, first kill against its reference, mean, t, Newey-West t, median day, trades, MDE, placebo percentile, K-nbhd median, break-even per side against every tier, brackets, calibration) and the edge ladder
   headline_sentences:
     each_slot_on_H: "[slot] on H, [venue] spot [pair]: [status]; first kill [K-x] at [value] against [reference]."
-    S25-PF: "S25's prints-only variant on Binance BTC/FDUSD, August to October 2026: gross edge [x] bp of turnover against the 10 bp taker fee a Regular account paid; break-even [y] bp per side; [status]."
+    S25-PF: "S25's coordinates on nine print inputs, on Binance BTC/FDUSD, August to October 2026: gross edge [x] bp of turnover against the 10 bp taker fee a Regular account paid; break-even [y] bp per side; [status]."
     S25-T: "S25 as frozen on Bybit's perpetual, unchanged on Bybit's spot book: [n] trades a day against 240 registered; [status]."
     calibration: "On Bybit's spot book, the print rule priced buys [x] bp and sells [y] bp [better / worse] than the book walk."
     P: "[slot] on P: [status]."
