@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -11,8 +12,7 @@ from test_spot_print_taker import hand_prints
 from test_spot_prints_fixture import grid_of, make_prints
 from trading_research.market_making.events import NS_PER_S
 from trading_research.spot.costs import load_fee_table
-from trading_research.spot.fills_standin import RULES, DayPrints
-from trading_research.spot.print_taker import execute_print_day, print_settings
+from trading_research.spot.print_taker import DayPrints, execute_print_day, fills, print_settings
 from trading_research.spot.walk_tables import (
     LONG,
     SHORT,
@@ -22,14 +22,15 @@ from trading_research.spot.walk_tables import (
     print_hold_table,
 )
 
+RULES = fills.RULES
 CONFIG = Path(__file__).resolve().parents[1] / "configs" / "spot_2026.yaml"
 TABLE = load_fee_table(CONFIG)
 BINANCE = "binance_spot_BTCFDUSD"
 
 
-def table_for(seed: int, hold_s: int, **kw: object) -> tuple[DayPrints, PrintHoldTable]:
+def table_for(seed: int, hold_s: int, **kw: Any) -> tuple[DayPrints, PrintHoldTable]:
     prints = make_prints(seed)
-    settings = print_settings(TABLE, BINANCE, **kw)  # type: ignore[arg-type]
+    settings = print_settings(TABLE, BINANCE, **kw)
     return prints, print_hold_table(prints, grid_of(prints), hold_s * NS_PER_S, settings)
 
 

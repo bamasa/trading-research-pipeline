@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -10,13 +11,17 @@ import pytest
 from test_spot_prints_fixture import CLIP, DAY, grid_of, make_prints
 from trading_research.market_making.events import NS_PER_S, day_start_ns
 from trading_research.spot.costs import FeeTable, load_fee_table
-from trading_research.spot.fills_standin import RULES, DayPrints
 from trading_research.spot.print_taker import (
     PRINT_COUNTERS,
+    DayPrints,
+    PrintDay,
     PrintSettings,
     execute_print_day,
+    fills,
     print_settings,
 )
+
+RULES = fills.RULES
 
 CONFIG = Path(__file__).resolve().parents[1] / "configs" / "spot_2026.yaml"
 TABLE = load_fee_table(CONFIG)
@@ -37,13 +42,13 @@ def hand_prints(rows: list[tuple[float, int, float, float]]) -> DayPrints:
                      np.array([r[1] for r in rows], dtype=np.int8), np.ones(len(rows), bool))  # fmt: skip
 
 
-def random_run(seed: int, count: int = 3000, **kw: object) -> tuple[DayPrints, np.ndarray, object]:
+def random_run(seed: int, count: int = 3000, **kw: Any) -> tuple[DayPrints, np.ndarray, PrintDay]:
     prints = make_prints(seed)
     rows = grid_of(prints)
     rng = np.random.default_rng(seed)
     pick = np.sort(rng.choice(len(rows), count, replace=False))
     side = rng.choice(np.array([-1, 1]), count)
-    settings = print_settings(TABLE, BINANCE, **kw)  # type: ignore[arg-type]
+    settings = print_settings(TABLE, BINANCE, **kw)
     return prints, rows, execute_print_day(prints, rows, rows[pick], side, HOLD, settings)
 
 
@@ -94,10 +99,10 @@ def test_the_money_is_the_accounts() -> None:
     assert (t["entry_wait_ns"] == t["entry_print_ns"] - t["entry_arrival_ns"]).all()
 
 
-def run(prints: DayPrints, decisions: list[float], sides: list[int], **kw: object) -> object:
+def run(prints: DayPrints, decisions: list[float], sides: list[int], **kw: Any) -> PrintDay:
     rows = np.unique(prints.ts)
     stamps = np.array([at(s) for s in decisions], dtype=np.int64)
-    settings = print_settings(TABLE, BINANCE, **kw)  # type: ignore[arg-type]
+    settings = print_settings(TABLE, BINANCE, **kw)
     return execute_print_day(prints, rows, stamps, np.array(sides), HOLD, settings)
 
 
@@ -109,7 +114,7 @@ def test_a_busy_period_depends_on_the_side() -> None:
                             (43600.0, 1, 59_802.0, 0.02), (43700.0, -1, 59_803.0, 0.02)])  # fmt: skip
     decisions = [43201.0, 43260.0, 43441.0]
     day = run(prints, decisions, [-1, -1, 1])
-    t, c = day.trades, day.counters  # type: ignore[attr-defined]
+    t, c = day.trades, day.counters
     assert len(t) == 2 and c["entries_busy"] == 1
     short, long = t.iloc[0], t.iloc[1]
     assert short.entry_print_ns == at(43202.0) and short.exit_decision_ns == at(43252.0)
@@ -117,7 +122,7 @@ def test_a_busy_period_depends_on_the_side() -> None:
     assert long.decision_ns == at(43441.0) and long.entry_print_ns == at(43500.0)
     assert long.exit_decision_ns == at(43600.0) and long.exit_print_ns == at(43700.0)
     flipped = run(prints, decisions, [1, 1, -1])
-    t, c = flipped.trades, flipped.counters  # type: ignore[attr-defined]
+    t, c = flipped.trades, flipped.counters
     assert len(t) == 1 and c["entries_busy"] == 2
     assert t.iloc[0].entry_print_ns == at(43440.5) and t.iloc[0].exit_print_ns == at(43501.0)
     assert bool(t.iloc[0].entry_late) and c["entry_late_print"] == 1
@@ -128,9 +133,9 @@ def test_entries_and_exits_without_a_later_print() -> None:
         [(600.0, 1, 100.0, 1.0), (700.0, -1, 99.0, 1.0), (86_345.0, -1, 98.0, 1.0)]
     )
     none = run(prints, [750.0], [-1])  # the only later seller prints after 23:59
-    assert none.counters["entries_no_print"] == 1 and len(none.trades) == 0  # type: ignore[attr-defined]
+    assert none.counters["entries_no_print"] == 1 and len(none.trades) == 0
     day = run(prints, [650.0], [-1])
-    c, trade = day.counters, day.trades.iloc[0]  # type: ignore[attr-defined]
+    c, trade = day.counters, day.trades.iloc[0]
     assert c["exits_no_print"] == 1 and c["exits_no_print_either_side"] == 0
     assert trade.entry_print_ns == at(700.0) and trade.exit_reason == "day_end"
     assert trade.exit_decision_ns == FLATTEN and bool(trade.exit_no_print)
@@ -143,7 +148,7 @@ def test_entries_and_exits_without_a_later_print() -> None:
 def test_an_exit_whose_side_never_prints_is_priced_at_the_other_side() -> None:
     prints = hand_prints([(600.0, 1, 100.0, 1.0), (700.0, 1, 103.0, 1.0)])
     day = run(prints, [500.0], [1])
-    t, c = day.trades, day.counters  # type: ignore[attr-defined]
+    t, c = day.trades, day.counters
     assert c["exits_no_print"] == 1 and c["exits_no_print_either_side"] == 1
     trade = t.iloc[0]
     assert trade.exit_price == 103.0 and trade.exit_print_ns == at(700.0)
@@ -153,16 +158,16 @@ def test_an_exit_whose_side_never_prints_is_priced_at_the_other_side() -> None:
 
 def test_the_brackets_keep_the_rules_fills_and_change_only_prices() -> None:
     runs = {rule: random_run(4, rule=rule)[2] for rule in RULES}
-    base = runs["rule"].trades  # type: ignore[attr-defined]
+    base = runs["rule"].trades
     timing = ["decision_ns", "side", "entry_print_ns", "exit_decision_ns", "exit_fill_ns"]
     for rule, day in runs.items():
-        t = day.trades  # type: ignore[attr-defined]
+        t = day.trades
         assert t[timing].equals(base[timing]), rule
-        assert day.counters == runs["rule"].counters  # type: ignore[attr-defined]
+        assert day.counters == runs["rule"].counters
     found = ~base["exit_no_print"].to_numpy()
     buy_entry = base["side"].to_numpy() > 0
-    opt, worst = runs["optimistic"].trades, runs["worse_of_two"].trades  # type: ignore[attr-defined]
-    pess = runs["pessimistic_depth"].trades  # type: ignore[attr-defined]
+    opt, worst = runs["optimistic"].trades, runs["worse_of_two"].trades
+    pess = runs["pessimistic_depth"].trades
     beyond = base["entry_beyond"].to_numpy() > 0
     assert not np.array_equal(opt["entry_price"], base["entry_price"])
     # worse of two is never better for the account than the pessimistic depth price
@@ -174,7 +179,7 @@ def test_the_brackets_keep_the_rules_fills_and_change_only_prices() -> None:
 
 def test_k_latency_moves_every_arrival_by_100_ms() -> None:
     _, _, day = random_run(5, latency_ns=110_000_000)
-    t = day.trades  # type: ignore[attr-defined]
+    t = day.trades
     assert (t["entry_arrival_ns"] - t["decision_ns"] == 110_000_000).all()
     assert (t["exit_arrival_ns"] - t["exit_decision_ns"] == 110_000_000).all()
 

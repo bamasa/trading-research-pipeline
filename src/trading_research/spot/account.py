@@ -23,6 +23,9 @@ What this module adds, from the executors' fills:
   change is the trades' net (plus, then, those fees' value at their fills).
 * **The long-only variant**: short decisions dropped before the one-position
   rule (:func:`long_only`), so its trades differ from the slot's.
+* **K-fill's extra charge** (:func:`with_extra_fees`): on the worse-of-two
+  bracket's trades, every buy also charged ``max(0, a_buy)`` and every sell
+  ``max(0, a_sell)`` bp of its notional; the fills themselves do not change.
 * **The day's money in bp** (:func:`day_summary`): ``net_bp_trade`` (the day's
   net over its filled entry notional), the same before fees, the gross over
   turnover (the fee break-even per side), the two sides apart, and net per 100
@@ -40,6 +43,7 @@ import pandas as pd
 
 from trading_research.backtest.taker import TakerDay, TakerSettings
 from trading_research.market_making.accounting import IdentityError
+from trading_research.spot.costs import fill_fee
 from trading_research.spot.print_taker import DayPrints, PrintDay
 
 BOOKINGS: tuple[str, ...] = ("quote", "received")
@@ -329,3 +333,24 @@ def day_summary(trades: pd.DataFrame) -> DaySummary:
         _ratio(float(net[short].sum()), float(notional[short].sum())),
         float((net / notional * 100.0).sum()) if len(trades) else 0.0,
     )
+
+
+def with_extra_fees(trades: pd.DataFrame, buy_bp: float, sell_bp: float) -> pd.DataFrame:
+    """K-fill's run: ``trades`` with every buy also charged ``max(0, buy_bp)`` and every
+    sell ``max(0, sell_bp)`` bp of its fill's notional, as an extra fee (``extra``);
+    ``fees``, ``net`` and ``net_bp`` include it. A long buys at its entry and sells at
+    its exit, a short the reverse."""
+    a_buy, a_sell = max(0.0, float(buy_bp)), max(0.0, float(sell_bp))
+    side = trades["side"].to_numpy(dtype=np.int64)
+    size = trades["size"].to_numpy(dtype=np.float64)
+    entry = trades["entry_price"].to_numpy(dtype=np.float64) * size
+    exit_ = trades["exit_price"].to_numpy(dtype=np.float64) * size
+    extra = fill_fee(entry, np.where(side > 0, a_buy, a_sell)) + fill_fee(
+        exit_, np.where(side > 0, a_sell, a_buy)
+    )
+    out = trades.copy()
+    out["extra"] = extra
+    out["fees"] = trades["fees"].to_numpy(dtype=np.float64) + extra
+    out["net"] = trades["net"].to_numpy(dtype=np.float64) - extra
+    out["net_bp"] = out["net"] / out["notional"] * 1e4
+    return out

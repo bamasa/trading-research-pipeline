@@ -17,7 +17,7 @@ from datetime import date
 import numpy as np
 
 from trading_research.market_making.events import NS_PER_S, day_start_ns
-from trading_research.spot.fills_standin import DayPrints
+from trading_research.spot.print_taker import DayPrints
 
 DAY = date(2026, 6, 3)
 CLIP = 0.010

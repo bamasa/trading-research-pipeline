@@ -24,6 +24,7 @@ from trading_research.spot.account import (
     first_last_print,
     long_only,
     print_fills,
+    with_extra_fees,
 )
 from trading_research.spot.costs import book_settings, execute_book_day, load_fee_table
 from trading_research.spot.print_taker import PrintDay, execute_print_day, print_settings
@@ -159,3 +160,15 @@ def test_fills_are_refused_out_of_order() -> None:
         Fills(np.array([2, 1]), np.array([1, -1]), np.ones(2), np.ones(2), np.ones(2))
     with pytest.raises(ValueError):
         Fills(np.array([1, 2]), np.array([1, 0]), np.ones(2), np.ones(2), np.ones(2))
+
+
+def test_k_fills_extra_charge_falls_on_each_fills_side() -> None:
+    day, _, _, _ = print_day(4)
+    t = day.trades
+    charged = with_extra_fees(t, 1.5, -2.0)  # a negative advantage charges nothing
+    entry, exit_ = t["entry_price"] * t["size"], t["exit_price"] * t["size"]
+    want = np.where(t["side"] > 0, entry * 1.5e-4, exit_ * 1.5e-4)
+    np.testing.assert_allclose(charged["extra"], want, rtol=1e-12)
+    np.testing.assert_allclose(charged["net"], t["net"] - want, rtol=1e-12, atol=1e-15)
+    assert day_summary(charged).net_bp < day_summary(t).net_bp
+    assert (with_extra_fees(t, 0.0, 0.0)["net"] == t["net"]).all()
