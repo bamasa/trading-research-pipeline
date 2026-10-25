@@ -122,9 +122,10 @@ def test_stale_and_worse_of_two() -> None:
     assert buy["stale"] == 100.0 and buy["rule"] == 102.0 and buy["worse_of_two"] == 102.0
     sell = one(tape, SELL, 4 * S, decision=3 * S)
     assert sell["stale"] == 98.0 and sell["rule"] == 99.0 and sell["worse_of_two"] == 98.0
-    # No print of the side at or before the decision: worse of two is the rule's.
+    # No print of the side at or before the decision: the stale bracket takes the
+    # rule's price, and worse of two the pessimistic one.
     early = one(tape, SELL, 0, decision=0)
-    assert np.isnan(early["stale"]) and early["worse_of_two"] == early["pessimistic"] == 98.0
+    assert early["stale"] == early["rule"] and early["worse_of_two"] == early["pessimistic"] == 98.0
 
 
 def test_bounds_fallback_and_late_prints() -> None:

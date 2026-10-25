@@ -34,7 +34,7 @@ def loop_fill(prints: pd.DataFrame, side: int, arrival: int, decision: int, unti
     mine = (prints["aggressor"].to_numpy() == side) & ~prints["rpi"].to_numpy()
     clip, effective = SETTINGS.clip, max(arrival, not_before)
     earlier = [i for i in range(len(ts)) if mine[i] and ts[i] <= decision]
-    stale = px[earlier[-1]] if earlier else np.nan
+    stale = px[earlier[-1]] if earlier else np.nan  # none: the rule's price, set below
     later = [i for i in range(len(ts)) if mine[i] and effective <= ts[i] < until]
     if not later:
         if not fallback:
@@ -43,7 +43,8 @@ def loop_fill(prints: pd.DataFrame, side: int, arrival: int, decision: int, unti
         if not before:
             before = [i for i in range(len(ts)) if not prints["rpi"].iloc[i] and ts[i] <= effective]
         j = before[-1]
-        return {"rule": px[j], "pessimistic": px[j], "stale": stale, "index": j}
+        return {"rule": px[j], "pessimistic": px[j], "stale": stale if earlier else px[j],
+                "index": j}  # fmt: skip
     stamp = ts[later[0]]
     left, cost = clip, 0.0
     sweep = [i for i in later if ts[i] == stamp]
@@ -55,8 +56,9 @@ def loop_fill(prints: pd.DataFrame, side: int, arrival: int, decision: int, unti
     window = [px[i] for i in range(len(ts)) if mine[i] and stamp < ts[i] <= stamp + 60 * S
               and ts[i] < flatten]  # fmt: skip
     worst = (max(window) if side > 0 else min(window)) if window else last
-    return {"rule": (cost + left * last) / clip, "pessimistic": (cost + left * worst) / clip,
-            "stale": stale, "index": later[0]}  # fmt: skip
+    rule = (cost + left * last) / clip
+    return {"rule": rule, "pessimistic": (cost + left * worst) / clip,
+            "stale": stale if earlier else rule, "index": later[0]}  # fmt: skip
 
 
 @pytest.mark.parametrize("seed", [0, 1, 2])

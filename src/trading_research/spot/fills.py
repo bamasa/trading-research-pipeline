@@ -21,8 +21,10 @@ The brackets price the same fills (same prints, same times) four more ways:
 (the part beyond the sweep at the worst price of a same-side reachable print
 stamped in ``(s, s + 60 s]`` and before 23:59, ``s`` the fill's stamp, or the
 sweep's last price if there is none), ``stale`` (the whole clip at the last
-same-side reachable print stamped at or before the decision) and
-``worse_of_two`` (per fill the worse of ``pessimistic`` and ``stale``).
+same-side reachable print stamped at or before the decision, or the rule's
+price when the day has none before it) and ``worse_of_two`` (per fill the
+worse of ``pessimistic`` and the stale print, ``pessimistic`` alone when there
+is no stale print).
 
 Interface (stable; ``spot/print_taker.py`` and ``spot/walk_tables.py`` use it)
 -------------------------------------------------------------------------------
@@ -367,7 +369,7 @@ def fill_orders(
         rule=out["rule"],
         optimistic=out["optimistic"],
         pessimistic=out["pessimistic"],
-        stale=out["stale"],
+        stale=np.where(np.isnan(out["stale"]), out["rule"], out["stale"]),
         worse_of_two=np.where(np.isnan(out["pessimistic"]), np.nan, worse),
         sweep=out["sweep"],
         beyond=out["beyond"],
