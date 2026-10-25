@@ -391,7 +391,7 @@ def _screen(
 ) -> Assessment:
     """Precedence steps 1 to 3: void, too few trades, killed; else the p for Holm."""
     v = series(s.value)
-    found = Assessment(s.slot, block, "", trades=int(np.nansum(s.trades)), days=len(v),
+    found = Assessment(s.slot, block, "", trades=round(float(np.nansum(s.trades))), days=len(v),
                        mean=float(v.mean()) if len(v) else math.nan,
                        mde=block_mde(s.mde, block, len(s.days)))  # fmt: skip
     unknown = set(study_voids) - set(VOID_CONDITIONS)
