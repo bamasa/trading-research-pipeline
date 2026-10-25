@@ -25,7 +25,9 @@ The rules, as registered:
   makes them from the table; :func:`execute_book_day` and
   :func:`book_hold_table`, the two ways a book slot is run, refuse any other
   settings, the executor's default (the perpetual's 5.5 bp taker) included, and
-  check every fill's fee against the table (K-units).
+  check every fill's fee against the table (K-units). The loader's book day
+  becomes the executor's book by :func:`taker_book`, at the walk depth and
+  without funding.
 
 The undated cells (Bybit's Supreme VIP and Pro 6, read without a capture) are
 kept for reporting only; they cover no instant and no fill ever pays them.
@@ -44,6 +46,7 @@ import yaml
 
 from trading_research.backtest.costs import FeeTier
 from trading_research.backtest.taker import TakerBook, TakerDay, TakerSettings, execute_day
+from trading_research.data.study_loader import BookDay
 from trading_research.market_making.events import NS_PER_S
 from trading_research.search_engine.walk_tables import HoldTable, WalkTable, hold_table
 
@@ -297,6 +300,15 @@ def check_fill_fees(expected: np.ndarray, charged: np.ndarray, *, tol: float = 1
     if bad.any():
         k = int(np.flatnonzero(bad)[0])
         raise FeeUnitsError(f"fill {k}: fee {got[k]!r} charged, the table's is {want[k]!r}")
+
+
+def taker_book(day: BookDay, depth: int = 10) -> TakerBook:
+    """A loaded book day as the executor's book: ``depth`` levels walked (ten, or the
+    200 the stage-0 check may set), no funding; an excluded day is not executed."""
+    if day.frame is None or day.exclusions:
+        reasons = ", ".join(day.exclusions) or "no frame"
+        raise ValueError(f"{day.symbol} {day.day} is excluded ({reasons}); it is not executed")
+    return TakerBook.from_frame(day.frame, day.day, depth=depth)
 
 
 def execute_book_day(

@@ -177,6 +177,7 @@ def run_stage(
     opener: Opener | None = None,
     book_workers: int = 1,
     print_workers: int = 1,
+    book_depth: int = bybit_book.LEVELS,
     timeout: float = 120.0,
     clock: Callable[[], datetime] = _now,
     sleep: Callable[[float], None] = time.sleep,
@@ -190,7 +191,10 @@ def run_stage(
     each fetcher asks again before its request. ``expected_present`` is the
     head check's answer (:func:`trading_research.spot.archives.listed_present`).
     ``opener`` serves every archive (the synthetic venue in a dry run, which
-    fetches with one worker, in-process).
+    fetches with one worker, in-process). ``book_depth`` is the levels Bybit's
+    book is replayed at: ten, or the walk depth the stage-0 check sets (200 when
+    the clip exceeds ten levels in more than 0.1% of snapshots; the features keep
+    ten either way).
     """
     _check_planes(days)
     if not 1 <= book_workers <= BOOK_WORKERS_MAX or print_workers < 1:
@@ -212,6 +216,7 @@ def run_stage(
             access=access,
             opener=opener,
             timeout=timeout,
+            **({"depth": book_depth} if name == "bybit_book" else {}),
         )
         listed = present.get(name, frozenset())
         run_plane(

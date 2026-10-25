@@ -17,7 +17,10 @@ Exclusions are per day and per venue, counted by reason, never repaired:
 - **either venue's prints** (:func:`load_prints_day`): no file; no print inside
   the day; a price off the day's own tick, derived from its prints the same way;
 - **the fetch** (:func:`fetch_exclusions`): a missing plane (HTTP 404 only), an
-  unreadable archive or an unfetchable day, as the fetch log ended them.
+  unreadable archive or an unfetchable day, as the fetch log ended them;
+- **the fee table** (:func:`fee_exclusions`): a day the sourced fee table does
+  not cover at the venue's verdict tier, ``fee not sourced``
+  (:meth:`trading_research.spot.costs.FeeTable.exclusion`).
 
 A tick unlike the venue's specification is noted and excludes nothing. A day
 excluded on any plane of a venue is excluded on that venue (:func:`excluded_days`);
@@ -51,6 +54,7 @@ from trading_research.data.study_loader import (
 from trading_research.data.validate import Finding, Severity, validate_book
 from trading_research.market_making.events import OffGridPrice, derive_tick, to_ticks
 from trading_research.spot.archives import BOOK, BYBIT_BOOK, BYBIT_SPOT, PRINTS, Plane, day_path
+from trading_research.spot.costs import FEE_NOT_SOURCED, FeeTable
 from trading_research.spot.fetch import AccessGuard
 
 NO_PRINTS_FILE = "no_prints_file"
@@ -69,6 +73,7 @@ REASONS: tuple[str, ...] = (
     NO_PRINTS_FILE,
     NO_PRINT,
     *FETCH_REASONS.values(),
+    FEE_NOT_SOURCED,
 )
 
 
@@ -194,6 +199,12 @@ def fetch_exclusions(log: fl.FetchLog, plane: Plane) -> dict[date, str]:
         for r in log.of(plane.name)
         if r.status in FETCH_REASONS
     }
+
+
+def fee_exclusions(table: FeeTable, instrument: str, days: Iterable[date]) -> dict[date, str]:
+    """The days the fee table does not cover on ``instrument``'s venue, as exclusions."""
+    found = {day: table.exclusion(instrument, day) for day in days}
+    return {day: reason for day, reason in found.items() if reason is not None}
 
 
 def excluded_days(
