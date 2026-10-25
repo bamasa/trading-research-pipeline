@@ -105,3 +105,7 @@ when, so that the gaps between stages can be read later without guessing.
   `spot/prereg` (Binance BTC/FDUSD prints and Bybit spot BTCUSDT book, blind
   blocks in 2026); it touches none of this study's frozen code and fetches
   nothing before this study's last read.
+
+## 2026-10-25
+
+- Nothing run; H still waits on the private remote for its open entry.
