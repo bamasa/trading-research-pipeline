@@ -28,8 +28,8 @@ def test_serving_routes_urlopen_to_the_venue_and_refuses_every_socket() -> None:
             assert gzip.decompress(response.read()) == MARKET.bybit_prints_csv(DAY)
         with pytest.raises(OSError, match="no network"):
             socket.create_connection(("example.org", 443), timeout=1)
-        with pytest.raises(OSError, match="no network"):
-            socket.socket().connect(("example.org", 443))
+        with socket.socket() as raw, pytest.raises(OSError, match="no network"):
+            raw.connect(("example.org", 443))
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen("https://example.org/")
     assert venue.unknown == ["https://example.org/"]
