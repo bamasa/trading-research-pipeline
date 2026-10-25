@@ -78,7 +78,7 @@ def manifest(repo: Path) -> dict[str, Any]:
     return {
         "parts": listed,
         "sha256": run_log_sha256(parts),
-        "rows": sum(int(p["rows"]) for p in listed),
+        "rows": sum(int(str(p["rows"])) for p in listed),
     }
 
 

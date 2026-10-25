@@ -35,6 +35,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from datetime import date
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -132,7 +133,8 @@ def prints_proof(
 
 def readers(study: SpotStudy, log: fl.FetchLog, access: Any) -> dict[str, dict[str, Any]]:
     """``reader_test_result``: {instrument key: {day: {status, stream, findings, passes}}}."""
-    root, out = study.spot_root, {}
+    root = study.spot_root
+    out: dict[str, dict[str, Any]] = {}
     for name, planes in dy.VENUE_PLANES.items():
         key = sa.instrument(name).key
         out[key] = {}
@@ -214,10 +216,10 @@ def parity(study: SpotStudy, inputs: dy.DayInputs) -> dict[str, Any]:
     walk = WalkTable.from_book(book, settings.clip)
     rows, side = decisions(len(book.ts), study.scale.parity_decisions, inputs.day.toordinal() + 1)
     for hold in HOLDS_S:
-        found = book_hold_table(walk, round(hold * NS_PER_S), settings, table)
-        check = entry_parity(book, rows, side, found)
-        out[f"book/{inputs.day}/{hold:g}"] = {"trades": check.trades,
-                                               "mismatches": list(check.mismatches)}  # fmt: skip
+        book_table = book_hold_table(walk, round(hold * NS_PER_S), settings, table)
+        book_check = entry_parity(book, rows, side, book_table)
+        out[f"book/{inputs.day}/{hold:g}"] = {"trades": book_check.trades,
+                                               "mismatches": list(book_check.mismatches)}  # fmt: skip
     return out
 
 
@@ -231,18 +233,18 @@ def timings(study: SpotStudy, inputs: dy.DayInputs) -> dict[str, float]:
 
     out: dict[str, float] = {}
     for store in dy.STORES:
-        out[f"features_{store}_s"], _ = timed(lambda s=store: dy.store_frame(s, inputs))
+        out[f"features_{store}_s"], _ = timed(partial(dy.store_frame, store, inputs))
     assert inputs.binance.frame is not None
     grid = dy.grid_of(inputs.binance.frame)
     tape = dy.tape(inputs, sa.BINANCE)
     out["labels_prints_s"], labels = timed(
         lambda: print_targets(tape, grid, HOLDS_S, LABEL_FEES_BP)
     )
-    assert inputs.book.frame is not None
+    book_frame = inputs.book.frame
+    assert book_frame is not None
+    every_tenth = np.arange(0, len(book_frame), 10)
     out["labels_book_s"], _ = timed(
-        lambda: book_targets(
-            inputs.book.frame, HOLDS_S, LABEL_FEES_BP, at=np.arange(0, len(inputs.book.frame), 10)
-        )
+        lambda: book_targets(book_frame, HOLDS_S, LABEL_FEES_BP, at=every_tenth)
     )
     features = dy.store_frame("binance", inputs)
     target = labels[label_column(50.0, 0.0)]

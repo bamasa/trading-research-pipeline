@@ -53,6 +53,8 @@ STAND_IN_DAY = date(2026, 2, 20)
 #: The H day whose book has sequence gaps: excluded on Bybit and put back.
 GAP_DAY = date(2026, 9, 9)
 D_AMENDMENT = ": the D amendment"
+#: The synthetic book's message step: S25's one-second inputs need rows within a second.
+STEP_MS = 1_000
 
 
 def commit(repo: Path, message: str) -> str:
@@ -81,8 +83,8 @@ def registered_text(relative: Path, text: str) -> str:
 def market(scale: Scale) -> syn.SpotMarket:
     """The venue's days: every day the scale plans, and the 2025 stand-in's day."""
     days = {d for block in scale.calendar or {} for d in scale.days(block)}
-    return syn.SpotMarket(frozenset(days | {STAND_IN_DAY}), gap_days=frozenset({GAP_DAY}),
-                          rpi_every=9)  # fmt: skip
+    return syn.SpotMarket(frozenset(days | {STAND_IN_DAY}), step_ms=STEP_MS,
+                          gap_days=frozenset({GAP_DAY}), rpi_every=9)  # fmt: skip
 
 
 def make_repository(source: Path, target: Path) -> Path:
@@ -134,6 +136,8 @@ def stand_in_2025(repo: Path, found: syn.SpotMarket) -> Binding2025:
     for hold in holds:
         for fee in LABEL_FEES_2025_BP:
             y = targets[label_column(hold, fee)]
+            if y.nunique() < 2:  # the synthetic book rarely moves a fee's width: 0 bp's label
+                y = targets[label_column(hold, 0.0)]
             keep = complete & y.notna().to_numpy()
             model = fit_model(x[keep], y[keep], DRY_RUN.model_params)
             if model is None:
@@ -272,3 +276,16 @@ def dry_run(keep: Path | None = None, scale: Scale = DRY_RUN) -> dict[str, Any]:
     finally:
         if keep is None:
             shutil.rmtree(root, ignore_errors=True)
+
+
+def binding_of(repo: Path) -> Binding2025:
+    """The 2025 stand-in's binding, read back from a dry run's repository."""
+    config = repo / sr.CONFIG_2025_PATH
+    found = yaml.safe_load(config.read_text(encoding="utf-8"))
+    base = sr.FROZEN_DIR_2025
+    files = {base / "weights" / k: v for k, v in found["models"]["weights_sha256"].items()}
+    files[base / "finalists" / "S25.json"] = found["artefacts"]["frozen_finalist_files_sha256"][
+        "S25"
+    ]
+    files[base / "fitted_values.json"] = found["features"]["fitted_values_sha256"]
+    return Binding2025(sr.CONFIG_2025_PATH, file_sha256(config), files, None)

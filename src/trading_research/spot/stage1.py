@@ -13,8 +13,8 @@ Registered (the procedure's step 1, "Data budget", "Blocks"):
   (the fetch log's counts, the counts the loader reads).
 * **Exclusions** per day and venue, by reason, under that threshold.
 * **The leakage checks** (K-leak) of every print member, touch proxy and book
-  input on a slice of W's first usable day: truncation inside a row interval and
-  streaming parity (``validation/leakage_timed``); a failure stops the study.
+  input on the first W day with a row interval holding prints at two distinct
+  stamps: truncation inside that interval and streaming parity (``validation/leakage_timed``); a failure stops the study.
 * **The fitted values**: the median touch size of Bybit's spot book over W's
   usable days (``data/feature_store.median_touch_size``).
 * **The stores**: every D day usable on a venue, its inputs at every tenth row
@@ -26,6 +26,7 @@ Registered (the procedure's step 1, "Data budget", "Blocks"):
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
@@ -90,34 +91,61 @@ def gap_threshold(log: fl.FetchLog, d_days: list[date]) -> tuple[int, dict[str, 
     return max_sequence_gaps(list(counts.values())), counts
 
 
-def leakage(study: SpotStudy, inputs: dy.DayInputs) -> dict[str, Any]:
-    """Truncation and streaming parity of every input on a slice of a W day."""
+def cut_slice(
+    rows: pd.DataFrame, prints: pd.DataFrame, start: int
+) -> tuple[pd.DataFrame, pd.DataFrame, float] | None:
+    """The day's first row interval from ``start`` that holds prints at two distinct
+    stamps strictly inside it (where ``validation/leakage_timed`` cuts), the rows up
+    to a little after it, their prints, and the cut as a share of those rows."""
+    stamps, ps = stamps_ns(rows), stamps_ns(prints)
+    if len(stamps) < 2 or not len(ps):
+        return None
+    lo = np.searchsorted(ps, stamps[:-1], side="right")
+    hi = np.searchsorted(ps, stamps[1:], side="left")
+    distinct = ps[np.clip(hi - 1, 0, len(ps) - 1)] > ps[np.clip(lo, 0, len(ps) - 1)]
+    eligible = np.flatnonzero((hi > lo) & distinct) + 1
+    eligible = eligible[eligible >= max(start, 100)]
+    if not len(eligible):
+        return None
+    k = int(eligible[0])
+    end = min(len(rows), k + 50)
+    kept = rows.iloc[:end].reset_index(drop=True)
+    return kept, prints[ps <= stamps[end - 1]], (k + 0.5) / end
+
+
+def leakage(study: SpotStudy, inputs: dy.DayInputs, store: str) -> dict[str, Any] | None:
+    """Truncation inside a row interval and streaming parity of every input of
+    ``store`` on a W day (None when the day has no interval to cut inside)."""
     from trading_research.spot.book_inputs import book_registry
     from trading_research.spot.grid import print_grid
     from trading_research.validation.leakage_timed import LeakageError, assert_timed_honest
 
-    n, k = study.scale.leakage_rows, study.scale.leakage_positions
-    out: dict[str, Any] = {}
-    for store, (name, columns) in STORES.items():
-        if store == "book":
-            assert inputs.book.frame is not None and inputs.bybit.frame is not None
-            rows = dy.ten_levels(inputs.book.frame).iloc[:n].reset_index(drop=True)
-            prints = inputs.bybit.frame[stamps_ns(inputs.bybit.frame) <= stamps_ns(rows)[-1]]
-            registry = book_registry()
-        else:
-            prints = inputs.prints(name).frame
-            assert prints is not None
-            rows = print_grid(prints).iloc[:n].reset_index(drop=True)
-            prints = prints[stamps_ns(prints) <= stamps_ns(rows)[-1]]
-            registry = dy.registry()
-        positions = np.linspace(len(rows) // 2, len(rows) - 1, k).astype(int).tolist()
-        try:
-            assert_timed_honest(registry, rows, prints, names=list(columns), positions=positions)
-        except LeakageError as exc:
-            raise LeakError(f"K-leak: {store} on {inputs.day}: {exc}") from exc
-        out[store] = {"day": inputs.day.isoformat(), "rows": len(rows), "features": len(columns),
-                      "positions": len(positions), "passed": True}  # fmt: skip
-    return out
+    name, columns = STORES[store]
+    prints: pd.DataFrame | None
+    if store == "book":
+        assert inputs.book.frame is not None and inputs.bybit.frame is not None
+        rows, prints, registry = (
+            dy.ten_levels(inputs.book.frame),
+            inputs.bybit.frame,
+            book_registry(),
+        )
+    else:
+        prints = inputs.prints(name).frame
+        assert prints is not None
+        rows, registry = print_grid(prints), dy.registry()
+    assert prints is not None
+    found = cut_slice(rows.reset_index(drop=True), prints, study.scale.leakage_rows)
+    if found is None:
+        return None
+    rows, prints, cut = found
+    positions = np.linspace(len(rows) // 2, len(rows) - 1, study.scale.leakage_positions)
+    try:
+        assert_timed_honest(registry, rows, prints, names=list(columns),
+                            positions=sorted(set(positions.astype(int).tolist())), cut=cut)  # fmt: skip
+    except LeakageError as exc:
+        raise LeakError(f"K-leak: {store} on {inputs.day}: {exc}") from exc
+    return {"day": inputs.day.isoformat(), "rows": len(rows), "features": len(columns),
+            "cut": cut, "passed": True}  # fmt: skip
 
 
 def write_store(
@@ -149,7 +177,7 @@ def write_store(
     return {"rows": len(out), "bytes": path.stat().st_size}
 
 
-def spec_of(record0: dict[str, Any]) -> dict[str, tuple[float, float]]:
+def spec_of(record0: Mapping[str, Any]) -> dict[str, tuple[float, float]]:
     """Stage 0's tick and lot, keyed by instrument id."""
     ids = {i.key: i.id for i in sa.INSTRUMENTS.values()}
     return {
@@ -180,14 +208,17 @@ def run(study: SpotStudy) -> dict[str, Any]:
     days: dict[str, Any] = {}
     stores: dict[str, dict[str, Any]] = {s: {} for s in STORES}
     w_books: list[pd.DataFrame] = []
-    leak: dict[str, Any] | None = None
+    leak: dict[str, Any] = {}
     touch: float | None = None
     for inputs in dy.walk_days(sorted({*w_days, *d_days}), load):
         days[inputs.day.isoformat()] = {name: {"reasons": list(inputs.reasons[name]),
                                                "warm": inputs.warm[name]} for name in dy.VENUE_PLANES}  # fmt: skip
         if sa.block_of(inputs.day) == "W":
-            if leak is None and inputs.usable(sa.BINANCE) and inputs.usable(sa.BYBIT):
-                leak = leakage(study, inputs)
+            for store, (name, _) in STORES.items():
+                if store not in leak and inputs.usable(name):
+                    found = leakage(study, inputs, store)
+                    if found is not None:
+                        leak[store] = found
             if inputs.usable(sa.BYBIT) and inputs.book.frame is not None:
                 w_books.append(inputs.book.frame[["bid_size_0", "ask_size_0"]].copy())
             continue
@@ -201,8 +232,10 @@ def run(study: SpotStudy) -> dict[str, Any]:
                 stores[store][inputs.day.isoformat()] = write_store(
                     study, store, inputs, touch, walk
                 )
-    if leak is None:
-        raise LeakError("no W day is usable on both venues: the leakage checks could not run")
+    missing = sorted(set(STORES) - set(leak))
+    if missing:
+        raise LeakError(f"no usable W day has a row interval to cut inside for {missing}: "
+                        "the leakage checks could not run")  # fmt: skip
     if touch is None:
         raise RuntimeError("D has no day: nothing to store")
     usable_d = [

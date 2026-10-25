@@ -214,7 +214,9 @@ def layout(store: str, touch_size: float | None) -> StoreLayout:
 def model_inputs(frame: pd.DataFrame, columns: Sequence[str], scale: StoreLayout) -> pd.DataFrame:
     """The inputs as a fit sees them: scaled, cast to the store's dtypes and back to
     float64, an overflow (infinite) as missing."""
-    stored = to_stored(frame[["timestamp", *columns]], scale).drop(columns="timestamp")
+    local = StoreLayout(scale.touch_size, tuple(c for c in scale.raw_size_columns if c in columns),
+                        tuple(c for c in scale.float32_columns if c in columns))  # fmt: skip
+    stored = to_stored(frame[["timestamp", *columns]], local).drop(columns="timestamp")
     out = stored.astype(np.float64)
     return out.replace([np.inf, -np.inf], np.nan)
 

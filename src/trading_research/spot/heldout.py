@@ -119,12 +119,14 @@ def binance_rows(
     frame = dy.store_frame("binance", inputs)
     grid = stamps_ns(frame)
     tape = dy.tape(inputs, sa.BINANCE)
+    prints = inputs.binance.frame
+    assert prints is not None
     forward = {OWN_CELL.hold_s: print_forward(tape, grid, OWN_CELL.hold_s)}
     records, tables = {}, {}
     for name in VENUE_ROWS[sa.BINANCE]:
         probas = _probas(plan.models[name], frame, inputs.scored_from(sa.BINANCE))
         records[name], tables[name] = print_day(
-            ROWS[name], plan.models[name], tape, grid, probas, forward, inputs.binance.frame,
+            ROWS[name], plan.models[name], tape, grid, probas, forward, prints,
             table, day=inputs.day, null_a=plan.null_a,
         )  # fmt: skip
     return records, tables
@@ -139,6 +141,7 @@ def bybit_rows(
     book = taker_book(book_day_, depth=plan.depth)
     tape = dy.tape(inputs, sa.BYBIT)
     prints = inputs.bybit.frame
+    assert prints is not None
     records: dict[str, Any] = {}
     tables: dict[str, Any] = {}
     trades: dict[str, pd.DataFrame] = {}
