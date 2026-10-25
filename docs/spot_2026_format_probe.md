@@ -4,7 +4,9 @@ The spot study's readers were written against the column layout of each
 archive. To learn it, the first 4 KB of one file per plane were read, and
 nothing else: one file, one request, one byte range, on the first of the
 registered reader-test days (2026-03-03). No other day and no other byte of
-any spot file was read. The stage-0 amendment cites this note.
+any spot file was read. The registration cites this note (its "What was
+known", item 7), and stage 0 measures on the three reader-test days what it
+saw in these bytes.
 
 ## What was read
 

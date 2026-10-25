@@ -8,9 +8,9 @@ the 2025 study's loader is not used.
 **Placeholders.** The values set on D are ``null`` lines commented "frozen by
 the D amendment" (:data:`PLACEHOLDERS`). Putting ``null`` back into every one of
 them must give the registered sha256 (:data:`REGISTERED_SHA256`, the hash after
-the information-set amendment of 2026-10-25), or the one a later amendment
-records on a line ``Null-placeholder sha256: `<hash>``` under ``## Amendments``
-(the latest such line is accepted; a superseded hash never is).
+the information-set amendment and the code's choices of 2026-10-25), or the one
+a later amendment records on a line ``Null-placeholder sha256: `<hash>``` under
+``## Amendments`` (the latest such line is accepted; a superseded hash never is).
 :func:`freeze_text` writes the frozen values and nothing else; the D amendment
 records the result's sha256 as ``Frozen configuration sha256: `<hash>```.
 
@@ -58,10 +58,11 @@ TRIALS_PATH = Path("data/spot_2026/spot_2026_trials.parquet")
 TRIALS_MANIFEST_PATH = Path("experiments/results/spot_2026_trials.json")
 
 #: The sha256 of the YAML as registered, every placeholder ``null``, after the
-#: information-set amendment of 2026-10-25.
-REGISTERED_SHA256 = "81ad1ff49d7190268749cd7f1eaf19ac1a0b8145317efe3eb43d827f1d18ff76"
+#: information-set amendment of 2026-10-25 and the code's choices of that day.
+REGISTERED_SHA256 = "886fe1805b721994b7bf74357271aa41bb9a3f56129ad30a9eacb1736eb35451"
 #: Earlier texts' hashes: superseded, never accepted.
 SUPERSEDED_SHA256: tuple[str, ...] = (
+    "81ad1ff49d7190268749cd7f1eaf19ac1a0b8145317efe3eb43d827f1d18ff76",
     "1206d6b71c2f0ad2e76d65b0e91019899f9ceb6c53607fca46dbfec7235e17da",
     "b19beadc6d7e8a70769e279eb9f9d2935587f6035e7b826586e9b6c98b51f5dc",
     "056035e10c51c88c8381ee7f27238a420ae3da4207b80ef3197e699a312fea6a",
