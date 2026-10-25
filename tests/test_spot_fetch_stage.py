@@ -23,7 +23,7 @@ from trading_research.spot import synthetic as syn
 
 DAY, MISSING = date(2026, 3, 3), date(2026, 3, 4)
 MARKET = syn.SpotMarket(frozenset({DAY}), step_ms=600_000)
-ALL = dict.fromkeys(st.ORDER, (DAY, MISSING))
+ALL = st.every_plane([DAY, MISSING])
 
 
 @pytest.fixture(autouse=True)

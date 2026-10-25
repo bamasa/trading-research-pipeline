@@ -142,6 +142,11 @@ def _check_planes(days: Mapping[str, Sequence[date]]) -> None:
         raise ValueError(f"unknown planes {unknown}; the planes are {sorted(PLANES)}")
 
 
+def every_plane(days: Sequence[date]) -> dict[str, tuple[date, ...]]:
+    """One calendar for both venues: the same days in every plane."""
+    return dict.fromkeys(ORDER, tuple(days))
+
+
 def pending(days: Mapping[str, Sequence[date]], log: fl.FetchLog) -> dict[str, list[date]]:
     """The days of each plane a stage would still ask for: those its log has not resolved."""
     _check_planes(days)
