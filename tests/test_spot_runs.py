@@ -8,7 +8,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from _spot_day import TABLE
+from test_spot_day_fixture import TABLE
 from trading_research.spot import access as sa
 from trading_research.spot.runs import (
     decisions,

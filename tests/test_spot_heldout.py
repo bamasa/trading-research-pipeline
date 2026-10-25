@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from _spot_day import DAYS, stub_models, study_with_days
+from test_spot_day_fixture import DAYS, stub_models, study_with_days
 from trading_research.spot import access as sa
 from trading_research.spot import assemble as asm
 from trading_research.spot import blockread as br

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from _spot_day import DAYS, TABLE, fetch_days, load, probas
+from test_spot_day_fixture import DAYS, TABLE, fetch_days, load, probas
 from trading_research.features.timed import stamps_ns
 from trading_research.spot import access as sa
 from trading_research.spot import days as dy

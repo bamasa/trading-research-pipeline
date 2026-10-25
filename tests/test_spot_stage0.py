@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from _spot_day import DAYS, TABLE, fetch_days, load
+from test_spot_day_fixture import DAYS, TABLE, fetch_days, load
 from trading_research.data import fetch_log as fl
 from trading_research.spot import access as sa
 from trading_research.spot import archives as ar

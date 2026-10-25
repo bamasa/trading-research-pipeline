@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from _spot_day import DAYS, Stub, fetch_days, load
+from test_spot_day_fixture import DAYS, Stub, fetch_days, load
 from trading_research.features.timed import stamps_ns
 from trading_research.spot import access as sa
 from trading_research.spot import days as dy
