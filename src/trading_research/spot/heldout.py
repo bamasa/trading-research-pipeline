@@ -295,14 +295,16 @@ def own_tables(plan: ReadPlan, inputs: dy.DayInputs, table: FeeTable, venue: str
     hold = OWN_CELL.hold_ns
     if venue == sa.BINANCE:
         tape = dy.tape(inputs, venue)
-        grid = stamps_ns(dy.store_frame("binance", inputs))
+        assert inputs.binance.frame is not None
+        grid = dy.grid_of(inputs.binance.frame)
         table_ = print_hold_table(tape, grid, hold, print_settings(table, venue))
         return dict.fromkeys(VENUE_ROWS[venue], table_)
     settings = book_settings(table, venue, inputs.day)
     walk = WalkTable.from_book(taker_book(inputs.book, depth=plan.depth), settings.clip)
     book_table = book_hold_table(walk, hold, settings, table)
     tape = dy.tape(inputs, venue)
-    grid = stamps_ns(dy.store_frame("bybit_prints", inputs))
+    assert inputs.bybit.frame is not None
+    grid = dy.grid_of(inputs.bybit.frame)
     out = dict.fromkeys(PUT_BACK_ROWS, book_table)
     out["S25-PB"] = print_hold_table(tape, grid, hold, print_settings(table, venue))
     return out
