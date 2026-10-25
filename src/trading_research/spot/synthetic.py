@@ -75,8 +75,10 @@ def _ms(day: date) -> int:
 
 def _zip(name: str, text: str) -> bytes:
     buffer = io.BytesIO()
+    entry = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+    entry.compress_type = zipfile.ZIP_DEFLATED
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as packed:
-        packed.writestr(name, text)
+        packed.writestr(entry, text)
     return buffer.getvalue()
 
 
@@ -167,7 +169,7 @@ class SpotMarket:
         return ("\n".join(rows) + "\n").encode()
 
     def bybit_prints_archive(self, day: date) -> bytes:
-        return gzip.compress(self.bybit_prints_csv(day))
+        return gzip.compress(self.bybit_prints_csv(day), mtime=0)
 
     def binance_unit_for(self, day: date) -> str:
         if self.binance_unit is not None:
