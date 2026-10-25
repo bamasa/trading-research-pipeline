@@ -365,9 +365,9 @@ def test_p_refuses_without_its_conditions(repo: Path) -> None:
     with pytest.raises(HeldOutLocked, match="does not cover"):
         ledger.open("P", candidates=["S25-PF"], published=published)
     fee_amendment(repo)
-    with pytest.raises(HeldOutLocked, match="only for candidates"):
+    with pytest.raises(HeldOutLocked, match="every candidate on H"):
         ledger.open("P", candidates=["S25-BB"], published=published)
-    with pytest.raises(HeldOutLocked, match="only for candidates"):
+    with pytest.raises(HeldOutLocked, match="every candidate on H"):
         ledger.open("P", published=published)
     with pytest.raises(HeldOutLocked, match="not published"):
         ledger.open("P", candidates=["S25-PF"])
@@ -424,3 +424,13 @@ def test_copying_the_2025_files_checks_each_hash(repo: Path, tmp_path: Path) -> 
     write(repo, sl._FITTED_2025, b"other")
     with pytest.raises(HeldOutLocked, match="registered sha256"):
         sl.copy_frozen_2025(repo, tmp_path / "again", wanted)
+
+
+def test_p_is_read_once_for_every_candidate(repo: Path) -> None:
+    h_closed(repo, {"S25-PF": "candidate", "S25-BB": "candidate", "S25-T": "killed"})
+    fee_amendment(repo)
+    ledger = make_ledger(repo, now=P_DAY)
+    with pytest.raises(HeldOutLocked, match="every candidate on H"):
+        ledger.open("P", candidates=["S25-PF"], published=published)
+    entry = ledger.open("P", candidates=["S25-PF", "S25-BB"], published=published)
+    assert entry["candidates"] == ["S25-BB", "S25-PF"]

@@ -442,12 +442,13 @@ class Ledger:
     def verify_p(
         self, candidates: Sequence[str], published: Callable[[str, str, date], bool] | None
     ) -> None:
-        """P's own conditions: candidates on H, by the deadline, published and fee-covered."""
+        """P's own conditions: read once for every candidate on H, by the deadline,
+        after P's last day is published on both venues."""
         results = json.loads((self.repo / sr.RESULTS_PATHS["H"]).read_text(encoding="utf-8"))
         on_h = st.candidates_in(results)
-        if not candidates or not set(candidates) <= set(on_h):
+        if not on_h or set(candidates) != set(on_h):
             raise HeldOutLocked(
-                f"P opens only for candidates on H ({on_h}), not {list(candidates)}"
+                f"P opens once, for every candidate on H ({on_h}), not for {list(candidates)}"
             )
         if self.today() > self.p_deadline():
             raise HeldOutLocked(f"P's deadline {self.p_deadline()} has passed: no P read opens")
