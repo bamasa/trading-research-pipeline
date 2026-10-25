@@ -46,7 +46,7 @@ information_set:
   s25_coordinates: {named: 2026-10-08, by: "the 2025 registration, commit f7cf0bc", h_days_elapsed_when_named: 61, stated_end: none}  # not claimed chosen without knowledge of market conditions after 2025-08-01
   binance_spot_BTCFDUSD: {statement: the author worked on this pair in 2025, taken_to_end: 2025-12-31}
   bybit_spot_BTCUSDT: {statement: none}
-  confirmed: null  # {s25_coordinates, binance_spot_BTCFDUSD, bybit_spot_BTCUSDT}: the end dates the owner confirms, set only by one dated amendment committed before stage 0; null: not confirmed
+  confirmed: {s25_coordinates: 2025-12-31, binance_spot_BTCFDUSD: 2025-12-31, bybit_spot_BTCUSDT: never}  # {s25_coordinates, binance_spot_BTCFDUSD, bybit_spot_BTCUSDT}: the end dates the owner confirms, set only by one dated amendment committed before stage 0; null: not confirmed
   blind_if: every confirmed end date before held_out_start  # preferably before first_fitted_day
   fallback: "unless blind_if holds: H inside S25's information set; each slot's best status on H is 'candidate (H inside S25's information set)'; P the only confirmatory block; every status of statuses.after_P carries '(H inside S25's information set)'"
   first_fitted_day: 2026-05-01
@@ -441,7 +441,7 @@ fetch:
   via: this study's fetch (new code, on data/ensure.py's pattern)  # only missing days; archives deleted after replay or conversion
   root: data/spot/<venue>/<plane>/<symbol>/  # never data/{book,trades,bars,funding}/BTCUSDT
   stages:
-    0: {when: "after this registration and its code are committed and after the 2025 study's last read", what: reader-test days, gb: {bybit_ob200: 0.286, bybit_prints: 0.035, binance_aggtrades: 0.010}}
+    0: {when: "after this registration and its code are committed (the owner's amendment of 2026-10-25 lifts the wait for the 2025 study's last read)", what: reader-test days, gb: {bybit_ob200: 0.286, bybit_prints: 0.035, binance_aggtrades: 0.010}}
     1: {when: after stage 0 and the code-freeze note, what: [W, D], gb: {bybit_ob200: 7.363, bybit_prints: 0.564, binance_aggtrades: 0.136}}
     2: {when: "inside H's opened access, after the amendment", what: H, gb: {bybit_ob200: 3.813, bybit_prints: 0.339, binance_aggtrades: 0.064}}
     3: {when: "inside P's opened access, only for a candidate", what: P, gb_estimated: {bybit_ob200: 3.6, bybit_prints: 0.26, binance_aggtrades: 0.06}}  # at D's daily means; P's own HEAD check records the sizes
@@ -451,7 +451,7 @@ fetch:
   disk_peak_gb: [12, 19]  # books at 40-60 MB a replayed day (the 2024 perpetual figure; stage 0 measures spot)
   disk_margin_gb: 10  # free disk, measured when each stage starts (stage 0 included), must exceed the stage's budget by this much; otherwise the stage waits; each measurement recorded
   free_disk_gib: {2026-10-22: 66, 2026-10-24: 59}
-  not_before: "the 2025 study's last read has committed its results: its registered 46-53 GB is its peak on D; after H it deletes W's and D's features and keeps its books, prints, models and results, which may serve a defect check; this study deletes nothing of it"
+  not_before: "this registration and its code committed; the 2025 study's files are never written or deleted by this study, and the disk margin decides whether a stage may start (owner's amendment of 2026-10-25)"
 
 compute:
   estimate: "about 200 book days replayed at 2-3 minutes on at most 4 workers; 42 boosted fits at 1-2 minutes; scoring, placebos and neighbourhoods from walk tables; under a day for D, a few hours for each later read"

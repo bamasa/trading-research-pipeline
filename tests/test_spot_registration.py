@@ -19,7 +19,7 @@ CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
 #: The configuration as registered, every placeholder ``null``.
-REGISTERED_SHA256 = "1206d6b71c2f0ad2e76d65b0e91019899f9ceb6c53607fca46dbfec7235e17da"
+REGISTERED_SHA256 = "81ad1ff49d7190268749cd7f1eaf19ac1a0b8145317efe3eb43d827f1d18ff76"
 PLACEHOLDERS = (
     ("data", "reader_test_result"), ("data", "max_sequence_gaps"), ("data", "excluded_days_D"),
     ("data", "instrument_spec"), ("common", "book_levels", "walk"),
@@ -90,9 +90,11 @@ def test_blocks_follow_each_other_and_the_information_set() -> None:
 
 
 def h_is_blind() -> bool:
-    """H is blind only when the owner confirmed all three end dates before H's first day."""
+    """H is blind only when the owner confirmed all three end dates before H's first day
+    ("never" for an instrument the author never looked at)."""
     confirmed = CONFIG["information_set"]["confirmed"]
-    return confirmed is not None and all(d < BLOCKS["H"]["start"] for d in confirmed.values())
+    start = BLOCKS["H"]["start"]
+    return confirmed is not None and all(d == "never" or d < start for d in confirmed.values())
 
 
 def test_h_is_blind_only_under_a_confirmed_information_set() -> None:
@@ -105,6 +107,8 @@ def test_h_is_blind_only_under_a_confirmed_information_set() -> None:
         assert not h_is_blind()  # as registered: the fallback holds
     else:
         assert set(info["confirmed"]) == {"s25_coordinates", *INSTRUMENTS}
+        assert h_is_blind()  # the owner's amendment of 2026-10-25: every date before H
+        assert "### 2026-10-25: the information set confirmed" in DOCUMENT
     data = CONFIG["data"]
     last = {data[k]["present"][1] for k in ("bybit_book", "bybit_prints", "binance_prints")}
     assert last == {BLOCKS["H"]["end"]}  # H ends on the last day published at registration
