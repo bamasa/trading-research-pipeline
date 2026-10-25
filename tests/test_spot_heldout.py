@@ -84,3 +84,22 @@ def test_a_venue_with_a_third_of_its_days_out_is_unreadable(read: dict[str, Any]
     assert len(sentences["each_slot_on_H"]) == 3 and sentences["S25-T"]
     assert math.isfinite(m["rows"]["S25-PF"]["trades_per_day"])
     assert np.isfinite(found["rows"]["S25-PF"].trades).all()
+
+
+def test_on_p_only_h_candidates_are_assessed_and_the_table_gives_the_final_status(
+    read: dict[str, Any],
+) -> None:
+    from trading_research.spot import reads
+
+    on_h = {"S25-PF": "candidate", "S25-BB": "killed", "S25-T": "inconclusive"}
+    with syn.no_network():
+        found = br.compute(read["study"], read["plan"], blind=True, mde={}, h_statuses=on_h)
+    statuses = {s: a.status for s, a in found["assessments"].items()}
+    assert statuses["S25-BB"] == statuses["S25-T"] == "not taken to the block"
+    assert statuses["S25-PF"] not in ("not taken to the block",)
+    h = {"statuses": {s: {"status": v} for s, v in on_h.items()}}
+    final = reads._final("P", found["assessments"], True, h)
+    assert final["S25-BB"] == "killed" and final["S25-T"] == "inconclusive"
+    assert final["S25-PF"].startswith(
+        ("candidate, not confirmed", "confirmed", "killed on P", "void")
+    )
