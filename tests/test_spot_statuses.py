@@ -333,6 +333,8 @@ def test_slot_days_are_checked() -> None:
         make(value=np.zeros(3))
     with pytest.raises(ValueError, match="draws x days"):
         make(random=np.zeros(75))
+    with pytest.raises(ValueError, match="200 x 75"):
+        make(random=np.zeros((199, 75)))
     with pytest.raises(ValueError, match="neighbourhood"):
         st.neighbourhood_median(make(neighbourhood=np.zeros((11, 75))))
     with pytest.raises(ValueError, match="capacity"):

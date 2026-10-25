@@ -167,8 +167,8 @@ class SlotDays:
         for name, values in rows.items():
             if np.shape(values) != (n,):
                 raise ValueError(f"{self.slot}.{name} holds one value per day ({n})")
-        if np.ndim(self.random) != 2 or np.shape(self.random)[1] != n:
-            raise ValueError(f"{self.slot}.random is draws x days")
+        if np.shape(self.random) != (RANDOM_DRAWS, n):
+            raise ValueError(f"{self.slot}.random is draws x days ({RANDOM_DRAWS} x {n})")
         unknown = set(self.void) - set(VOID_CONDITIONS)
         if unknown:
             raise ValueError(f"{self.slot}: not a void condition {sorted(unknown)}")
