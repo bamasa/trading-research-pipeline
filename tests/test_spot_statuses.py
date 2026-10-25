@@ -252,15 +252,16 @@ def test_only_candidates_are_taken_to_p() -> None:
 
 def test_p_needs_ten_days_and_scales_the_mde() -> None:
     nine = make("S25-BB", n=9, trades=12.0)
-    found = st.family(
-        {"S25-BB": nine}, "P", blind=True, preset={"S25-PF": "not taken to the block"}
-    )
+    others = dict.fromkeys(("S25-PF", "S25-T"), "not taken to the block")
+    found = st.family({"S25-BB": nine}, "P", blind=True, preset=others)
     assert found["S25-BB"].bar is not None and not found["S25-BB"].bar["days_ok"]
     assert found["S25-T"].status == "not taken to the block"
     assert found["S25-BB"].mde == pytest.approx(1.0 * math.sqrt(75 / 9))
     assert st.block_mde(2.0, "H", 40) == 2.0 and st.block_mde(None, "P", 40) is None
     ten = make("S25-BB", n=10, trades=12.0)
-    assert st.family({"S25-BB": ten}, "P", blind=True)["S25-BB"].status == "passes"
+    assert st.family({"S25-BB": ten}, "P", blind=True, preset=others)["S25-BB"].status == "passes"
+    with pytest.raises(ValueError, match="neither its values"):
+        st.family({"S25-BB": ten}, "P", blind=True)
 
 
 @pytest.mark.parametrize(

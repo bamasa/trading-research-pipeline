@@ -470,7 +470,8 @@ def family(
 ) -> dict[str, Assessment]:
     """The three slots on ``block`` (H or P): Holm at m = 3 over the slots no earlier
     step settled, every other slot entering with p = 1 (``preset`` gives a status
-    set without assessing: not assessed, not taken to the block). On H under the
+    set without assessing: not assessed, not taken to the block; every slot has
+    its values or a preset status). On H under the
     fallback (``blind`` False) a candidate reads "candidate (H inside S25's
     information set)"."""
     if block not in MIN_DAYS:
@@ -478,14 +479,16 @@ def family(
     preset = dict(preset or {})
     out: dict[str, Assessment] = {}
     for slot in FAMILY:
-        if slot in preset or slot not in rows:
-            out[slot] = Assessment(slot, block, preset.get(slot, NOT_TAKEN))
+        if slot in preset:
+            out[slot] = Assessment(slot, block, preset[slot])
+        elif slot not in rows:
+            raise ValueError(f"{slot} on {block}: neither its values nor a preset status")
         else:
             if rows[slot].slot != slot:
                 raise ValueError(f"the values given as {slot} are {rows[slot].slot}'s")
             out[slot] = _screen(rows[slot], block, study_voids, a_buy, a_sell)
     passed = holm({slot: found.p for slot, found in out.items()}, ALPHA)
-    word = (CANDIDATE if blind else with_fallback(CANDIDATE, blind)) if block == "H" else PASSES
+    word = with_fallback(CANDIDATE, blind) if block == "H" else PASSES
     for slot, found in out.items():
         if found.status == "":
             _step_4_to_6(rows[slot], found, passed[slot], word)
