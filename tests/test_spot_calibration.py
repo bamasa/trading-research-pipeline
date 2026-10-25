@@ -114,3 +114,29 @@ def test_capacity_is_the_larger_side_share_of_the_venues_taker_volume() -> None:
     assert capacity_ratio(np.array([1]), np.array([0.1]), prints.iloc[2:]) == float("inf")
     assert capacity_median([0.0, 0.01, 0.03]) == 0.01
     assert np.isnan(capacity_median([]))
+
+
+def test_stage_0_records_the_unreachable_share_and_the_median_sweep() -> None:
+    from trading_research.spot.calibration import print_rule_checks
+
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [pd.Timestamp(DAY, tz="UTC").value + k * S for k in (1, 1, 2, 3)],
+                unit="ns",
+                utc=True,
+            ),
+            "price": [100.0, 100.5, 101.0, 99.0],
+            "size": [0.004, 0.004, 0.02, 0.01],
+            "aggressor": [1, 1, 1, -1],
+            "rpi": [False, False, False, True],
+        }
+    )
+    tape = PrintTape.from_frame(frame, DAY)
+    arrivals = np.array([0, 1, 2]) * S + tape.start_ns
+    fills = fill_orders(tape, 1, arrivals, arrivals, until_ns=tape.end_ns)
+    checks = print_rule_checks(tape, [fills], 0.010)
+    assert checks["unreachable_share"] == 0.25 and checks["prints"] == 4
+    # Sweeps of 0.008, 0.008 and 0.02 BTC against a 0.010 clip.
+    assert checks["median_sweep_over_clip"] == pytest.approx(0.8)
+    assert checks["share_beyond_sweep"] == pytest.approx(2 / 3)

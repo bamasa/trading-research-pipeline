@@ -37,7 +37,14 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from trading_research.spot.fills import BRACKETS, BUY, PrintFillSettings, PrintTape, fill_orders
+from trading_research.spot.fills import (
+    BRACKETS,
+    BUY,
+    Fills,
+    PrintFillSettings,
+    PrintTape,
+    fill_orders,
+)
 
 BP: float = 1e4
 SEEDS: tuple[int, ...] = tuple(range(10))
@@ -221,3 +228,20 @@ def capacity_median(daily_ratios: Sequence[float]) -> float:
     """The median of a block's daily capacity ratios (NaN for a block without days)."""
     values = np.asarray(daily_ratios, dtype=np.float64)
     return float(np.median(values)) if len(values) else float("nan")
+
+
+def print_rule_checks(tape: PrintTape, fills: Iterable[Fills], clip: float) -> dict[str, float]:
+    """Stage 0's records of the print rule: the unreachable share, the median sweep / clip.
+
+    ``fills`` are the rule's fills on the tape (an entry no print followed, or
+    an exit priced by the fallback, has no sweep and is left out).
+    """
+    chosen = list(fills)
+    sweep = np.concatenate([np.asarray(f.sweep)[f.found] for f in chosen] or [np.zeros(0)])
+    beyond = np.concatenate([np.asarray(f.beyond_sweep)[f.found] for f in chosen] or [np.zeros(0)])
+    return {
+        "prints": float(len(tape)),
+        "unreachable_share": float(tape.rpi.mean()) if len(tape) else float("nan"),
+        "median_sweep_over_clip": float(np.median(sweep) / clip) if len(sweep) else float("nan"),
+        "share_beyond_sweep": float(beyond.mean()) if len(beyond) else float("nan"),
+    }
