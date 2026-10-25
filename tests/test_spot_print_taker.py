@@ -8,20 +8,19 @@ from typing import Any
 import numpy as np
 import pytest
 
-from test_spot_prints_fixture import CLIP, DAY, grid_of, make_prints
+from test_spot_prints_fixture import CLIP, DAY, grid_of, make_frame, make_prints
 from trading_research.market_making.events import NS_PER_S, day_start_ns
 from trading_research.spot.costs import FeeTable, load_fee_table
+from trading_research.spot.fills import BRACKETS, PrintTape
+from trading_research.spot.loader import PrintsDay
 from trading_research.spot.print_taker import (
     PRINT_COUNTERS,
-    DayPrints,
     PrintDay,
     PrintSettings,
     execute_print_day,
-    fills,
     print_settings,
+    print_tape,
 )
-
-RULES = fills.RULES
 
 CONFIG = Path(__file__).resolve().parents[1] / "configs" / "spot_2026.yaml"
 TABLE = load_fee_table(CONFIG)
@@ -35,14 +34,14 @@ def at(seconds: float) -> int:
     return START + round(seconds * NS_PER_S)
 
 
-def hand_prints(rows: list[tuple[float, int, float, float]]) -> DayPrints:
+def hand_prints(rows: list[tuple[float, int, float, float]]) -> PrintTape:
     """Prints from ``(seconds after midnight, side, price, size)``, all reachable."""
     ts = np.array([at(r[0]) for r in rows], dtype=np.int64)
-    return DayPrints(DAY, ts, np.array([r[2] for r in rows]), np.array([r[3] for r in rows]),
-                     np.array([r[1] for r in rows], dtype=np.int8), np.ones(len(rows), bool))  # fmt: skip
+    return PrintTape(DAY, ts, np.array([r[2] for r in rows]), np.array([r[3] for r in rows]),
+                     np.array([r[1] for r in rows], dtype=np.int8))  # fmt: skip
 
 
-def random_run(seed: int, count: int = 3000, **kw: Any) -> tuple[DayPrints, np.ndarray, PrintDay]:
+def random_run(seed: int, count: int = 3000, **kw: Any) -> tuple[PrintTape, np.ndarray, PrintDay]:
     prints = make_prints(seed)
     rows = grid_of(prints)
     rng = np.random.default_rng(seed)
@@ -52,8 +51,8 @@ def random_run(seed: int, count: int = 3000, **kw: Any) -> tuple[DayPrints, np.n
     return prints, rows, execute_print_day(prints, rows, rows[pick], side, HOLD, settings)
 
 
-def first_print(prints: DayPrints, side: int, ns: int, until: int) -> int:
-    ok = (prints.side == side) & prints.reachable & (prints.ts >= ns) & (prints.ts < until)
+def first_print(prints: PrintTape, side: int, ns: int, until: int) -> int:
+    ok = (prints.side == side) & ~prints.rpi & (prints.ts >= ns) & (prints.ts < until)
     return int(np.flatnonzero(ok)[0]) if ok.any() else -1
 
 
@@ -68,7 +67,7 @@ def test_every_fill_is_the_rules_and_every_exit_the_labels(seed: int) -> None:
         assert trade.entry_position == first_print(prints, s, trade.entry_arrival_ns, FLATTEN)
         due = trade.entry_print_ns + HOLD
         h = np.searchsorted(rows, due)
-        decided = min(int(rows[h]) if h < len(rows) else due, FLATTEN)
+        decided = int(rows[h]) if h < len(rows) and rows[h] <= FLATTEN else FLATTEN
         assert trade.exit_decision_ns == decided
         assert trade.exit_reason == ("day_end" if decided == FLATTEN else "hold")
         if not trade.exit_no_print:
@@ -99,7 +98,7 @@ def test_the_money_is_the_accounts() -> None:
     assert (t["entry_wait_ns"] == t["entry_print_ns"] - t["entry_arrival_ns"]).all()
 
 
-def run(prints: DayPrints, decisions: list[float], sides: list[int], **kw: Any) -> PrintDay:
+def run(prints: PrintTape, decisions: list[float], sides: list[int], **kw: Any) -> PrintDay:
     rows = np.unique(prints.ts)
     stamps = np.array([at(s) for s in decisions], dtype=np.int64)
     settings = print_settings(TABLE, BINANCE, **kw)
@@ -157,7 +156,7 @@ def test_an_exit_whose_side_never_prints_is_priced_at_the_other_side() -> None:
 
 
 def test_the_brackets_keep_the_rules_fills_and_change_only_prices() -> None:
-    runs = {rule: random_run(4, rule=rule)[2] for rule in RULES}
+    runs = {rule: random_run(4, bracket=rule)[2] for rule in BRACKETS}
     base = runs["rule"].trades
     timing = ["decision_ns", "side", "entry_print_ns", "exit_decision_ns", "exit_fill_ns"]
     for rule, day in runs.items():
@@ -167,7 +166,7 @@ def test_the_brackets_keep_the_rules_fills_and_change_only_prices() -> None:
     found = ~base["exit_no_print"].to_numpy()
     buy_entry = base["side"].to_numpy() > 0
     opt, worst = runs["optimistic"].trades, runs["worse_of_two"].trades
-    pess = runs["pessimistic_depth"].trades
+    pess = runs["pessimistic"].trades
     beyond = base["entry_beyond"].to_numpy() > 0
     assert not np.array_equal(opt["entry_price"], base["entry_price"])
     # worse of two is never better for the account than the pessimistic depth price
@@ -204,11 +203,25 @@ def test_each_fill_pays_the_fee_of_its_instant() -> None:
 def test_settings_come_from_the_table() -> None:
     with pytest.raises(ValueError, match="no tier"):
         PrintSettings(table=TABLE, instrument=BINANCE, tier="non_vip")
-    with pytest.raises(ValueError, match="unknown fill rule"):
-        print_settings(TABLE, BINANCE, rule="mid")
+    with pytest.raises(ValueError, match="unknown bracket"):
+        print_settings(TABLE, BINANCE, bracket="mid")
     settings = print_settings(TABLE, BINANCE, "vip9")
     assert settings.instrument == "binance_spot_BTCFDUSD"
     assert settings.fee_bp(np.array([at(43_200.0)]))[0] == 2.3
     with pytest.raises(ValueError):
         execute_print_day(make_prints(), np.array([2, 1]), np.array([1]), np.array([1]), HOLD,
                           settings)  # fmt: skip
+
+
+def test_the_loaders_day_is_the_rules_tape() -> None:
+    frame = make_frame(6)
+    tape = print_tape(
+        PrintsDay("binance_prints", DAY, frame, 0.01, rpi_rows=int(frame["rpi"].sum()))
+    )
+    np.testing.assert_array_equal(tape.side, frame["aggressor"].to_numpy())
+    np.testing.assert_array_equal(tape.rpi, frame["rpi"].to_numpy())
+    assert tape.ts[0] == frame["timestamp"].iloc[0].value and tape.day == DAY
+    for excluded in (PrintsDay("binance_prints", DAY, frame, None, ("off_grid_price",)),
+                     PrintsDay("binance_prints", DAY, None, None, ("no_print",))):  # fmt: skip
+        with pytest.raises(ValueError, match="not executed"):
+            print_tape(excluded)

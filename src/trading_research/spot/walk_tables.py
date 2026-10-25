@@ -9,8 +9,9 @@ for each side, the entry fill's print, the exit's decision, print and fill
 time, the time the position keeps the account busy until, the prices, fees and
 the net in quote and in bp of the entry notional, with the arithmetic in the
 executor's own order, so a looked-up trade equals the executor's to the last
-bit. Fills come from the executor's rule (``print_taker``'s one import of the
-fill function) and nothing else.
+bit. Fills come from :func:`trading_research.spot.fills.round_trips`, through
+the executor's own call (:func:`.print_taker.day_round_trips`), and nothing
+else.
 
 On a book a taker's exit time does not depend on its side; on prints it does,
 since a buy and a sell fill at different prints. So the table keeps the busy
@@ -32,20 +33,15 @@ from datetime import date
 
 import numpy as np
 
-from trading_research.market_making.events import day_start_ns
 from trading_research.search_engine.walk_tables import Parity
 from trading_research.spot.costs import fill_fee
+from trading_research.spot.fills import PrintTape
 from trading_research.spot.print_taker import (
-    BEYOND_SHARE,
-    NS_PER_DAY,
     PRINT_COUNTERS,
-    DayPrints,
     PrintSettings,
-    clock_ns,
-    day_sweeps,
+    day_round_trips,
     execute_print_day,
-    fills,
-    no_print_exits,
+    exits_either_side,
 )
 
 LONG, SHORT = 0, 1
@@ -102,7 +98,7 @@ class PrintHoldTable:
 
 
 def print_hold_table(
-    prints: DayPrints, row_ns: np.ndarray, hold_ns: int, settings: PrintSettings
+    tape: PrintTape, row_ns: np.ndarray, hold_ns: int, settings: PrintSettings
 ) -> PrintHoldTable:
     """Apply the print executor's rules to a decision at every row of ``row_ns``."""
     if hold_ns <= 0:
@@ -110,13 +106,9 @@ def print_hold_table(
     ts = np.asarray(row_ns, dtype=np.int64)
     if len(ts) > 1 and np.any(np.diff(ts) <= 0):
         raise ValueError("row stamps must be strictly increasing")
-    n, latency, clip, rule = len(ts), settings.latency_ns, settings.clip, settings.rule
-    start = day_start_ns(prints.day)
-    allowed = (ts >= start + clock_ns(settings.no_entry_before)) & (
-        ts <= start + clock_ns(settings.no_entry_after)
-    )
-    flatten, day_end = start + clock_ns(settings.flatten_at), start + NS_PER_DAY
-    sw = day_sweeps(prints, settings)
+    n, clip, bracket = len(ts), settings.clip, settings.bracket
+    first_ok, last_ok = settings.entry_hours_ns(tape)
+    allowed = (ts >= first_ok) & (ts <= last_ok)
     out = {name: np.full((2, n), -1, dtype=np.int64) for name in
            ("entry_print_ns", "exit_decision_ns", "exit_print_ns", "free_ns")}  # fmt: skip
     for name in ("entry_price", "entry_beyond", "exit_price", "exit_beyond", "notional",
@@ -125,41 +117,29 @@ def print_hold_table(
     flags = {name: np.zeros((2, n), dtype=bool) for name in
              ("has_entry", "entry_late", "exit_late", "exit_no_print", "exit_either_side")}  # fmt: skip
     for index, s in SIDES:
-        arrival = ts + latency
-        entry = fills.fill(sw[s], arrival, until_ns=flatten, decision_ns=ts, rule=rule)
+        trips = day_round_trips(tape, ts, ts, s, hold_ns, settings)
+        entry, exit_ = trips.entry, trips.exit
         k = np.flatnonzero(entry.found)
-        e_ns, e_price = entry.print_ns[k], entry.price[k]
-        due = e_ns + hold_ns
-        h = np.searchsorted(ts, due, side="left")
-        decided = np.where(h < n, ts[np.minimum(h, n - 1)], due)
-        decided = np.minimum(decided, flatten)
-        x_arrival = decided + latency
-        exit_ = fills.fill(sw[-s], x_arrival, until_ns=day_end, decision_ns=decided, rule=rule)
-        found = exit_.found
-        x_ns, x_price = exit_.print_ns.copy(), exit_.price.copy()
-        x_beyond = np.where(found, exit_.beyond, 0.0)
-        either = np.zeros(len(k), dtype=bool)
-        if (~found).any():
-            _, stamp, price, side_none = no_print_exits(sw[-s], sw[s], x_arrival[~found])
-            x_ns[~found], x_price[~found], either[~found] = stamp, price, side_none
-        x_fill = np.where(found, x_ns, x_arrival)
-        fee_e = settings.fee_bp(e_ns)
-        fee_x = settings.fee_bp(x_fill)
-        fees = fill_fee(e_price * clip, fee_e) + fill_fee(x_price * clip, fee_x)
+        e_ns, e_price = entry.print_ns[k], entry.price(bracket)[k]
+        x_ns, x_price, x_fill = exit_.print_ns[k], exit_.price(bracket)[k], trips.busy_until_ns[k]
+        fees = fill_fee(e_price * clip, settings.fee_bp(e_ns)) + fill_fee(
+            x_price * clip, settings.fee_bp(x_fill)
+        )
         gross = s * (x_price - e_price) * clip
-        values = {"entry_print_ns": e_ns, "exit_decision_ns": decided, "exit_print_ns": x_ns,
-                  "free_ns": x_fill, "entry_price": e_price, "entry_beyond": entry.beyond[k],
-                  "exit_price": x_price, "exit_beyond": x_beyond, "notional": e_price * clip,
-                  "gross": gross, "fees": fees, "net": gross - fees}  # fmt: skip
+        values = {"entry_print_ns": e_ns, "exit_decision_ns": trips.exit_decision_ns[k],
+                  "exit_print_ns": x_ns, "free_ns": x_fill, "entry_price": e_price,
+                  "entry_beyond": entry.beyond[k], "exit_price": x_price,
+                  "exit_beyond": exit_.beyond[k], "notional": e_price * clip, "gross": gross,
+                  "fees": fees, "net": gross - fees}  # fmt: skip
         for name, value in values.items():
             out[name][index, k] = value
         flags["has_entry"][index, k] = True
-        flags["entry_late"][index, k] = e_ns - arrival[k] > settings.late_print_ns
-        flags["exit_late"][index, k] = x_ns - x_arrival > settings.late_print_ns
-        flags["exit_no_print"][index, k] = ~found
-        flags["exit_either_side"][index, k] = either
+        flags["entry_late"][index, k] = entry.late[k]
+        flags["exit_late"][index, k] = exit_.late[k]
+        flags["exit_no_print"][index, k] = exit_.fallback[k]
+        flags["exit_either_side"][index, k] = exits_either_side(tape, exit_)[k]
     pnl_bp = out["net"] / out["notional"] * 1e4
-    return PrintHoldTable(prints.day, ts, int(hold_ns), settings, allowed, flags["has_entry"],
+    return PrintHoldTable(tape.day, ts, int(hold_ns), settings, allowed, flags["has_entry"],
                           out["entry_print_ns"], out["entry_price"], out["entry_beyond"],
                           flags["entry_late"], out["exit_decision_ns"], out["exit_print_ns"],
                           out["exit_price"], out["exit_beyond"], flags["exit_late"],
@@ -251,12 +231,11 @@ def execute_rows(table: PrintHoldTable, rows: np.ndarray, side: np.ndarray) -> P
     r, s_ = rows[taken], side[taken]
     own_ = side_index(s_)
     counters["entries"] = len(taken)
-    limit = BEYOND_SHARE * table.settings.clip
     for name, values in (("exits_no_print", table.exit_no_print),
                          ("exits_no_print_either_side", table.exit_either_side),
                          ("entry_late_print", table.entry_late), ("exit_late_print", table.exit_late),
-                         ("fill_beyond_sweep", table.entry_beyond > limit),
-                         ("fill_beyond_sweep", table.exit_beyond > limit)):  # fmt: skip
+                         ("fill_beyond_sweep", table.entry_beyond > 0.0),
+                         ("fill_beyond_sweep", table.exit_beyond > 0.0)):  # fmt: skip
         counters[name] += int(values[own_, r].sum())
     notional = table.notional[own_, r]
     exit_notional = table.exit_price[own_, r] * table.settings.clip
@@ -266,7 +245,7 @@ def execute_rows(table: PrintHoldTable, rows: np.ndarray, side: np.ndarray) -> P
 
 
 def print_entry_parity(
-    prints: DayPrints, rows: np.ndarray, side: np.ndarray, table: PrintHoldTable
+    tape: PrintTape, rows: np.ndarray, side: np.ndarray, table: PrintHoldTable
 ) -> Parity:
     """Execute the same decisions with :func:`.print_taker.execute_print_day` and with
     the table, and list every difference: which decisions became trades, their entry
@@ -275,7 +254,7 @@ def print_entry_parity(
     rows = np.asarray(rows, dtype=np.int64)
     side = np.asarray(side, dtype=np.int64)
     ours = execute_rows(table, rows, side)
-    day = execute_print_day(prints, table.row_ns, table.row_ns[rows], side, table.hold_ns,
+    day = execute_print_day(tape, table.row_ns, table.row_ns[rows], side, table.hold_ns,
                             table.settings)  # fmt: skip
     theirs, out = day.trades, []
     if len(theirs) != ours.trades:

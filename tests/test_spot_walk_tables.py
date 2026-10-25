@@ -12,7 +12,8 @@ from test_spot_print_taker import hand_prints
 from test_spot_prints_fixture import grid_of, make_prints
 from trading_research.market_making.events import NS_PER_S
 from trading_research.spot.costs import load_fee_table
-from trading_research.spot.print_taker import DayPrints, execute_print_day, fills, print_settings
+from trading_research.spot.fills import BRACKETS, PrintTape
+from trading_research.spot.print_taker import execute_print_day, print_settings
 from trading_research.spot.walk_tables import (
     LONG,
     SHORT,
@@ -22,13 +23,12 @@ from trading_research.spot.walk_tables import (
     print_hold_table,
 )
 
-RULES = fills.RULES
 CONFIG = Path(__file__).resolve().parents[1] / "configs" / "spot_2026.yaml"
 TABLE = load_fee_table(CONFIG)
 BINANCE = "binance_spot_BTCFDUSD"
 
 
-def table_for(seed: int, hold_s: int, **kw: Any) -> tuple[DayPrints, PrintHoldTable]:
+def table_for(seed: int, hold_s: int, **kw: Any) -> tuple[PrintTape, PrintHoldTable]:
     prints = make_prints(seed)
     settings = print_settings(TABLE, BINANCE, **kw)
     return prints, print_hold_table(prints, grid_of(prints), hold_s * NS_PER_S, settings)
@@ -50,13 +50,13 @@ def test_parity_with_the_print_executor(hold_s: int, seed: int) -> None:
     assert parity.trades >= 10
 
 
-@pytest.mark.parametrize("rule", RULES)
-def test_parity_under_every_bracket_and_at_110_ms(rule: str) -> None:
+@pytest.mark.parametrize("bracket", BRACKETS)
+def test_parity_under_every_bracket_and_at_110_ms(bracket: str) -> None:
     for latency in (10_000_000, 110_000_000):
-        prints, table = table_for(2, 50, rule=rule, latency_ns=latency)
+        prints, table = table_for(2, 50, bracket=bracket, latency_ns=latency)
         rows, side = decisions(table, table.rows // 2, 2)
         parity = print_entry_parity(prints, rows, side, table)
-        assert parity.ok, (rule, latency, parity.mismatches)
+        assert parity.ok, (bracket, latency, parity.mismatches)
 
 
 def test_placebos_keep_their_own_busy_periods() -> None:

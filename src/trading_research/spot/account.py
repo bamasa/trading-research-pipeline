@@ -44,7 +44,8 @@ import pandas as pd
 from trading_research.backtest.taker import TakerDay, TakerSettings
 from trading_research.market_making.accounting import IdentityError
 from trading_research.spot.costs import fill_fee
-from trading_research.spot.print_taker import DayPrints, PrintDay
+from trading_research.spot.fills import PrintTape
+from trading_research.spot.print_taker import PrintDay
 
 BOOKINGS: tuple[str, ...] = ("quote", "received")
 #: Clips of BTC held at the day's start, per booking.
@@ -127,7 +128,7 @@ def print_fills(day: PrintDay) -> Fills:
     )
 
 
-def first_last_print(prints: DayPrints) -> tuple[float, float]:
+def first_last_print(prints: PrintTape) -> tuple[float, float]:
     """The day's first and last print prices, in archive order: the inventory's marks."""
     if not len(prints.ts):
         raise ValueError("a day without a print has no first print to mark the inventory at")
