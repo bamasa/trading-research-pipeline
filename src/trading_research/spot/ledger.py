@@ -565,7 +565,7 @@ class Ledger:
         self._write(on_disk)
         key = (block, entry["commit"], entry["config_sha256"], environment)
         grants = sa.grants_for(sa.opened_blocks(block))
-        access = sa.SpotAccess(grants, entry["read"], session=key, issuer=sa._ISSUER)
+        access = sa.SpotAccess(grants, entry["read"], session=key, seal=sa._SEAL)
         return ReadSession(self, block, key, access)
 
 

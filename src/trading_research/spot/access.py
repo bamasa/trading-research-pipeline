@@ -17,7 +17,7 @@ file of a day, so a refused day costs nothing and reveals nothing.
   serve the spot readers' proof, stage 0's timing and the dry run, and nothing
   else (:data:`READER_TEST_PURPOSES`, :func:`reader_test_access`).
 * **H and P** are granted only by the study's ledger
-  (:mod:`trading_research.spot.ledger`), which carries the issuer token.
+  (:mod:`trading_research.spot.ledger`), which alone carries the seal an opened access needs.
 * **E** is never fetched and never granted; **no day of 2025** is ever read
   (:data:`FIRST_READABLE_DAY`), and neither are the 2025 study's reader-test days.
 """
@@ -128,15 +128,15 @@ def grants_for(blocks: Iterable[str]) -> frozenset[tuple[str, str, str]]:
     )
 
 
-class _Issuer:
-    """The ledger's token; pickled by reference, so it survives a worker process."""
+class _Seal:
+    """The ledger's seal; pickled by reference, so it survives a worker process."""
 
     def __reduce__(self) -> str:
-        return "_ISSUER"
+        return "_SEAL"
 
 
-#: Issued only by the ledger: an access to H or P must carry it.
-_ISSUER = _Issuer()
+#: Applied only by the ledger: an access to H or P must carry it.
+_SEAL = _Seal()
 
 
 @dataclass(frozen=True)
@@ -152,7 +152,7 @@ class SpotAccess:
     grants: frozenset[tuple[str, str, str]]
     stamp: str
     session: tuple[str, ...] = ()
-    issuer: object = field(default=None, repr=False, compare=False)
+    seal: object = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         unknown = {
@@ -164,7 +164,7 @@ class SpotAccess:
         }
         if unknown:
             raise ValueError(f"unknown instruments, blocks or planes {sorted(unknown)}")
-        if any(block in HELD_OUT for _, block, _ in self.grants) and self.issuer is not _ISSUER:
+        if any(block in HELD_OUT for _, block, _ in self.grants) and self.seal is not _SEAL:
             raise HeldOutLocked(
                 "access to H or P is issued only by the spot study's ledger, which checks "
                 "the frozen configuration and records the read"

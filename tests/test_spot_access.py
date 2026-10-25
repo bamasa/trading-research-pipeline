@@ -59,7 +59,7 @@ def test_development_access_permits_reader_test_w_and_d_only() -> None:
 
 
 def test_no_day_of_2025_is_ever_read() -> None:
-    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("P")), "first read", issuer=sa._ISSUER)
+    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("P")), "first read", seal=sa._SEAL)
     for day in (date(2025, 1, 1), date(2025, 6, 30), date(2025, 12, 31)):
         with pytest.raises(HeldOutLocked, match="no day of 2025"):
             opened.require(sa.BINANCE, [day], sa.PRINTS)
@@ -72,10 +72,10 @@ def test_held_out_access_only_from_the_ledger() -> None:
         sa.SpotAccess(sa.grants_for(("H",)), "first read")
     with pytest.raises(ValueError, match="unknown"):
         sa.SpotAccess(frozenset({(sa.BYBIT, "E", sa.BOOK)}), "development")
-    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("H")), "first read", issuer=sa._ISSUER)
+    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("H")), "first read", seal=sa._SEAL)
     opened.require(sa.BYBIT, sa.block_days("H"), sa.BOOK)
     assert not opened.allows(sa.BYBIT, sa.block_days("P")[0], sa.BOOK)
-    assert pickle.loads(pickle.dumps(opened)).issuer is sa._ISSUER
+    assert pickle.loads(pickle.dumps(opened)).seal is sa._SEAL
     assert sa.opened_blocks("P") == ("reader_test", "W", "D", "H", "P")
     with pytest.raises(ValueError):
         sa.opened_blocks("D")
