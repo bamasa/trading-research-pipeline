@@ -7,11 +7,13 @@ searched"):
   June, July and the frozen fits, every hold and label fee of S25-PF's and
   S25-BB's neighbourhoods, S25-PB's and S25-PFT's own cell; S25-T is the 2025
   study's frozen fit, its files checked by sha256 here as at the H and P gates.
-* **The fold-level leakage test** (K-leak) on June and July for S25-PF and
-  S25-BB: the fit path (training rows, purge, fit, thresholds) run on the stores
-  of the fold's days and again with every input and label after the fold's cutoff
-  mutated (``validation/fold_leakage``); weights and theta must keep their sha256.
-  The frozen fits' cutoff is D's end, after which no day is loaded.
+* **The fold-level leakage test** (K-leak) on every fold, the frozen one
+  included: the fold's own fit path (:func:`~trading_research.spot.fits.fit_fold`:
+  training rows, purge, every fit, every cell's theta on the inner validation's
+  loaded days) run again on stores and loaded days whose every input, label and
+  price after the fold's cutoff is mutated (``validation/fold_leakage``); every
+  fit's digest and every theta must be unchanged. The frozen fits' cutoff is D's
+  end, after which no day is on disk.
 * **Scoring**: each fold's fits on its test month, every row and cell through
   :mod:`.heldout`'s read (placebos, neighbours, latency, brackets, calibration),
   with Null A's hour-block sign flips on the own cell.
@@ -30,7 +32,6 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -39,7 +40,6 @@ import numpy as np
 import pandas as pd
 
 from trading_research.evaluation.significance import minimum_detectable_effect
-from trading_research.features.timed import stamps_ns
 from trading_research.spot import access as sa
 from trading_research.spot import assemble as asm
 from trading_research.spot import days as dy
@@ -47,54 +47,82 @@ from trading_research.spot import heldout as ho
 from trading_research.spot import runlog
 from trading_research.spot import statuses as st
 from trading_research.spot.context import SpotStudy
-from trading_research.spot.fits import (
-    fit_fold,
-    fit_model,
-    frozen_2025,
-    row_models,
-    rules_at,
-    store_rows,
-    training_set,
-)
+from trading_research.spot.fits import fit_fold, frozen_2025, load_model, row_models, store_rows
 from trading_research.spot.plan import ROWS, WALK_FORWARD, Fold, folds
-from trading_research.spot.print_label import label_column
 from trading_research.spot.registration import FAMILY
 from trading_research.spot.runs import RowModels
 from trading_research.spot.stage1 import LeakError, frozen_under, spec_of
 from trading_research.spot.state import write_json
 
-LEAK_ROWS: tuple[str, ...] = ("S25-PF", "S25-BB")
+
+def mutated_after(frame: pd.DataFrame | None, cutoff_ns: int, prices: Sequence[str],
+                  labels: Sequence[str] = (), seed: int = 0) -> pd.DataFrame | None:  # fmt: skip
+    """``frame`` with every named price and label at a row stamped after the cutoff
+    changed (``validation/fold_leakage.mutate_after_cutoff``)."""
+    from trading_research.validation.fold_leakage import mutate_after_cutoff
+
+    if frame is None or not len(frame):
+        return frame
+    cutoff = pd.Timestamp(cutoff_ns, unit="ns", tz="UTC")
+    return mutate_after_cutoff(frame, cutoff, price_columns=[c for c in prices if c in frame],
+                               label_columns=[c for c in labels if c in frame], seed=seed)  # fmt: skip
 
 
-def fold_leak(study: SpotStudy, fold: Fold, name: str) -> dict[str, Any]:
-    """The fold-level test on one row's own cell (module docstring)."""
-    from trading_research.validation.fold_leakage import check_fold
+def mutated_inputs(inputs: dy.DayInputs, cutoff_ns: int) -> dy.DayInputs:
+    """A loaded day with every book and print price stamped after the cutoff changed."""
+    from dataclasses import replace
 
-    row = ROWS[name]
-    cell = row.own
-    frame = store_rows(study, row.store, [*fold.train, *fold.inner, *fold.test], row.inputs)
-    frame = frame.sort_values("timestamp", kind="stable").reset_index(drop=True)
-    target = label_column(cell.hold_s, cell.fee_bp)
+    book = inputs.book.frame
+    levels = (
+        []
+        if book is None
+        else [c for c in book.columns if c.startswith(("bid_price_", "ask_price_"))]
+    )
+    return replace(
+        inputs,
+        book=replace(inputs.book, frame=mutated_after(book, cutoff_ns, levels)),
+        binance=replace(inputs.binance, frame=mutated_after(inputs.binance.frame, cutoff_ns, ["price"])),
+        bybit=replace(inputs.bybit, frame=mutated_after(inputs.bybit.frame, cutoff_ns, ["price"], seed=1)),
+    )  # fmt: skip
 
-    def fit(data: pd.DataFrame) -> dict[str, Any]:
-        x, y = training_set(data, fold, cell.hold_s, cell.fee_bp, row.inputs,
-                            study.scale.max_training_rows)  # fmt: skip
-        model = fit_model(x, y, study.scale.model_params)
-        if model is None:
-            return {"weights": None, "theta": None}
-        stamps = stamps_ns(data)
-        keep = fold.inner_keep(stamps, cell.hold_s) & data["scored"].to_numpy(dtype=bool)
-        inputs = data.loc[keep, list(model.columns_)].astype(np.float64)
-        complete = inputs.notna().all(axis=1).to_numpy()
-        proba = np.asarray(model.predict_proba(inputs[complete]))
-        rule = rules_at(proba, len(fold.inner), [cell.rate])[cell.rate]
-        return {"weights": model, "theta": asdict(rule)}
 
-    cutoff = pd.Timestamp(fold.cutoff_ns, unit="ns", tz="UTC")
-    found = check_fold(fit, frame, cutoff, price_columns=list(row.inputs), label_columns=[target],
-                       time_column="timestamp", fold=f"{name}/{fold.name}")  # fmt: skip
-    return {"row": name, "fold": fold.name, "cutoff": str(cutoff), "rows": len(frame),
-            "changed": list(found.changed), "leaks": found.leaks}  # fmt: skip
+def fold_leak(
+    study: SpotStudy, fold: Fold, record1: Mapping[str, Any], fitted: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The fold-level test (K-leak) through the fold's own fit path
+    (:func:`trading_research.spot.fits.fit_fold`): every fit of the fold and every
+    cell's theta again, on stores and loaded days whose every input, label and
+    price stamped after the fold's cutoff is changed; each fit (by its model's
+    digest) and each theta, in the frozen form, must equal the fold's own."""
+    from trading_research.validation.fold_leakage import digest
+
+    cutoff = fold.cutoff_ns
+    load = ho.loader(study, plan_for(study, fold, {}, record1))
+
+    def read(
+        study_: SpotStudy, store: str, days: Sequence[Any], columns: Sequence[str]
+    ) -> pd.DataFrame:
+        frame = store_rows(study_, store, days, columns)
+        labels = [c for c in frame.columns if c.startswith("label_")]
+        found = mutated_after(frame, cutoff, list(columns), labels, seed=2)
+        return frame if found is None else found
+
+    folder = study.dir("D", "leak", fold.name, "fits")
+    mutated = fit_fold(study, fold, lambda day: mutated_inputs(load(day), cutoff),
+                       float(record1["touch_size"]), read=read, folder=folder)  # fmt: skip
+    own = study.work / "D" / "fits" / fold.name
+
+    def models(record: Mapping[str, Any], where: Path) -> dict[str, str | None]:
+        return {key: None if not entry.get("sha256") else digest(load_model(where / key))
+                for key, entry in record["fits"].items()}  # fmt: skip
+
+    before, after = models(fitted, own), models(mutated, folder)
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    changed += sorted(f"theta {row}" for row in set(fitted["thresholds"]) | set(mutated["thresholds"])
+                      if fitted["thresholds"].get(row) != mutated["thresholds"].get(row))  # fmt: skip
+    return {"fold": fold.name, "cutoff": str(pd.Timestamp(cutoff, unit="ns", tz="UTC")),
+            "fits": len(before), "thresholds": sorted(fitted["thresholds"]),
+            "changed": changed, "leaks": bool(changed)}  # fmt: skip
 
 
 def usable_days(
@@ -223,12 +251,11 @@ def run(study: SpotStudy) -> dict[str, Any]:
     all_folds = folds(usable_days(record1, list(study.scale.days("D"))))
     fitted = {name: fold_records(study, fold, record1) for name, fold in all_folds.items()}
     leaks = []
-    for name in WALK_FORWARD:
-        for row in LEAK_ROWS:
-            path = study.work / "D" / "leak" / f"{name}_{row}.json"
-            if not path.exists():
-                write_json(path, fold_leak(study, all_folds[name], row))
-            leaks.append(json.loads(path.read_text(encoding="utf-8")))
+    for name, fold in all_folds.items():  # every fold, the frozen one included
+        path = study.work / "D" / "leak" / f"{name}.json"
+        if not path.exists():
+            write_json(path, fold_leak(study, fold, record1, fitted[name]))
+        leaks.append(json.loads(path.read_text(encoding="utf-8")))
     if any(found["leaks"] for found in leaks):
         raise LeakError(f"K-leak: the fold-level test changed {[f for f in leaks if f['leaks']]}")
     records: dict[str, Any] = {}

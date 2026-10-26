@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 
@@ -41,3 +41,65 @@ def test_usable_days_on_either_venue() -> None:
                        "2026-05-02": {sa.BINANCE: {"reasons": ["y"]}, sa.BYBIT: {"reasons": ["x"]}}}}  # fmt: skip
     assert dv.usable_days(record, days) == [date(2026, 5, 1)]
     assert dv.usable_days(record, days, sa.BYBIT) == []
+
+
+def _day_inputs(day: date):  # type: ignore[no-untyped-def]
+    import pandas as pd
+
+    from trading_research.data.study_loader import BookDay
+    from trading_research.spot import days as dy
+    from trading_research.spot import loader as ld
+
+    stamps = pd.date_range(pd.Timestamp(day, tz="UTC"), periods=24, freq="h")
+    prints = pd.DataFrame({"timestamp": stamps, "price": 100.0, "size": 1.0, "aggressor": 1})
+    book = pd.DataFrame({"timestamp": stamps, "bid_price_0": 99.0, "ask_price_0": 101.0,
+                         "bid_size_0": 1.0, "ask_size_0": 1.0})  # fmt: skip
+    return dy.DayInputs(day, ld.PrintsDay("prints", day, prints, 0.01),
+                        ld.PrintsDay("prints", day, prints.copy(), 0.01),
+                        BookDay("bybit-spot:BTCUSDT", day, book, 0, 0.01),
+                        {sa.BINANCE: (), sa.BYBIT: ()})  # fmt: skip
+
+
+def test_the_mutated_day_changes_only_what_lies_after_the_cutoff() -> None:
+    from trading_research.spot.plan import midnight_ns
+
+    day = date(2026, 6, 30)
+    cutoff = midnight_ns(day) + 12 * 3_600 * 1_000_000_000  # rows 0..12 at or before it
+    found = dv.mutated_inputs(_day_inputs(day), cutoff)
+    for frame, column, value in ((found.binance.frame, "price", 100.0),
+                                 (found.bybit.frame, "price", 100.0),
+                                 (found.book.frame, "ask_price_0", 101.0)):  # fmt: skip
+        assert (frame[column].iloc[:13] == value).all()
+        assert (frame[column].iloc[13:] != value).all()
+    assert (found.book.frame["bid_price_0"] < found.book.frame["ask_price_0"]).all()
+
+
+def _fold_leak(tmp_path, monkeypatch, reads_after: bool):  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    from trading_research.spot import heldout as ho
+    from trading_research.spot.plan import folds
+
+    usable = [date(2026, 5, 1) + timedelta(days=k) for k in range(92)]
+    fold = folds(usable)["june"]
+
+    def fit_fold(study, fold_, load, touch, read=None, folder=None):  # type: ignore[no-untyped-def]
+        day = fold_.test[0] if reads_after else fold_.inner[-1]  # a theta that reads a test day
+        price = float(load(day).binance.frame["price"].iloc[-1])
+        return {"fits": {}, "thresholds": {"S25-PF": {"cell": {"theta_long": price}}}}
+
+    honest = {"fits": {}, "thresholds": {"S25-PF": {"cell": {"theta_long": 100.0}}}}
+    monkeypatch.setattr(dv, "fit_fold", fit_fold)
+    monkeypatch.setattr(ho, "loader", lambda *_: _day_inputs)
+    study = SimpleNamespace(work=tmp_path, scale=SimpleNamespace(null_a_draws=0),
+                            dir=lambda *parts: tmp_path.joinpath(*parts))  # fmt: skip
+    spec = {i.key: {"tick": 0.01, "lot": 1e-6} for i in sa.INSTRUMENTS.values()}
+    record1 = {"max_sequence_gaps": 0, "walk": 10, "instrument_spec": spec, "touch_size": 1.0}
+    return dv.fold_leak(study, fold, record1, honest)  # type: ignore[arg-type]
+
+
+def test_the_fold_level_test_runs_the_fit_path_and_sees_a_theta_that_reads_ahead(
+    tmp_path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    assert _fold_leak(tmp_path, monkeypatch, reads_after=True)["changed"] == ["theta S25-PF"]
+    assert not _fold_leak(tmp_path, monkeypatch, reads_after=False)["leaks"]

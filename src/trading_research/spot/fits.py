@@ -157,20 +157,27 @@ def inner_probas(
     return {k: np.concatenate(v) if v else np.zeros((0, 3)) for k, v in found.items()}, used
 
 
+StoreReader = Callable[[SpotStudy, str, Sequence[Any], Sequence[str]], pd.DataFrame]
+
+
 def fit_fold(
-    study: SpotStudy, fold: Fold, load: Callable[[Any], dy.DayInputs], touch_size: float
-) -> dict[str, Any]:
+    study: SpotStudy, fold: Fold, load: Callable[[Any], dy.DayInputs], touch_size: float, *,
+    read: StoreReader | None = None, folder: Path | None = None,
+) -> dict[str, Any]:  # fmt: skip
     """Every fit of the fold and every cell's thresholds; the models are written under
-    the work directory (the frozen fold's are copied to ``models/`` by the amendment)."""
+    the work directory (the frozen fold's are copied to ``models/`` by the amendment).
+    ``read`` reads the stores (:func:`store_rows`) and ``folder`` takes the models:
+    the fold-level leakage test runs this same path on mutated data."""
     out: dict[str, Any] = {"fold": fold.name, "train": list(fold.train), "inner": list(fold.inner),
                            "fits": {}, "thresholds": {}, "inner_days": {}}  # fmt: skip
-    folder = study.dir("D", "fits", fold.name)
+    folder = folder or study.dir("D", "fits", fold.name)
+    read = read or store_rows
     for store in dy.STORES:
         rows = fitted_rows(store)
         if not rows:
             continue
         columns = sorted({c for r in rows for c in r.inputs})
-        frame = store_rows(study, store, fold.train, columns)
+        frame = read(study, store, fold.train, columns)
         models: dict[tuple[str, float, float], Any] = {}
         for row in rows:
             for hold, fee in row.fits:
