@@ -9,9 +9,11 @@ and 127 against 121, 187 against 183, 204 against 203) are one entry here.
 
 ``close_by_time`` closed after ``close_time`` 100 or 500; the unit is not in the
 original's code and is read as seconds, which matches its trade counts (about
-two fills per hold, plus the wait for the next signal). The two entries marked
+two fills per hold, plus the wait for the next signal). The entries marked
 ``added`` were not in the original: the best gate held 100 s, the strategy the
-brief named, and held 10 s, the other reading of the unit.
+brief named, and held 10 s, the other reading of the unit; and the best gate
+with the original's event code re-enacted, its unstable sort included (see
+:mod:`.gate`).
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ def _g(
 
 REF37 = _g("ref37", 0.9, 0.40, 3, 2.5, 15, 60)
 REF48 = _g("ref48", 0.9, 0.45, 4, 1.6, 15, 10)
+REF48_UNSTABLE = GateConfig("ref48_unstable_sort", 0.9, 0.45, 4, 1.6, 15, 10, "unstable_sort")
 C150 = _g("c150", 0.9, 0.40, 3, 2.5, 15, 1)
 C189 = _g("c189", 0.9, 0.40, 3, 2.5, 15, 0)
 C195 = _g("c195", 0.9, 0.45, 4, 1.6, 15, 0)
@@ -75,6 +78,7 @@ SWEEP: tuple[Run, ...] = (
     Run(_g("c223", 0.9, 0.45, 4, 1.6, 15, 1), S2S, "sweep cell 223"),
     Run(REF48, close_after(100), "added: the best gate held 100 s"),
     Run(REF48, close_after(10), "added: the best gate held 10 s"),
+    Run(REF48_UNSTABLE, S2S, "added: the best gate with the original's unstable event sort"),
 )
 
 #: Part 2's registered runs: the best gate as the original held it, then held 100 s.

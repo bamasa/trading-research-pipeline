@@ -25,12 +25,16 @@ CFG = GateConfig(
 
 
 def _original_events(
-    labels: np.ndarray, seconds: np.ndarray, gap: float, cooldown: float
+    labels: np.ndarray, seconds: np.ndarray, gap: float, cooldown: float, kind: str = "stable"
 ) -> np.ndarray:
-    """The original's grouping and cooldown, its loops kept, with a stable sort."""
+    """The original's grouping and cooldown, its loops kept; ``kind`` is the sort's.
+
+    As in the original, the kept positions index the sorted frame and are applied
+    to the labels in their given order.
+    """
     df = (
         pd.DataFrame({"t": seconds, "label": labels})
-        .sort_values("t", kind="stable")
+        .sort_values("t", kind=kind)
         .reset_index(drop=True)
     )
     events, cur, start, end, prev = [], None, 0, 0, None
@@ -48,7 +52,7 @@ def _original_events(
     for t0, t1, lab, idx in events:
         if lab == FLAT or t0 < last + cooldown:
             continue
-        out[idx], last = lab, t1
+        out[idx], last = labels[idx], t1
     return out
 
 
@@ -62,6 +66,18 @@ def test_one_per_event_matches_the_original_loop() -> None:
         )
         expected = _original_events(labels, seconds, cfg.event_max_gap, cfg.cooldown_seconds)
         np.testing.assert_array_equal(one_per_event(labels, seconds, cfg), expected)
+
+
+def test_unstable_order_re_enacts_the_original_sort() -> None:
+    rng = np.random.default_rng(4)
+    seconds = np.repeat(np.arange(2000), 10)
+    labels = rng.choice([0, 1, 2], size=len(seconds), p=[0.02, 0.96, 0.02])
+    cfg = GateConfig("t", 0.9, 0.45, 4, 1.6, 15, 10, event_order="unstable_sort")
+    expected = _original_events(labels, seconds, 15, 10, kind="quicksort")
+    got = one_per_event(labels, seconds, cfg)
+    np.testing.assert_array_equal(got, expected)
+    stable = one_per_event(labels, seconds, GateConfig("t", 0.9, 0.45, 4, 1.6, 15, 10))
+    assert (got != FLAT).sum() <= (stable != FLAT).sum()
 
 
 def test_gate_holds_on_each_condition() -> None:

@@ -18,8 +18,14 @@ filter, in time order:
   event trades, and none starts within ``cooldown_seconds`` of the end of the
   last event that traded.
 
-The original grouped events after an unstable sort on whole seconds, which can
-reorder the rows inside a second; here the rows keep their time order.
+The original grouped events after pandas' default (unstable) sort on whole
+seconds, which reorders rows inside a second, and then kept the row at each
+event's sorted position in the unsorted labels: a signal survives only where the
+sort left it in place, so the original's signals are a thinned and partly
+shifted subset of what its rule describes. Here the rows keep their time order
+(``event_order="time"``); ``event_order="unstable_sort"`` re-enacts the
+original's code with this machine's sort, whose permutation need not be the one
+the original's machine produced.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
 
 #: The original's taker scenario: fee per side and slippage, in its units.
 FEE_BP_PER_SIDE, SLIPPAGE_BP = 5.0, 3.0
@@ -44,6 +51,7 @@ class GateConfig:
     t_min: float
     event_max_gap: float
     cooldown_seconds: float
+    event_order: str = "time"
 
 
 def strategy_inputs(
@@ -89,6 +97,12 @@ def one_per_event(labels: np.ndarray, seconds: np.ndarray, cfg: GateConfig) -> n
     out = np.full(n, FLAT, dtype=labels.dtype)
     if n == 0:
         return out
+    given = labels
+    if cfg.event_order == "unstable_sort":
+        order = pd.DataFrame({"t": seconds}).sort_values("t").index.to_numpy()
+        labels, seconds = labels[order], np.asarray(seconds)[order]
+    elif cfg.event_order != "time":
+        raise ValueError(f"unknown event order {cfg.event_order!r}")
     gap = np.diff(seconds) > cfg.event_max_gap
     starts = np.flatnonzero(np.concatenate([[True], (labels[1:] != labels[:-1]) | gap]))
     ends = np.concatenate([starts[1:] - 1, [n - 1]])
@@ -96,6 +110,6 @@ def one_per_event(labels: np.ndarray, seconds: np.ndarray, cfg: GateConfig) -> n
     for start, end in zip(starts, ends, strict=True):
         if labels[start] == FLAT or seconds[start] < last_close + cfg.cooldown_seconds:
             continue
-        out[start] = labels[start]
+        out[start] = given[start]
         last_close = seconds[end]
     return out
