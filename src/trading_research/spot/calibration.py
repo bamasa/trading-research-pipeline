@@ -224,7 +224,7 @@ def trade_fills(trades: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     return np.concatenate([side, -side]), np.concatenate([size, size])
 
 
-def capacity_median(daily_ratios: Sequence[float]) -> float:
+def capacity_median(daily_ratios: Sequence[float] | np.ndarray) -> float:
     """The median of a block's daily capacity ratios (NaN for a block without days)."""
     values = np.asarray(daily_ratios, dtype=np.float64)
     return float(np.median(values)) if len(values) else float("nan")

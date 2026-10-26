@@ -323,14 +323,45 @@ def execute_book_day(
     book's day, with every fill's fee checked against the table (K-units)."""
     checked = require_book_settings(settings, table, book.day)
     day = execute_day(book, decision_ns, side, hold_ns, checked)
-    trades = day.trades
+    check_book_fees(day.trades, table, checked.instrument, checked.tier)
+    return day
+
+
+def book_fill_fee_bp(
+    table: FeeTable, instrument: str, tier: str, stamps_ns: np.ndarray
+) -> np.ndarray:
+    """The fee the rule assigns each book fill: the day's higher taker fee of the tier
+    (the book executor charges one fee a day), for the day of the fill's stamp."""
+    stamps = np.asarray(stamps_ns, dtype=np.int64)
+    days = stamps // NS_PER_DAY
+    out = np.empty(len(stamps))
+    for value in np.unique(days):
+        day = date(1970, 1, 1) + timedelta(days=int(value))
+        out[days == value] = table.day_fees(instrument, day, tier).taker_bp
+    return out
+
+
+def check_book_fees(trades: Any, table: FeeTable, instrument: str, tier: str) -> None:
+    """K-units on every fill of a book run, from a fresh look-up of ``table`` at the
+    stamps the trade table records: the entry at its snapshot, the exit at the later
+    of its snapshot and its arrival. The executor charges one fee per fill at the
+    day's fee and stores a trade's two fees summed, so each fill's fee is checked as
+    that fee and the sum against the trade's."""
+    if not len(trades):
+        return
     size = trades["size"].to_numpy(dtype=np.float64)
+    entry_ns = trades["entry_snapshot_ns"].to_numpy(dtype=np.int64)
+    exit_ns = np.maximum(trades["exit_snapshot_ns"].to_numpy(dtype=np.int64),
+                         trades["exit_arrival_ns"].to_numpy(dtype=np.int64))  # fmt: skip
     entry = trades["entry_price"].to_numpy(dtype=np.float64) * size
     exit_ = trades["exit_price"].to_numpy(dtype=np.float64) * size
-    taker = checked.fees.taker_bp
-    expected = fill_fee(entry, taker) + fill_fee(exit_, taker)
-    check_fill_fees(expected, trades["fees"].to_numpy(dtype=np.float64))
-    return day
+    fresh_e = book_fill_fee_bp(table, instrument, tier, entry_ns)
+    fresh_x = book_fill_fee_bp(table, instrument, tier, exit_ns)
+    charged = trades["fees"].to_numpy(dtype=np.float64)
+    implied = charged / (entry + exit_) * 1e4  # one fee for both fills of a trade
+    check_fill_fees(np.concatenate([fill_fee(entry, fresh_e), fill_fee(exit_, fresh_x)]),
+                    np.concatenate([fill_fee(entry, implied), fill_fee(exit_, implied)]))  # fmt: skip
+    check_fill_fees(fill_fee(entry, fresh_e) + fill_fee(exit_, fresh_x), charged)
 
 
 def book_hold_table(walk: WalkTable, hold_ns: int, settings: object, table: FeeTable) -> HoldTable:

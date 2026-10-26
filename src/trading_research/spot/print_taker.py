@@ -140,7 +140,8 @@ PRINT_TRADE_COLUMNS: tuple[str, ...] = (
     "exit_decision_ns", "exit_arrival_ns", "exit_print_ns", "exit_position", "exit_fill_ns",
     "exit_price", "exit_beyond", "exit_fee_bp", "exit_wait_ns", "exit_late", "exit_reason",
     "exit_no_print", "exit_fallback_age_ns", "hold_realised_ns",
-    "notional", "exit_notional", "gross", "fees", "net", "gross_bp", "net_bp",
+    "notional", "exit_notional", "gross", "entry_fee", "exit_fee", "fees", "net", "gross_bp",
+    "net_bp",
 )  # fmt: skip
 
 #: Counters every day reports, zero when nothing happened.
@@ -277,9 +278,27 @@ def execute_print_day(
                     int(exit_.print_index[k]), x_fill, x_price, x_beyond, fee_x, x_ns - x_arrival,
                     x_late, str(trips.exit_reason[k]), no_print, int(exit_.age_ns[k]),
                     x_fill - e_ns, notional,
-                    x_price * clip, gross, fees, net, gross / notional * 1e4,
+                    x_price * clip, gross, paid_e, paid_x, fees, net, gross / notional * 1e4,
                     net / notional * 1e4))  # fmt: skip
-    return _finish(account, out, counters)
+    day = _finish(account, out, counters)
+    check_print_fees(day.trades, settings.table, settings.instrument, settings.tier)
+    return day
+
+
+def check_print_fees(trades: pd.DataFrame, table: FeeTable, instrument: str, tier: str) -> None:
+    """K-units on every fill of a print run: each fill's fee, in quote, against the fee
+    a fresh look-up of ``table`` assigns its venue, tier and the instant the trade
+    table records for it (the entry's print, the exit's fill time)."""
+    if not len(trades):
+        return
+    size = trades["size"].to_numpy(dtype=np.float64)
+    stamps = (trades["entry_print_ns"], trades["exit_fill_ns"])
+    prices = (trades["entry_price"], trades["exit_price"])
+    expected = [fill_fee(p.to_numpy(dtype=np.float64) * size,
+                         table.taker_bp(instrument, tier, t.to_numpy(dtype=np.int64)))
+                for p, t in zip(prices, stamps, strict=True)]  # fmt: skip
+    charged = [trades[c].to_numpy(dtype=np.float64) for c in ("entry_fee", "exit_fee")]
+    check_fill_fees(np.concatenate(expected), np.concatenate(charged))
 
 
 def _finish(

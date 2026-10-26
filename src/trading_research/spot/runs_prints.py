@@ -6,26 +6,30 @@ runs and Null A's flips take the true run's entry decision times and re-apply
 the one-position rule to their own fills through the print walk table of the
 hold (:func:`trading_research.spot.walk_tables.execute_rows`); the neighbourhood
 cells (S25-PF only), the 110 ms re-run, the four brackets and the long-only
-variant are full runs of the executor. See :mod:`.runs` for the record.
+variant are full runs of the executor. Every run's void conditions, its own
+(K-units on every fill, K-acct) and its fills' on the spot account (K-acct,
+K-cap, K-inv), join the day's record (:mod:`.run_checks`); G and the two walked
+P&Ls at the true trades are recorded as in 2025. See :mod:`.runs` for the record.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import date
+from functools import partial
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from trading_research.market_making.accounting import IdentityError
 from trading_research.spot import account as acc
 from trading_research.spot.calibration import capacity_ratio, trade_fills
-from trading_research.spot.costs import FeeTable, FeeUnitsError
+from trading_research.spot.costs import FeeTable
 from trading_research.spot.fills import PrintTape
 from trading_research.spot.plan import Row
 from trading_research.spot.print_taker import PrintDay, execute_print_day, print_settings
+from trading_research.spot.run_checks import Voids, print_table_fills
 from trading_research.spot.runs import (
     RowModels,
     decisions,
@@ -38,7 +42,12 @@ from trading_research.spot.runs import (
     table_bp,
     tier_values,
 )
-from trading_research.spot.walk_tables import PrintHoldTable, execute_rows, print_hold_table
+from trading_research.spot.walk_tables import (
+    PrintHoldTable,
+    PrintTableTrades,
+    execute_rows,
+    print_hold_table,
+)
 
 BRACKET_RUNS: tuple[str, ...] = ("optimistic", "pessimistic", "stale", "worse_of_two")
 LATENCY_RERUN_NS = 110_000_000
@@ -63,11 +72,41 @@ def _run(tape: PrintTape, grid: np.ndarray, rows: np.ndarray, side: np.ndarray, 
     return execute_print_day(tape, grid, grid[rows], side, hold_ns, settings)
 
 
-def shifted(table: PrintHoldTable, start_ns: int, tod_ns: np.ndarray, side: np.ndarray) -> float:
+def _full(voids: Voids, call: Callable[[], PrintDay]) -> PrintDay | None:
+    """A full executor run with its void conditions: the run's own (K-units, K-acct)
+    and its fills' on the spot account (K-acct, K-cap, K-inv)."""
+    day = voids.run(call)
+    if day is not None:
+        voids.account(acc.print_fills(day), day.net)
+    return day
+
+
+def _bp(day: PrintDay | None) -> float:
+    return math.nan if day is None else day.day_bp()
+
+
+def _table_run(
+    voids: Voids, table: PrintHoldTable, rows: np.ndarray, side: np.ndarray, fees: FeeTable
+) -> PrintTableTrades:
+    """A walk-table run with its void conditions: each fill's fee and the account."""
+    found = execute_rows(table, rows, side)
+    replayed = voids.run(lambda: print_table_fills(table, found, fees))
+    if replayed is not None:
+        voids.account(*replayed)
+    return found
+
+
+def shifted(
+    table: PrintHoldTable, start_ns: int, tod_ns: np.ndarray, side: np.ndarray,
+    voids: Voids | None = None, fees: FeeTable | None = None,
+) -> float:  # fmt: skip
     """Another day's signal tape on this day's table, with its own one-position state."""
     rows = shift_rows(table.row_ns, start_ns, tod_ns)
     inside = rows < table.rows
-    return table_bp(execute_rows(table, rows[inside], np.asarray(side)[inside]))
+    rows, side = rows[inside], np.asarray(side)[inside]
+    if voids is None or fees is None:
+        return table_bp(execute_rows(table, rows, side))
+    return table_bp(_table_run(voids, table, rows, side, fees))
 
 
 def print_day(
@@ -83,29 +122,27 @@ def print_day(
     day: date,
     null_a: int = 0,
 ) -> tuple[dict[str, Any], PrintHoldTable | None]:
-    """The day's record, and the own cell's walk table (for the one-day shift)."""
+    """The day's record, and the own cell's walk table (for the one-day shift). The
+    record's ``void`` holds every void condition any run of the day fired."""
     own = row.own
     rows, side = decisions(probas[own.fit], fits.rules[own])
     settings = print_settings(table, row.instrument)
     record: dict[str, Any] = {"day": day.isoformat(), "row": row.name, "void": [],
                               "decisions": len(rows), "grid_rows": len(grid)}  # fmt: skip
-    try:
-        true = _run(tape, grid, rows, side, own.hold_ns, settings)
-    except FeeUnitsError:
-        return record | {"void": ["K-units"]}, None
-    except IdentityError:
-        return record | {"void": ["K-acct"]}, None
+    voids = Voids(tape)
+    true = _full(voids, lambda: _run(tape, grid, rows, side, own.hold_ns, settings))
+    if true is None:
+        return record | {"void": voids.sorted()}, None
     trades = true.trades
     record.update(value=true.day_bp(), trades=len(trades), counters=dict(true.counters),
                   net_quote=float(true.net), turnover=float(true.turnover))  # fmt: skip
     record.update(_money(trades))
-    record["void"] = _account(true, tape)
     table50 = print_hold_table(tape, grid, own.hold_ns, settings)
     t_rows = np.searchsorted(grid, trades["decision_ns"].to_numpy(dtype=np.int64))
     t_side = trades["side"].to_numpy(dtype=np.int64)
 
     def placebo(sides: np.ndarray) -> tuple[float, int]:
-        found = execute_rows(table50, t_rows, sides)
+        found = _table_run(voids, table50, t_rows, sides, table)
         return table_bp(found), int(found.counters["entries_busy"])
 
     record["flipped"], skipped_flip = placebo(-t_side)
@@ -120,8 +157,9 @@ def print_day(
         placebo(t_side * hour_flips(grid[t_rows], start, k, day))[0] for k in range(null_a)
     ]
     late = print_settings(table, row.instrument, latency_ns=LATENCY_RERUN_NS)
-    record["latency"] = _run(tape, grid, rows, side, own.hold_ns, late).day_bp()
-    record.update(_variants(row, fits, tape, grid, probas, rows, side, table))
+    record["latency"] = _bp(_full(voids, lambda: _run(tape, grid, rows, side, own.hold_ns, late)))
+    record.update(_variants(row, fits, tape, grid, probas, rows, side, table, voids))
+    record.update(g_values(table50, t_rows, t_side))
     scored = np.isfinite(probas[own.fit]).all(axis=1)
     record["ic"] = rank_ic(signal(probas[own.fit])[scored], forward[own.hold_s][scored])
     record["capacity"] = capacity_ratio(*trade_fills(trades), prints) if len(trades) else 0.0
@@ -131,7 +169,22 @@ def print_day(
         table.taker_bp(row.instrument, tier, trades["entry_print_ns"].to_numpy(np.int64)),
         table.taker_bp(row.instrument, tier, trades["exit_fill_ns"].to_numpy(np.int64))))  # fmt: skip
     record["signal"] = {"tod_ns": (grid[rows] - start).tolist(), "side": side.tolist()}
+    record["void"] = voids.sorted()
     return record, table50
+
+
+def g_values(table: Any, rows: np.ndarray, side: np.ndarray) -> dict[str, Any]:
+    """G and the two walked P&Ls at the true trades' decision rows, from the own
+    cell's table, as the 2025 ledger records them (0 on a day without a trade)."""
+    from trading_research.search_engine.walk_tables import TABLE_COUNTERS, take
+
+    if isinstance(table, PrintHoldTable):
+        values = execute_rows(table, rows, side).day_values()
+    else:
+        values = take(table, rows, side, dict.fromkeys(TABLE_COUNTERS, 0)).day_values()
+    return {
+        k: values[k] for k in ("G_bp", "pnl_long_bp", "pnl_short_bp", "g_trades") if k in values
+    }
 
 
 def _money(trades: pd.DataFrame) -> dict[str, Any]:
@@ -155,15 +208,6 @@ def _money(trades: pd.DataFrame) -> dict[str, Any]:
     return out
 
 
-def _account(day: PrintDay, tape: PrintTape) -> list[str]:
-    """The spot account's void conditions on the day (K-acct, K-cap, K-inv)."""
-    try:
-        found = acc.account_day(acc.print_fills(day), day.net, *acc.first_last_print(tape))
-    except ValueError:  # fills out of time order: positions overlapped
-        return ["K-cap"]
-    return list(found.void)
-
-
 def inventory(tape: PrintTape) -> dict[str, float]:
     """The held clip marked from the day's first print to its last."""
     first, last = acc.first_last_print(tape)
@@ -179,22 +223,25 @@ def _variants(
     rows: np.ndarray,
     side: np.ndarray,
     table: FeeTable,
+    voids: Voids,
 ) -> dict[str, Any]:
-    """The brackets, K-fill's worse-of-two sums, the long-only variant, the cells."""
+    """The brackets, K-fill's worse-of-two sums, the long-only variant, the cells,
+    each a full run whose void conditions join the day's."""
     own = row.own
     out: dict[str, Any] = {"brackets": {}, **inventory(tape)}
     for bracket in BRACKET_RUNS:
         settings = print_settings(table, row.instrument, bracket=bracket)
-        day = _run(tape, grid, rows, side, own.hold_ns, settings)
-        out["brackets"][bracket] = day.day_bp()
-        if bracket == "worse_of_two":
+        day = _full(voids, partial(_run, tape, grid, rows, side, own.hold_ns, settings))
+        out["brackets"][bracket] = _bp(day)
+        if bracket == "worse_of_two" and day is not None:
             buys, sells = side_notional(day.trades)
             out["worse"] = {"net_quote": float(day.trades["net"].sum()),
                             "entry_notional": float(day.trades["notional"].sum()),
                             "buy_notional": buys, "sell_notional": sells}  # fmt: skip
     verdict = print_settings(table, row.instrument)
     longs, sides = acc.long_only(grid[rows], side)
-    out["long_only"] = execute_print_day(tape, grid, longs, sides, own.hold_ns, verdict).day_bp()
+    out["long_only"] = _bp(_full(voids, lambda: execute_print_day(
+        tape, grid, longs, sides, own.hold_ns, verdict)))  # fmt: skip
     if len(row.cells) > 1:
         cells = []
         for cell in row.cells:
@@ -202,6 +249,6 @@ def _variants(
                 cells.append(math.nan)
                 continue
             r, s = decisions(probas[cell.fit], fits.rules[cell])
-            cells.append(_run(tape, grid, r, s, cell.hold_ns, verdict).day_bp())
+            cells.append(_bp(_full(voids, partial(_run, tape, grid, r, s, cell.hold_ns, verdict))))
         out["neighbourhood"] = cells
     return out
