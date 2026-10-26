@@ -163,6 +163,54 @@ def summarise(table: pd.DataFrame) -> pd.DataFrame:
     return pooled.reset_index()
 
 
+#: The original's printed backtests (Binance spot, 2025-02-05 .. 06, 0.01 ETH):
+#: fills, PnL before and after its fee, in USDT, rounded as its tables show
+#: them; keyed by the replication's run and holding.
+ORIGINAL: dict[tuple[str, str], tuple[int, float, float]] = {
+    ("ref37", "signal_to_signal"): (185, 1, 0),
+    ("c121", "signal_to_signal"): (298, -1, -2),
+    ("c122", "signal_to_signal"): (300, -0, -2),
+    ("c124", "signal_to_signal"): (298, -1, -2),
+    ("c125", "signal_to_signal"): (496, 1, -2),
+    ("c126", "signal_to_signal"): (798, 1, -4),
+    ("c133", "signal_to_signal"): (350, 2, 0),
+    ("c138", "signal_to_signal"): (592, 3, -1),
+    ("c149", "signal_to_signal"): (350, 2, 0),
+    ("c150", "signal_to_signal"): (930, 5, -1),
+    ("c155", "signal_to_signal"): (796, 1, -4),
+    ("c156", "signal_to_signal"): (2424, 3, -12),
+    ("c164", "signal_to_signal"): (1591, 4, -6),
+    ("c150", "close_by_time_100s"): (1407, 3, -6),
+    ("c176", "signal_to_signal"): (932, 5, -1),
+    ("c183", "signal_to_signal"): (316, 2, -0),
+    ("c189", "close_by_time_100s"): (1936, 6, -6),
+    ("c189", "signal_to_signal"): (1458, 7, -2),
+    ("c195", "close_by_time_100s"): (1982, 6, -7),
+    ("c195", "signal_to_signal"): (1502, 7, -3),
+    ("ref48", "signal_to_signal"): (358, 3.1, 0.9),
+    ("c205", "signal_to_signal"): (504, 1, -2),
+    ("c206", "signal_to_signal"): (352, 3, 1),
+    ("ref48", "close_by_time_500s"): (454, 2, -1),
+    ("c218", "signal_to_signal"): (348, 3, 1),
+    ("c223", "signal_to_signal"): (960, 5, -1),
+}
+
+
+def wide(summary: pd.DataFrame) -> pd.DataFrame:
+    """One row per run: counts, gross, net at each fee, the gross edge, and the
+    original's printed numbers where it ran the same thing."""
+    base = summary[summary["fee_bp_per_side"] == 0.0].set_index(["run", "strategy"])
+    out = base[["source", "days", "signals", "fills_per_day", "gross_usdt"]].copy()
+    for fee in (2.2, 5.5):
+        part = summary[summary["fee_bp_per_side"] == fee].set_index(["run", "strategy"])
+        out[f"net_{fee:g}bp_usdt"] = part["net_usdt"]
+        out[f"days_net_positive_{fee:g}bp"] = part["days_net_positive"]
+    out["gross_bp_of_turnover"] = base["gross_bp_of_turnover"]
+    for i, name in enumerate(("original_fills", "original_pnl", "original_pnl_after_fee")):
+        out[name] = [ORIGINAL.get(key, (np.nan, np.nan, np.nan))[i] for key in out.index]
+    return out.reset_index()
+
+
 def cmd_backtest(args: argparse.Namespace) -> None:
     from trading_research.replication_eth.evaluate import day_rows, signals
     from trading_research.replication_eth.store import book_path
@@ -185,7 +233,9 @@ def cmd_backtest(args: argparse.Namespace) -> None:
     table.to_csv(RESULTS / f"replication_eth_2025_{args.part}_days.csv", index=False)
     summary = summarise(table)
     summary.to_csv(RESULTS / f"replication_eth_2025_{args.part}_summary.csv", index=False)
-    print(summary.round(3).to_string(index=False))
+    table = wide(summary)
+    table.to_csv(RESULTS / f"replication_eth_2025_{args.part}_runs.csv", index=False)
+    print(table.round(3).to_string(index=False))
 
 
 def cmd_fetch(args: argparse.Namespace) -> None:
@@ -196,14 +246,17 @@ def cmd_fetch(args: argparse.Namespace) -> None:
 
 
 def cmd_shares(args: argparse.Namespace) -> None:
-    """Class shares on the training days at candidate thresholds, against the
-    original's printed mix (5 s, filtered rows: 9.05 / 81.88 / 9.08 %;
-    10 s, every row: 7.62 / 84.88 / 7.50 %)."""
+    """Class shares on the training days at the two thresholds the original's
+    code holds (2e-4 printed when it ran on one day, 5e-4 in its source), against
+    the mix it printed for its ten-day training split (5 s, filtered rows:
+    9.05 / 81.88 / 9.08 %; 10 s, every row: 7.62 / 84.88 / 7.50 %). The one
+    with the smaller largest gap is the replication's threshold."""
     data = load_span(ROOT, span(args.start, args.end))
     vol = np.concatenate(data["volatility"])
     rel50, rel100 = np.concatenate(data["rel50"]), np.concatenate(data["rel100"])
     rows = []
-    for alpha in (2e-4, 3e-4, 4e-4, 5e-4):
+    printed = np.array([0.0905, 0.8188, 0.0908, 0.0762, 0.8488, 0.0750])
+    for alpha in (2e-4, 5e-4):
         y50, y100 = labels(rel50, alpha), labels(rel100, alpha)
         kept = vol >= MIN_VOLATILITY
         s50 = np.bincount(y50[kept], minlength=4)[1:] / kept.sum()
@@ -218,6 +271,7 @@ def cmd_shares(args: argparse.Namespace) -> None:
                 "h10s_all_flat": s100[1],
                 "h10s_all_up": s100[2],
                 "filtered_out": 1 - kept.mean(),
+                "largest_gap_to_printed": float(np.abs(np.r_[s50, s100] - printed).max()),
             }
         )
     table = pd.DataFrame(rows)
