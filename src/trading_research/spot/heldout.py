@@ -213,9 +213,11 @@ def calibration(
         target = folder / "fill_s" / f"{day}.parquet"
         target.parent.mkdir(parents=True, exist_ok=True)
         pd.concat(priced, ignore_index=True).to_parquet(target, index=False)
-    out["thinned"] = None
-    if inputs.usable(sa.BINANCE) and inputs.binance.frame is not None and len(walked.trades):
+    out["thinned"] = None  # a day excluded on Binance is not used
+    if inputs.usable(sa.BINANCE) and inputs.binance.frame is not None:
         count = len(inputs.binance.frame)
+        out["thinned"] = {"binance_prints": count, "capacity": 0.0, "trades": len(walked.trades)}
+    if out["thinned"] is not None and len(walked.trades):
         thinned = thinned_calibration(prints, count, walked.trades, day)
         target = folder / "thinned" / f"{day}.parquet"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -223,7 +225,7 @@ def calibration(
         sides, sizes = trade_fills(walked.trades)
         ratios = [capacity_ratio(sides, sizes, thin_prints(prints, count, seed))
                   for seed in range(10)]  # fmt: skip
-        out["thinned"] = {"binance_prints": count, "capacity": float(np.mean(ratios))}
+        out["thinned"]["capacity"] = float(np.mean(ratios))
     out["prints"] = {"bybit": len(prints),
                      "binance": None if inputs.binance.frame is None else len(inputs.binance.frame)}  # fmt: skip
     return out

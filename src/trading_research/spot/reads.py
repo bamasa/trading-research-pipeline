@@ -194,3 +194,29 @@ def read_block(study: SpotStudy, block: str, *, commit: Committer | None = None)
     return study.state.finish(block, {"results_sha256": digest, "label": label,
                                       "statuses": {s: a.status for s, a in found["assessments"].items()},
                                       "after_P": after, "sentences": sentences, "page": page})  # fmt: skip
+
+
+def final_statuses(study: SpotStudy, today: date | None = None) -> dict[str, str]:
+    """Each slot's status by the registered table after P: from P's results once P is
+    read; before it, "candidate (P not yet read)" for a candidate until P's deadline
+    and "candidate, not confirmed (P not read by its deadline)" after it; every
+    other status as H left it (with the fallback's mark when H was not blind)."""
+    path = study.repo / sr.RESULTS_PATHS["H"]
+    if not path.exists():
+        return {}
+    h = json.loads(path.read_text(encoding="utf-8"))
+    p_path = study.repo / sr.RESULTS_PATHS["P"]
+    if p_path.exists():
+        after = json.loads(p_path.read_text(encoding="utf-8")).get("measurements", {})
+        found = after.get("after_P") or {}
+        if found:
+            return {slot: str(found[slot]) for slot in sr.FAMILY if slot in found}
+    try:
+        deadline = study.ledger().p_deadline()
+    except HeldOutLocked:  # H's results not yet committed: the deadline is not running
+        deadline = None
+    day = today or study.ledger().today()
+    state = "not read by its deadline" if deadline and day > deadline else "not yet read"
+    blind = bool(h.get("blind"))
+    return {slot: st.final_status(str(h["statuses"][slot]["status"]), p_state=state, blind=blind)
+            for slot in sr.FAMILY if slot in h.get("statuses", {})}  # fmt: skip

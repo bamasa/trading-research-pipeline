@@ -85,7 +85,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.frozen_2025 is not None:
         study.binding = replace(study.binding, root=args.frozen_2025.resolve())
     if args.command == "status":
-        result: object = study.state.status()
+        final = reads.final_statuses(study)
+        result: object = {**study.state.status(), **({"after_P": final} if final else {})}
     elif args.command == "pages":
         result = pages.publish(study)
     elif args.command in ("open", "read"):

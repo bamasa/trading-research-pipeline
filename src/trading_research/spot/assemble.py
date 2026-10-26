@@ -220,3 +220,35 @@ def measurements(records: Mapping[str, Mapping[str, Any]], s: st.SlotDays) -> di
             out[f"{name}_median_of_days"] = float(np.median(medians)) if len(medians) else None
         out["caps"] = st.caps(s) if len(days) else None
     return out
+
+
+def thinned_capacity_median(records: Mapping[str, Mapping[str, Any]]) -> float | None:
+    """The thinned calibration's capacity median over the kept Bybit days it was
+    computed on (Binance's day usable too), a day without a book-walk trade of S25-PB
+    counting 0 and an infinite day's ratio infinite; None without such a day."""
+    from trading_research.spot import access as sa
+
+    found = [records[d].get("calibration", {}).get("thinned") for d in kept_days(records, sa.BYBIT)]
+    days = [f for f in found if f is not None]
+    if not days:
+        return None
+    capacity = np.array([np.nan if f.get("capacity") is None else f["capacity"] for f in days])
+    trades = np.array([float(f.get("trades", 1)) for f in days])
+    return capacity_median(capacity_values(capacity, trades))
+
+
+def both_ways(records: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, float | None]]:
+    """FILL-S's ``net_bp_trade`` both ways, the day-mean over the kept Bybit days: S25-BB
+    by the book walk (its true run) and by the print rule, S25-PB by the print rule
+    (its true run) and by the book walk."""
+    from trading_research.spot import access as sa
+
+    days = kept_days(records, sa.BYBIT)
+    rows = [records[d]["rows"] for d in days]
+    calib = [records[d].get("calibration", {}) for d in days]
+    return {
+        "S25-BB": {"book_walk": _mean(_values([r.get("S25-BB", {}) for r in rows], "value")),
+                   "print_rule": _mean(_values([c.get("bb_print_rule", {}) for c in calib], "value"))},
+        "S25-PB": {"print_rule": _mean(_values([r.get("S25-PB", {}) for r in rows], "value")),
+                   "book_walk": _mean(_values([c.get("pb_book", {}) for c in calib], "value"))},
+    }  # fmt: skip

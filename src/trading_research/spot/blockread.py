@@ -157,9 +157,14 @@ def compute(
                         a_buy=a_buy, a_sell=a_sell)  # fmt: skip
     measured = {r: [asdict(k) for k in st.measured_kills(rows[r], a_buy, a_sell)]
                 for r in MEASURED_ROWS if ROWS[r].instrument not in unreadable}  # fmt: skip
+    not_assessed = {r: st.unreadable_status(ROWS[r].instrument, plan.block)
+                    for r in MEASURED_ROWS if ROWS[r].instrument in unreadable}  # fmt: skip
+    calibration["thinned_capacity_median"] = asm.thinned_capacity_median(records)
+    calibration["net_bp_trade_both_ways"] = asm.both_ways(records)
     measurements = {
         "rows": {r: asm.measurements(records, s) for r, s in rows.items()},
         "measured_rows_kills": measured,
+        "measured_rows_not_assessed": not_assessed,
         "gap_days_put_back": {r: put_back_view(records, r) for r in ho.PUT_BACK_ROWS},
         "calibration": calibration,
         "excluded": {sa.instrument(n).key: {d.isoformat(): list(v) for d, v in e.items()}
