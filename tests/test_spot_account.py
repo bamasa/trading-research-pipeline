@@ -14,6 +14,7 @@ from test_spot_prints_fixture import CLIP, grid_of, make_prints
 from trading_research.backtest.taker import TakerBook
 from trading_research.market_making.accounting import IdentityError
 from trading_research.market_making.events import NS_PER_S
+from trading_research.spot import account as acc
 from trading_research.spot.account import (
     CapError,
     Fills,
@@ -172,3 +173,37 @@ def test_k_fills_extra_charge_falls_on_each_fills_side() -> None:
     np.testing.assert_allclose(charged["net"], t["net"] - want, rtol=1e-12, atol=1e-15)
     assert day_summary(charged).net_bp < day_summary(t).net_bp
     assert (with_extra_fees(t, 0.0, 0.0)["net"] == t["net"]).all()
+
+
+def _round_trips(sides: np.ndarray, entry: np.ndarray, exit_: np.ndarray, fee_bp: float = 10.0):
+    """One clip in and out per side, in time order, and the trips' net in quote."""
+    n = len(sides)
+    side = np.empty(2 * n, dtype=np.int64)
+    side[0::2], side[1::2] = sides, -sides
+    price = np.empty(2 * n)
+    price[0::2], price[1::2] = entry, exit_
+    fills = acc.Fills(np.arange(2 * n, dtype=np.int64), side, price, np.full(2 * n, 0.010),
+                      np.full(2 * n, fee_bp))  # fmt: skip
+    net = sides * (exit_ - entry) * 0.010 - (entry + exit_) * 0.010 * fee_bp * 1e-4
+    return fills, float(net.sum())
+
+
+@pytest.mark.parametrize("trips", [1_001, 1_726, 4_312])
+def test_k_inv_never_fires_on_an_honest_heavy_day(trips: int) -> None:
+    """Fees alone exhaust three clips of quote after about 1,000 round trips at 10 bp;
+    they are a separate ledger, so the largest feasible day (20 s holds from 00:01 to
+    23:58) fires nothing."""
+    px = np.full(trips, 60_000.0)
+    fills, net = _round_trips(np.ones(trips, dtype=np.int64), px, px)
+    day = acc.account_day(fills, net, 60_000.0, 60_000.0)
+    assert day.void == ()
+
+
+def test_k_inv_never_fires_on_a_losing_day_or_after_many_longs_then_a_short() -> None:
+    entry = np.full(850, 60_000.0)
+    fills, net = _round_trips(np.ones(850, dtype=np.int64), entry, entry * (1 - 5e-4))
+    assert acc.account_day(fills, net, 60_000.0, 60_000.0).void == ()
+    sides = np.r_[np.ones(1_001, dtype=np.int64), -1]
+    px = np.full(len(sides), 60_000.0)
+    fills, net = _round_trips(sides, px, px)
+    assert acc.account_day(fills, net, 60_000.0, 60_000.0).void == ()

@@ -12,11 +12,16 @@ What this module adds, from the executors' fills:
 * **The inventory's own P&L**: the held clip marked from the day's first print
   to its last. A separate line, never inside ``net_bp_trade``, a kill or a
   status.
-* **K-inv**: either coin's balance below zero after any fill, replayed twice:
-  ``quote``, every fee booked in quote (the registered convention); and
-  ``received``, each fee deducted in the asset received (a buy's in BTC at
-  ``size x fee_bp x 1e-4``, a sell's in quote), the day starting with two clips
-  of BTC. With these balances it fires only through an accounting fault.
+* **K-inv**: either coin's balance below zero after any fill, on the balances
+  the positions move: the BTC a short sells and buys back, and the quote a long
+  spends at its entry and gets back at its exit, valued at the entry's price;
+  each round trip's fees and P&L go to a separate ledger, which K-acct
+  reconciles. It is checked in both bookings, ``quote`` (every fee booked in
+  quote, the registered convention) and ``received`` (each fee deducted in the
+  asset received, a buy's in BTC at ``size x fee_bp x 1e-4``, a sell's in quote,
+  the day starting with two clips of BTC). With these balances it fires only
+  when a position exceeds the held inventory, never on a heavy day's fees or
+  losses.
 * **K-cap**: the traded position beyond one clip either way after any fill.
 * **K-acct** on the spot account: at the day's end the BTC balance is the
   start's (less, when fees are deducted in BTC, those fees) and the quote's
@@ -144,6 +149,7 @@ class InventoryCheck:
     quote_start: float
     base_end: float
     quote_end: float
+    #: The lowest balances K-inv reads: the positions' balances, fees and P&L apart.
     min_base: float
     min_quote: float
     #: The fees deducted in BTC, in BTC and valued at their fills' prices (0 in quote).
@@ -155,6 +161,23 @@ class InventoryCheck:
     @property
     def k_inv(self) -> bool:
         return self.first_negative >= 0
+
+
+def position_balances(
+    fills: Fills, base0: float, quote0: float, clip: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """After each fill, the BTC and the quote the open position holds the account to:
+    the start's BTC plus the position, and the start's quote less what the open
+    position cost (a short's proceeds count as quote held). Each round trip's fees
+    and P&L are a separate ledger, so these return to the start whenever the
+    position is flat."""
+    flow = fills.side * fills.size
+    position = np.cumsum(flow)
+    flat = np.abs(position) <= 1e-12 * clip
+    segment = np.concatenate([[0], np.cumsum(flat[:-1])]) if len(flat) else np.zeros(0, int)
+    cost = pd.Series(flow * fills.price).groupby(segment).cumsum().to_numpy(dtype=np.float64)
+    cost = np.where(flat, 0.0, cost)
+    return base0 + np.where(flat, 0.0, position), quote0 - cost
 
 
 def replay(fills: Fills, booking: str, first_price: float, clip: float) -> InventoryCheck:
@@ -170,15 +193,16 @@ def replay(fills: Fills, booking: str, first_price: float, clip: float) -> Inven
     quote_step = -fills.side * notional - np.where(in_base, 0.0, fee)
     base = base0 + np.cumsum(base_step)
     quote = quote0 + np.cumsum(quote_step)
-    negative = (base < -1e-12 * clip) | (quote < -1e-9 * max(quote0, 1.0))
+    held_base, held_quote = position_balances(fills, base0, quote0, clip)
+    negative = (held_base < -1e-12 * clip) | (held_quote < -1e-9 * max(quote0, 1.0))
     return InventoryCheck(
         booking,
         base0,
         quote0,
         float(base[-1]) if len(base) else base0,
         float(quote[-1]) if len(quote) else quote0,
-        float(min(base.min(), base0)) if len(base) else base0,
-        float(min(quote.min(), quote0)) if len(quote) else quote0,
+        float(min(held_base.min(), base0)) if len(base) else base0,
+        float(min(held_quote.min(), quote0)) if len(quote) else quote0,
         float((fills.size * fills.fee_bp * 1e-4)[in_base].sum()),
         float(fee[in_base].sum()),
         int(np.flatnonzero(negative)[0]) if negative.any() else -1,
