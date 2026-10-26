@@ -45,6 +45,8 @@ def pooled_group(g: pd.DataFrame) -> dict[str, Any]:
         "gross_bp_trade": _ratio(gross, notional),
         "gross_bp_turnover": _ratio(gross, turnover),
         "long_share": float(g["trades_long"].sum()) / trades if trades else math.nan,
+        "decisions_per_day": float(g["decisions"].sum()) / len(g) if len(g) else math.nan,
+        "ic_mean": float(g["ic"].mean()) if len(g) else math.nan,
         "market_bp_day_mean": float(g["market_bp"].mean()) if len(g) else math.nan,
     }  # fmt: skip
 
@@ -58,4 +60,9 @@ def pooled(rows: pd.DataFrame, windows: Sequence[str] = ("A", "B")) -> pd.DataFr
     for frame in frames:
         for key, g in frame.groupby(list(KEYS), sort=False):
             found.append(dict(zip(KEYS, key, strict=True)) | pooled_group(g))
-    return pd.DataFrame(found)
+    out = pd.DataFrame(found)
+    order = {"two_sided": 0, "long_only": 1, "zero": 0, "regular_10bp": 1}
+    places = {w: k for k, w in enumerate(windows)}
+    ranks = out["window"].map(places).fillna(len(windows)) * 10 + out["variant"].map(order)
+    out = out.assign(_rank=ranks + out["fees"].map(order) / 10)
+    return out.sort_values("_rank", kind="stable").drop(columns="_rank").reset_index(drop=True)

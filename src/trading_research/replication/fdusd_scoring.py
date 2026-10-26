@@ -14,6 +14,9 @@ registered fee table (``configs/spot_2026.yaml``), whose BTC/FDUSD interval from
 
 Each is run for the two-sided slot and for the long-only variant
 (``spot.account.long_only``: every short dropped before the one-position rule).
+The day's rank IC of ``p_long - p_short`` against the forward move over the
+hold, from the mid proxy at the entry fill (``spot.print_label.forward_move_bp``),
+is recorded beside it, as the spot study records it.
 A fee changes no fill and no decision, so a day's trades are the same at both
 tiers and only the money differs.
 """
@@ -33,8 +36,9 @@ from trading_research.spot import account as acc
 from trading_research.spot import days as dy
 from trading_research.spot.archives import BINANCE_SPOT
 from trading_research.spot.costs import FeeTable
+from trading_research.spot.print_label import forward_move_bp
 from trading_research.spot.print_taker import PrintDay, execute_print_day, print_settings
-from trading_research.spot.runs import decisions
+from trading_research.spot.runs import decisions, rank_ic, signal
 from trading_research.strategies.hold_first import HoldFirstRule
 
 FEES: dict[str, str] = {"zero": "vip2_to_vip9", "regular_10bp": "regular"}
@@ -80,7 +84,10 @@ def score_day(
     frame = found.features()
     grid = stamps_ns(frame)
     tape = found.tape()
-    rows, side = decisions(dy.predict(model, frame, LAYOUT, found.scored_from), rule)
+    proba = dy.predict(model, frame, LAYOUT, found.scored_from)
+    rows, side = decisions(proba, rule)
+    scored = np.isfinite(proba).all(axis=1)
+    ic = rank_ic(signal(proba)[scored], forward_move_bp(tape, grid, HOLD_S)[scored])
     runs = {"two_sided": (grid[rows], side), "long_only": acc.long_only(grid[rows], side)}
     first, last = acc.first_last_print(tape)
     out = []
@@ -91,5 +98,6 @@ def score_day(
             run = execute_print_day(tape, grid, decided, sides, HOLD_NS, settings)
             out.append({"window": window, "day": day.isoformat(), "variant": variant,
                         "fees": fees, "tier": tier, "warm": found.warm, "grid_rows": len(grid),
-                        "market_bp": (last / first - 1.0) * 1e4, **money(run)})  # fmt: skip
+                        "market_bp": (last / first - 1.0) * 1e4, "ic": ic,
+                        **money(run)})  # fmt: skip
     return out

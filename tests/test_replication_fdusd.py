@@ -36,14 +36,14 @@ def _venue() -> syn.SpotVenue:
     return syn.SpotVenue(syn.SpotMarket(frozenset(DAYS), step_ms=30_000))
 
 
-def test_the_guard_permits_the_replication_days_of_binance_prints_only() -> None:
+def test_the_guard_allows_the_replication_days_of_binance_prints_only() -> None:
     guard = rf.ReplicationAccess()
     guard.require(BINANCE_SPOT, [date(2024, 11, 1), date(2025, 6, 30)], PRINTS)
     for instrument, day, plane in ((BINANCE_SPOT, date(2025, 3, 15), PRINTS),
                                    (BINANCE_SPOT, date(2026, 8, 8), PRINTS),
                                    (BYBIT_SPOT, date(2025, 6, 1), PRINTS),
                                    (BINANCE_SPOT, date(2025, 6, 1), "book")):  # fmt: skip
-        with pytest.raises(PermissionError):
+        with pytest.raises(rf.OutsideReplication):
             guard.require(instrument, [day], plane)
 
 
@@ -53,7 +53,7 @@ def test_a_day_lands_only_under_a_replication_root(tmp_path: Path) -> None:
         root / "binance" / "prints" / "BTCFDUSD" / "2025-02-03.parquet"
     )
     for wrong in (tmp_path / "data" / "spot", tmp_path / "data" / "replication" / "spot"):
-        with pytest.raises(PermissionError):
+        with pytest.raises(rf.OutsideReplication):
             rf.target_path(DAYS[0], wrong)
 
 
@@ -116,3 +116,24 @@ def test_the_two_fees_differ_only_by_ten_bp_of_turnover(tmp_path: Path) -> None:
     break_even = summary.loc[("A", "two_sided", "zero"), "gross_bp_turnover"]
     assert np.isclose(break_even, zero.loc["two_sided", "gross_quote"]
                       / zero.loc["two_sided", "turnover"] * 1e4)  # fmt: skip
+
+
+def test_the_page_shows_both_fees_and_both_windows(tmp_path: Path) -> None:
+    from trading_research.replication.fdusd_page import page
+
+    root, venue = tmp_path / "replication", _venue()
+    for day in DAYS:
+        rf.fetch_day(day, root, opener=venue)
+    table = load_fee_table(REPO / CONFIG_PATH)
+    rule = HoldFirstRule(theta_long=0.5, theta_short=2.0)
+    one = pd.DataFrame(rs.score_day("A", _AlwaysLong(), rule, table, DAYS[1], root))
+    days = pd.concat([one, one.assign(window="B")], ignore_index=True)
+    fit = {"rows": 10, "classes": {"1": 4, "0": 2, "-1": 4},
+           "theta": {"theta_long": 0.5, "theta_short": 2.0}}  # fmt: skip
+    fits = [fit | {"window": "A"}, fit | {"window": "B"}]
+    text = page(fits, pooled(days), days, pd.DataFrame({"day": [str(d) for d in DAYS]}))
+    assert "Exploratory, not a blind test" in text
+    for title in ("## Results at zero fees", "## Results at the Regular account",
+                  "## Window A, day by day", "## Window B, day by day", "## What it shows"):  # fmt: skip
+        assert title in text
+    assert "| A+B | two-sided |" in text and "| A+B | long-only |" in text

@@ -1,8 +1,8 @@
 """A descriptive replication of the author's 2025 research on Binance spot BTC/FDUSD.
 
-Exploratory, not a blind test: the author worked on these dates in 2025, so
-nothing here is held out, and nothing here changes any registration. It runs
-the spot study's S25-PF recipe (print-only inputs, ``gbm``, label fee 0, hold
+Exploratory, not a blind test: the author's 2025 research on this pair covered
+these dates, so nothing here is held out, and nothing here changes any
+registration. It runs the spot study's S25-PF recipe (print-only inputs, ``gbm``, label fee 0, hold
 50 s, the hold-first rule at 240 trades a day, taker in and taker out by the
 side-correct print rule) on two 2025 windows, at zero fees and at the Regular
 account's 10 bp taker fee, to show at which fee the result is positive::
@@ -31,6 +31,8 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 RESULTS = REPO / "experiments" / "results"
 FETCH_CSV = RESULTS / "replication_fdusd_2025_fetch.csv"
+DAYS_CSV = RESULTS / "replication_fdusd_2025_days.csv"
+PAGE = RESULTS / "replication_fdusd_2025.md"
 
 
 def _fetch_one(day: date, attempts: int = 4) -> dict[str, Any]:
@@ -124,6 +126,23 @@ def score(window: str, workers: int) -> int:
     return 0
 
 
+def report() -> int:
+    """The per-day CSV and the results page, from both windows' fits and days."""
+    import pandas as pd
+
+    from trading_research.replication.fdusd_page import page
+    from trading_research.replication.fdusd_summary import pooled
+
+    fits = [json.loads((_work(w) / "fit.json").read_text(encoding="utf-8")) for w in "AB"]
+    days = pd.concat([pd.read_csv(_work(w) / "days.csv") for w in "AB"], ignore_index=True)
+    days = days.sort_values(["window", "variant", "fees", "day"]).reset_index(drop=True)
+    days.to_csv(DAYS_CSV, index=False, float_format="%.6g")
+    fetched = pd.read_csv(FETCH_CSV)
+    PAGE.write_text(page(fits, pooled(days), days, fetched), encoding="utf-8")
+    print(PAGE.read_text(encoding="utf-8"))
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     found = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
@@ -144,8 +163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return fit(args.window, args.workers)
     if args.command == "score":
         return score(args.window, args.workers)
-    parser().error(f"{args.command} is not implemented yet")
-    return 2
+    return report()
 
 
 if __name__ == "__main__":

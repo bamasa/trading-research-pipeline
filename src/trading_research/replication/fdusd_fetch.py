@@ -11,7 +11,8 @@ side flag and takes each file's epoch unit), and written to
 checksum are deleted after the conversion, whatever happened.
 
 :class:`ReplicationAccess` is the replication's own guard for the spot loader:
-it permits Binance BTCFDUSD prints on the replication's days and nothing else.
+it allows Binance BTCFDUSD prints on the replication's days and refuses anything else
+(:class:`OutsideReplication`).
 """
 
 from __future__ import annotations
@@ -41,6 +42,10 @@ SPANS: tuple[tuple[date, date], ...] = (
 )
 
 
+class OutsideReplication(LookupError):
+    """A plane, a day or a data root that is not the replication's."""
+
+
 def span_days(first: date, last: date) -> list[date]:
     return [first + timedelta(days=k) for k in range((last - first).days + 1)]
 
@@ -59,11 +64,11 @@ class ReplicationAccess:
         self, instrument: str, days: Iterable[date], plane: str, *, what: str = "read"
     ) -> None:
         if instrument != BINANCE_SPOT or plane != PRINTS:
-            raise PermissionError(f"the replication reads {BINANCE_SPOT} prints only, not {what} "
+            raise OutsideReplication(f"the replication reads {BINANCE_SPOT} prints only, not {what} "
                                   f"of {instrument} {plane}")  # fmt: skip
         outside = sorted(d for d in days if d not in self.days)
         if outside:
-            raise PermissionError(f"{what}: {outside[0]} is not a replication day")
+            raise OutsideReplication(f"{what}: {outside[0]} is not a replication day")
 
 
 def target_path(day: date, root: Path | str = ROOT) -> Path:
@@ -71,7 +76,7 @@ def target_path(day: date, root: Path | str = ROOT) -> Path:
     path = day_path(BINANCE_PRINTS, day, root)
     parts = Path(root).resolve().parts
     if "replication" not in parts or "spot" in parts:
-        raise PermissionError(f"{root} is not a replication data root")
+        raise OutsideReplication(f"{root} is not a replication data root")
     return path
 
 
