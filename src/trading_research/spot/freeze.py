@@ -156,6 +156,7 @@ def compute_record(study: SpotStudy, record0: Mapping[str, Any], record1: Mappin
         "disk": [{k: d.get(k) for k in ("stage", "at", "free_gb", "passed")} for d in record1["disk"]],
         "replay_peak_rss_bytes": max([int(p) for p in peaks if p] or [0]),
         "workers": study.workers, "stores": record1["stores"],
+        "code_freeze": {"commit": str(record1["code_freeze"]["commit"])},
         "trials": {"sha256": trials["sha256"], "rows": int(trials["rows"])},
     })  # fmt: skip
 
@@ -231,6 +232,8 @@ def amendment_text(study: SpotStudy, frozen: str, values: Mapping[tuple[str, ...
              f"- Complete D run D{study.run}; the run log's manifest "
              f"`{sr.TRIALS_MANIFEST_PATH.as_posix()}`: sha256 `{trials['sha256']}`, "
              f"{trials['rows']} rows.",
+             "- The code-freeze commit stage 1, D and this amendment ran under: "
+             f"`{values[('compute', 'record')]['code_freeze']['commit']}`.",
              "- Days excluded on W and D: " + "; ".join(
                  f"{key} {len({d for d, _ in items})} ({', '.join(sorted({r for _, r in items})) or 'none'})"
                  for key, items in excluded.items()) + ".",
@@ -273,9 +276,11 @@ def write_amendment(study: SpotStudy, values: Mapping[tuple[str, ...], Any]) -> 
 def run(study: SpotStudy) -> dict[str, Any]:
     """The amendment stage's record (module docstring)."""
     from trading_research.spot.development import ensure_2025
+    from trading_research.spot.stage1 import frozen_under
 
     if study.reload().frozen:
         raise RuntimeError("the configuration is already frozen: the D amendment is written once")
+    freeze = frozen_under(study)
     ensure_2025(study)
     check_2025(study)
     files = frozen_files(study, study.state.record("1"), _frozen_fold(study))
@@ -284,7 +289,7 @@ def run(study: SpotStudy) -> dict[str, Any]:
     values = placeholder_values(study, files, trials)
     written = write_amendment(study, values)
     return {"files": files, "trials": trials, "rehearsal": rehearsal, "amendment": written,
-            "commit": study.commit(),
+            "commit": study.commit(), "code_freeze": freeze,
             "next": "review the frozen configuration, the amendment and the run log's manifest; "
                     "commit them; then open H"}  # fmt: skip
 

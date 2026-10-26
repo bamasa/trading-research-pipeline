@@ -397,8 +397,16 @@ def _per_slot(value: Any, where: str) -> None:
         _require(_is_number(number) and number >= 0, f"{where}.{slot} must be a number at least 0")
 
 
+_COMMIT = re.compile(r"[0-9a-f]{7,40}")
+
+
 def _compute_record(value: Any, where: str) -> None:
-    """Any record, with the run log's sha256 and row count under ``trials``."""
+    """Any record, with the run log's sha256 and row count under ``trials`` and the
+    code-freeze commit stage 1 ran under at ``code_freeze.commit``."""
+    freeze = _mapping(_mapping(value, where).get("code_freeze"), f"{where}.code_freeze")
+    commit = freeze.get("commit")
+    _require(isinstance(commit, str) and _COMMIT.fullmatch(commit) is not None,
+             f"{where}.code_freeze.commit must be a commit in hex")  # fmt: skip
     trials = _mapping(_mapping(value, where).get("trials"), f"{where}.trials")
     _require(_is_sha256(trials.get("sha256")), f"{where}.trials.sha256 must be a sha256")
     rows = trials.get("rows")
@@ -681,6 +689,12 @@ class Registration:
     def mde(self) -> dict[str, float]:
         """{slot: MDE} on H, as frozen."""
         return {k: float(v) for k, v in (self.value(("metrics", "mde", "value")) or {}).items()}
+
+    @property
+    def code_freeze(self) -> str | None:
+        """The code-freeze commit stage 1 ran under, as the compute record holds it."""
+        record = self.value(("compute", "record"))
+        return None if record is None else str(record["code_freeze"]["commit"])
 
     @property
     def trials(self) -> dict[str, Any] | None:

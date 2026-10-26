@@ -46,8 +46,12 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def frozen_values(**files: bytes) -> dict[tuple[str, ...], Any]:
-    """A valid set of frozen values; ``files`` gives the frozen files' bytes."""
+FREEZE = "1a317b1" + "0" * 33
+
+
+def frozen_values(code_freeze: str = FREEZE, **files: bytes) -> dict[tuple[str, ...], Any]:
+    """A valid set of frozen values; ``files`` gives the frozen files' bytes and
+    ``code_freeze`` the code-freeze commit stage 1 ran under."""
     weights = files.get("weights", b"weights")
     day = {"status": "on_disk", "stream": {"messages": 1}, "findings": {}, "passes": True}
     return {
@@ -62,7 +66,8 @@ def frozen_values(**files: bytes) -> dict[tuple[str, ...], Any]:
         ("metrics", "mde", "sigma_d"): {"S25-PF": 4.0, "S25-BB": 3.0},
         ("metrics", "mde", "value"): {"S25-PF": 2.0, "S25-BB": 1.5},
         ("measurements", "result_D"): {"S25-PF": {"days": 61}},
-        ("compute", "record"): {"trials": {"sha256": sha(files.get("trials", b"t")), "rows": 10}},
+        ("compute", "record"): {"code_freeze": {"commit": code_freeze},
+                                "trials": {"sha256": sha(files.get("trials", b"t")), "rows": 10}},
         ("amendment", "date"): date(2026, 11, 20),
         ("artefacts", "frozen_slot_files_sha256"): {"S25-PF": sha(files.get("slot", b"slot"))},
     }  # fmt: skip
@@ -134,7 +139,9 @@ def test_freezing_writes_the_placeholders_and_nothing_else() -> None:
             "outside",
         ),
         (("data", "excluded_days_D"), {KEYS[0]: [[date(2026, 8, 8), "x"]]}, "day of W or D"),
-        (("compute", "record"), {"workers": 4}, "trials"),
+        (("compute", "record"), {"workers": 4, "code_freeze": {"commit": FREEZE}}, "trials"),
+        (("compute", "record"), {"trials": {"sha256": "0" * 64, "rows": 1}}, "code_freeze"),
+        (("compute", "record"), {"code_freeze": {"commit": "HEAD"}}, "a commit in hex"),
         (("metrics", "mde", "value"), {"S25-PB": 1.0}, "outside"),
     ],
 )

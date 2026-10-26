@@ -60,7 +60,7 @@ from trading_research.spot.plan import ROWS, WALK_FORWARD, Fold, folds
 from trading_research.spot.print_label import label_column
 from trading_research.spot.registration import FAMILY
 from trading_research.spot.runs import RowModels
-from trading_research.spot.stage1 import LeakError, spec_of
+from trading_research.spot.stage1 import LeakError, frozen_under, spec_of
 from trading_research.spot.state import write_json
 
 LEAK_ROWS: tuple[str, ...] = ("S25-PF", "S25-BB")
@@ -215,6 +215,7 @@ def ensure_2025(study: SpotStudy) -> None:
 
 def run(study: SpotStudy) -> dict[str, Any]:
     """The D stage's record (module docstring)."""
+    frozen_under(study)
     record1 = study.state.record("1")
     touch = float(record1["touch_size"])
     ensure_2025(study)

@@ -18,7 +18,11 @@ On the 2025 study's pattern, bound to this study's blocks and its registration
   closes it as failed) and, at the end, the results file's sha256.
 
 **H** opens only if the amendment records the configuration's sha256, the file
-on disk has it and is committed; the tree is clean but for the ledger; every
+on disk has it and is committed; the study code is the code the amendment froze
+(the code-freeze commit its compute record names, nothing of the code changed
+since), the configuration changed since that commit only in its placeholders and
+the document only by appending one frozen-hash line and no null-hash line (both
+checked at every open and every process); the tree is clean but for the ledger; every
 frozen fit, frozen slot file and the fitted-values file is at the amendment's
 sha256; the 2025 study's files S25-T loads are at the sha256s its configuration
 records and that configuration at its frozen sha256; the run log's manifest is
@@ -48,8 +52,13 @@ from typing import Any
 
 import yaml
 
-from trading_research.market_making.prereg import HeldOutLocked, PreRegistrationError
+from trading_research.market_making.prereg import (
+    HeldOutLocked,
+    PreRegistrationError,
+    unfrozen_text,
+)
 from trading_research.spot import access as sa
+from trading_research.spot import code_freeze as cf
 from trading_research.spot import registration as sr
 from trading_research.spot import statuses as st
 
@@ -293,6 +302,52 @@ class Ledger:
         self._committed_unchanged(self.config)
         return registration
 
+    def verify_code_freeze(self, registration: sr.Registration) -> str:
+        """The study code is the code the amendment froze: the code-freeze commit the
+        frozen configuration records is the note's (a later line only with an
+        amendment naming it), HEAD descends from it, and nothing of ``src/``,
+        ``experiments/spot_2026.py``, ``pyproject.toml`` or ``uv.lock`` changed since."""
+        recorded = registration.code_freeze
+        if recorded is None:
+            raise HeldOutLocked("the amendment records no code-freeze commit")
+        document = (self.repo / self.document).read_text(encoding="utf-8")
+        try:
+            expected = _git(self.repo, "rev-parse", f"{recorded}^{{commit}}").strip()
+            return cf.check(self.repo, _git, sr.amendments_text(document), paths=cf.CODE_ONLY,
+                            expected=expected)  # fmt: skip
+        except cf.CodeFreezeError as exc:
+            raise HeldOutLocked(f"the code freeze does not hold: {exc}") from exc
+
+    def verify_pinned(self, registration: sr.Registration, commit: str) -> None:
+        """Since the code-freeze commit the configuration changed only in its
+        placeholders (and, for P, by the fee amendment's intervals), and the document
+        only by appending, with exactly one frozen-hash line and no null-hash line; the
+        null-placeholder hash accepted is the one the document held at that commit."""
+        then = _git(self.repo, "show", f"{commit}:{self.config.as_posix()}")
+        if unfrozen_text(registration.base_text) != unfrozen_text(then):
+            raise HeldOutLocked(
+                f"{self.config} changed outside its placeholders since the code-freeze commit "
+                f"{commit[:7]}"
+            )
+        before = _git(self.repo, "show", f"{commit}:{self.document.as_posix()}").rstrip("\n")
+        now = (self.repo / self.document).read_text(encoding="utf-8")
+        if not now.startswith(before):
+            raise HeldOutLocked(
+                f"{self.document} changed since the code-freeze commit other than by appending"
+            )
+        appended = now[len(before) :]
+        frozen = sr.FROZEN_HASH_PATTERN.findall(appended)
+        if len(frozen) != 1 or sr.NULL_HASH_PATTERN.findall(appended):
+            raise HeldOutLocked(
+                "since the code-freeze commit the document must gain exactly one frozen "
+                f"configuration hash and no null-placeholder hash (found {len(frozen)} and "
+                f"{len(sr.NULL_HASH_PATTERN.findall(appended))})"
+            )
+        try:
+            sr.Registration.from_text(registration.text, null_sha256=sr.latest_null_sha256(before))
+        except PreRegistrationError as exc:
+            raise HeldOutLocked(f"the configuration is not the registered one: {exc}") from exc
+
     def verify_tree(self, since: str | None = None) -> None:
         """Nothing but the ledger file is changed, untracked or, since ``since``, committed."""
         ledger = self.ledger.as_posix()
@@ -482,6 +537,7 @@ class Ledger:
             raise ValueError("candidates are named for P only")
         registration = self.verify_frozen(block)
         self.verify_tree()
+        self.verify_pinned(registration, self.verify_code_freeze(registration))
         committed = self.committed_entries()
         if self.entries() != committed:
             raise HeldOutLocked("the ledger has entries that are not committed")
@@ -548,6 +604,7 @@ class Ledger:
         registration = self.verify_frozen(block)
         if registration.sha256 != entry["config_sha256"]:
             raise HeldOutLocked(f"the configuration is not the one {block} was opened with")
+        self.verify_pinned(registration, self.verify_code_freeze(registration))
         self.verify_frozen_files(registration)
         self.verify_2025_files()
         environment = self._environment(committed)

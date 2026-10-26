@@ -96,32 +96,56 @@ def write(repo: Path, relative: Path | str, data: bytes) -> Path:
     return path
 
 
-def frozen_text() -> str:
-    return sr.freeze_text(TEXT, frozen_values(**OURS))
+#: The study code's stand-in, frozen by the note before stage 1.
+CODE = Path("src/trading_research/spot/statuses.py")
+FREEZES: dict[Path, str] = {}
+
+
+def frozen_text(repo: Path) -> str:
+    """The frozen configuration, its compute record naming the repository's freeze."""
+    return sr.freeze_text(TEXT, frozen_values(FREEZES[repo], **OURS))
 
 
 def amended_document(text: str) -> str:
     return DOCUMENT + f"\n### 2026-11-20: the D amendment\n\n{sr.frozen_hash_line(text)}\n"
 
 
+def freeze_code(repo: Path, message: str = "the code-freeze note") -> str:
+    """Commit the note naming HEAD as the code-freeze commit; return that commit."""
+    frozen_at = git(repo, "rev-parse", "HEAD").strip()
+    note = repo / "docs" / "spot_2026_code_freeze.md"
+    lines = note.read_text(encoding="utf-8") if note.exists() else "# Code freeze\n"
+    write(repo, note.relative_to(repo), (lines + f"\nCode-freeze commit: `{frozen_at}`\n").encode())
+    commit(repo, message)
+    return frozen_at
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
+    """The registration and the study code; the code-freeze note; then, after D, the
+    frozen configuration, the D amendment, the frozen files and the run log."""
     repo = tmp_path / "repo"
     repo.mkdir()
     git(repo, "init", "-q")
     write(repo, ".gitignore", b"/models/\n/data/\n")
-    text = frozen_text()
+    write(repo, sr.CONFIG_PATH, TEXT.encode())
+    write(repo, sr.DOCUMENT_PATH, DOCUMENT.encode())
+    write(repo, sr.CONFIG_2025_PATH, config_2025())
+    write(repo, CODE, b"T_BAR = 3.0\n")
+    write(repo, "README.md", b"study\n")
+    commit(repo, "registration and study code")
+    FREEZES.clear()
+    FREEZES[repo] = freeze_code(repo)
+    text = frozen_text(repo)
     write(repo, sr.CONFIG_PATH, text.encode())
     write(repo, sr.DOCUMENT_PATH, amended_document(text).encode())
-    write(repo, sr.CONFIG_2025_PATH, config_2025())
     for relative, data in {**OUR_FILES, **FILES_2025}.items():
         write(repo, relative, data)
     write(repo, sr.TRIALS_PATH, TRIALS)
     manifest = {"sha256": sha(TRIALS), "rows": 10,
                 "parts": [{"file": sr.TRIALS_PATH.name, "sha256": sha(TRIALS), "rows": 10}]}  # fmt: skip
     write(repo, sr.TRIALS_MANIFEST_PATH, json.dumps(manifest).encode())
-    write(repo, "README.md", b"study\n")
-    commit(repo, "registration")
+    commit(repo, "the D amendment")
     return repo
 
 
@@ -172,19 +196,20 @@ def test_h_needs_the_d_amendment_and_the_frozen_file(repo: Path) -> None:
     commit(repo)
     with pytest.raises(HeldOutLocked, match="no amendment records"):
         make_ledger(repo).open("H")
-    write(repo, sr.DOCUMENT_PATH, amended_document(frozen_text()).encode())
+    write(repo, sr.DOCUMENT_PATH, amended_document(frozen_text(repo)).encode())
     write(repo, sr.CONFIG_PATH, TEXT.encode())
     commit(repo)
     with pytest.raises(HeldOutLocked, match="still null"):
         make_ledger(repo).open("H")
-    other = sr.freeze_text(TEXT, {**frozen_values(**OURS), ("data", "max_sequence_gaps"): 4})
+    other = sr.freeze_text(TEXT, {**frozen_values(FREEZES[repo], **OURS),
+                                  ("data", "max_sequence_gaps"): 4})  # fmt: skip
     write(repo, sr.CONFIG_PATH, other.encode())
     commit(repo)
     with pytest.raises(HeldOutLocked, match="the amendment froze"):
         make_ledger(repo).open("H")
-    write(repo, sr.CONFIG_PATH, frozen_text().encode())
+    write(repo, sr.CONFIG_PATH, frozen_text(repo).encode())
     commit(repo)
-    write(repo, sr.CONFIG_PATH, (frozen_text() + "\n").encode())
+    write(repo, sr.CONFIG_PATH, (frozen_text(repo) + "\n").encode())
     with pytest.raises(HeldOutLocked):
         make_ledger(repo).open("H")  # not the frozen hash on disk, and not committed
 
@@ -324,7 +349,7 @@ def h_closed(repo: Path, statuses: dict[str, str]) -> None:
 
 
 def fee_amendment(repo: Path) -> None:
-    write(repo, sr.CONFIG_PATH, with_p_intervals(frozen_text()).encode())
+    write(repo, sr.CONFIG_PATH, with_p_intervals(frozen_text(repo)).encode())
     document = (repo / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
     write(repo, sr.DOCUMENT_PATH, (document + "\n### 2027-01-05: the fee amendment\n").encode())
     commit(repo, "the fee amendment")
@@ -390,7 +415,7 @@ def test_p_refuses_a_change_since_h_beyond_results_and_the_fee_amendment(repo: P
     write(repo, "docs/spot_2026_defects.md", b"none\n")
     write(repo, "experiments/results/spot_2026_page.json", b"{}")
     commit(repo, "allowed")
-    write(repo, "src/trading_research/spot/heldout.py", b"# changed\n")
+    write(repo, "tests/test_spot_heldout.py", b"# changed\n")
     commit(repo, "not allowed")
     with pytest.raises(HeldOutLocked, match="changed since H's read"):
         make_ledger(repo, now=P_DAY).open("P", candidates=["S25-PF"], published=published)
@@ -434,3 +459,91 @@ def test_p_is_read_once_for_every_candidate(repo: Path) -> None:
         ledger.open("P", candidates=["S25-PF"], published=published)
     entry = ledger.open("P", candidates=["S25-PF", "S25-BB"], published=published)
     assert entry["candidates"] == ["S25-BB", "S25-PF"]
+
+
+# ---------------------------------------------------------------------------
+# The code freeze, the configuration and the document, pinned at every open
+# ---------------------------------------------------------------------------
+
+
+def test_h_refuses_study_code_changed_after_the_freeze(repo: Path) -> None:
+    write(repo, CODE, b"T_BAR = 0.5  # the bar lowered after D\n")
+    commit(repo, "a change to the study code after the freeze, with no amendment")
+    with pytest.raises(HeldOutLocked, match="study code changed after the code-freeze commit"):
+        make_ledger(repo).open("H")
+    for path in ("experiments/spot_2026.py", "pyproject.toml", "uv.lock"):
+        write(repo, CODE, b"T_BAR = 3.0\n")
+        write(repo, path, b"changed\n")
+        commit(repo, f"{path} changed")
+        with pytest.raises(HeldOutLocked, match="code freeze does not hold"):
+            make_ledger(repo).open("H")
+        (repo / path).unlink()
+        commit(repo, f"{path} restored")
+
+
+def test_a_later_freeze_counts_only_with_an_amendment_and_stage_ones_commit(repo: Path) -> None:
+    write(repo, CODE, b"T_BAR = 3.0  # a correction\n")
+    commit(repo, "a correction")
+    later = freeze_code(repo, "a second code-freeze line")
+    with pytest.raises(HeldOutLocked, match="no dated amendment names it"):
+        make_ledger(repo).open("H")
+    document = (repo / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+    write(
+        repo,
+        sr.DOCUMENT_PATH,
+        (document + f"\n### 2026-11-21: a correction\n\n`{later}`\n").encode(),
+    )
+    commit(repo, "the correction's amendment")
+    with pytest.raises(HeldOutLocked, match="not the one stage 1 ran under"):
+        make_ledger(repo).open("H")  # the frozen configuration records the first freeze
+
+
+def test_h_refuses_a_configuration_changed_outside_its_placeholders(repo: Path) -> None:
+    """The fee table edited after the freeze, a new null hash and the frozen line rewritten."""
+    from trading_research.market_making.prereg import sha256_bytes
+
+    old = "regular: [0.0, 10.0], vip3: [0.0, 6.0]"
+    edited = TEXT.replace(old, "regular: [0.0, 2.3], vip3: [0.0, 6.0]")
+    null = sha256_bytes(unfrozen_text(edited).encode())
+    frozen = sr.freeze_text(edited, frozen_values(FREEZES[repo], **OURS), null_sha256=null)
+    document = (
+        DOCUMENT
+        + f"\n### 2026-11-20: the D amendment\n\n{sr.frozen_hash_line(frozen)}\n"
+        + f"\n### 2026-11-20: a later change\n\nNull-placeholder sha256: `{null}`\n"
+    )
+    write(repo, sr.CONFIG_PATH, frozen.encode())
+    write(repo, sr.DOCUMENT_PATH, document.encode())
+    commit(repo, "fees edited after the freeze, a null hash and the frozen line rewritten")
+    with pytest.raises(HeldOutLocked, match="changed outside its placeholders"):
+        make_ledger(repo).open("H")
+
+
+def test_the_document_gains_one_frozen_hash_line_and_no_null_hash_line(repo: Path) -> None:
+    document = (repo / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+    extra = f"\n### 2026-11-21: another\n\nNull-placeholder sha256: `{sr.REGISTERED_SHA256}`\n"
+    write(repo, sr.DOCUMENT_PATH, (document + extra).encode())
+    commit(repo, "a null-hash line after the freeze")
+    with pytest.raises(HeldOutLocked, match="exactly one frozen"):
+        make_ledger(repo).open("H")
+    line = sr.frozen_hash_line(frozen_text(repo))
+    write(repo, sr.DOCUMENT_PATH, (document + f"\n{line}\n").encode())
+    commit(repo, "the frozen line twice")
+    with pytest.raises(HeldOutLocked, match="exactly one frozen"):
+        make_ledger(repo).open("H")
+
+
+def test_every_process_checks_the_freeze_and_the_pins(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened(repo)
+    calls: list[str] = []
+    real = sl.Ledger.verify_pinned
+
+    def pinned(self: sl.Ledger, registration: sr.Registration, commit_: str) -> None:
+        calls.append(commit_)
+        real(self, registration, commit_)
+
+    monkeypatch.setattr(sl.Ledger, "verify_pinned", pinned)
+    commit(repo, "a process")
+    make_ledger(repo).session("H")
+    assert calls == [FREEZES[repo]]

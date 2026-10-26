@@ -28,7 +28,6 @@ Registered (the procedure's step 1, "Data budget", "Blocks"):
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from datetime import date
 from typing import Any
@@ -42,44 +41,38 @@ from trading_research.data.study_loader import max_sequence_gaps
 from trading_research.features.timed import stamps_ns
 from trading_research.spot import access as sa
 from trading_research.spot import archives as ar
+from trading_research.spot import code_freeze as cf
 from trading_research.spot import days as dy
+from trading_research.spot import registration as sr
 from trading_research.spot import runlog
 from trading_research.spot.book_inputs import book_targets
+from trading_research.spot.code_freeze import CODE_FREEZE_LINE, CODE_FREEZE_NOTE, STUDY_CODE
 from trading_research.spot.context import SpotStudy, git
 from trading_research.spot.fits import store_path
 from trading_research.spot.plan import HOLDS_S, LABEL_FEES_BP, STORES, TARGET_STRIDE
 from trading_research.spot.print_label import print_targets
 from trading_research.spot.stage0 import fetch
 
-CODE_FREEZE_NOTE = "docs/spot_2026_code_freeze.md"
-CODE_FREEZE_LINE = re.compile(r"Code-freeze commit: `([0-9a-f]{7,40})`")
-STUDY_CODE = ("src/", "experiments/spot_2026.py", "configs/spot_2026.yaml", "pyproject.toml",
-              "uv.lock")  # fmt: skip
+__all__ = ["CODE_FREEZE_LINE", "CODE_FREEZE_NOTE", "STUDY_CODE", "code_freeze", "frozen_under"]
 
 
 class LeakError(AssertionError):
     """A feature failed its leakage check (K-leak): the study stops."""
 
 
-def code_freeze(study: SpotStudy) -> dict[str, str]:
-    """The note's commit, refused unless no study code changed after it."""
-    path = study.repo / CODE_FREEZE_NOTE
-    if not path.exists():
-        raise RuntimeError(f"no {CODE_FREEZE_NOTE}: the code freeze is recorded, with a line "
-                           "'Code-freeze commit: `<sha>`', before the stage 1 fetch")  # fmt: skip
-    git(study.repo, "ls-files", "--error-unmatch", CODE_FREEZE_NOTE)
-    found = CODE_FREEZE_LINE.findall(path.read_text(encoding="utf-8"))
-    if not found:
-        raise RuntimeError(f"{CODE_FREEZE_NOTE} names no 'Code-freeze commit: `<sha>`'")
-    commit = git(study.repo, "rev-parse", f"{found[-1]}^{{commit}}").strip()
-    git(study.repo, "merge-base", "--is-ancestor", commit, "HEAD")
-    changed = git(study.repo, "diff", "--name-only", f"{commit}..HEAD", "--", *STUDY_CODE).split()
-    dirty = git(study.repo, "status", "--porcelain", "--", *STUDY_CODE).splitlines()
-    if changed or dirty:
-        raise RuntimeError(f"study code changed after the code-freeze commit {commit[:7]}: "
-                           f"{(changed + [d[3:] for d in dirty])[:5]}; a change is a correction "
-                           "under the amendment protocol")  # fmt: skip
-    return {"commit": commit}
+def code_freeze(study: SpotStudy, expected: str | None = None) -> dict[str, str]:
+    """The note's commit, refused unless no study code (the configuration included)
+    changed after it and, with ``expected``, it is the commit stage 1 ran under."""
+    from trading_research.spot.registration import amendments_text
+
+    document = study.repo / sr.DOCUMENT_PATH
+    amendments = amendments_text(document.read_text(encoding="utf-8")) if document.exists() else ""
+    return {"commit": cf.check(study.repo, git, amendments, expected=expected)}
+
+
+def frozen_under(study: SpotStudy) -> dict[str, str]:
+    """D's and the amendment's check: the code freeze stage 1 recorded, unchanged."""
+    return code_freeze(study, expected=str(study.state.record("1")["code_freeze"]["commit"]))
 
 
 def gap_threshold(log: fl.FetchLog, d_days: list[date]) -> tuple[int, dict[str, int]]:
