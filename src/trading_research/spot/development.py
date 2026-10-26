@@ -59,10 +59,11 @@ def mutated_after(frame: pd.DataFrame | None, cutoff_ns: int, prices: Sequence[s
                   labels: Sequence[str] = (), seed: int = 0) -> pd.DataFrame | None:  # fmt: skip
     """``frame`` with every named price and label at a row stamped after the cutoff
     changed (``validation/fold_leakage.mutate_after_cutoff``)."""
+    from trading_research.features.timed import stamps_ns
     from trading_research.validation.fold_leakage import mutate_after_cutoff
 
-    if frame is None or not len(frame):
-        return frame
+    if frame is None or not len(frame) or not (stamps_ns(frame) > cutoff_ns).any():
+        return frame  # nothing after the cutoff: the frame itself, uncopied
     cutoff = pd.Timestamp(cutoff_ns, unit="ns", tz="UTC")
     return mutate_after_cutoff(frame, cutoff, price_columns=[c for c in prices if c in frame],
                                label_columns=[c for c in labels if c in frame], seed=seed)  # fmt: skip
