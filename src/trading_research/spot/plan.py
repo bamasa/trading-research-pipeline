@@ -244,8 +244,10 @@ class Scale:
         return tuple(sa.block_days(block))
 
     def null_b_shifts(self, n: int) -> range:
-        """The registered 7 <= s <= 54 on 61 test days; on fewer days the same share of
-        the circle is left out at each end."""
+        """The registered 7 <= s <= 54, at most n - 1, over the kept test days; on a dry
+        run's few days the same share of the circle is left out at each end."""
+        if not self.dry:
+            return range(7, min(54, n - 1) + 1)
         low = max(1, math.ceil(7 * n / 61))
         return range(low, n - low + 1)
 

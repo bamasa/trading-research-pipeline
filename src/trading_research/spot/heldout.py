@@ -24,7 +24,10 @@ the walk depth and the instruments' specification. For each day
 **The one-day shift**: each kept day takes the previous kept day's signal tape
 of the same row at the same times of day; the block's first kept day takes its
 last kept day's (circularly over the kept days), computed once every day is
-read. Each day's record is written under ``reads/<label>/days`` as it is
+read. A shift run that flags ``flatten_stale`` excludes its day on Bybit like any
+run of the read; when that day is the first kept one, the next kept day's shift
+is redone from the last kept day (:func:`first_shift`). The shift runs' void
+conditions join their rows'. Each day's record is written under ``reads/<label>/days`` as it is
 finished, so a read that stops resumes at the next day.
 """
 
@@ -42,6 +45,7 @@ import pandas as pd
 from trading_research.features.timed import stamps_ns
 from trading_research.labels.taker_vwap import forward_move_bp as book_forward
 from trading_research.spot import access as sa
+from trading_research.spot import assemble as asm
 from trading_research.spot import days as dy
 from trading_research.spot import loader as ld
 from trading_research.spot.calibration import (
@@ -57,13 +61,17 @@ from trading_research.spot.costs import FeeTable, book_settings, execute_book_da
 from trading_research.spot.plan import OWN_CELL, ROWS
 from trading_research.spot.print_label import forward_move_bp as print_forward
 from trading_research.spot.print_taker import execute_print_day, print_settings
+from trading_research.spot.run_checks import Voids
 from trading_research.spot.runs import RowModels, tier_values
 from trading_research.spot.runs_book import book_day
 from trading_research.spot.runs_book import shifted as book_shifted
 from trading_research.spot.runs_prints import print_day
 from trading_research.spot.runs_prints import shifted as print_shifted
 from trading_research.spot.state import plain, write_json
+from trading_research.spot.statuses import VOID_CONDITIONS as VOID_ORDER
 
+#: The exclusion of a Bybit day that a run of the read flags (R16).
+STALE = "flatten_stale"
 VENUE_ROWS: dict[str, tuple[str, ...]] = {
     sa.BINANCE: ("S25-PF", "S25-PFT"),
     sa.BYBIT: ("S25-BB", "S25-T", "S25-PB"),
@@ -231,12 +239,32 @@ def put_back(plan: ReadPlan, inputs: dy.DayInputs, table: FeeTable) -> dict[str,
     return {name: {k: r.get(k) for k in keep} for name, r in records.items()}
 
 
-def _shift(name: str, table: Any, start: int, source: Mapping[str, Any]) -> tuple[float, bool]:
+def _shift(
+    name: str, table: Any, start: int, source: Mapping[str, Any], voids: Voids | None = None,
+    fees: FeeTable | None = None,
+) -> tuple[float, bool]:  # fmt: skip
+    """The one-day shift's value of ``name`` on this day's table from ``source``'s signal
+    tape, and whether the run flags ``flatten_stale``; with ``voids``, the run's fills
+    are checked and replayed on the spot account."""
     signal = source["rows"][name].get("signal") or {"tod_ns": [], "side": []}
     tod, side = np.asarray(signal["tod_ns"], np.int64), np.asarray(signal["side"], np.int64)
     if ROWS[name].grid == "book":
-        return book_shifted(table, start, tod, side)
-    return print_shifted(table, start, tod, side), False
+        return book_shifted(table, start, tod, side, voids, fees)
+    return print_shifted(table, start, tod, side, voids, fees), False
+
+
+def _shift_into(
+    record: dict[str, Any], row: str, table: Any, inputs: dy.DayInputs, venue: str,
+    source: Mapping[str, Any], fees: FeeTable,
+) -> bool:  # fmt: skip
+    """Write ``row``'s one-day shift from ``source`` into the day's record, its void
+    conditions joining the row's; return whether the run flags ``flatten_stale``."""
+    voids = Voids(dy.tape(inputs, venue))
+    value, flagged = _shift(row, table, dy.midnight_ns(inputs.day), source, voids, fees)
+    found = record["rows"][row]
+    found["shifted"], found["shifted_from"] = value, source["day"]
+    found["void"] = sorted(set(found.get("void", [])) | voids.fired, key=VOID_ORDER.index)
+    return flagged
 
 
 def read_day(
@@ -244,7 +272,7 @@ def read_day(
 ) -> dict[str, Any]:
     """One day's record: every usable venue's rows, the calibration, the put-back
     view, and each kept row's one-day shift from the venue's last kept day."""
-    day, start = inputs.day, dy.midnight_ns(inputs.day)
+    day = inputs.day
     out: dict[str, Any] = {"day": day.isoformat(), "rows": {}, "kept": {}, "venues": {}}
     for name in VENUE_ROWS:
         out["venues"][name] = {"reasons": list(inputs.reasons[name]), "warm": inputs.warm[name]}
@@ -272,15 +300,11 @@ def read_day(
             for row in VENUE_ROWS[name]:
                 if tables.get(row) is None:
                     continue
-                value, flagged = _shift(row, tables[row], start, last[name])
-                out["rows"][row]["shifted"], out["rows"][row]["shifted_from"] = (
-                    value,
-                    last[name]["day"],
-                )
+                flagged = _shift_into(out, row, tables[row], inputs, name, last[name], table)
                 stale = stale or (name == sa.BYBIT and flagged)
         out["kept"][name] = usable and not (name == sa.BYBIT and stale)
     if stale:
-        out["venues"][sa.BYBIT]["reasons"].append("flatten_stale")
+        out["venues"][sa.BYBIT]["reasons"].append(STALE)
     return out
 
 
@@ -334,17 +358,39 @@ def read_days(study: SpotStudy, plan: ReadPlan) -> dict[str, dict[str, Any]]:
             if kept:
                 first.setdefault(name, record["day"])
                 last[name] = record
-    for name, day in first.items():
+    for name in first:
+        first_shift(plan, records, name, last[name], load, table, folder)
+    return records
+
+
+def first_shift(
+    plan: ReadPlan, records: dict[str, dict[str, Any]], name: str, last: Mapping[str, Any],
+    load: Callable[[date], dy.DayInputs], table: FeeTable, folder: Any,
+) -> None:  # fmt: skip
+    """The block's first kept day on ``name`` takes the last kept day's tape. A shift run
+    that flags ``flatten_stale`` excludes that day on Bybit, as any run of the read
+    does, and the next kept day becomes the first, its shift redone circularly from
+    the last kept day, until a first day's shift keeps it."""
+    while True:
+        kept = asm.kept_days(records, name)
+        if len(kept) < 2 or kept[0] == last["day"]:
+            return
+        day = kept[0]
         record = records[day]
-        if record.get(f"first_shift_{name}") or last[name]["day"] == day:
-            continue
+        if record.get(f"first_shift_{name}") == last["day"]:
+            return
         inputs = load(date.fromisoformat(day))
         tables = own_tables(plan, inputs, table, name)
+        stale = False
         for row in VENUE_ROWS[name]:
             if row in record["rows"] and "value" in record["rows"][row]:
-                value, _ = _shift(row, tables[row], dy.midnight_ns(inputs.day), last[name])
-                record["rows"][row]["shifted"], record["rows"][row]["shifted_from"] = (
-                    value, last[name]["day"])  # fmt: skip
-        record[f"first_shift_{name}"] = True
-        write_json(folder / "days" / f"{day}.json", plain(record))
-    return records
+                flagged = _shift_into(record, row, tables[row], inputs, name, last, table)
+                stale = stale or (name == sa.BYBIT and flagged)
+        record[f"first_shift_{name}"] = last["day"]
+        if stale:
+            record["kept"][name] = False
+            record["venues"][name]["reasons"].append(STALE)
+        records[day] = plain(record)
+        write_json(folder / "days" / f"{day}.json", records[day])
+        if not stale:
+            return

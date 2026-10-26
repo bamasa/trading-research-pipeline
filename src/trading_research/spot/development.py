@@ -165,7 +165,11 @@ def null_a(records: Mapping[str, Any], s: st.SlotDays, draws: int) -> dict[str, 
 def null_b(study: SpotStudy, plan: ho.ReadPlan, records: Mapping[str, Any],
            rows: Mapping[str, st.SlotDays]) -> dict[str, Any]:  # fmt: skip
     """Null B on the own cell: every test day takes the signal tape of the test day
-    ``s`` before it, circularly over the kept test days, for every registered shift."""
+    ``s`` before it, circularly over the kept test days, for every registered shift.
+
+    Null B describes D and gates nothing, so it excludes no day: a shifted run that
+    flags ``flatten_stale`` gives its day no value under that shift, and such runs
+    are counted (``stale_runs``)."""
     load = ho.loader(study, plan)
     table = study.fee_table
     out: dict[str, Any] = {}
@@ -173,6 +177,7 @@ def null_b(study: SpotStudy, plan: ho.ReadPlan, records: Mapping[str, Any],
         days = asm.kept_days(records, venue)
         shifts = list(study.scale.null_b_shifts(len(days)))
         values = {name: np.full((len(shifts), len(days)), np.nan) for name in names}
+        stale = dict.fromkeys(names, 0)
         for j, day in enumerate(days):
             inputs = load(date.fromisoformat(day))
             tables = ho.own_tables(plan, inputs, table, venue)
@@ -181,12 +186,14 @@ def null_b(study: SpotStudy, plan: ho.ReadPlan, records: Mapping[str, Any],
                 source = records[days[(j - shift) % len(days)]]
                 for name in names:
                     if name in source["rows"] and "signal" in source["rows"][name]:
-                        values[name][k, j] = ho._shift(name, tables[name], start, source)[0]
+                        value, flagged = ho._shift(name, tables[name], start, source)
+                        stale[name] += int(flagged)
+                        values[name][k, j] = np.nan if flagged else value
         for name in names:
             true = st.series_mean(rows[name].value)
             means = [st.series_mean(row) for row in values[name]]
             out[name] = {"shifts": [shifts[0], shifts[-1]] if shifts else None,
-                         "true_mean": true,
+                         "true_mean": true, "stale_runs": stale[name],
                          "p": (1 + sum(m >= true for m in means)) / (1 + len(means)) if means else None,
                          "median_shift": float(np.median(means)) if means else None}  # fmt: skip
     return out
