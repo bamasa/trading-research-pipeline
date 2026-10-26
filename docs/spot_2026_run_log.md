@@ -30,3 +30,8 @@ in the D amendment; this log records what happened and when.
 - The D amendment written by `amend` (frozen configuration `d1625173…`, 14
   frozen fits, the July rehearsal run and discarded) and committed after
   review.
+- H opened at 06:10 (local commit `57458b1`); H's 75 days fetched on each
+  plane and the fetch records committed (`bc5ed75`); the computing read ran
+  and closed. Every slot killed by K1: S25-PF −17.35 bp, S25-BB −19.43 bp,
+  S25-T −19.28 bp a trade at the Regular / non-VIP tier. P is not read: no
+  slot was a candidate on H.
