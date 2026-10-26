@@ -56,9 +56,9 @@ def evaluate(
     losses, right, total = [], 0, 0
     with torch.no_grad():
         for ends, xb in _batches(x, np.arange(WINDOW - 1, len(x)), BATCH):
-            yb = torch.from_numpy(y[ends]).to(device)
-            if not bool((yb != IGNORE).any()):
+            if not (y[ends] != IGNORE).any():
                 continue
+            yb = torch.from_numpy(y[ends]).to(device)
             logits = model(xb.to(device))
             losses.append(float(loss_fn(logits, yb)))
             keep = yb != IGNORE
@@ -94,22 +94,22 @@ def fit(
         for ends, xb in _batches(
             x_train, rng.permutation(np.arange(WINDOW - 1, len(x_train))), BATCH
         ):
-            yb = torch.from_numpy(y_train[ends]).to(device)
-            if not bool((yb != IGNORE).any()):
+            if not (y_train[ends] != IGNORE).any():
                 continue
+            yb = torch.from_numpy(y_train[ends]).to(device)
             optimizer.zero_grad()
             loss = loss_fn(model(xb.to(device)), yb)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), CLIP_NORM)
             optimizer.step()
-            losses.append(float(loss.detach()))
+            losses.append(loss.detach())
         val_loss, val_acc = evaluate(model, x_val, y_val, loss_fn, device)
         plateau.step(val_loss)
         if val_acc > best:
             best, best_state = val_acc, copy.deepcopy(model.state_dict())
         row = {
             "epoch": epoch,
-            "train_loss": float(np.mean(losses)),
+            "train_loss": float(torch.stack(losses).mean()),
             "val_loss": val_loss,
             "val_acc": val_acc,
             "kept": float(val_acc >= best),
