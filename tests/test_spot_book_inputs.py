@@ -100,4 +100,6 @@ def test_targets_are_the_2025_walked_label_at_each_fee(depth: int) -> None:
         exits = WalkedTakerLabel(hold, depth=depth).outcomes(book)["exit_index"].to_numpy()[at]
         known = exits < len(book)
         expected[known] = np.maximum(expected[known], stamps[exits[known]])
+        own = np.where(known, stamps[np.minimum(exits, len(book) - 1)], -1)
+        assert (targets[f"reads_until_ns_{hold:g}"].to_numpy() == own).all()
     assert (targets["reads_until_ns"].to_numpy() == expected).all() and (expected == -1).any()

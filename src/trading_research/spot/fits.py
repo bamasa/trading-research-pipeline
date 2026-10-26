@@ -38,7 +38,7 @@ from trading_research.spot import days as dy
 from trading_research.spot.context import SpotStudy
 from trading_research.spot.ledger import file_sha256
 from trading_research.spot.plan import ROWS, Cell, Fold, Row, fit_key
-from trading_research.spot.print_label import label_column
+from trading_research.spot.print_label import label_column, reads_column
 from trading_research.spot.runs import RowModels
 from trading_research.strategies.hold_first import HoldFirstRule, fit_hold_first
 
@@ -63,7 +63,9 @@ def training_set(
 ) -> tuple[pd.DataFrame, pd.Series]:  # fmt: skip
     """The fold's training rows for one fit, as the purge and the stride leave them."""
     stamps = stamps_ns(frame)
-    keep = fold.train_keep(stamps, frame["reads_until_ns"].to_numpy(), hold_s)
+    own = reads_column(hold_s)  # the fit's own hold's labels; the latest of every hold before
+    reads = frame[own if own in frame else "reads_until_ns"].to_numpy()
+    keep = fold.train_keep(stamps, reads, hold_s)
     keep &= frame["scored"].to_numpy(dtype=bool)
     at = np.flatnonzero(keep)
     at = at[thin_positions(len(at), max_rows)]
@@ -124,7 +126,7 @@ def store_rows(
         if not path.exists():  # the day is not usable on the store's venue
             continue
         frame = pd.read_parquet(path)
-        targets = [c for c in frame.columns if c.startswith("label_")]
+        targets = [c for c in frame.columns if c.startswith(("label_", "reads_until_ns_"))]
         frames.append(frame[[*keep, *targets]])
     if not frames:
         return pd.DataFrame(columns=keep)

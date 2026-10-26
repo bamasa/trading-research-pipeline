@@ -158,6 +158,11 @@ def forward_column(hold_s: float) -> str:
     return f"forward_{hold_s:g}"
 
 
+def reads_column(hold_s: float) -> str:
+    """The stamp of the last print (or book row) the hold's labels read, for its purge."""
+    return f"reads_until_ns_{hold_s:g}"
+
+
 def print_targets(
     tape: PrintTape,
     grid_ns: np.ndarray,
@@ -171,7 +176,8 @@ def print_targets(
 
     For each hold, one walk of both sides serves every label fee (a fee ``f``
     takes ``2 f`` off both sides' P&L), as the 2025 targets do; the forward
-    move; and the latest stamp any of the row's labels reads, for the purge.
+    move; and the stamp each hold's labels read up to (``reads_until_ns_<hold>``),
+    which purges that hold's fits, with the latest over the holds beside them.
     """
     grid = np.asarray(grid_ns, dtype=np.int64)
     rows = np.arange(len(grid)) if at is None else np.asarray(at, dtype=np.int64)
@@ -183,6 +189,7 @@ def print_targets(
         for fee in fees_bp:
             columns[label_column(hold, fee)] = classify(long_bp - 2 * fee, short_bp - 2 * fee)
         columns[forward_column(hold)] = forward_move_bp(tape, grid, hold)[rows]
-        reads = np.maximum(reads, out["reads_until_ns"].to_numpy())
+        columns[reads_column(hold)] = out["reads_until_ns"].to_numpy(dtype=np.int64)
+        reads = np.maximum(reads, columns[reads_column(hold)])
     columns["reads_until_ns"] = reads
     return pd.DataFrame(columns)

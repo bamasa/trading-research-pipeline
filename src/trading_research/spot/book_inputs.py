@@ -37,7 +37,7 @@ from trading_research.features.study_set import RAW_SIZE_COLUMNS, microstructure
 from trading_research.features.timed import TimedRegistry, build_timed, stamps_ns
 from trading_research.labels.directional import BUY, HOLD, SELL
 from trading_research.labels.taker_vwap import WalkedTakerLabel, forward_move_bp
-from trading_research.spot.print_label import forward_column, label_column
+from trading_research.spot.print_label import forward_column, label_column, reads_column
 
 #: S25's inputs: configs/short_horizon_2025.yaml features.selected, in its order.
 S25_SELECTED: tuple[str, ...] = (
@@ -139,6 +139,9 @@ def book_targets(
         columns[forward_column(hold)] = forward_move_bp(rows, hold).to_numpy()[picked]
         exit_index = outcome["exit_index"].to_numpy()
         known = exit_index < len(rows)
-        reads[known] = np.maximum(reads[known], stamps[exit_index[known]])
+        own = np.full(len(picked), -1, dtype=np.int64)
+        own[known] = stamps[exit_index[known]]
+        columns[reads_column(hold)] = own
+        reads = np.maximum(reads, own)
     columns["reads_until_ns"] = reads
     return pd.DataFrame(columns)

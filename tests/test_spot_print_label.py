@@ -111,7 +111,13 @@ def test_targets_at_every_fee_equal_the_label_at_that_fee() -> None:
         for fee in (0.0, 10.0):
             direct = PrintLabel(hold, label_fee_bp=fee)(tape, grid).to_numpy()[at]
             np.testing.assert_array_equal(targets[label_column(hold, fee)].to_numpy(), direct)
+        own = PrintLabel(hold).outcomes(tape, grid)["reads_until_ns"].to_numpy()[at]
+        np.testing.assert_array_equal(targets[f"reads_until_ns_{hold:g}"].to_numpy(), own)
     assert targets["timestamp"].tolist() == grid[at].tolist()
+    np.testing.assert_array_equal(
+        targets["reads_until_ns"],
+        np.maximum(targets["reads_until_ns_20"], targets["reads_until_ns_50"]),
+    )
 
 
 def test_the_forward_move_is_mid_proxy_to_mid_proxy() -> None:

@@ -43,6 +43,23 @@ def test_training_rows_end_before_the_purge_and_are_thinned_evenly() -> None:
     assert fits.thin_positions(10, 4).tolist() == [0, 2, 5, 7]
 
 
+def test_each_fit_is_purged_by_its_own_holds_labels() -> None:
+    """A 120 s label reading past the inner validation's start does not drop the
+    50 s fit's row, whose own label reads nothing after it."""
+    fold = folds(sa.block_days("D"))["june"]
+    data = frame(fold)
+    stamps = data["timestamp"].astype("int64").to_numpy()
+    late = stamps < fold.inner_start_ns - purge_ns(120.0)
+    data["reads_until_ns_50"] = stamps + 50 * NS_PER_S
+    data["reads_until_ns_120"] = np.where(late, fold.inner_start_ns + 1, stamps + 120 * NS_PER_S)
+    data["reads_until_ns"] = np.maximum(data["reads_until_ns_50"], data["reads_until_ns_120"])
+    data["label_120_0"] = data["label_50_0"]
+    _, y50 = fits.training_set(data, fold, 50.0, 0.0, ["a"], max_rows=1_000)
+    assert len(y50) == (stamps < fold.inner_start_ns - purge_ns(50.0)).sum()
+    _, y120 = fits.training_set(data, fold, 120.0, 0.0, ["a"], max_rows=1_000)
+    assert len(y120) == 0  # every 120 s label reads past the inner validation's start
+
+
 def test_a_fit_needs_two_classes_and_thresholds_need_rows() -> None:
     x = pd.DataFrame({"a": [1.0, 2.0, 3.0]})
     assert fits.fit_model(x, pd.Series([1.0, 1.0, 1.0]), {}) is None
