@@ -10,7 +10,8 @@ Binance publishes no spot book, so a taker order there is priced from prints
   ``not_before`` (an exit's entry fill);
 * the clip walks that print and the other reachable prints of the same side
   with the same stamp, in archive order, at their volume-weighted price; the
-  part beyond that sweep is charged at the sweep's last price and counted;
+  part beyond that sweep is charged at the sweep's worst price (the highest
+  for a buy, the lowest for a sell) and counted;
 * prints flagged ``rpi`` are never filled against (they stay in the features);
 * an order no such print follows is not filled (``found`` is False); an exit
   is then priced, with ``fallback``, at the last reachable print of its side
@@ -18,13 +19,15 @@ Binance publishes no spot book, so a taker order there is priced from prints
 
 The brackets price the same fills (same prints, same times) four more ways:
 ``optimistic`` (the whole clip at the first print's price), ``pessimistic``
-(the part beyond the sweep at the worst price of a same-side reachable print
-stamped in ``(s, s + 60 s]`` and before 23:59, ``s`` the fill's stamp, or the
-sweep's last price if there is none), ``stale`` (the whole clip at the last
-same-side reachable print stamped at or before the decision, or the rule's
-price when the day has none before it) and ``worse_of_two`` (per fill the
-worse of ``pessimistic`` and the stale print, ``pessimistic`` alone when there
-is no stale print).
+(the part beyond the sweep at the literal worst price of a same-side reachable
+print stamped in ``(s, s + 60 s]``, ``s`` the fill's stamp, and before 23:59 for
+an entry or before the day's end for an exit, or at the sweep's worst price if
+there is none), ``stale`` (the whole clip at the last same-side reachable print
+stamped at or before the decision, or the rule's price when the day has none
+before it) and ``worse_of_two`` (per fill the worst of the rule's, the
+pessimistic and the stale price; for an exit priced without a later print also
+of the last reachable print of the other side stamped at or before its
+arrival). An order the rule does not fill has no price under any bracket.
 
 Interface (stable; ``spot/print_taker.py`` and ``spot/walk_tables.py`` use it)
 -------------------------------------------------------------------------------
@@ -99,9 +102,10 @@ class _Groups:
     first: np.ndarray  # first side-index of each group
     end: np.ndarray  # one past its last side-index
     ts: np.ndarray
-    rule: np.ndarray  # sweep VWAP, beyond at the sweep's last price
+    rule: np.ndarray  # sweep VWAP, beyond at the sweep's worst price
     optimistic: np.ndarray  # the first print's price
-    pessimistic: np.ndarray  # beyond at the window's worst price
+    pessimistic: np.ndarray  # beyond at the window's worst price (window to 23:59)
+    pessimistic_exit: np.ndarray  # the same, the window to the day's end
     sweep: np.ndarray  # size of the sweep
     beyond: np.ndarray  # clip beyond the sweep (0 when the sweep covers it)
     of_print: np.ndarray  # group of each side-index
@@ -179,6 +183,7 @@ class PrintTape:
                 raise ValueError(f"a {name} is not a positive finite number")
         self._sides: dict[int, _Side] = {}
         self._groups: dict[tuple[int, PrintFillSettings], _Groups] = {}
+        self._reachable: np.ndarray | None = None
 
     @classmethod
     def from_frame(cls, prints: pd.DataFrame, day: date) -> PrintTape:
@@ -213,6 +218,13 @@ class PrintTape:
             self._groups[key] = _price_groups(self.side_prints(side), side, settings, self)
         return self._groups[key]
 
+    @property
+    def reachable(self) -> np.ndarray:
+        """Positions of the reachable prints of either side, in archive order."""
+        if self._reachable is None:
+            self._reachable = np.flatnonzero(~self.rpi).astype(np.int64)
+        return self._reachable
+
 
 def _price_groups(
     prints: _Side, side: int, settings: PrintFillSettings, tape: PrintTape
@@ -234,19 +246,26 @@ def _price_groups(
     sweep = np.bincount(of_print, weights=prints.size, minlength=count)
     beyond = np.maximum(clip - taken, 0.0)
     beyond = np.where(beyond > settings.beyond_tolerance * clip, beyond, 0.0)
-    last = prints.price[end - 1] if n else np.zeros(0)
+    op = np.maximum if side == BUY else np.minimum
+    sweep_worst = op.reduceat(prints.price, first) if n else np.zeros(0)
     ts = prints.ts[first]
-    bound = np.minimum(ts + settings.depth_window_ns, tape.flatten_ns(settings) - 1)
-    hi = np.searchsorted(prints.ts, bound, side="right").astype(np.int64)
-    worst = _range_extreme(prints.price, end, hi, "max" if side == BUY else "min")
-    worst = np.where(np.isnan(worst), last, worst)
+    worse = "max" if side == BUY else "min"
+
+    def window(until_ns: int) -> np.ndarray:
+        """The beyond part at the worst print of ``(s, s + 60 s]`` before ``until_ns``."""
+        bound = np.minimum(ts + settings.depth_window_ns, until_ns - 1)
+        hi = np.searchsorted(prints.ts, bound, side="right").astype(np.int64)
+        worst = _range_extreme(prints.price, end, hi, worse)
+        return (cost + beyond * np.where(np.isnan(worst), sweep_worst, worst)) / clip
+
     return _Groups(
         first=first,
         end=end,
         ts=ts,
-        rule=(cost + beyond * last) / clip,
+        rule=(cost + beyond * sweep_worst) / clip,
         optimistic=prints.price[first] if n else np.zeros(0),
-        pessimistic=(cost + beyond * worst) / clip,
+        pessimistic=window(tape.flatten_ns(settings)),
+        pessimistic_exit=window(tape.end_ns),
         sweep=sweep,
         beyond=beyond,
         of_print=of_print,
@@ -322,11 +341,12 @@ def fill_orders(
     """Fill each order by the side-correct print rule, with every bracket.
 
     ``until_ns`` bounds the prints an order may fill at (exclusive): 23:59 for
-    an executor's entry, the day's end otherwise. ``not_before_ns`` (an exit's
-    entry fill stamp) keeps an exit off earlier prints. With ``fallback`` an
-    order no print follows is priced at the last reachable print of its side
-    stamped at or before its effective arrival, or, if its side has none, of
-    either side; otherwise its prices are NaN.
+    an executor's entry, the day's end otherwise; the pessimistic window ends
+    there too (an order bounded after 23:59 reads its window to the day's end).
+    ``not_before_ns`` (an exit's entry fill stamp) keeps an exit off earlier
+    prints. With ``fallback`` an order no print follows is priced at the last
+    reachable print of its side stamped at or before its effective arrival, or,
+    if its side has none, of either side; otherwise every price is NaN.
     """
     settings = settings or PrintFillSettings()
     arrival = np.asarray(arrival_ns, dtype=np.int64)
@@ -345,20 +365,27 @@ def fill_orders(
         "sweep": np.full(n, np.nan),
         "beyond": np.zeros(n),
         "stale": np.full(n, np.nan),
+        "other_side": np.full(n, np.nan),
         **{name: np.full(n, np.nan) for name in ("rule", "optimistic", "pessimistic")},
     }
+    late_window = bound > tape.flatten_ns(settings)
     for s in (BUY, SELL):
         mine = np.flatnonzero(sides == s)
         if len(mine):
-            _fill_side(tape, s, mine, effective, decision, bound, settings, out)
+            _fill_side(tape, s, mine, effective, decision, bound, late_window, settings, out)
     if fallback:
         _fall_back(tape, sides, effective, out)
     found = out["found"]
     out["wait_ns"][found] = out["print_ns"][found] - arrival[found]
-    stale = np.where(np.isnan(out["stale"]), out["pessimistic"], out["stale"])
-    worse = np.where(
-        sides > 0, np.fmax(out["pessimistic"], stale), np.fmin(out["pessimistic"], stale)
-    )
+    priced = found | out["fallback"]
+    stale = np.where(priced, np.where(np.isnan(out["stale"]), out["rule"], out["stale"]), np.nan)
+    # Worse of two: the worst of the rule's, the pessimistic and the stale price, and
+    # for an exit priced without a later print the other side's last print too.
+    candidates = (out["rule"], out["pessimistic"], stale, out["other_side"])
+    worst_buy, worst_sell = candidates[0], candidates[0]
+    for values in candidates[1:]:
+        worst_buy, worst_sell = np.fmax(worst_buy, values), np.fmin(worst_sell, values)
+    worse = np.where(priced, np.where(sides > 0, worst_buy, worst_sell), np.nan)
     return Fills(
         side=sides,
         arrival_ns=arrival,
@@ -369,8 +396,8 @@ def fill_orders(
         rule=out["rule"],
         optimistic=out["optimistic"],
         pessimistic=out["pessimistic"],
-        stale=np.where(np.isnan(out["stale"]), out["rule"], out["stale"]),
-        worse_of_two=np.where(np.isnan(out["pessimistic"]), np.nan, worse),
+        stale=stale,
+        worse_of_two=worse,
         sweep=out["sweep"],
         beyond=out["beyond"],
         wait_ns=out["wait_ns"],
@@ -387,6 +414,7 @@ def _fill_side(
     effective: np.ndarray,
     decision: np.ndarray,
     bound: np.ndarray,
+    late_window: np.ndarray,
     settings: PrintFillSettings,
     out: dict[str, np.ndarray],
 ) -> None:
@@ -401,8 +429,11 @@ def _fill_side(
     out["found"][rows] = True
     out["print_index"][rows] = prints.index[j[hit]]
     out["print_ns"][rows] = groups.ts[g]
-    for name in ("rule", "optimistic", "pessimistic", "sweep", "beyond"):
+    for name in ("rule", "optimistic", "sweep", "beyond"):
         out[name][rows] = getattr(groups, name)[g]
+    out["pessimistic"][rows] = np.where(
+        late_window[rows], groups.pessimistic_exit[g], groups.pessimistic[g]
+    )
 
 
 def _fall_back(
@@ -415,17 +446,21 @@ def _fall_back(
         prints = tape.side_prints(s)
         at = _last_at_or_before(prints.index, prints.ts, effective[missing])
         if (at < 0).any():
-            reachable = np.flatnonzero(~tape.rpi).astype(np.int64)
+            reachable = tape.reachable
             either = _last_at_or_before(reachable, tape.ts[reachable], effective[missing])
             at = np.where(at >= 0, at, either)
+        other = tape.side_prints(-s)
+        opposite = _last_at_or_before(other.index, other.ts, effective[missing])
         ok = at >= 0
-        rows, at = missing[ok], at[ok]
+        rows, at, opposite = missing[ok], at[ok], opposite[ok]
         out["fallback"][rows] = True
         out["print_index"][rows] = at
         out["print_ns"][rows] = tape.ts[at]
         out["age_ns"][rows] = effective[rows] - tape.ts[at]
         for name in ("rule", "optimistic", "pessimistic"):
             out[name][rows] = tape.price[at]
+        known = opposite >= 0
+        out["other_side"][rows[known]] = tape.price[opposite[known]]
 
 
 def _last_at_or_before(index: np.ndarray, ts: np.ndarray, targets: np.ndarray) -> np.ndarray:

@@ -31,20 +31,26 @@ def loop_fill(prints: pd.DataFrame, side: int, arrival: int, decision: int, unti
     """One order, priced by reading the prints one at a time."""
     ts = prints["timestamp"].astype("int64").to_numpy()
     px, sz = prints["price"].to_numpy(), prints["size"].to_numpy()
-    mine = (prints["aggressor"].to_numpy() == side) & ~prints["rpi"].to_numpy()
+    rpi = prints["rpi"].to_numpy()
+    mine = (prints["aggressor"].to_numpy() == side) & ~rpi
+    other = (prints["aggressor"].to_numpy() == -side) & ~rpi
+    worse = max if side > 0 else min
     clip, effective = SETTINGS.clip, max(arrival, not_before)
     earlier = [i for i in range(len(ts)) if mine[i] and ts[i] <= decision]
     stale = px[earlier[-1]] if earlier else np.nan  # none: the rule's price, set below
     later = [i for i in range(len(ts)) if mine[i] and effective <= ts[i] < until]
     if not later:
         if not fallback:
-            return {"rule": np.nan, "pessimistic": np.nan, "stale": stale, "index": -1}
+            return {"rule": np.nan, "pessimistic": np.nan, "stale": np.nan,
+                    "worse_of_two": np.nan, "index": -1}  # fmt: skip
         before = [i for i in range(len(ts)) if mine[i] and ts[i] <= effective]
         if not before:
-            before = [i for i in range(len(ts)) if not prints["rpi"].iloc[i] and ts[i] <= effective]
+            before = [i for i in range(len(ts)) if not rpi[i] and ts[i] <= effective]
         j = before[-1]
-        return {"rule": px[j], "pessimistic": px[j], "stale": stale if earlier else px[j],
-                "index": j}  # fmt: skip
+        opposite = [px[i] for i in range(len(ts)) if other[i] and ts[i] <= effective][-1:]
+        found = stale if earlier else px[j]
+        return {"rule": px[j], "pessimistic": px[j], "stale": found,
+                "worse_of_two": worse([px[j], found, *opposite]), "index": j}  # fmt: skip
     stamp = ts[later[0]]
     left, cost = clip, 0.0
     sweep = [i for i in later if ts[i] == stamp]
@@ -52,13 +58,17 @@ def loop_fill(prints: pd.DataFrame, side: int, arrival: int, decision: int, unti
         take = min(left, sz[i])
         cost, left = cost + take * px[i], left - take
     left = left if left > 1e-9 * clip else 0.0
-    last = px[sweep[-1]]
+    sweep_worst = worse(px[i] for i in sweep)
+    # The window ends where the order may no longer fill: 23:59 or the day's end.
+    end = flatten if until <= flatten else int(ts[0]) // (86_400 * S) * 86_400 * S + 86_400 * S
     window = [px[i] for i in range(len(ts)) if mine[i] and stamp < ts[i] <= stamp + 60 * S
-              and ts[i] < flatten]  # fmt: skip
-    worst = (max(window) if side > 0 else min(window)) if window else last
-    rule = (cost + left * last) / clip
-    return {"rule": rule, "pessimistic": (cost + left * worst) / clip,
-            "stale": stale if earlier else rule, "index": later[0]}  # fmt: skip
+              and ts[i] < end]  # fmt: skip
+    worst = worse(window) if window else sweep_worst
+    rule = (cost + left * sweep_worst) / clip
+    pessimistic = (cost + left * worst) / clip
+    found = stale if earlier else rule
+    return {"rule": rule, "pessimistic": pessimistic, "stale": found,
+            "worse_of_two": worse([rule, pessimistic, found]), "index": later[0]}  # fmt: skip
 
 
 @pytest.mark.parametrize("seed", [0, 1, 2])
@@ -71,15 +81,19 @@ def test_fill_orders_equals_the_loop(seed: int) -> None:
     decision = arrival - SETTINGS.latency_ns
     side = np.where(rng.random(200) < 0.5, BUY, SELL)
     not_before = arrival + rng.integers(0, 3 * S, 200) * (rng.random(200) < 0.3)
-    until = int(ts[-1]) - 5 * S
-    for fallback in (False, True):
+    for until, fallback in (
+        (int(ts[-1]) - 5 * S, False),
+        (int(ts[-1]) - 5 * S, True),
+        (tape.end_ns, True),
+        (tape.flatten_ns(SETTINGS), False),
+    ):
         fills = fill_orders(tape, side, arrival, decision, until_ns=until,
                             not_before_ns=not_before, fallback=fallback)  # fmt: skip
         for k in range(len(arrival)):
             ref = loop_fill(prints, int(side[k]), int(arrival[k]), int(decision[k]), until,
                             int(not_before[k]), fallback, tape.flatten_ns(SETTINGS))  # fmt: skip
             assert fills.print_index[k] == ref["index"]
-            for name in ("rule", "pessimistic", "stale"):
+            for name in ("rule", "pessimistic", "stale", "worse_of_two"):
                 np.testing.assert_allclose(getattr(fills, name)[k], ref[name], rtol=1e-12)
 
 

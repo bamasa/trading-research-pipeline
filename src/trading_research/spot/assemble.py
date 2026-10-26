@@ -201,8 +201,9 @@ def measurements(records: Mapping[str, Mapping[str, Any]], s: st.SlotDays) -> di
         out["brackets"] = {b: _mean(np.array([(r.get("brackets") or {}).get(b, np.nan) for r in rows],
                                              float)) for b in ("optimistic", "pessimistic", "stale",
                                                                "worse_of_two")}  # fmt: skip
-        for name in ("entry_wait_s", "exit_wait_s", "hold_realised_s"):
+        for name in ("entry_wait_s", "exit_wait_s", "hold_realised_s", "exit_fallback_age_s"):
             medians = np.array([(r.get(name) or [None, None, None])[1] for r in rows], dtype=float)
-            out[f"{name}_median_of_days"] = _mean(medians)
+            medians = medians[np.isfinite(medians)]
+            out[f"{name}_median_of_days"] = float(np.median(medians)) if len(medians) else None
         out["caps"] = st.caps(s) if len(days) else None
     return out

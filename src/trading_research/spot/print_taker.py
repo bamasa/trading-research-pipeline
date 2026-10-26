@@ -130,14 +130,16 @@ def print_settings(
 
 #: The per-trade table's columns, in order. A wait is the fill's print stamp less
 #: the order's arrival; an exit priced without a later print has a negative one,
-#: minus the age of the print it was priced at.
+#: minus the age of the print it was priced at, which ``exit_fallback_age_ns``
+#: holds apart (-1 for an exit with a later print), so that the ages are reported
+#: separately from the waits.
 PRINT_TRADE_COLUMNS: tuple[str, ...] = (
     "decision_ns", "side", "size",
     "entry_arrival_ns", "entry_print_ns", "entry_position", "entry_price", "entry_beyond",
     "entry_fee_bp", "entry_wait_ns", "entry_late",
     "exit_decision_ns", "exit_arrival_ns", "exit_print_ns", "exit_position", "exit_fill_ns",
     "exit_price", "exit_beyond", "exit_fee_bp", "exit_wait_ns", "exit_late", "exit_reason",
-    "exit_no_print", "hold_realised_ns",
+    "exit_no_print", "exit_fallback_age_ns", "hold_realised_ns",
     "notional", "exit_notional", "gross", "fees", "net", "gross_bp", "net_bp",
 )  # fmt: skip
 
@@ -273,7 +275,8 @@ def execute_print_day(
         out.append((t, s, clip, arrival, e_ns, int(entry.print_index[k]), e_price, e_beyond, fee_e,
                     e_ns - arrival, e_late, int(trips.exit_decision_ns[k]), x_arrival, x_ns,
                     int(exit_.print_index[k]), x_fill, x_price, x_beyond, fee_x, x_ns - x_arrival,
-                    x_late, str(trips.exit_reason[k]), no_print, x_fill - e_ns, notional,
+                    x_late, str(trips.exit_reason[k]), no_print, int(exit_.age_ns[k]),
+                    x_fill - e_ns, notional,
                     x_price * clip, gross, fees, net, gross / notional * 1e4,
                     net / notional * 1e4))  # fmt: skip
     return _finish(account, out, counters)

@@ -93,19 +93,25 @@ def test_the_clip_sweeps_same_stamp_prints_in_archive_order() -> None:
     assert covered["pessimistic"] == covered["rule"]
 
 
-def test_pessimistic_depth_without_a_later_print_uses_the_sweeps_last_price() -> None:
+def test_pessimistic_depth_ends_where_the_order_may_no_longer_fill() -> None:
+    """An entry's window ends at 23:59, an exit's at the day's end; without a print
+    in it the beyond part is charged at the sweep's worst price."""
     flatten = (23 * 3600 + 59 * 60) * S - 3600 * S  # 23:59 from T0
     tape = tape_of(
         [
-            (0, 100.0, 0.001, SELL, False),
             (0, 99.5, 0.001, SELL, False),
-            (flatten + S, 50.0, 1.0, SELL, False),  # after 23:59: outside the window
+            (0, 100.0, 0.001, SELL, False),  # out of price order: the sweep's worst is 99.5
+            (flatten + S, 50.0, 1.0, SELL, False),  # after 23:59
         ]
     )
-    fill = one(tape, SELL, 0, settings=PrintFillSettings(depth_window_ns=86_400 * S))
-    walked = 0.001 * 100.0 + 0.001 * 99.5
-    assert fill["pessimistic"] == pytest.approx((walked + 0.008 * 99.5) / 0.010)
-    assert fill["pessimistic"] == fill["rule"]
+    wide = PrintFillSettings(depth_window_ns=86_400 * S)
+    entry = one(tape, SELL, 0, until_ns=T0 + flatten, settings=wide)
+    walked = 0.001 * 99.5 + 0.001 * 100.0
+    assert entry["rule"] == pytest.approx((walked + 0.008 * 99.5) / 0.010)
+    assert entry["pessimistic"] == entry["rule"]
+    exit_ = one(tape, SELL, 0, settings=wide)  # bounded at the day's end
+    assert exit_["pessimistic"] == pytest.approx((walked + 0.008 * 50.0) / 0.010)
+    assert exit_["worse_of_two"] == exit_["pessimistic"]
 
 
 def test_stale_and_worse_of_two() -> None:

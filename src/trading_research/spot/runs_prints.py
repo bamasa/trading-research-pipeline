@@ -146,7 +146,12 @@ def _money(trades: pd.DataFrame) -> dict[str, Any]:
     for name, column in (("entry_wait_s", "entry_wait_ns"), ("exit_wait_s", "exit_wait_ns"),
                          ("hold_realised_s", "hold_realised_ns")):  # fmt: skip
         values = trades[column].to_numpy(dtype=np.float64) / 1e9 if len(trades) else np.zeros(0)
+        if name == "exit_wait_s" and "exit_no_print" in trades:  # a fallback exit waits not
+            values = values[~trades["exit_no_print"].to_numpy(dtype=bool)]
         out[name] = quantiles(values)
+    if "exit_fallback_age_ns" in trades:  # the fallback prints' ages, reported apart
+        ages = trades["exit_fallback_age_ns"].to_numpy(dtype=np.float64)
+        out["exit_fallback_age_s"] = quantiles(ages[ages >= 0] / 1e9)
     return out
 
 
