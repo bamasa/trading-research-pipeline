@@ -14,7 +14,10 @@ Registered (the procedure's step 1, "Data budget", "Blocks"):
 * **Exclusions** per day and venue, by reason, under that threshold.
 * **The leakage checks** (K-leak) of every print member, touch proxy and book
   input on the first W day with a row interval holding prints at two distinct
-  stamps: truncation inside that interval and streaming parity (``validation/leakage_timed``); a failure stops the study.
+  stamps past the longest declared lookback: truncation inside that interval and
+  streaming parity at positions past that lookback, so each buffer drops history
+  (``validation/leakage_timed``); the touch proxies are checked as features of the
+  prints, and the grid's proxies must be theirs; a failure stops the study.
 * **The fitted values**: the median touch size of Bybit's spot book over W's
   usable days (``data/feature_store.median_touch_size``).
 * **The stores**: every D day usable on a venue, its inputs at every tenth row
@@ -91,12 +94,20 @@ def gap_threshold(log: fl.FetchLog, d_days: list[date]) -> tuple[int, dict[str, 
     return max_sequence_gaps(list(counts.values())), counts
 
 
+#: How far past the longest declared lookback the streaming positions start, and
+#: how much longer than that the slice runs: the parity must drop history.
+PARITY_MARGIN_NS = 1_000_000_000
+SLICE_MARGIN_NS = 120_000_000_000
+
+
 def cut_slice(
-    rows: pd.DataFrame, prints: pd.DataFrame, start: int
-) -> tuple[pd.DataFrame, pd.DataFrame, float] | None:
+    rows: pd.DataFrame, prints: pd.DataFrame, start: int, *, min_span_ns: int = 0,
+    min_rows: int = 0,
+) -> tuple[pd.DataFrame, pd.DataFrame, float] | None:  # fmt: skip
     """The day's first row interval from ``start`` that holds prints at two distinct
     stamps strictly inside it (where ``validation/leakage_timed`` cuts), the rows up
-    to a little after it, their prints, and the cut as a share of those rows."""
+    to a little after it, their prints, and the cut as a share of those rows. The
+    interval lies at least ``min_span_ns`` and ``min_rows`` after the first row."""
     stamps, ps = stamps_ns(rows), stamps_ns(prints)
     if len(stamps) < 2 or not len(ps):
         return None
@@ -104,7 +115,8 @@ def cut_slice(
     hi = np.searchsorted(ps, stamps[1:], side="left")
     distinct = ps[np.clip(hi - 1, 0, len(ps) - 1)] > ps[np.clip(lo, 0, len(ps) - 1)]
     eligible = np.flatnonzero((hi > lo) & distinct) + 1
-    eligible = eligible[eligible >= max(start, 100)]
+    eligible = eligible[eligible >= max(start, 100, min_rows + 1)]
+    eligible = eligible[stamps[eligible] >= stamps[0] + min_span_ns]
     if not len(eligible):
         return None
     k = int(eligible[0])
@@ -118,7 +130,6 @@ def leakage(study: SpotStudy, inputs: dy.DayInputs, store: str) -> dict[str, Any
     ``store`` on a W day (None when the day has no interval to cut inside)."""
     from trading_research.spot.book_inputs import book_registry
     from trading_research.spot.grid import print_grid
-    from trading_research.validation.leakage_timed import LeakageError, assert_timed_honest
 
     name, columns = STORES[store]
     prints: pd.DataFrame | None
@@ -134,18 +145,59 @@ def leakage(study: SpotStudy, inputs: dy.DayInputs, store: str) -> dict[str, Any
         assert prints is not None
         rows, registry = print_grid(prints), dy.registry()
     assert prints is not None
-    found = cut_slice(rows.reset_index(drop=True), prints, study.scale.leakage_rows)
+    try:
+        found = check_store(store, registry, list(columns), rows, prints,
+                            study.scale.leakage_rows, study.scale.leakage_positions)  # fmt: skip
+    except LeakError as exc:
+        raise LeakError(f"{exc} (on {inputs.day})") from exc
+    if found is None:
+        return None
+    return {"day": inputs.day.isoformat(), **found}
+
+
+def check_store(
+    store: str, registry: Any, columns: list[str], rows: pd.DataFrame, prints: pd.DataFrame,
+    start: int, count: int,
+) -> dict[str, Any] | None:  # fmt: skip
+    """One store's K-leak on one day's rows and prints (None: no interval to cut in)."""
+    from trading_research.features.timed import seconds_ns
+    from trading_research.spot.grid import PROXY_COLUMNS, proxy_registry, touch_proxies
+    from trading_research.validation.leakage_timed import LeakageError, assert_timed_honest
+
+    lookback_ns = seconds_ns(registry.longest_lookback_s(list(columns)))
+    lookback_rows = registry.longest_lookback_rows(list(columns))
+    found = cut_slice(rows.reset_index(drop=True), prints, start,
+                      min_span_ns=lookback_ns + SLICE_MARGIN_NS, min_rows=lookback_rows)  # fmt: skip
     if found is None:
         return None
     rows, prints, cut = found
-    positions = np.linspace(len(rows) // 2, len(rows) - 1, study.scale.leakage_positions)
+    positions = parity_positions(rows, lookback_ns, lookback_rows, count)
+    checks = [(registry, list(columns))]
+    if store != "book":  # the touch proxies are row state of the print grid
+        checks.append((proxy_registry(), list(PROXY_COLUMNS)))
+        rebuilt = touch_proxies(prints, stamps_ns(rows))
+        if not np.array_equal(rows[list(PROXY_COLUMNS)].to_numpy(), rebuilt.to_numpy(),
+                              equal_nan=True):  # fmt: skip
+            raise LeakError(f"K-leak: {store}: the grid's touch proxies are not the proxies "
+                            "of the prints at the row stamps")  # fmt: skip
     try:
-        assert_timed_honest(registry, rows, prints, names=list(columns),
-                            positions=sorted(set(positions.astype(int).tolist())), cut=cut)  # fmt: skip
+        for reg, names in checks:
+            assert_timed_honest(reg, rows, prints, names=names, positions=positions, cut=cut)
     except LeakageError as exc:
-        raise LeakError(f"K-leak: {store} on {inputs.day}: {exc}") from exc
-    return {"day": inputs.day.isoformat(), "rows": len(rows), "features": len(columns),
-            "cut": cut, "passed": True}  # fmt: skip
+        raise LeakError(f"K-leak: {store}: {exc}") from exc
+    return {"rows": len(rows), "features": len(columns), "proxies": len(checks) > 1, "cut": cut,
+            "positions": len(positions), "lookback_s": lookback_ns / 1e9, "passed": True}  # fmt: skip
+
+
+def parity_positions(
+    rows: pd.DataFrame, lookback_ns: int, lookback_rows: int, count: int
+) -> list[int]:
+    """Streaming positions far enough into the slice that each declared buffer drops
+    history: past the longest lookback in time and in rows from the first row."""
+    stamps = stamps_ns(rows)
+    first = int(np.searchsorted(stamps, stamps[0] + lookback_ns + PARITY_MARGIN_NS, side="left"))
+    first = min(max(first, lookback_rows + 1), len(rows) - 1)
+    return sorted(set(np.linspace(first, len(rows) - 1, count).astype(int).tolist()))
 
 
 def write_store(

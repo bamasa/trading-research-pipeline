@@ -19,7 +19,10 @@ day's grid built with the previous day's tail carries its proxies across
 midnight and a cold day's does not.
 
 A row's proxies are state, as a book row's levels are: they may come from a
-print older than any window, and a feature reads them from the row.
+print older than any window, and a feature reads them from the row. So that the
+leakage checks reach them, :func:`proxy_registry` declares each proxy as a
+trades-plane feature computed from the prints it is given, a day's state as its
+lookback.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from trading_research.features.prints import print_stamps_ns
+from trading_research.features.timed import TimedFeature, TimedRegistry, stamps_ns
 
 GRID_MS: int = 100
 PROXY_COLUMNS: tuple[str, ...] = ("ask_proxy", "bid_proxy", "mid_proxy")
@@ -84,3 +88,26 @@ def print_grid(prints: pd.DataFrame, grid_ms: int = GRID_MS) -> pd.DataFrame:
     frame = touch_proxies(prints, stamps)
     frame.insert(0, "timestamp", pd.to_datetime(stamps, unit="ns", utc=True))
     return frame
+
+
+#: A proxy's declared lookback: a day's state, carried from any earlier print.
+PROXY_LOOKBACK_S = 86_400.0
+
+
+def _proxy_feature(column: str) -> TimedFeature:
+    def fn(rows: pd.DataFrame, prints: pd.DataFrame | None) -> pd.Series:
+        if prints is None:
+            raise ValueError(f"the {column} reads prints; none were given")
+        values = touch_proxies(prints, stamps_ns(rows))[column].to_numpy()
+        return pd.Series(values, index=rows.index)
+
+    return TimedFeature(column, "trades", PROXY_LOOKBACK_S, 0, fn,
+                        f"the {column} at each row stamp, from the prints given")  # fmt: skip
+
+
+def proxy_registry() -> TimedRegistry:
+    """The three touch proxies as trades-plane features, for the leakage checks."""
+    registry = TimedRegistry()
+    for column in PROXY_COLUMNS:
+        registry.add(_proxy_feature(column))
+    return registry

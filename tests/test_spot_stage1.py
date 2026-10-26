@@ -57,3 +57,47 @@ def test_the_cut_falls_strictly_inside_an_interval_with_two_prints() -> None:
     k = int(len(kept) * cut)
     assert k == 151 and len(kept) == 200 and len(kept_prints) == 5
     assert stage1.cut_slice(rows, prints.iloc[:3], 100) is None
+
+
+def _leaky_proxies_at(ts, price, side, targets):  # type: ignore[no-untyped-def]
+    """Reads to the end of each row's 100 ms interval: the next row's prints."""
+    ends = np.asarray(targets) // 100_000_000 * 100_000_000 + 100_000_000 - 1
+    return ORIGINAL_PROXIES(ts, price, side, ends)
+
+
+from trading_research.spot import grid as _grid  # noqa: E402
+
+ORIGINAL_PROXIES = _grid.proxies_at
+
+
+def _check(prints: pd.DataFrame) -> dict | None:  # type: ignore[type-arg]
+    from trading_research.spot.features_prints import print_registry
+    from trading_research.spot.plan import PROXY_INPUTS
+
+    rows = _grid.print_grid(prints)
+    return stage1.check_store("binance", print_registry(), list(PROXY_INPUTS), rows, prints,
+                              1_200, 12)  # fmt: skip
+
+
+def test_stage_ones_check_reaches_a_forward_reading_touch_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_spot_synthetic_prints import make_prints
+
+    prints = make_prints(12_000, seed=3, mean_gap_s=0.7)
+    found = _check(prints)
+    assert found is not None and found["proxies"] and found["positions"] > 1
+    monkeypatch.setattr(_grid, "proxies_at", _leaky_proxies_at)
+    with pytest.raises(stage1.LeakError, match="proxy"):
+        _check(prints)
+
+
+def test_streaming_positions_lie_past_the_longest_lookback() -> None:
+    rows = pd.DataFrame({"timestamp": pd.to_datetime(np.arange(0, 7_200, 1.0), unit="s", utc=True)})
+    positions = stage1.parity_positions(rows, 3_660 * 1_000_000_000, 120, 10)
+    assert positions[0] >= 3_661 and positions[-1] == 7_199 and len(positions) == 10
+    prints = pd.DataFrame({"timestamp": pd.to_datetime([1.5, 1.7, 3_700.2, 3_700.4], unit="s",
+                                                       utc=True)})  # fmt: skip
+    found = stage1.cut_slice(rows, prints, 100, min_span_ns=3_660 * 1_000_000_000)
+    assert found is not None and int(len(found[0]) * found[2]) == 3_701
+    assert stage1.cut_slice(rows, prints.iloc[:2], 100, min_span_ns=3_660 * 1_000_000_000) is None
