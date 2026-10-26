@@ -250,6 +250,9 @@ def run(study: SpotStudy) -> dict[str, Any]:
         return dy.load_day(day, study.spot_root, access=access, logs=[log], table=study.fee_table,
                            max_sequence_gaps=threshold, depth=walk, spec=spec)  # fmt: skip
 
+    # Logged before any D day is loaded, so a stage that stops still has its row.
+    runlog.append(study.repo, run=f"D{study.run}", stage="1", days=d_days,
+                  note="stage 1: features and targets of D's days")  # fmt: skip
     days: dict[str, Any] = {}
     stores: dict[str, dict[str, Any]] = {s: {} for s in STORES}
     w_books: list[pd.DataFrame] = []
@@ -283,11 +286,6 @@ def run(study: SpotStudy) -> dict[str, Any]:
                         "the leakage checks could not run")  # fmt: skip
     if touch is None:
         raise RuntimeError("D has no day: nothing to store")
-    usable_d = [
-        d for d in d_days if any(not days[d.isoformat()][n]["reasons"] for n in dy.VENUE_PLANES)
-    ]
-    runlog.append(study.repo, run=f"D{study.run}", stage="1", days=usable_d,
-                  note="stage 1: features and targets of D's days")  # fmt: skip
     excluded = {sa.instrument(n).key: [[d, r] for d, v in days.items() for r in v[n]["reasons"]]
                 for n in dy.VENUE_PLANES}  # fmt: skip
     return {"code_freeze": freeze, "walk": walk, "fetch_s": fetch_s,

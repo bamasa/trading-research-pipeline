@@ -202,13 +202,13 @@ def rehearse(study: SpotStudy, values: Mapping[tuple[str, ...], Any]) -> dict[st
     plan = ho.ReadPlan(label="rehearsal", block="H", days=tuple(july), access=sa.development_access(),
                        models=br.frozen_models(study, frozen), max_gaps=int(record1["max_sequence_gaps"]),
                        depth=int(record1["walk"]), spec=spec_of(record1))  # fmt: skip
+    runlog.append(study.repo, run=f"D{study.run}", stage="amend", days=july,
+                  note="the rehearsal: July standing in for H, outputs discarded")  # fmt: skip
     found = br.compute(study, plan, blind=study.registration.h_blind,
                        mde=values[("metrics", "mde", "value")])  # fmt: skip
     write_json(study.dir("amend", "rehearsal") / "discarded_outputs.json",
                {"statuses": {s: a.record() for s, a in found["assessments"].items()},
                 "measurements": found["measurements"]})  # fmt: skip
-    runlog.append(study.repo, run=f"D{study.run}", stage="amend", days=july,
-                  note="the rehearsal: July standing in for H, outputs discarded")  # fmt: skip
     return {"ran": True, "stand_in_days": len(july), "outputs": "discarded, never reported"}
 
 

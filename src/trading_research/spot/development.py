@@ -250,6 +250,10 @@ def run(study: SpotStudy) -> dict[str, Any]:
     ensure_2025(study)
     s25_t = frozen_2025(study)
     all_folds = folds(usable_days(record1, list(study.scale.days("D"))))
+    # Logged before anything is computed, so a stage that stops still has its row.
+    read = sorted({d for f in all_folds.values() for d in (*f.inner, *f.test)})
+    runlog.append(study.repo, run=f"D{study.run}", stage="D", days=read,
+                  note="D: inner validations and the test months scored")  # fmt: skip
     fitted = {name: fold_records(study, fold, record1) for name, fold in all_folds.items()}
     leaks = []
     for name, fold in all_folds.items():  # every fold, the frozen one included
@@ -266,9 +270,6 @@ def run(study: SpotStudy) -> dict[str, Any]:
                                record1)  # fmt: skip
         records.update(ho.read_days(study, plans[name]))
     rows = {r: asm.slot_days(records, r) for r in ROWS}
-    read = sorted({d for f in all_folds.values() for d in (*f.inner, *f.test)})
-    runlog.append(study.repo, run=f"D{study.run}", stage="D", days=read,
-                  note="D: inner validations and the test months scored")  # fmt: skip
     kept = asm.kept_days(records, sa.BYBIT)
     folders = [study.work / "reads" / f"D_{name}" for name in WALK_FORWARD]
     return {
