@@ -42,6 +42,7 @@ from trading_research.data.failures import Opener
 from trading_research.data.fetch_stage import run_plane
 from trading_research.data.study_fetch import DayOutcome
 from trading_research.spot import binance, bybit_book, bybit_prints
+from trading_research.spot.access import require_spot_path
 from trading_research.spot.archives import PLANES, day_path
 from trading_research.spot.fetch import AccessGuard
 
@@ -132,7 +133,8 @@ class SpotRoots:
 
     @classmethod
     def under(cls, data_root: Path | str) -> SpotRoots:
-        base = Path(data_root)
+        """The roots under the study's data root, ``data/spot`` (refused elsewhere)."""
+        base = require_spot_path(data_root, Path(data_root).parent)
         return cls(data=base, archives=base / "_archives_in_flight")
 
 

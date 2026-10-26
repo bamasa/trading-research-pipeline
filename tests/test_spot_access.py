@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 import yaml
 
@@ -59,7 +60,8 @@ def test_development_access_permits_reader_test_w_and_d_only() -> None:
 
 
 def test_no_day_of_2025_is_ever_read() -> None:
-    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("P")), "first read", seal=sa._SEAL)
+    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("P")), "first read",
+                           session=("P", "c", "s", "e"), seal=sa._SEAL)  # fmt: skip
     for day in (date(2025, 1, 1), date(2025, 6, 30), date(2025, 12, 31)):
         with pytest.raises(HeldOutLocked, match="no day of 2025"):
             opened.require(sa.BINANCE, [day], sa.PRINTS)
@@ -72,7 +74,8 @@ def test_held_out_access_only_from_the_ledger() -> None:
         sa.SpotAccess(sa.grants_for(("H",)), "first read")
     with pytest.raises(ValueError, match="unknown"):
         sa.SpotAccess(frozenset({(sa.BYBIT, "E", sa.BOOK)}), "development")
-    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("H")), "first read", seal=sa._SEAL)
+    opened = sa.SpotAccess(sa.grants_for(sa.opened_blocks("H")), "first read",
+                           session=("H", "c", "s", "e"), seal=sa._SEAL)  # fmt: skip
     opened.require(sa.BYBIT, sa.block_days("H"), sa.BOOK)
     assert not opened.allows(sa.BYBIT, sa.block_days("P")[0], sa.BOOK)
     assert pickle.loads(pickle.dumps(opened)).seal is sa._SEAL
@@ -128,3 +131,20 @@ def test_data_roots_and_files_of_days(tmp_path: Path) -> None:
     monthly.write_bytes(b"")
     assert sa.files_of_days(sa.block_days("H"), base) == sorted([monthly, named])
     assert sa.files_of_days(sa.block_days("P"), base) == []
+
+
+def test_the_writers_keep_to_the_study_data_layout(tmp_path: Path) -> None:
+    from trading_research.spot.fetch import write_parquet
+    from trading_research.spot.fetch_stage import SpotRoots
+
+    frame = pd.DataFrame({"x": [1]})
+    good = tmp_path / "spot" / "bybit" / "book" / "BTCUSDT" / "2026-05-01.parquet"
+    write_parquet(frame, good)
+    assert good.exists()
+    for bad in (tmp_path / "book" / "BTCUSDT" / "2026-05-01.parquet",
+                tmp_path / "spot" / "binance" / "book" / "BTCFDUSD" / "2026-05-01.parquet"):  # fmt: skip
+        with pytest.raises(HeldOutLocked, match="data layout"):
+            write_parquet(frame, bad)
+    assert SpotRoots.under(tmp_path / "spot").data == tmp_path / "spot"
+    with pytest.raises(HeldOutLocked, match="outside the spot study's data root"):
+        SpotRoots.under(tmp_path / "data")

@@ -36,6 +36,7 @@ import pandas as pd
 from trading_research.data import fetch_log as fl
 from trading_research.data.failures import Download, Opener, download_to, is_missing_plane
 from trading_research.data.study_fetch import DayOutcome
+from trading_research.spot.access import require_spot_layout
 
 #: Exceptions that say an archive which arrived does not decompress.
 UNREADABLE_ARCHIVE: tuple[type[BaseException], ...] = (
@@ -100,7 +101,9 @@ def done(
 
 
 def write_parquet(frame: pd.DataFrame, target: Path) -> None:
-    """Written under a temporary name and renamed, so a file on disk is whole."""
+    """Written under a temporary name and renamed, so a file on disk is whole; only a
+    day file of the study's layout is written (``access.require_spot_layout``)."""
+    require_spot_layout(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(f"{target.name}.part")
     frame.to_parquet(partial, compression="zstd", index=False)

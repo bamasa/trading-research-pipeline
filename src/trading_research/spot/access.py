@@ -169,6 +169,15 @@ class SpotAccess:
                 "access to H or P is issued only by the spot study's ledger, which checks "
                 "the frozen configuration and records the read"
             )
+        if self.seal is _SEAL and (
+            not self.session
+            or self.session[0] not in HELD_OUT
+            or self.grants != grants_for(opened_blocks(self.session[0]))
+        ):
+            raise HeldOutLocked(
+                "a sealed access is a read session's: its grants are exactly the blocks its "
+                "session's block opens"
+            )
 
     def allows(self, name: str, day: date, plane: str) -> bool:
         if day < FIRST_READABLE_DAY or day in NEVER_READ_DAYS:
@@ -248,6 +257,18 @@ def require_spot_path(path: Path | str, base: Path | str = Path("data")) -> Path
     if target != root and root not in target.parents:
         raise HeldOutLocked(f"{path} lies outside the spot study's data root {root}")
     return Path(path)
+
+
+def require_spot_layout(path: Path | str) -> Path:
+    """``path`` if it is a day file of the study's layout, ``<root>/<venue>/<plane>/<symbol>/
+    <day>.parquet`` for a venue, plane and symbol of the study; refuse anything else,
+    the 2025 study's ``data/{book,trades,bars,funding}/BTCUSDT`` among them."""
+    target = Path(path)
+    symbol, plane, venue = target.parent, target.parent.parent, target.parent.parent.parent
+    known = {(i.venue, p, i.symbol) for i in INSTRUMENTS.values() for p in i.planes}
+    if (venue.name, plane.name, symbol.name) not in known:
+        raise HeldOutLocked(f"{path} is not a day file of the spot study's data layout")
+    return target
 
 
 def files_of_days(days: Iterable[date], base: Path | str = Path("data")) -> list[Path]:
