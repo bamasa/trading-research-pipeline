@@ -17,7 +17,10 @@ them. Stage 0 records them on the reader-test days.
 **Ten levels.** :func:`beyond_levels_share` is the share of book rows in
 which the clip exceeds the visible levels on either side; stage 0 records it,
 and above :data:`WALK_THRESHOLD` the walk replays all 200 levels
-(``replay(depth=200)``) while the features keep ten.
+(``replay(depth=200)``, :func:`replay_walk`: the ten-level grid's rows with the
+deeper levels the archive holds) while the features keep ten. The share is over
+the grid's rows: an interval whose first update leaves a side with fewer than
+ten levels has no row, as in 2025, so it is never traded nor walked.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -49,10 +53,82 @@ WALK_THRESHOLD = 0.001
 
 
 def replay(archive: Path | str, *, depth: int = LEVELS, grid_ms: int = GRID_MS) -> pd.DataFrame:
-    """One day's archive as book rows on the registered grid."""
-    return bybit.reconstruct(
-        archive, symbol=BYBIT_SPOT, depth=depth, grid_ms=grid_ms, source=SOURCE
-    )
+    """One day's archive as book rows on the registered grid: ``data/bybit.reconstruct``
+    at ten levels; at a deeper walk, :func:`replay_walk`, the same rows with the
+    deeper levels the archive holds."""
+    if depth <= LEVELS:
+        return bybit.reconstruct(
+            archive, symbol=BYBIT_SPOT, depth=depth, grid_ms=grid_ms, source=SOURCE
+        )
+    return replay_walk(archive, depth=depth, grid_ms=grid_ms)
+
+
+def replay_walk(archive: Path | str, *, depth: int, grid_ms: int = GRID_MS) -> pd.DataFrame:
+    """The ten-level grid's rows carrying up to ``depth`` levels for the walk.
+
+    ``data/bybit.reconstruct`` at ``depth`` skips an interval whose first update
+    leaves a side with fewer than ``depth`` levels, so a 200-level replay would
+    lose rows of the registered ten-level grid. Here the book is replayed as
+    ``reconstruct`` replays it (its :class:`~trading_research.data.bybit.BookState`
+    and message reader, the same snapshot, delta, gap and interval rules), a row
+    is emitted where the ten-level grid has one, and a level the archive does not
+    hold at that moment is left empty (NaN, which the walk reads as no depth).
+    The first ten levels of every row equal ``reconstruct(depth=10)``'s; the rows
+    with an empty deep level are counted (``attrs["deep_levels_missing_rows"]``).
+    """
+    state = bybit.BookState()
+    rows: list[list[Any]] = []
+    bucket: int | None = None
+    short = 0
+    for message in bybit._messages(Path(archive)):
+        kind, data, stamp = message.get("type"), message.get("data", {}), int(message["ts"])
+        update = data.get("u")
+        if kind == "snapshot":
+            state = bybit.BookState()
+            state.apply("b", data.get("b", []))
+            state.apply("a", data.get("a", []))
+            state.last_update = update
+        elif kind == "delta":
+            if (
+                state.last_update is not None
+                and update is not None
+                and update != state.last_update + 1
+            ):
+                state.gaps += 1
+            state.apply("b", data.get("b", []))
+            state.apply("a", data.get("a", []))
+            state.last_update = update
+        else:
+            continue
+        if not state.ready:
+            continue
+        current = stamp // grid_ms
+        if bucket is not None and current == bucket:
+            continue
+        bucket = current
+        bids, asks = state.top(depth)
+        if len(bids) < LEVELS or len(asks) < LEVELS:  # the ten-level grid's rule
+            continue
+        short += len(bids) < depth or len(asks) < depth
+        empty = [(np.nan, np.nan)] * depth
+        row: list[Any] = [stamp, update]
+        for bid, ask in zip([*bids, *empty][:depth], [*asks, *empty][:depth], strict=True):
+            row += [*bid, *ask]
+        rows.append(row)
+    if not rows:
+        raise bybit.BybitArchiveError(f"{archive} produced no usable book rows")
+    columns = ["ms", "sequence_id"]
+    for level in range(depth):
+        columns += [f"bid_price_{level}", f"bid_size_{level}", f"ask_price_{level}",
+                    f"ask_size_{level}"]  # fmt: skip
+    frame = pd.DataFrame(rows, columns=columns)
+    stamps = pd.to_datetime(frame.pop("ms"), unit="ms", utc=True)
+    frame.insert(0, "timestamp", stamps)
+    frame.insert(1, "symbol", pd.Series(BYBIT_SPOT, index=frame.index, dtype="string"))
+    frame.insert(2, "source", pd.Series(SOURCE, index=frame.index, dtype="string"))
+    frame.attrs["sequence_gaps"] = state.gaps
+    frame.attrs["deep_levels_missing_rows"] = short
+    return frame.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
 @dataclass(frozen=True)
@@ -127,8 +203,8 @@ def beyond_levels_share(
     """Share of rows in which ``clip`` exceeds the ``depth`` visible levels on either side."""
     if frame.empty:
         raise ValueError("no book rows to measure")
-    bids = frame[[f"bid_size_{k}" for k in range(depth)]].to_numpy(dtype=np.float64).sum(axis=1)
-    asks = frame[[f"ask_size_{k}" for k in range(depth)]].to_numpy(dtype=np.float64).sum(axis=1)
+    bids = np.nansum(frame[[f"bid_size_{k}" for k in range(depth)]].to_numpy(np.float64), axis=1)
+    asks = np.nansum(frame[[f"ask_size_{k}" for k in range(depth)]].to_numpy(np.float64), axis=1)
     return float(np.mean((bids < clip) | (asks < clip)))
 
 
@@ -172,6 +248,7 @@ def fetch_day(
         stats.update(
             rows=len(frame),
             sequence_gaps=int(frame.attrs.get("sequence_gaps", 0)),
+            deep_levels_missing_rows=int(frame.attrs.get("deep_levels_missing_rows", 0)),
             clip_beyond_levels_share=beyond_levels_share(frame, depth=depth),
             peak_rss_bytes=peak_rss_bytes(),
         )

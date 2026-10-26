@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable, Iterator
 from datetime import date, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -154,3 +155,27 @@ def test_fetch_ends_venue_days_the_gap_threshold_and_an_unreadable_block(tmp_pat
         ld.gap_threshold(book) == 5
     )  # the 95th percentile of 0, 5 and 1, rounded up; the absent day not counted
     assert not ld.unreadable(venue, 12) and ld.unreadable(venue, 11)
+
+
+def test_a_walk_depth_book_day_with_empty_deep_levels_is_usable(root: Path) -> None:
+    """At a 200-level walk, a level the archive did not hold is empty, not a fault;
+    a deep price present and not positive still excludes the day."""
+
+    def deepen(frame: pd.DataFrame) -> pd.DataFrame:
+        out = frame.copy()
+        for k in range(10, 12):
+            out[f"bid_price_{k}"] = out["bid_price_9"] - 0.1 * (k - 9)
+            out[f"ask_price_{k}"] = out["ask_price_9"] + 0.1 * (k - 9)
+            out[f"bid_size_{k}"] = out[f"ask_size_{k}"] = 0.5
+        out.loc[out.index[:3], ["bid_price_11", "bid_size_11"]] = np.nan
+        return out
+
+    deep = _rewrite(root, ar.BYBIT_BOOK, DAY, deepen)
+    book = ld.load_book_day(DAY, deep, access=OPEN, max_sequence_gaps=0, depth=12)
+    assert book.usable and book.tick == pytest.approx(0.1)
+    bad = _rewrite(root, ar.BYBIT_BOOK, DAY,
+                   lambda f: deepen(f).assign(ask_price_11=lambda g: g["ask_price_11"] * 0 - 1))  # fmt: skip
+    assert (
+        ld.NON_POSITIVE_PRICE
+        in ld.load_book_day(DAY, bad, access=OPEN, max_sequence_gaps=0, depth=12).exclusions
+    )

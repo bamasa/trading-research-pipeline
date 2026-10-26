@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trading_research.data.bybit import BybitArchiveError
 from trading_research.data.validate import Severity, validate_book
 from trading_research.spot import bybit_book as bb
 from trading_research.spot import synthetic as syn
@@ -78,11 +77,13 @@ def test_gaps_are_counted_as_reconstruct_counts_them(tmp_path: Path) -> None:
     assert stats.messages == 1440 and stats.median_interval_ms == 60_000.0
 
 
-def test_the_walk_can_replay_deeper_and_a_too_shallow_book_raises(tmp_path: Path) -> None:
+def test_the_walk_can_replay_deeper_on_the_ten_level_grid(tmp_path: Path) -> None:
     path = _write(tmp_path, syn.SpotMarket(frozenset({DAY}), step_ms=600_000))
     assert "ask_size_11" in bb.replay(path, depth=syn.LEVELS).columns
-    with pytest.raises(BybitArchiveError, match="no usable book rows"):
-        bb.replay(path, depth=bb.ARCHIVE_LEVELS)
+    ten, deep = bb.replay(path), bb.replay(path, depth=bb.ARCHIVE_LEVELS)
+    assert len(deep) == len(ten) == deep.attrs["deep_levels_missing_rows"]  # a shallow archive
+    assert deep[f"ask_price_{syn.LEVELS}"].isna().all()
+    assert bb.beyond_levels_share(deep, depth=bb.ARCHIVE_LEVELS) <= bb.beyond_levels_share(ten)
 
 
 def test_the_share_of_rows_whose_clip_exceeds_ten_levels() -> None:

@@ -110,6 +110,10 @@ def _findings(report: Iterable[Finding]) -> dict[str, dict[str, int]]:
     return out
 
 
+#: The book levels the features read and the grid is validated on.
+FEATURE_LEVELS = 10
+
+
 def load_book_day(
     day: date,
     root: Path | str,
@@ -133,12 +137,19 @@ def load_book_day(
     if frame.empty:
         return BookDay(BYBIT_SPOT, day, None, gaps, None, exclusions=(NO_BOOK,),
                        rows_outside_day=outside)  # fmt: skip
-    report = validate_book(frame, depth=depth, sampled=True)
+    # The grid's ten levels are validated as in 2025; a deeper walk's levels may be
+    # empty where the archive held fewer at that moment, and must be positive where not.
+    report = validate_book(frame, depth=min(depth, FEATURE_LEVELS), sampled=True)
     exclusions: list[str] = []
-    if any(f.check == "positive_prices" and f.severity is Severity.ERROR for f in report):
+    deep = frame[[f"{side}_price_{level}" for side in ("bid", "ask")
+                  for level in range(FEATURE_LEVELS, depth)]].to_numpy(dtype=np.float64)  # fmt: skip
+    if any(f.check == "positive_prices" and f.severity is Severity.ERROR for f in report) or (
+        deep.size and bool((deep[np.isfinite(deep)] <= 0).any())
+    ):
         exclusions.append(NON_POSITIVE_PRICE)
     columns = [f"{side}_price_{level}" for side in ("bid", "ask") for level in range(depth)]
-    tick, gridded = own_tick(frame[columns].to_numpy(dtype=np.float64).ravel())
+    prices = frame[columns].to_numpy(dtype=np.float64).ravel()
+    tick, gridded = own_tick(prices[np.isfinite(prices)])
     if not gridded:
         exclusions.append(OFF_GRID_PRICE)
     if max_sequence_gaps is not None and gaps > max_sequence_gaps:
