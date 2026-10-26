@@ -92,6 +92,7 @@ def test_s25_pf_and_s25_t_sentences() -> None:
         (0.5, -0.25, "buys 0.50 bp and sells -0.25 bp better than the book walk."),
         (0.1, -0.75, "buys -0.10 bp and sells 0.75 bp worse than the book walk."),
         (0.0, 0.0, "buys 0.00 bp and sells 0.00 bp better than the book walk."),
+        (-0.001, 0.0004, "buys 0.00 bp and sells 0.00 bp worse than the book walk."),
     ],
 )
 def test_the_calibration_sentence(buy: float, sell: float, end: str) -> None:

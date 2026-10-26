@@ -713,7 +713,11 @@ def check_status(status: str) -> str:
 
 
 def _bp(value: float, digits: int = 2) -> str:
-    return f"{value:.{digits}f}" if math.isfinite(value) else "n/a"
+    """``value`` at ``digits`` decimals; a value that rounds to zero reads without a sign."""
+    if not math.isfinite(value):
+        return "n/a"
+    text = f"{value:.{digits}f}"
+    return text.lstrip("-") if float(text) == 0 else text
 
 
 def slot_on_h(slot: str, status: str, checks: Sequence[KillCheck] = ()) -> str:
