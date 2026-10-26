@@ -1,0 +1,21 @@
+{
+  "parts": [
+    {
+      "file": "spot_2026_trials.part0001.parquet",
+      "rows": 1,
+      "sha256": "a735938d4c5fe63b9b6b04883724bff8c399c192b7522e908c62a797413048cd"
+    },
+    {
+      "file": "spot_2026_trials.part0002.parquet",
+      "rows": 1,
+      "sha256": "4c3dceca94867558daf437d4f63e8281c50f99e85d6d28a81faae6b5f642b432"
+    },
+    {
+      "file": "spot_2026_trials.part0003.parquet",
+      "rows": 1,
+      "sha256": "5be192d57960628e91c02c350200e3abb0417b19519ba7ede3d87fd116a0d97c"
+    }
+  ],
+  "rows": 3,
+  "sha256": "58db0ad4c794f0ebcadf2544312d578a014f7b4833bc283e7d91c80c1c74364d"
+}

@@ -23,3 +23,10 @@ in the D amendment; this log records what happened and when.
   touch proxies included; W's touch size 0.606 BTC; stores for D's 92 days.
 - Stage D launched with the 2025 study's checkout as the source of its frozen
   files.
+- Stage D, 03:45 to 05:37: the June, July and frozen folds fitted with the
+  reads_until_ns purge; the full fold-level leakage test through the
+  production fit path passed on every fold and fit; sigma_D, the MDEs, Null A
+  and Null B and the thinned calibration written.
+- The D amendment written by `amend` (frozen configuration `d1625173…`, 14
+  frozen fits, the July rehearsal run and discarded) and committed after
+  review.
