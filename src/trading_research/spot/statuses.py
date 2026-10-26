@@ -731,9 +731,8 @@ def slot_on_h(slot: str, status: str, checks: Sequence[KillCheck] = ()) -> str:
     venue, pair = VENUE_NAME[name], PAIR_NAME[name]
     if kill is None:
         return fill("each_slot_on_H", slot, venue, pair, status, "none", "n/a", "n/a")
-    digits = 3 if kill.name == "K-label" else 2
-    unit = KILL_UNITS.get(kill.name, " bp")
-    value, reference = _bp(kill.value, digits), _bp(kill.reference, digits) + unit
+    unit = KILL_UNITS.get(kill.name, " bp")  # two decimals and its unit, on both values
+    value, reference = _bp(kill.value) + unit, _bp(kill.reference) + unit
     return fill("each_slot_on_H", slot, venue, pair, status, kill.name, value, reference)
 
 

@@ -42,15 +42,17 @@ def test_the_templates_are_the_registered_sentences() -> None:
 def test_each_slot_on_h() -> None:
     killed = st.slot_on_h("S25-BB", "killed", [kill("K1", -1.234, 0.0), kill("K-fee", 4.0, 10.0)])
     assert killed == (
-        "S25-BB on H, Bybit spot BTCUSDT: killed; first kill K1 at -1.23 against 0.00 bp."
+        "S25-BB on H, Bybit spot BTCUSDT: killed; first kill K1 at -1.23 bp against 0.00 bp."
     )
     fee = st.slot_on_h("S25-PF", "killed", [kill("K1", 1.0, 0.0, False), kill("K-fee", 4.0, 10.0)])
-    assert fee.endswith("first kill K-fee at 4.00 against 10.00 bp per side.")
+    assert fee.endswith("first kill K-fee at 4.00 bp per side against 10.00 bp per side.")
     assert "Binance spot BTC/FDUSD" in fee
     label = st.slot_on_h("S25-T", "killed", [kill("K-label", -0.0123, 0.0)])
-    assert label.endswith("K-label at -0.012 against 0.000 (rank IC).")
+    assert label.endswith("K-label at -0.01 (rank IC) against 0.00 (rank IC).")
     days = st.slot_on_h("S25-T", "killed", [kill("K-days", 0.4, 0.5)])
-    assert days.endswith("K-days at 0.40 against 0.50 (share of days positive).")
+    assert days.endswith(
+        "K-days at 0.40 (share of days positive) against 0.50 (share of days positive)."
+    )
     for status in ("candidate", f"candidate {FALLBACK}", "inconclusive (too few trades)", "void",
                    "not assessed (H unreadable on Bybit)", "not assessed (H read failed)"):  # fmt: skip
         sentence = st.slot_on_h("S25-BB", status, [kill("K1", 1.0, 0.0, False)])
