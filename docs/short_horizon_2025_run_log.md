@@ -109,3 +109,10 @@ when, so that the gaps between stages can be read later without guessing.
 ## 2026-10-25
 
 - Nothing run; H still waits on the private remote for its open entry.
+
+## 2026-10-26
+
+- Nothing of this study was run. The owner chose to run the 2026 spot study
+  first, on its own local branch and environment; it read only 2026 days and
+  wrote nothing of this study. H still waits on the owner's decision on how
+  its open entry is recorded. No 2025 file of H, F or P is on disk.
