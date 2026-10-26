@@ -4,7 +4,8 @@
 :class:`~trading_research.spot.statuses.SlotDays` per row over its venue's kept
 days (usable, and on Bybit not stale), **a day without a trade as NaN** in every
 series that has no value then (``value``, ``gross_bp_turnover``, the placebos,
-the cells, the 110 ms re-run), and 0 trades and 0 capacity. :func:`excluded`
+the cells, the 110 ms re-run), and 0 trades and 0 capacity; an infinite capacity
+ratio, which a record holds as missing, is read back as infinite. :func:`excluded`
 counts each venue's excluded days by reason; :func:`calibration` reads FILL-S
 and FILL-S thinned (``a_buy`` and ``a_sell``); :func:`measurements` writes what
 the page and the results file report beside each status.
@@ -55,6 +56,16 @@ def _values(rows: Sequence[Mapping[str, Any]], key: str, width: int | None = Non
     return np.array(filled, dtype=float).reshape(len(rows), width).T
 
 
+def capacity_values(capacity: np.ndarray, trades: np.ndarray) -> np.ndarray:
+    """The days' capacity ratios as the cap reads them. A record cannot hold an
+    infinite ratio (it is written as missing), so a missing ratio on a day with a
+    trade is infinite (a side the slot traded and the venue did not print), and a
+    day without a trade is 0."""
+    found = np.asarray(capacity, dtype=float)
+    traded = np.asarray(trades, dtype=float) > 0
+    return np.where(np.isnan(found), np.where(traded, np.inf, 0.0), found)
+
+
 def slot_days(
     records: Mapping[str, Mapping[str, Any]], row: str, mde: float | None = None
 ) -> st.SlotDays:
@@ -86,7 +97,7 @@ def slot_days(
         worse_of_two=worse,
         fills=_values(rows, "fills") if row in PRINT_ROWS else None,
         beyond_sweep=_values(rows, "beyond_sweep") if row in PRINT_ROWS else None,
-        capacity=np.nan_to_num(_values(rows, "capacity"), nan=0.0),
+        capacity=capacity_values(_values(rows, "capacity"), trades),
         void=tuple(sorted({v for r in rows for v in r.get("void", [])},
                           key=st.VOID_CONDITIONS.index)),
         mde=mde,
@@ -187,8 +198,10 @@ def measurements(records: Mapping[str, Mapping[str, Any]], s: st.SlotDays) -> di
         "long_only": _mean(_values(rows, "long_only")),
         "inventory_pnl_quote": float(np.nansum(_values(rows, "inventory_pnl"))),
         "inventory_pnl_bp_a_day": _mean(_values(rows, "inventory_pnl_bp")),
-        "volume_30_day_quote": 30.0 * float(np.nanmean(turnover)) if len(turnover) else None,
-        "capacity_median": capacity_median(np.nan_to_num(s.capacity, nan=0.0)) if s.capacity is not None else None,
+        "volume_30_day_quote": None if _mean(turnover) is None else 30.0 * float(_mean(turnover) or 0.0),
+        "capacity_median": capacity_median(s.capacity) if s.capacity is not None else None,
+        "capacity_median_infinite": bool(s.capacity is not None and len(s.capacity)
+                                         and np.isinf(capacity_median(s.capacity))),
         "counters": counters, "grid_row_share_traded": float(np.nansum(s.trades)) / grid if grid else None,
         "skips": {k: float(np.nansum([float((r.get("skips") or {}).get(k, 0)) for r in rows]))
                   for k in ("flipped", "all_long", "all_short", "random")},

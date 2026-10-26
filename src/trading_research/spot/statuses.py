@@ -431,9 +431,8 @@ def caps(s: SlotDays) -> dict[str, float]:
     beyond the sweep, and the median day's capacity ratio."""
     if s.capacity is None or np.shape(s.capacity) != (len(s.days),):
         raise ValueError(f"{s.slot}: the capacity ratio of every usable day is needed")
-    out = {
-        "capacity_median": float(np.median(np.nan_to_num(np.asarray(s.capacity, float), nan=0.0)))
-    }
+    capacity = np.asarray(s.capacity, float)
+    out = {"capacity_median": float(np.median(np.where(np.isnan(capacity), 0.0, capacity)))}
     if s.slot in PRINT_ROWS:
         if s.fills is None or s.beyond_sweep is None:
             raise ValueError(f"{s.slot} is a print slot: its fills and fills beyond the sweep")
