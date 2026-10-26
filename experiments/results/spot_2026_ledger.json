@@ -7,9 +7,1140 @@
       "config_sha256": "d1625173c0b7a15c8785a957d77596210f46893e792c834449152e39cf5476b7",
       "environment": "54d2492d08947f6405b5325a86a9e844bba74c36da2c7ae9d70ee8994a0823d8",
       "failures": [],
-      "fetch": {},
+      "fetch": {
+        "binance_prints/2026-08-08": {
+          "downloaded_at": "2026-10-26T06:31:24.958868+00:00",
+          "sha256": "fc67b21d50872c549dc4236a494c481d6d9b1d775869c4127ebe1af97c975b3e",
+          "size": 106964
+        },
+        "binance_prints/2026-08-09": {
+          "downloaded_at": "2026-10-26T06:31:27.023527+00:00",
+          "sha256": "e16341d6654ee3bed29d8d679b1404f002e8f9b0ded116a8069775fe873906d3",
+          "size": 200169
+        },
+        "binance_prints/2026-08-10": {
+          "downloaded_at": "2026-10-26T06:31:28.773763+00:00",
+          "sha256": "ec6b3dc4a1757e61296e46c59eee1fedefd187eb1e81bc6125c3331b81df0758",
+          "size": 512487
+        },
+        "binance_prints/2026-08-11": {
+          "downloaded_at": "2026-10-26T06:31:31.237439+00:00",
+          "sha256": "8034aa507780230b6752aff29963430430dbb5bbffb47e51916a39d6caf592fa",
+          "size": 400269
+        },
+        "binance_prints/2026-08-12": {
+          "downloaded_at": "2026-10-26T06:31:32.955425+00:00",
+          "sha256": "4d7407ddee48890086e0620fcf8382cdf73d0112c877252fb0d3e79f11ec1359",
+          "size": 457605
+        },
+        "binance_prints/2026-08-13": {
+          "downloaded_at": "2026-10-26T06:31:35.369585+00:00",
+          "sha256": "62165cdb8807a43f48b4e2a9336066c06740ef3f6ec8dedc300564f433a0db5c",
+          "size": 522122
+        },
+        "binance_prints/2026-08-14": {
+          "downloaded_at": "2026-10-26T06:31:37.039929+00:00",
+          "sha256": "3cbd509c51de1b88800a625960f83c3b1022adaf06e807d90369236719b80379",
+          "size": 422771
+        },
+        "binance_prints/2026-08-15": {
+          "downloaded_at": "2026-10-26T06:31:39.021804+00:00",
+          "sha256": "898eadeac4e778f6f02dad145cc62fe5074c9376807d9fd4d691c5b49112ac6b",
+          "size": 85497
+        },
+        "binance_prints/2026-08-16": {
+          "downloaded_at": "2026-10-26T06:31:40.449047+00:00",
+          "sha256": "f284a87c4aacd5dbf859afef22760685c0a0357722751c21cbc556e183378cf9",
+          "size": 150342
+        },
+        "binance_prints/2026-08-17": {
+          "downloaded_at": "2026-10-26T06:31:42.524573+00:00",
+          "sha256": "d56a478e40e5da1b0c68355061878f462c2dc663d0032829a91bbd4b24c9c17d",
+          "size": 431796
+        },
+        "binance_prints/2026-08-18": {
+          "downloaded_at": "2026-10-26T06:31:43.986934+00:00",
+          "sha256": "e7ebfa61db7cb8d21ae0b985878db5d0b476198d382b3045eabdef087c5a396d",
+          "size": 318412
+        },
+        "binance_prints/2026-08-19": {
+          "downloaded_at": "2026-10-26T06:31:46.048102+00:00",
+          "sha256": "74abcf47f96a189dc110e8a0d265d6893df6eb9d48d10770443f5ef480b73e70",
+          "size": 1986801
+        },
+        "binance_prints/2026-08-20": {
+          "downloaded_at": "2026-10-26T06:31:48.797420+00:00",
+          "sha256": "0a33103f44f461002d9d3b5e49c829ae4e35edaf46664dc99d3b7f04229f21a5",
+          "size": 2580236
+        },
+        "binance_prints/2026-08-21": {
+          "downloaded_at": "2026-10-26T06:31:52.471506+00:00",
+          "sha256": "e887cb8dc4c233a571de030a1ec46e8710303d587f0ad8f149b8fad0da7e64f5",
+          "size": 3649836
+        },
+        "binance_prints/2026-08-22": {
+          "downloaded_at": "2026-10-26T06:31:55.012008+00:00",
+          "sha256": "dc1b43b6692080e00adf2053ce77de905a39157d4984506054bb1b0c76473a73",
+          "size": 1351319
+        },
+        "binance_prints/2026-08-23": {
+          "downloaded_at": "2026-10-26T06:31:57.117094+00:00",
+          "sha256": "f97a0e74057e0270c432d8e10c25ce6bb6aa12657db2a80bd8f6b5f554917781",
+          "size": 1047901
+        },
+        "binance_prints/2026-08-24": {
+          "downloaded_at": "2026-10-26T06:31:59.984321+00:00",
+          "sha256": "06d04b4468fe6057a60297b0753afac593518b1cb46d824f60a4e908a1eddcb5",
+          "size": 1967547
+        },
+        "binance_prints/2026-08-25": {
+          "downloaded_at": "2026-10-26T06:32:02.693280+00:00",
+          "sha256": "2b6761c1baab39831e1636216eaef01bf47831c9c1a74b747cbfc052d145b3ce",
+          "size": 1733052
+        },
+        "binance_prints/2026-08-26": {
+          "downloaded_at": "2026-10-26T06:32:05.188203+00:00",
+          "sha256": "0c0e46ee110c57b10f6b7e0ac5a973b6fa47b791449104528161e4e11175071d",
+          "size": 913799
+        },
+        "binance_prints/2026-08-27": {
+          "downloaded_at": "2026-10-26T06:32:07.446159+00:00",
+          "sha256": "6f4b5879ed238d5d2f6cc3ec2820b85c760e570bfb18af60ee31b7c3efb98e52",
+          "size": 982715
+        },
+        "binance_prints/2026-08-28": {
+          "downloaded_at": "2026-10-26T06:32:10.360075+00:00",
+          "sha256": "c864849300b3ec45e5d07a0fc0b05ac89e35ba7f53e11910f139edc5e02acbb5",
+          "size": 1259376
+        },
+        "binance_prints/2026-08-29": {
+          "downloaded_at": "2026-10-26T06:32:12.043791+00:00",
+          "sha256": "eb8c6a7fc0b6343721ae9ea1ae79d02bc3cdfcce9b8cadf98d6be30184156cf3",
+          "size": 228661
+        },
+        "binance_prints/2026-08-30": {
+          "downloaded_at": "2026-10-26T06:32:14.915905+00:00",
+          "sha256": "6f3d418d7fcb84306983d1a4a3140923fa7e0057122c58fc9def415d61b42b71",
+          "size": 615306
+        },
+        "binance_prints/2026-08-31": {
+          "downloaded_at": "2026-10-26T06:32:17.322866+00:00",
+          "sha256": "105ab7972bfad88c4f08f8a7a97d57689f38823227398d6fa85c018c940c89bc",
+          "size": 933212
+        },
+        "binance_prints/2026-09-01": {
+          "downloaded_at": "2026-10-26T06:32:19.598026+00:00",
+          "sha256": "2c9615873f99a73d3f2114497c8c829ae1ec95e52a2328bf968e22469caac511",
+          "size": 917577
+        },
+        "binance_prints/2026-09-02": {
+          "downloaded_at": "2026-10-26T06:32:21.595656+00:00",
+          "sha256": "de2cb5d1a45e0e7803822c382cd43b6052ca9c512212b6df5863f5d7bced8803",
+          "size": 784700
+        },
+        "binance_prints/2026-09-03": {
+          "downloaded_at": "2026-10-26T06:32:24.058320+00:00",
+          "sha256": "933678d1e60ccebba74e6088c1f595ec164fad02d9ed566e2f73b938fb92f6a7",
+          "size": 1334527
+        },
+        "binance_prints/2026-09-04": {
+          "downloaded_at": "2026-10-26T06:32:26.816101+00:00",
+          "sha256": "9b4d00340615dca4d6e87c80ef55100e5a8e75d2b8704831d8271cad739682d0",
+          "size": 1182036
+        },
+        "binance_prints/2026-09-05": {
+          "downloaded_at": "2026-10-26T06:32:28.356932+00:00",
+          "sha256": "321f1753e251873e5831d01cf6ea071736f49ba155cedbf8af60bbb4d33b1a72",
+          "size": 282094
+        },
+        "binance_prints/2026-09-06": {
+          "downloaded_at": "2026-10-26T06:32:30.799522+00:00",
+          "sha256": "3138a67687a1c3ab849263a4c01ee3fa5559a8ef362bd320d7d051ce4e4115d9",
+          "size": 427104
+        },
+        "binance_prints/2026-09-07": {
+          "downloaded_at": "2026-10-26T06:32:33.410333+00:00",
+          "sha256": "0d170554c5f93a08c451eb6b29b549c5283a26fc70cf3f3a1a02ba51f0ded365",
+          "size": 535519
+        },
+        "binance_prints/2026-09-08": {
+          "downloaded_at": "2026-10-26T06:32:35.445214+00:00",
+          "sha256": "c0857f6314089bf45525b2d2bd1f54169c66291342ad4ab5d29bbe3c35e6e498",
+          "size": 761789
+        },
+        "binance_prints/2026-09-09": {
+          "downloaded_at": "2026-10-26T06:32:37.474550+00:00",
+          "sha256": "624db1f4b006b91e1c4dc48b90b4bf38ef4ba3e92a90e494195f7327bacca323",
+          "size": 871889
+        },
+        "binance_prints/2026-09-10": {
+          "downloaded_at": "2026-10-26T06:32:40.001479+00:00",
+          "sha256": "9cbc772faaab37bfd432b832c5c998f8c438e4ee185ccdea164839ca09a32e21",
+          "size": 780594
+        },
+        "binance_prints/2026-09-11": {
+          "downloaded_at": "2026-10-26T06:32:42.424984+00:00",
+          "sha256": "366c376d8480f54065169930aa5bc01e99dd4b6066febff1db9dd6e8af1402bf",
+          "size": 1352793
+        },
+        "binance_prints/2026-09-12": {
+          "downloaded_at": "2026-10-26T06:32:44.535774+00:00",
+          "sha256": "70e2b8776e0ca17f857fc9fff450a3a7993a7821535dfecb30f6e4df2688d11b",
+          "size": 163898
+        },
+        "binance_prints/2026-09-13": {
+          "downloaded_at": "2026-10-26T06:32:46.513832+00:00",
+          "sha256": "12963234841382394eb319d350b9a15878fb5591fa2fb36d835e3098a8bcfb06",
+          "size": 388714
+        },
+        "binance_prints/2026-09-14": {
+          "downloaded_at": "2026-10-26T06:32:48.762321+00:00",
+          "sha256": "eb167e3c8db5ca99bede4b775a88b1138a32bfc4aae0f0dba5a2fd17cdd5e994",
+          "size": 1129259
+        },
+        "binance_prints/2026-09-15": {
+          "downloaded_at": "2026-10-26T06:32:51.617685+00:00",
+          "sha256": "5910f730b40bd163ae785af9b2e42c083a9ffe6baec9267dff351ef3fb5c0911",
+          "size": 1458117
+        },
+        "binance_prints/2026-09-16": {
+          "downloaded_at": "2026-10-26T06:32:53.168644+00:00",
+          "sha256": "4b797da1ff3dda1f47212b71e1530bfc7ddf6ac564ef33f0db62b023f0f08dac",
+          "size": 1211544
+        },
+        "binance_prints/2026-09-17": {
+          "downloaded_at": "2026-10-26T06:32:55.385472+00:00",
+          "sha256": "c2c5ad82ff9098baddfc419e099fdbd051312b101ff0126cc5e988964dc4c515",
+          "size": 831765
+        },
+        "binance_prints/2026-09-18": {
+          "downloaded_at": "2026-10-26T06:32:57.766382+00:00",
+          "sha256": "9227078c9750099ff84e356e4ec778ad70487eeb657e8bed04d109f0c5d69761",
+          "size": 1363008
+        },
+        "binance_prints/2026-09-19": {
+          "downloaded_at": "2026-10-26T06:32:59.312536+00:00",
+          "sha256": "5b4a93c35c847e169de52ece977717950fbfbd878e4e0bf4bfc30fd8a4eab0ab",
+          "size": 590748
+        },
+        "binance_prints/2026-09-20": {
+          "downloaded_at": "2026-10-26T06:33:01.776128+00:00",
+          "sha256": "71e7a6847e6a814611b08c8b659b48bdc7ff654402b4580b32cdcffbef6871e8",
+          "size": 616254
+        },
+        "binance_prints/2026-09-21": {
+          "downloaded_at": "2026-10-26T06:33:04.945710+00:00",
+          "sha256": "4d92a1aadd16b39fa7ed33b07979c69714e811d79cdaec067b33779f76467d7b",
+          "size": 1865391
+        },
+        "binance_prints/2026-09-22": {
+          "downloaded_at": "2026-10-26T06:33:07.507085+00:00",
+          "sha256": "67feec3a2feff53fc2e9749e8fc5e952f6b954945e9397316045f237ab73db11",
+          "size": 1028043
+        },
+        "binance_prints/2026-09-23": {
+          "downloaded_at": "2026-10-26T06:33:09.762393+00:00",
+          "sha256": "4eec7e74354439a3dfee7e8751b552c85b3c1188ee5c890f84fd279d04fc81fa",
+          "size": 1111286
+        },
+        "binance_prints/2026-09-24": {
+          "downloaded_at": "2026-10-26T06:33:11.980522+00:00",
+          "sha256": "fe1fad98664849caa11a0054cc78287f12882873dd001e605b5ecfed1d329e0b",
+          "size": 949625
+        },
+        "binance_prints/2026-09-25": {
+          "downloaded_at": "2026-10-26T06:33:14.508199+00:00",
+          "sha256": "4d58312606aa4fd06a8bb47752ef14d86dc092eae31a43b7082d21111e9fbe67",
+          "size": 761493
+        },
+        "binance_prints/2026-09-26": {
+          "downloaded_at": "2026-10-26T06:33:16.418733+00:00",
+          "sha256": "8d10442a1b9d4fbc740b9a24397cda44f8b19b899aee76a8c90c9460f6935ed7",
+          "size": 170313
+        },
+        "binance_prints/2026-09-27": {
+          "downloaded_at": "2026-10-26T06:33:18.152190+00:00",
+          "sha256": "a9db0adca95f67e331aee0a51af874bb0e58d81000300d854e3569067834111b",
+          "size": 533145
+        },
+        "binance_prints/2026-09-28": {
+          "downloaded_at": "2026-10-26T06:33:20.664966+00:00",
+          "sha256": "a1a27e017e3fc1cc7ef92288ab7f6abd12ed91e56a6afaf540a51d2180d00a1b",
+          "size": 943576
+        },
+        "binance_prints/2026-09-29": {
+          "downloaded_at": "2026-10-26T06:33:22.632758+00:00",
+          "sha256": "1145e835a2083d8509d4efd49338c0364025f9d9ef2ff853108d6c08a895b131",
+          "size": 651325
+        },
+        "binance_prints/2026-09-30": {
+          "downloaded_at": "2026-10-26T06:33:24.678592+00:00",
+          "sha256": "9affd4a59de75898742063174527d46cb3d5925ec04d1101dc0cd0f3c1fc22d1",
+          "size": 950759
+        },
+        "binance_prints/2026-10-01": {
+          "downloaded_at": "2026-10-26T06:33:26.637051+00:00",
+          "sha256": "4aaca6c47d0a8dcd1fd74abfe8d79dc3ed3943e74e9b7f2de0a152a4928fae91",
+          "size": 858159
+        },
+        "binance_prints/2026-10-02": {
+          "downloaded_at": "2026-10-26T06:33:28.885934+00:00",
+          "sha256": "d0bc4ec193bd2033ed6c64d6c1383c70b4dda4bac9205780c359ad2ebf6a5427",
+          "size": 1192914
+        },
+        "binance_prints/2026-10-03": {
+          "downloaded_at": "2026-10-26T06:33:31.750474+00:00",
+          "sha256": "443935eaa5ce72f23bdf6511665802f43ea01f4afff380b409b98034d8b95a63",
+          "size": 588891
+        },
+        "binance_prints/2026-10-04": {
+          "downloaded_at": "2026-10-26T06:33:33.308943+00:00",
+          "sha256": "dc7f98b448c3d47f23a3160e0449644819c9f71fc8a04379344d4032641e5cfa",
+          "size": 354747
+        },
+        "binance_prints/2026-10-05": {
+          "downloaded_at": "2026-10-26T06:33:35.925075+00:00",
+          "sha256": "ef532abf80422ff2ee80852b511768f7738a980a34c3b1f420c47b2e9d4f4890",
+          "size": 807510
+        },
+        "binance_prints/2026-10-06": {
+          "downloaded_at": "2026-10-26T06:33:38.376317+00:00",
+          "sha256": "cce87d307ff84256077108d0adcd469119ab736bcb28d1c1ce42300d82f50bb9",
+          "size": 570132
+        },
+        "binance_prints/2026-10-07": {
+          "downloaded_at": "2026-10-26T06:33:41.072935+00:00",
+          "sha256": "cc101271c09840eff132bfd43952d535bf7a87c7ac40f06f3dfc6608305328e1",
+          "size": 822915
+        },
+        "binance_prints/2026-10-08": {
+          "downloaded_at": "2026-10-26T06:33:43.326399+00:00",
+          "sha256": "c4b3a5d65779938bc92746ac8246e685ea9cf2882100fc2bfa19560da9783df5",
+          "size": 1171204
+        },
+        "binance_prints/2026-10-09": {
+          "downloaded_at": "2026-10-26T06:33:45.099366+00:00",
+          "sha256": "9e6eae8a4deb5fbe4e0f3fe4e4aac528a6f8f7337e204dc37fe0ef0939f36790",
+          "size": 486922
+        },
+        "binance_prints/2026-10-10": {
+          "downloaded_at": "2026-10-26T06:33:46.579840+00:00",
+          "sha256": "ab52f5ceb8801ef03f348c463d0b189e5dc6fc527bd5eb8821b29200fcefe246",
+          "size": 146244
+        },
+        "binance_prints/2026-10-11": {
+          "downloaded_at": "2026-10-26T06:33:48.269986+00:00",
+          "sha256": "674a98a3ebe8d4046f6b02d6705ec58a2685f323a90973054032111f55200332",
+          "size": 300101
+        },
+        "binance_prints/2026-10-12": {
+          "downloaded_at": "2026-10-26T06:33:50.752711+00:00",
+          "sha256": "117ab0517eed3b3cef98eaaa0dc9a1838f803a7db6e67f09387f7e60336779f5",
+          "size": 719698
+        },
+        "binance_prints/2026-10-13": {
+          "downloaded_at": "2026-10-26T06:33:52.939738+00:00",
+          "sha256": "699e0e2d715f859fd7a4e42e70758ca19967a47bbcaf14e5bb0d5ca2dfe9e16a",
+          "size": 941891
+        },
+        "binance_prints/2026-10-14": {
+          "downloaded_at": "2026-10-26T06:33:55.209284+00:00",
+          "sha256": "76eddc355beb100b63aceca7301c604fd165260fbed8b3ca5cdb8aee219ae0e4",
+          "size": 1113768
+        },
+        "binance_prints/2026-10-15": {
+          "downloaded_at": "2026-10-26T06:33:58.184145+00:00",
+          "sha256": "85b4e199c8aa762f018c9c6c98209dcfb19419cad630e8dce83639e7b84c36f9",
+          "size": 1660280
+        },
+        "binance_prints/2026-10-16": {
+          "downloaded_at": "2026-10-26T06:34:00.535223+00:00",
+          "sha256": "eeb986944ebc846aa28eab18aee676da6a213fd9f13359315f18d95edd581054",
+          "size": 942921
+        },
+        "binance_prints/2026-10-17": {
+          "downloaded_at": "2026-10-26T06:34:02.304672+00:00",
+          "sha256": "a693e9fe1ef2532fb9af1dc3dc8ff574d96b37bad4ce1424b5279141ed1f79ca",
+          "size": 199934
+        },
+        "binance_prints/2026-10-18": {
+          "downloaded_at": "2026-10-26T06:34:05.156659+00:00",
+          "sha256": "9efd165301eebe054f6770d259b1cbb9e2367ae5657e70a88737f87774f74516",
+          "size": 459062
+        },
+        "binance_prints/2026-10-19": {
+          "downloaded_at": "2026-10-26T06:34:07.222378+00:00",
+          "sha256": "95790a00c3d5c6a4694e1a55dbabfadbcf9f5c238af4e5cfba72c2fed0a35528",
+          "size": 631305
+        },
+        "binance_prints/2026-10-20": {
+          "downloaded_at": "2026-10-26T06:34:09.288478+00:00",
+          "sha256": "3644918894f84b17a7c647885e47232f7ffb37d5ed3a7d17266f497bda931872",
+          "size": 757715
+        },
+        "binance_prints/2026-10-21": {
+          "downloaded_at": "2026-10-26T06:34:11.740059+00:00",
+          "sha256": "c34f5b1cd75f8d4f87f017c2e2f0f306ecd9ad74a947de85ab957122ec6986fb",
+          "size": 739058
+        },
+        "bybit_book/2026-08-08": {
+          "downloaded_at": "2026-10-26T06:12:07.538492+00:00",
+          "sha256": "d65d7b9d5cf7e30873d29e0347ad5344f3989dec0a5e8011c842a34bf00c1e85",
+          "size": 20971403
+        },
+        "bybit_book/2026-08-09": {
+          "downloaded_at": "2026-10-26T06:12:03.962661+00:00",
+          "sha256": "1efa0e09c950441cac4db89a69ad2a1c55e39ea88b61990685c27d51451d0d1c",
+          "size": 21677557
+        },
+        "bybit_book/2026-08-10": {
+          "downloaded_at": "2026-10-26T06:12:19.904570+00:00",
+          "sha256": "9d6f76a95819a744b571d9cdcc7d202142cc082474b482538c9ac5c2b2b8b9f0",
+          "size": 39919202
+        },
+        "bybit_book/2026-08-11": {
+          "downloaded_at": "2026-10-26T06:12:16.189381+00:00",
+          "sha256": "5a58157f66a3742b32a916dd48e6ba9b44391ba3c68202610a045311dce42386",
+          "size": 35537704
+        },
+        "bybit_book/2026-08-12": {
+          "downloaded_at": "2026-10-26T06:12:59.456534+00:00",
+          "sha256": "1c7bf2a054b8198619dec9908fd279e88989dd66bcf5d4c1a13b7511fd840489",
+          "size": 42159542
+        },
+        "bybit_book/2026-08-13": {
+          "downloaded_at": "2026-10-26T06:12:57.085093+00:00",
+          "sha256": "4b56e61de00ea58f66ab1825740207c39ec5c60de6a41eed40c8ecc7afada6d7",
+          "size": 41289366
+        },
+        "bybit_book/2026-08-14": {
+          "downloaded_at": "2026-10-26T06:13:01.797826+00:00",
+          "sha256": "36feac8576cad284bb12a158088ce37fe6540900efa0f8f272ca589d0420739d",
+          "size": 38007599
+        },
+        "bybit_book/2026-08-15": {
+          "downloaded_at": "2026-10-26T06:13:05.985145+00:00",
+          "sha256": "f04c62583f3dd35f639fd73cbf53d1c2f0daf2ae8585c9c4e7dc9b3af92b2aba",
+          "size": 17619576
+        },
+        "bybit_book/2026-08-16": {
+          "downloaded_at": "2026-10-26T06:13:27.544015+00:00",
+          "sha256": "afde94d70d45fefeab24b1f1ff331a471cc18820d39b340ecb5d93bd21bb922a",
+          "size": 18156824
+        },
+        "bybit_book/2026-08-17": {
+          "downloaded_at": "2026-10-26T06:13:43.675007+00:00",
+          "sha256": "a5fd82cba47edd478cca4bda5ebafbf98daa07f9f2708194943b6858e1df48c6",
+          "size": 37505806
+        },
+        "bybit_book/2026-08-18": {
+          "downloaded_at": "2026-10-26T06:13:47.440770+00:00",
+          "sha256": "1f5ba6a2a69baef99ec79cabca28960f1eeab28b4c7b7ff788b183194dc9707b",
+          "size": 32867871
+        },
+        "bybit_book/2026-08-19": {
+          "downloaded_at": "2026-10-26T06:13:57.376783+00:00",
+          "sha256": "6520ef0c244aa3452cbf8fb54875db04b3e9b2e1c2b3c97b0ad6f75491e2ac58",
+          "size": 59025155
+        },
+        "bybit_book/2026-08-20": {
+          "downloaded_at": "2026-10-26T06:14:24.434156+00:00",
+          "sha256": "71dd8a50fc073018f8d75d01177a09f11a10d1da76d42333455ffe74b21a29fa",
+          "size": 80137805
+        },
+        "bybit_book/2026-08-21": {
+          "downloaded_at": "2026-10-26T06:14:57.350656+00:00",
+          "sha256": "7e3497f6f6be0f4c09fa88641b6bad388f06ed2736162acae84269ef821c8842",
+          "size": 114245133
+        },
+        "bybit_book/2026-08-22": {
+          "downloaded_at": "2026-10-26T06:14:47.402148+00:00",
+          "sha256": "33ea6366abd8aebceb5780814b8835fea0779e25d7ef84ef52efa87d16ea0a77",
+          "size": 66144951
+        },
+        "bybit_book/2026-08-23": {
+          "downloaded_at": "2026-10-26T06:14:57.556858+00:00",
+          "sha256": "6647fac20a196a28707c0623d20587c49323a28ba0090b063838f675343a1e60",
+          "size": 57852347
+        },
+        "bybit_book/2026-08-24": {
+          "downloaded_at": "2026-10-26T06:15:35.886508+00:00",
+          "sha256": "c9d2b719ef941b97cef4151598ad186dadc650440e9e21e91969c0202e6cd3ff",
+          "size": 77442282
+        },
+        "bybit_book/2026-08-25": {
+          "downloaded_at": "2026-10-26T06:16:03.687409+00:00",
+          "sha256": "5230d5c07205188fe0e53305d6deb29ea6158a00a4b67609efa1fb876f454725",
+          "size": 75567343
+        },
+        "bybit_book/2026-08-26": {
+          "downloaded_at": "2026-10-26T06:16:15.495470+00:00",
+          "sha256": "fff64006cb0f3f08163258c82ccf3600dcefa67f30f9ccbe91b760949583fbf9",
+          "size": 61964706
+        },
+        "bybit_book/2026-08-27": {
+          "downloaded_at": "2026-10-26T06:16:16.344890+00:00",
+          "sha256": "fe786397fd2aa5e176f04ac1d9d92a596e6b36f8b1a88ba3a9118df13a45e6e7",
+          "size": 62204525
+        },
+        "bybit_book/2026-08-28": {
+          "downloaded_at": "2026-10-26T06:16:33.049232+00:00",
+          "sha256": "a650fc908b3a9b25c8d9d499b286991073205daf5a1ffd5f1a1a75f5235c6bb2",
+          "size": 67496480
+        },
+        "bybit_book/2026-08-29": {
+          "downloaded_at": "2026-10-26T06:16:54.494058+00:00",
+          "sha256": "2935c861ef5468e7e453c374061b174f9db6cf6830f111bd49d69c1fca397a75",
+          "size": 34731427
+        },
+        "bybit_book/2026-08-30": {
+          "downloaded_at": "2026-10-26T06:17:06.889419+00:00",
+          "sha256": "754cba9bbed97525f64b9e2a949e3be055d5a3219bfb67a948dfc36722945cd0",
+          "size": 47300357
+        },
+        "bybit_book/2026-08-31": {
+          "downloaded_at": "2026-10-26T06:17:24.729923+00:00",
+          "sha256": "bcbd223b0429ee54564238c6e16f21c2eebd941d08b0d58ae6c309bdd5c2e42d",
+          "size": 64411367
+        },
+        "bybit_book/2026-09-01": {
+          "downloaded_at": "2026-10-26T06:17:33.101422+00:00",
+          "sha256": "f0df207eb1f9372cf2542ddb726d03e6d0516a89efc533ceae0841bcffc7313f",
+          "size": 62091194
+        },
+        "bybit_book/2026-09-02": {
+          "downloaded_at": "2026-10-26T06:17:54.486248+00:00",
+          "sha256": "81356ba82da04b0f433f284415abaec27e7f593d1a9507fd492e29f2cb6b043f",
+          "size": 60378387
+        },
+        "bybit_book/2026-09-03": {
+          "downloaded_at": "2026-10-26T06:18:11.454105+00:00",
+          "sha256": "7fc8390d67160dcc1722571a8aa3ad4aba72615a0208911954c68ce46481cad1",
+          "size": 64673046
+        },
+        "bybit_book/2026-09-04": {
+          "downloaded_at": "2026-10-26T06:18:18.377774+00:00",
+          "sha256": "1aff8bf800269d4db069ce52c788075a4998f80524a00a3dbe39840554631215",
+          "size": 55833748
+        },
+        "bybit_book/2026-09-05": {
+          "downloaded_at": "2026-10-26T06:18:14.749994+00:00",
+          "sha256": "300e40884225d3af38188c33bc4b919753fb724621ad04ad72beee4d1f4274c3",
+          "size": 29305139
+        },
+        "bybit_book/2026-09-06": {
+          "downloaded_at": "2026-10-26T06:18:38.404072+00:00",
+          "sha256": "7badfc112c25ce8b2aae87881ac727b04bad43978fc1fa6182f43b4128463337",
+          "size": 34020348
+        },
+        "bybit_book/2026-09-07": {
+          "downloaded_at": "2026-10-26T06:18:59.176076+00:00",
+          "sha256": "c42bf13328fd78ebdc6372600bb2a043b8e614216c46fac939e0b916934cf92c",
+          "size": 43165740
+        },
+        "bybit_book/2026-09-08": {
+          "downloaded_at": "2026-10-26T06:19:16.302550+00:00",
+          "sha256": "af145410e5f632a193e7cf616060dc6ee35469dc3756a50ff5a5dfebbbfb7b04",
+          "size": 54582865
+        },
+        "bybit_book/2026-09-09": {
+          "downloaded_at": "2026-10-26T06:19:12.664144+00:00",
+          "sha256": "22e841467d6b345cda5888d3315b014c0816bb852b8f8e2f652a824b755109d9",
+          "size": 54148268
+        },
+        "bybit_book/2026-09-10": {
+          "downloaded_at": "2026-10-26T06:19:29.237264+00:00",
+          "sha256": "7358a05193af3b90eaee4871130f771f2b0ddfab97df44f91f777394476c3d5e",
+          "size": 50862288
+        },
+        "bybit_book/2026-09-11": {
+          "downloaded_at": "2026-10-26T06:19:51.913232+00:00",
+          "sha256": "849a07f6b2531c393619128c9760f286032213e235b495820320e27ea6f447c8",
+          "size": 55142930
+        },
+        "bybit_book/2026-09-12": {
+          "downloaded_at": "2026-10-26T06:19:48.802287+00:00",
+          "sha256": "b03f36bab8155dfa677a362e1b1ea781142faeed83318df8bf428aecc8073e96",
+          "size": 21772939
+        },
+        "bybit_book/2026-09-13": {
+          "downloaded_at": "2026-10-26T06:19:57.698435+00:00",
+          "sha256": "a25cfa63762966097996d5696af61daf52617459ef3354dee3087e664bf26cad",
+          "size": 29728411
+        },
+        "bybit_book/2026-09-14": {
+          "downloaded_at": "2026-10-26T06:20:21.546930+00:00",
+          "sha256": "d319a085a8e02a4c57eb3ab6c7180ad5a1ae6891f1e34a7e1ce8be7915bcffda",
+          "size": 54172950
+        },
+        "bybit_book/2026-09-15": {
+          "downloaded_at": "2026-10-26T06:20:41.166110+00:00",
+          "sha256": "99cb3cf56d1592bd113ca8bf23f549c87e2226820f94b68bac553ccd666594bf",
+          "size": 59443628
+        },
+        "bybit_book/2026-09-16": {
+          "downloaded_at": "2026-10-26T06:21:03.243201+00:00",
+          "sha256": "348803aee38722c66386f26acd1720f46e2f890954ee139a1f0656442b4861cf",
+          "size": 57826704
+        },
+        "bybit_book/2026-09-17": {
+          "downloaded_at": "2026-10-26T06:20:55.780631+00:00",
+          "sha256": "0f7ae940e30e3c8a529852c6f377dfc8b5990f3ef0a8439d5fcd2443a84f0ba7",
+          "size": 48649238
+        },
+        "bybit_book/2026-09-18": {
+          "downloaded_at": "2026-10-26T06:21:16.985258+00:00",
+          "sha256": "5625b09631b6f465729c58f4d0fe067cf0dcb1b3c70bc50f1de49d4f84898da1",
+          "size": 59972501
+        },
+        "bybit_book/2026-09-19": {
+          "downloaded_at": "2026-10-26T06:21:28.054727+00:00",
+          "sha256": "5d5e1eedc9fe877e9e6e4559f1118dbb863495b79750cac03e57f401c01fd6b5",
+          "size": 37844368
+        },
+        "bybit_book/2026-09-20": {
+          "downloaded_at": "2026-10-26T06:21:46.286853+00:00",
+          "sha256": "a911fe5875f7033546514222608fae4f6b1c974c56c4cdbcbedf90a62aae861e",
+          "size": 42423239
+        },
+        "bybit_book/2026-09-21": {
+          "downloaded_at": "2026-10-26T06:22:12.435723+00:00",
+          "sha256": "0fa890a75bac553cf2fc42b332496d56ea118fb39a674f2f069d2f0c0c420287",
+          "size": 68544790
+        },
+        "bybit_book/2026-09-22": {
+          "downloaded_at": "2026-10-26T06:22:15.229042+00:00",
+          "sha256": "1d04c2e718c35660041f618023fda18ca44268095f015afdd2d3d2e6e9c69cc6",
+          "size": 58646140
+        },
+        "bybit_book/2026-09-23": {
+          "downloaded_at": "2026-10-26T06:22:21.319709+00:00",
+          "sha256": "a13a5a3df1670e059b63327ad8a18c6696288c6e20a03a5bc49d4431ef19e61c",
+          "size": 56397387
+        },
+        "bybit_book/2026-09-24": {
+          "downloaded_at": "2026-10-26T06:22:40.880663+00:00",
+          "sha256": "51bfd2e4ece90bc2b4d460a7ee857da1771257f4be89e28f5820db224958441c",
+          "size": 57994432
+        },
+        "bybit_book/2026-09-25": {
+          "downloaded_at": "2026-10-26T06:23:03.137841+00:00",
+          "sha256": "114d61bad83b8bc9d109707755e3d84d4ac4a3c59e91cd386c5c768dc785f706",
+          "size": 49891678
+        },
+        "bybit_book/2026-09-26": {
+          "downloaded_at": "2026-10-26T06:22:58.039414+00:00",
+          "sha256": "10c54241e51eafa14e1d79f21a2a5fbca78c5ef4881f93b6c864545cb01424b0",
+          "size": 26869528
+        },
+        "bybit_book/2026-09-27": {
+          "downloaded_at": "2026-10-26T06:23:04.081053+00:00",
+          "sha256": "7d14b4e02f99e71190f48253222aba930d8fb28c0c1995b7ab03a3d37ab62621",
+          "size": 33715037
+        },
+        "bybit_book/2026-09-28": {
+          "downloaded_at": "2026-10-26T06:23:35.378421+00:00",
+          "sha256": "bc6a8da2c72bdfc15d7c2a88bfe514c020810ee32ce2905075215c325af64e08",
+          "size": 62375498
+        },
+        "bybit_book/2026-09-29": {
+          "downloaded_at": "2026-10-26T06:23:54.188254+00:00",
+          "sha256": "3aca230b9f88a214845988d474746d981533438d29714ba04ee09e1c1a3800a4",
+          "size": 56716956
+        },
+        "bybit_book/2026-09-30": {
+          "downloaded_at": "2026-10-26T06:24:13.767326+00:00",
+          "sha256": "40e3aadecebab8e9b24b14c99619010c05698723bbc6767bf8c2fb8e4c60ea02",
+          "size": 63263003
+        },
+        "bybit_book/2026-10-01": {
+          "downloaded_at": "2026-10-26T06:24:05.430632+00:00",
+          "sha256": "5191c76241ef70d9869a4812ad0a33347fd907a21abd8c5a1814fb163ac222d6",
+          "size": 64819022
+        },
+        "bybit_book/2026-10-02": {
+          "downloaded_at": "2026-10-26T06:24:31.972177+00:00",
+          "sha256": "ce42275257519f30c7843aa44a00d307c2b5d98543950610da3dd7cb4b4d6656",
+          "size": 67877812
+        },
+        "bybit_book/2026-10-03": {
+          "downloaded_at": "2026-10-26T06:24:35.198353+00:00",
+          "sha256": "ec9c90c8a0bd4d2e576779b1498849c1b713d4117016e1a36a3c579dfe8f9cd9",
+          "size": 25876011
+        },
+        "bybit_book/2026-10-04": {
+          "downloaded_at": "2026-10-26T06:24:48.088221+00:00",
+          "sha256": "5c94c2513e853ade9d2db0206455105f08ba7601816205c4db5c1dcaebd6009a",
+          "size": 31533803
+        },
+        "bybit_book/2026-10-05": {
+          "downloaded_at": "2026-10-26T06:25:08.230931+00:00",
+          "sha256": "5412f94c8d799a82c0b31e53ace6f131d7f8c8499e453ebfcd7c39bb0637db4e",
+          "size": 56127628
+        },
+        "bybit_book/2026-10-06": {
+          "downloaded_at": "2026-10-26T06:25:22.949547+00:00",
+          "sha256": "c1a3e73b0176e0519a9a6caedb1a7fae80dc78ee246406ee6a42432719854cd8",
+          "size": 48940434
+        },
+        "bybit_book/2026-10-07": {
+          "downloaded_at": "2026-10-26T06:25:33.565305+00:00",
+          "sha256": "19236bfd60e68db2f10ce0aee21ab83ecfc24ed37a32e2c299b948cf15a1a01a",
+          "size": 58388771
+        },
+        "bybit_book/2026-10-08": {
+          "downloaded_at": "2026-10-26T06:25:45.390261+00:00",
+          "sha256": "754ece900b99f50bee97e3b44a97b8b42d0f3194bd1220a8458fec948475f9d1",
+          "size": 70373756
+        },
+        "bybit_book/2026-10-09": {
+          "downloaded_at": "2026-10-26T06:26:01.125178+00:00",
+          "sha256": "856ebe4beae223535b47bf2ac2b969ed4a49df6513db9da1be03fd57a104fc6f",
+          "size": 49524348
+        },
+        "bybit_book/2026-10-10": {
+          "downloaded_at": "2026-10-26T06:26:03.778570+00:00",
+          "sha256": "9008b38b7a6b57c6c8f664ad658364672ba52375d547211b49645c04fc15e2b4",
+          "size": 25144162
+        },
+        "bybit_book/2026-10-11": {
+          "downloaded_at": "2026-10-26T06:26:15.321932+00:00",
+          "sha256": "1c97602553df0e29887f9d9b6a7be46028a02df6894cc374c88ba0882c8c6575",
+          "size": 29427534
+        },
+        "bybit_book/2026-10-12": {
+          "downloaded_at": "2026-10-26T06:26:36.780583+00:00",
+          "sha256": "4a0d9a8463b46bab6fd2c75de1dd7dbc5c5655b2d419b2d512a28bf1bc0d733b",
+          "size": 48045252
+        },
+        "bybit_book/2026-10-13": {
+          "downloaded_at": "2026-10-26T06:26:58.248730+00:00",
+          "sha256": "6707c27da56f1ff2eb1f04c13b3561d0f1470b2500745352b1c2a7cddcc3f832",
+          "size": 54321598
+        },
+        "bybit_book/2026-10-14": {
+          "downloaded_at": "2026-10-26T06:27:05.973796+00:00",
+          "sha256": "6b5077437a85b1197d86769971f8bf458328f2484ba7b1749b2d4dca30fe7928",
+          "size": 61555179
+        },
+        "bybit_book/2026-10-15": {
+          "downloaded_at": "2026-10-26T06:27:21.403780+00:00",
+          "sha256": "9a06d90d0f890255845b267d88e74c64e48b860ca2b7a70c2f8ec576f86a32b7",
+          "size": 77273065
+        },
+        "bybit_book/2026-10-16": {
+          "downloaded_at": "2026-10-26T06:27:31.498255+00:00",
+          "sha256": "aea8f771cbe533df769b1f59caabcb5bf029283a5fd1bc70a6d492689e26e4ab",
+          "size": 59993960
+        },
+        "bybit_book/2026-10-17": {
+          "downloaded_at": "2026-10-26T06:27:48.380726+00:00",
+          "sha256": "ad0a7e3145f309e5aa57ad9fb36130390ff40c03f67ad5c0f97451fb3912cd71",
+          "size": 34974837
+        },
+        "bybit_book/2026-10-18": {
+          "downloaded_at": "2026-10-26T06:28:10.507509+00:00",
+          "sha256": "ee22478f5ee4c7cab540dadf688eb61aad2730065fbf95d15dbbcb5a8aea177d",
+          "size": 49223319
+        },
+        "bybit_book/2026-10-19": {
+          "downloaded_at": "2026-10-26T06:28:18.034028+00:00",
+          "sha256": "61ab6375aa39223acc682d1c242039b32f11871df18e38d514e30072b7972de1",
+          "size": 53224917
+        },
+        "bybit_book/2026-10-20": {
+          "downloaded_at": "2026-10-26T06:28:28.310662+00:00",
+          "sha256": "8dc54ddff0c687a909c2b37d712eaa5103766a437f6765f75b4bbe6a119358ac",
+          "size": 61082927
+        },
+        "bybit_book/2026-10-21": {
+          "downloaded_at": "2026-10-26T06:28:42.354770+00:00",
+          "sha256": "4fdaf1f595a8d0bac7d1c0ae967da0ebdb263f65aa4ed9d517df7c80b85e033d",
+          "size": 60314581
+        },
+        "bybit_prints/2026-08-08": {
+          "downloaded_at": "2026-10-26T06:28:43.681711+00:00",
+          "sha256": "806e4d0338c9e12d008c95a24e38867ab60dc951db556806c7343f8814a65e29",
+          "size": 759183
+        },
+        "bybit_prints/2026-08-09": {
+          "downloaded_at": "2026-10-26T06:28:44.517373+00:00",
+          "sha256": "b9530de163967cbfef48acc07dbc41b1d6f32623376e83abf6264a066179a20e",
+          "size": 1042778
+        },
+        "bybit_prints/2026-08-10": {
+          "downloaded_at": "2026-10-26T06:28:46.579948+00:00",
+          "sha256": "6ea74171a32868f865b336cd84c1b79d9222f5b082395bb5f87678e36e156d03",
+          "size": 2522958
+        },
+        "bybit_prints/2026-08-11": {
+          "downloaded_at": "2026-10-26T06:28:48.634142+00:00",
+          "sha256": "756226e896c2ba7a1018a4973b116c826acbf7ef61fd87ca03457b6117abc9a7",
+          "size": 2347845
+        },
+        "bybit_prints/2026-08-12": {
+          "downloaded_at": "2026-10-26T06:28:50.228941+00:00",
+          "sha256": "ed7a96ba791905afc528a4df5d1c4485be49af6ab730d5d98cfe4854b343284e",
+          "size": 2788133
+        },
+        "bybit_prints/2026-08-13": {
+          "downloaded_at": "2026-10-26T06:28:51.674434+00:00",
+          "sha256": "15affb99d37282097196b00d1275e72a9b97be194678a64bf8bf68cb381142f1",
+          "size": 2991561
+        },
+        "bybit_prints/2026-08-14": {
+          "downloaded_at": "2026-10-26T06:28:53.363882+00:00",
+          "sha256": "3734f5c98d5a042f0d403f7020d3e10d9615c90eb73782c3a7c6558f3488eec3",
+          "size": 2526749
+        },
+        "bybit_prints/2026-08-15": {
+          "downloaded_at": "2026-10-26T06:28:54.280016+00:00",
+          "sha256": "b09cc00ba8be58ed3a228c87f78711085b777b96428b5114e0dcc92283dcfbd8",
+          "size": 797331
+        },
+        "bybit_prints/2026-08-16": {
+          "downloaded_at": "2026-10-26T06:28:55.879643+00:00",
+          "sha256": "0d93c19431d32fbee26cc2337ea76ad42a3eb270b30b36e1e97075d0d0cb4dd1",
+          "size": 869336
+        },
+        "bybit_prints/2026-08-17": {
+          "downloaded_at": "2026-10-26T06:28:57.221744+00:00",
+          "sha256": "11ca313d518f146b4617d05b6a0f2858cb5816e68642ff112d546d6adb2ea236",
+          "size": 2465602
+        },
+        "bybit_prints/2026-08-18": {
+          "downloaded_at": "2026-10-26T06:28:59.079608+00:00",
+          "sha256": "f84f72356caf0f8fe0444de902d37cbad4a0a599a08c5e5585d87264624c2d0e",
+          "size": 2083222
+        },
+        "bybit_prints/2026-08-19": {
+          "downloaded_at": "2026-10-26T06:29:02.385742+00:00",
+          "sha256": "aa74dc8d2b170d0a430576dfc199c3de64376ad29796eeb5c5c9dbded4fe18d7",
+          "size": 4901524
+        },
+        "bybit_prints/2026-08-20": {
+          "downloaded_at": "2026-10-26T06:29:05.276627+00:00",
+          "sha256": "11a11535c2edd20246049c7fe622f8628b01d208b9ac9a9208d2efa1f8e2bb2e",
+          "size": 6783499
+        },
+        "bybit_prints/2026-08-21": {
+          "downloaded_at": "2026-10-26T06:29:09.447391+00:00",
+          "sha256": "f0c3363d4a98ce0665c99b8d5f41b1a0c046c1023fbba6fe1ebf0dd4cb2c9061",
+          "size": 12379977
+        },
+        "bybit_prints/2026-08-22": {
+          "downloaded_at": "2026-10-26T06:29:12.019294+00:00",
+          "sha256": "32f90404c94ef8e36937eb5cefa3560ce1a07b93419f08f6ebb1a2b57eb43c3e",
+          "size": 5464155
+        },
+        "bybit_prints/2026-08-23": {
+          "downloaded_at": "2026-10-26T06:29:13.663243+00:00",
+          "sha256": "3c724e95c1173a85eea0c0886fc42d4aab6caa54db09547c9c741fac86bccbf3",
+          "size": 4149519
+        },
+        "bybit_prints/2026-08-24": {
+          "downloaded_at": "2026-10-26T06:29:16.568938+00:00",
+          "sha256": "2826cfb118f95d08f67dc60fb415baca5c7472bdc18a4a73212f90c6a3bc10ef",
+          "size": 6638055
+        },
+        "bybit_prints/2026-08-25": {
+          "downloaded_at": "2026-10-26T06:29:18.584100+00:00",
+          "sha256": "ff87bc19ce590247eee4afbe72f129131d5dccc96fe809dc014741d6b0e35e3d",
+          "size": 6735890
+        },
+        "bybit_prints/2026-08-26": {
+          "downloaded_at": "2026-10-26T06:29:20.240980+00:00",
+          "sha256": "d0b3bfce50afb444d062f83cb5c31a3dd731c92594c914e2646ae02e51d00cf4",
+          "size": 4715084
+        },
+        "bybit_prints/2026-08-27": {
+          "downloaded_at": "2026-10-26T06:29:22.059758+00:00",
+          "sha256": "8f4e3bd9357d87a469a26dd9021c01bae9f6e1e08352904cf233629a6c8f82e2",
+          "size": 4838525
+        },
+        "bybit_prints/2026-08-28": {
+          "downloaded_at": "2026-10-26T06:29:24.756496+00:00",
+          "sha256": "72ff8969e824c886e0b6d2578bc0adec28c615ae32fa759f5e475d567566c4bf",
+          "size": 5285515
+        },
+        "bybit_prints/2026-08-29": {
+          "downloaded_at": "2026-10-26T06:29:26.628614+00:00",
+          "sha256": "7059e37fdf1829aede5dbca7f73ccc26f2ffca2a243502c312fda97d1abf0bf5",
+          "size": 1549415
+        },
+        "bybit_prints/2026-08-30": {
+          "downloaded_at": "2026-10-26T06:29:28.290149+00:00",
+          "sha256": "a6512aff5b3c3f183b27b65f154bdc2486335a58093ba9c783c5716a709617c7",
+          "size": 2647097
+        },
+        "bybit_prints/2026-08-31": {
+          "downloaded_at": "2026-10-26T06:29:32.073494+00:00",
+          "sha256": "d8d9aa7049f93ca312ee3a9ad04b1dfc66a883513fac9e4107fba5f67dc29eab",
+          "size": 3866267
+        },
+        "bybit_prints/2026-09-01": {
+          "downloaded_at": "2026-10-26T06:29:41.406589+00:00",
+          "sha256": "fc2a5458dda6aaf7bb8e1344d2b842fd034860ca1e8859efe689de18338f09b3",
+          "size": 4176508
+        },
+        "bybit_prints/2026-09-02": {
+          "downloaded_at": "2026-10-26T06:29:44.277770+00:00",
+          "sha256": "749c5522ddcdf1722080a445782ba7e3e400b80b9e7d1faee9159d6e3ac2600d",
+          "size": 3878640
+        },
+        "bybit_prints/2026-09-03": {
+          "downloaded_at": "2026-10-26T06:29:46.294888+00:00",
+          "sha256": "f14e09e67acb964e895ff3fb45fff842a7d3981dbdd1ae43fe3bb6db561ddd5d",
+          "size": 4788262
+        },
+        "bybit_prints/2026-09-04": {
+          "downloaded_at": "2026-10-26T06:29:47.862806+00:00",
+          "sha256": "78de2a3989668183b5b818f78dea982baa08cba92e39a96ee26cafbbde9eb92f",
+          "size": 3975300
+        },
+        "bybit_prints/2026-09-05": {
+          "downloaded_at": "2026-10-26T06:29:48.860546+00:00",
+          "sha256": "d021b58086a2e96483bb73e0eea5fdd0445f414d34497c4cc8ed2f7900b342b6",
+          "size": 1581997
+        },
+        "bybit_prints/2026-09-06": {
+          "downloaded_at": "2026-10-26T06:29:50.883520+00:00",
+          "sha256": "57c733ab0813dff0f0114c7bd56f1e03ef6531288cfdaf1fdf2e01eb47550e45",
+          "size": 1605349
+        },
+        "bybit_prints/2026-09-07": {
+          "downloaded_at": "2026-10-26T06:29:52.251039+00:00",
+          "sha256": "2f03c9e663f218b109f88ea115e09127a88155dbab8becb7679d8e12f15722eb",
+          "size": 2305609
+        },
+        "bybit_prints/2026-09-08": {
+          "downloaded_at": "2026-10-26T06:29:53.822239+00:00",
+          "sha256": "37cdad98cb8afe982317808d4c7fe5e1c3295ffcd31eccb1e43cff87257f4554",
+          "size": 3321971
+        },
+        "bybit_prints/2026-09-09": {
+          "downloaded_at": "2026-10-26T06:29:55.407196+00:00",
+          "sha256": "1c5b879ea5801fdf10a89385d675e6f4e98d9ade193193ffeb9aa209856b7c22",
+          "size": 3607524
+        },
+        "bybit_prints/2026-09-10": {
+          "downloaded_at": "2026-10-26T06:29:57.003894+00:00",
+          "sha256": "d0f5793189bfcfdd67770f647c19c6199c62f8888eec5814c3377e088ac23b52",
+          "size": 3856575
+        },
+        "bybit_prints/2026-09-11": {
+          "downloaded_at": "2026-10-26T06:29:58.799406+00:00",
+          "sha256": "3c80eb4210a24b336ef00d17de7f33f0f6787a383337feb4f55c19c9afd42e08",
+          "size": 5001325
+        },
+        "bybit_prints/2026-09-12": {
+          "downloaded_at": "2026-10-26T06:29:59.638453+00:00",
+          "sha256": "e323029717bc5dfe5fe2359c9eee1aeb11301c7d8b1c2c2757bc601999ea376d",
+          "size": 1023675
+        },
+        "bybit_prints/2026-09-13": {
+          "downloaded_at": "2026-10-26T06:30:03.115312+00:00",
+          "sha256": "5244cf796cc494a1b63898a870dcb0b97dc2f5f7301badf9076c261cffdc4c39",
+          "size": 1682170
+        },
+        "bybit_prints/2026-09-14": {
+          "downloaded_at": "2026-10-26T06:30:05.517212+00:00",
+          "sha256": "28217d72c6475772707f8ec09184715439ea3cb22d47850ab5ff5dd36a4d4864",
+          "size": 4034703
+        },
+        "bybit_prints/2026-09-15": {
+          "downloaded_at": "2026-10-26T06:30:08.932834+00:00",
+          "sha256": "0c0365b074495d2ad70ed65c85bdf206b9fb036b12334b11ab1fb71ed40c9c05",
+          "size": 5565948
+        },
+        "bybit_prints/2026-09-16": {
+          "downloaded_at": "2026-10-26T06:30:10.748011+00:00",
+          "sha256": "147ba59cb866a884439b611621789f8bc0638bcda8d7abf2a6700d5aa97bffdf",
+          "size": 5028634
+        },
+        "bybit_prints/2026-09-17": {
+          "downloaded_at": "2026-10-26T06:30:12.230571+00:00",
+          "sha256": "cb9ec7f9b1fed86e2652f3a7f7523a633311aac28206cead23fb734494acff52",
+          "size": 3506134
+        },
+        "bybit_prints/2026-09-18": {
+          "downloaded_at": "2026-10-26T06:30:14.327754+00:00",
+          "sha256": "d1b84bb737dd4ab86527be9985d383885baae70f529b75deccabfd0255127f6f",
+          "size": 5146404
+        },
+        "bybit_prints/2026-09-19": {
+          "downloaded_at": "2026-10-26T06:30:15.798828+00:00",
+          "sha256": "9cddd2c7b8290b4a953daf1f9397654e734337e397636684d8d0d88715d5bc6a",
+          "size": 2511285
+        },
+        "bybit_prints/2026-09-20": {
+          "downloaded_at": "2026-10-26T06:30:17.240221+00:00",
+          "sha256": "d91a49dcadf40979c5f595c5d3e5e61647fe1a5ba1da6cad0e1d558a8ff6eca2",
+          "size": 3007943
+        },
+        "bybit_prints/2026-09-21": {
+          "downloaded_at": "2026-10-26T06:30:19.691811+00:00",
+          "sha256": "c6e310aef8598e4f902e08d9197fe6defaa2864dd0c7ed86e8c36843375332c3",
+          "size": 7808139
+        },
+        "bybit_prints/2026-09-22": {
+          "downloaded_at": "2026-10-26T06:30:21.778253+00:00",
+          "sha256": "3caddb5967f82f146a7b65e6e53c4b94809dee8cc6cd93958cf190402f4819be",
+          "size": 6198025
+        },
+        "bybit_prints/2026-09-23": {
+          "downloaded_at": "2026-10-26T06:30:24.154454+00:00",
+          "sha256": "eda8d94bcf6e39b213930fedb5495d96718fbc5676a846ae51b3b8cc6ce80cc2",
+          "size": 6765539
+        },
+        "bybit_prints/2026-09-24": {
+          "downloaded_at": "2026-10-26T06:30:26.598230+00:00",
+          "sha256": "0c662a21adae9d2ef08339f73177ac414150946fa1ceb8e454b68e2cae78ae24",
+          "size": 6755923
+        },
+        "bybit_prints/2026-09-25": {
+          "downloaded_at": "2026-10-26T06:30:28.323633+00:00",
+          "sha256": "e968dcb2a34ca8b7f0a286dd3b082d77d1b206fc275d05ab80fd3bf6aafcc0b2",
+          "size": 5082546
+        },
+        "bybit_prints/2026-09-26": {
+          "downloaded_at": "2026-10-26T06:30:29.355914+00:00",
+          "sha256": "75d173b41c0c0916bb06099dd031ab83b02ea0591df986c7eda0189940b133fd",
+          "size": 1956538
+        },
+        "bybit_prints/2026-09-27": {
+          "downloaded_at": "2026-10-26T06:30:30.943181+00:00",
+          "sha256": "ff02e8a84e28a8acb0c47a3416cb88b870d3f6d0ea653d43db786565a0fb1251",
+          "size": 2994919
+        },
+        "bybit_prints/2026-09-28": {
+          "downloaded_at": "2026-10-26T06:30:33.584093+00:00",
+          "sha256": "30a6b8c84518782754ade30495450a761ef11c250ea1aeef6c5542596c9797ba",
+          "size": 7747381
+        },
+        "bybit_prints/2026-09-29": {
+          "downloaded_at": "2026-10-26T06:30:35.707348+00:00",
+          "sha256": "ae3dd1fc9bd1b2ae5a05ee1b4d2d0312a67c9b7ceb12d940d523bb835b3fd3ee",
+          "size": 6138316
+        },
+        "bybit_prints/2026-09-30": {
+          "downloaded_at": "2026-10-26T06:30:37.969274+00:00",
+          "sha256": "f30ef19f9153aa6bf8838860dfacd55af0b83df0ab79f024908b119ae821d798",
+          "size": 6292936
+        },
+        "bybit_prints/2026-10-01": {
+          "downloaded_at": "2026-10-26T06:30:40.149375+00:00",
+          "sha256": "f03bae31d23ef26a99d705ed6a4c2937d2760c41159261f3ed5a6b11be1eab6d",
+          "size": 6230751
+        },
+        "bybit_prints/2026-10-02": {
+          "downloaded_at": "2026-10-26T06:30:42.551021+00:00",
+          "sha256": "ce3fe446197ff46eed5bb3a1896e3eb5a1bf8753939d783d0d1ceed452ab27ee",
+          "size": 7101078
+        },
+        "bybit_prints/2026-10-03": {
+          "downloaded_at": "2026-10-26T06:30:43.787967+00:00",
+          "sha256": "dd790b73c17987548880bddee06631249e4389059da864be2c3a62ac1bc63a90",
+          "size": 1578769
+        },
+        "bybit_prints/2026-10-04": {
+          "downloaded_at": "2026-10-26T06:30:45.076539+00:00",
+          "sha256": "86ffbe3b3c0ac2b891b0b775048cb4cb0bd2c49f27a8c5fc12a542ba93b88353",
+          "size": 2180113
+        },
+        "bybit_prints/2026-10-05": {
+          "downloaded_at": "2026-10-26T06:30:47.057248+00:00",
+          "sha256": "8b236198e955d2405760336ab04f98cdf335e40deb09e97abeb4a38060c426dc",
+          "size": 5863824
+        },
+        "bybit_prints/2026-10-06": {
+          "downloaded_at": "2026-10-26T06:30:49.080412+00:00",
+          "sha256": "7938ac27cabe26e091bfcb715632afcffd5185a7706c52dcf1374ff5532c0b25",
+          "size": 4745532
+        },
+        "bybit_prints/2026-10-07": {
+          "downloaded_at": "2026-10-26T06:30:51.553996+00:00",
+          "sha256": "8442182a093d230d83185c042e46287f2afcf20f2f4be4cfc4116f387b543ce6",
+          "size": 7092625
+        },
+        "bybit_prints/2026-10-08": {
+          "downloaded_at": "2026-10-26T06:30:55.019735+00:00",
+          "sha256": "5c59096544af3ac73e9b13c06bd6209bc12c56fc204350b51bfa92d0e0000219",
+          "size": 10914045
+        },
+        "bybit_prints/2026-10-09": {
+          "downloaded_at": "2026-10-26T06:30:57.349336+00:00",
+          "sha256": "d43ab98cc7d1b089af6a8aeeda623d2a41bfc8326f129e9424a15c99c1d346d6",
+          "size": 5989359
+        },
+        "bybit_prints/2026-10-10": {
+          "downloaded_at": "2026-10-26T06:30:58.349770+00:00",
+          "sha256": "017941ca2964f1721a4317eb0d80e79614a19f93bd3f3c1d3a12b0bf29d41258",
+          "size": 1652452
+        },
+        "bybit_prints/2026-10-11": {
+          "downloaded_at": "2026-10-26T06:30:59.484447+00:00",
+          "sha256": "ef93bd51b53381a3c77e85c9a9ec0b1f7fbb252d295a7c130e44e7c3c87fcaad",
+          "size": 2140755
+        },
+        "bybit_prints/2026-10-12": {
+          "downloaded_at": "2026-10-26T06:31:02.263025+00:00",
+          "sha256": "9e509f4afc8a60abc29ff6a089dca585850501ec50480c0c16e5f82fd2ee27cd",
+          "size": 6165992
+        },
+        "bybit_prints/2026-10-13": {
+          "downloaded_at": "2026-10-26T06:31:04.946108+00:00",
+          "sha256": "6708a4e123b218c0dee0543ecbe16a2bcae96be559bd4aea7aae60c861425616",
+          "size": 7137555
+        },
+        "bybit_prints/2026-10-14": {
+          "downloaded_at": "2026-10-26T06:31:07.444713+00:00",
+          "sha256": "db68f34fca2523090721ebe25c66271ac7a39d5c6825e34f78b742dffefd351b",
+          "size": 7328212
+        },
+        "bybit_prints/2026-10-15": {
+          "downloaded_at": "2026-10-26T06:31:10.439534+00:00",
+          "sha256": "d6c88f8808ebec9faedd222663144be86a6f87baeb465697afd553797853ff3b",
+          "size": 9692881
+        },
+        "bybit_prints/2026-10-16": {
+          "downloaded_at": "2026-10-26T06:31:12.913888+00:00",
+          "sha256": "41e4c7b145f487289a4d02b9af96f37537e5697f8d9fa95bf6816950d3dd4e77",
+          "size": 7520141
+        },
+        "bybit_prints/2026-10-17": {
+          "downloaded_at": "2026-10-26T06:31:14.401508+00:00",
+          "sha256": "63ec60563660bbe9bef265405b3c8eb7c56a6b981fd35c9f07ce7c32eab0d3b3",
+          "size": 2793440
+        },
+        "bybit_prints/2026-10-18": {
+          "downloaded_at": "2026-10-26T06:31:16.165665+00:00",
+          "sha256": "1973e6323c29dc9a6042d12abcdca57b3aeb41abcf60c88c70586f832e3f2c1a",
+          "size": 5012113
+        },
+        "bybit_prints/2026-10-19": {
+          "downloaded_at": "2026-10-26T06:31:17.988829+00:00",
+          "sha256": "7e092815d5be383a04156be15e7f679decb05811b769ea8b8826d36247b934ec",
+          "size": 6221547
+        },
+        "bybit_prints/2026-10-20": {
+          "downloaded_at": "2026-10-26T06:31:20.699571+00:00",
+          "sha256": "4ad1f684eff798b925ae69fca6828820bf6086611af2935cb37b8b680cfba5d0",
+          "size": 7004770
+        },
+        "bybit_prints/2026-10-21": {
+          "downloaded_at": "2026-10-26T06:31:22.920895+00:00",
+          "sha256": "120005f407c3d620cf866823d73ad78948792b88ccb957bcc575089de70db9e9",
+          "size": 6154622
+        }
+      },
       "h_config_sha256": "d1625173c0b7a15c8785a957d77596210f46893e792c834449152e39cf5476b7",
-      "processes": [],
+      "processes": [
+        {
+          "utc": "2026-10-26T06:10:56Z",
+          "workers": 4
+        }
+      ],
       "read": "first read",
       "results_sha256": null,
       "utc": "2026-10-26T06:10:48Z"
