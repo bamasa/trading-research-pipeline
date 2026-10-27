@@ -189,6 +189,18 @@ def search_results(study: Study, record_d: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def committed_n_trials(study: Study, record_d: dict[str, Any]) -> int:
+    """N_trials as the trial ledger's committed manifest counts it: every (run, key)
+    pair, the simulator trials of stage C counted (the N quoted on every page);
+    stage D's own count (its taker cells) only before a manifest exists."""
+    from trading_research.search_engine.ledger import MANIFEST_PATH, TrialLedger
+
+    repo = getattr(study, "repo", None)
+    if repo is None or not (repo / MANIFEST_PATH).exists():
+        return int(record_d["N_trials"])
+    return TrialLedger.in_repository(repo, study.catalogue()).n_trials
+
+
 def admitted_on_d(c: Computed) -> list[str]:
     """The searched slots admitted on D (S-P and S-M once stage C has run)."""
     assert c.d is not None
@@ -208,7 +220,7 @@ def development_sentences(c: Computed, out: Written) -> None:
         return
     record_d = c.d
     nulls = search_results(c.study, record_d)
-    n_trials, runs = int(record_d["N_trials"]), int(record_d["R_D"])
+    n_trials, runs = committed_n_trials(c.study, record_d), int(record_d["R_D"])
     out.attempt("search_on_D", "D", lambda: hl.search_on_d(n_trials, nulls, runs))
     if c.c is None:
         out.wait("payoff_on_D", "S-P's and S-M's admission waits for stage C")

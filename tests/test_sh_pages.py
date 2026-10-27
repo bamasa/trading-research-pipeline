@@ -185,6 +185,26 @@ def test_the_development_sentences_follow_stages_d_and_c() -> None:
     assert nothing.plain()["payoff_on_D"] == [hl.alternatives("payoff_on_D")[0] + "."]
 
 
+def test_the_search_sentence_quotes_n_trials_from_the_committed_manifest(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
+    """N on the pages is the trial ledger's N_trials, the simulator trials counted
+    (2,435 on D), not stage D's taker count (2,400)."""
+    from trading_research.search_engine import ledger as tl
+
+    manifest = tmp_path / tl.MANIFEST_PATH
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text('{"n_trials": 2435}', encoding="utf-8")
+    monkeypatch.setattr(tl.TrialLedger, "record", lambda self: {"n_trials": 2435})
+    c = pages.Computed(SimpleNamespace(keys=(C_KEY, S25_KEY), repo=tmp_path,
+                                       catalogue=lambda: None))  # type: ignore[arg-type]
+    for name in ("c", "e", "board"):
+        c.__dict__[name] = None
+    c.__dict__["d"], c.__dict__["read"] = record_d(), {}
+    (search,) = written(c).plain()["search_on_D"]
+    assert search.startswith("Searched 2,435 configurations")
+
+
 def test_the_sentences_after_h() -> None:
     h = read_h(h_series(), PRESET)
     out = written(computed(d=record_d(), c=record_c(), read={"H": h}))
