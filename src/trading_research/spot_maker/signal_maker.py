@@ -13,9 +13,11 @@ As registered under "The slots", MK-S, step by step:
 3. **Exit.** After a fill, decided at the earliest of the first grid row
    stamped at or after the entry's first fill + hold, the first decision of
    the other side after ``t`` and 23:59: a resting order of the other side for
-   the position at its own proxy, skewed, post-only, sized at its arrival;
-   requoted every ``requote_s`` after its decision; flattened at 23:59 as a
-   taker if anything remains (``exits_flattened``).
+   the position at its own proxy, skewed by the position known at its
+   decision, post-only, sized at its arrival; requoted every ``requote_s``
+   after its decision at the proxy then (an undefined proxy keeps the last
+   price); flattened at 23:59 as a taker if anything remains
+   (``exits_flattened``).
 4. **One position.** After the exit, the next decision may be taken at a row
    stamped at or after the position's last fill. Other decisions meanwhile are
    skipped (``skipped_busy``), except the opposite one that ends an entry or
@@ -30,7 +32,7 @@ import numpy as np
 
 from trading_research.spot.fills import PrintTape
 from trading_research.spot_maker import resting
-from trading_research.spot_maker.executor import DayRun, MakerSettings, close_position
+from trading_research.spot_maker.executor import DayRun, MakerSettings, close_position, known_after
 from trading_research.spot_maker.registration import REMAINDER_BTC
 from trading_research.spot_maker.touch import Proxies, quote_price
 
@@ -55,14 +57,18 @@ def _record(run: DayRun, tape: PrintTape, side: int, price: float,
 
 
 def _exit(run: DayRun, tape: PrintTape, proxies: Proxies, side: int, size: float, decided: int,
-          settings: MakerSettings) -> int:  # fmt: skip
+          settings: MakerSettings, entry_unknown: float = 0.0) -> int:  # fmt: skip
     """The exit of a position of ``size`` held on ``side``, decided at ``decided``; the
-    time of its last fill."""
+    time of its last fill. ``entry_unknown``: the part of ``size`` filled after
+    ``decided`` (inside the entry's cancel latency), not yet known when the exit is
+    priced; each order is sized at its arrival and skewed by the position known at
+    its decision."""
     flat, lat = settings.flatten_ns(tape), settings.latency_ns
     remaining, tau, price, last = size, decided, math.nan, decided
+    known = size - entry_unknown  # the position's size known at the decision
     while remaining > REMAINDER_BTC and tau < flat:
         ask, bid = proxies.one(tau)
-        quoted = quote_price(-side, ask, bid, side * remaining, skew_bp=settings.skew_bp,
+        quoted = quote_price(-side, ask, bid, side * known, skew_bp=settings.skew_bp,
                              clip=settings.clip, tick=settings.tick)  # fmt: skip
         price = quoted if math.isfinite(quoted) else price
         end = min(tau + settings.requote_ns, flat)
@@ -70,9 +76,13 @@ def _exit(run: DayRun, tape: PrintTape, proxies: Proxies, side: int, size: float
             run.counters["exit_quotes"] += 1
             run.posted_btc += remaining
             found = resting.fill(tape, -side, price, remaining, tau + lat, end + lat, settings.rule)
+            run.note(tape, -side, price, remaining, tau + lat, end + lat, found)
             remaining -= _record(run, tape, -side, price, found, "exit")
             if len(found[0]):
                 last = int(tape.ts[found[0][-1]])
+            known = remaining + known_after(tape, found, end)
+        else:
+            known = remaining
         tau = end
     if remaining > REMAINDER_BTC:
         run.counters["exits_flattened"] += 1
@@ -89,7 +99,7 @@ def run_signal_maker(
     settings: MakerSettings,
 ) -> DayRun:
     """One day of MK-S on the decisions given (the true ones, or a placebo's sides)."""
-    run = DayRun()
+    run = DayRun.start(settings)
     sides = np.asarray(decision_side, dtype=np.int64)
     stamps = np.asarray(decision_ns, dtype=np.int64)
     opposite = next_opposite(sides)
@@ -115,6 +125,7 @@ def run_signal_maker(
         flip = int(stamps[opposite[k]]) if opposite[k] >= 0 else math.inf
         cancel = int(min(t + settings.hold_ns, flip, flat))
         found = resting.fill(tape, s, price, settings.clip, t + lat, cancel + lat, settings.rule)
+        run.note(tape, s, price, settings.clip, t + lat, cancel + lat, found)
         if not len(found[0]):
             run.counters["entries_unfilled"] += 1
             busy = cancel
@@ -133,7 +144,8 @@ def run_signal_maker(
             done = close_position(run, tape, s * size, settings)
             run.counters["exits_flattened"] += 1
         else:
-            done = _exit(run, tape, proxies, s, size, decided, settings)
+            done = _exit(run, tape, proxies, s, size, decided, settings,
+                         known_after(tape, found, decided))  # fmt: skip
         run.holds_s.append((done - first_fill) / 1e9)
         busy = done
     return run

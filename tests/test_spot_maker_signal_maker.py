@@ -69,3 +69,27 @@ def test_an_exit_that_never_fills_is_flattened_at_ten_bp_side() -> None:
     assert last[5] == "flatten" and last[1] == -1 and last[4] is False
     assert run.counters["exits_flattened"] == 1 and run.counters["flattens"] == 1
     assert sm.next_opposite(np.array([1, 1, -1, 1])).tolist() == [2, 2, 3, -1]
+
+
+def test_the_exit_skews_by_the_position_known_at_its_decision() -> None:
+    # the long fills 0.004 at 5 s; the short at 20 s cancels it and starts the exit, and
+    # 0.006 more fill at 20.005 s inside the cancel's latency: the exit is sized 0.010
+    # at its arrival but skewed by the 0.004 known at 20 s (a 1 bp a clip cell)
+    rows = [(0, 100.02, 0.01, 1), (1, 100.00, 0.01, -1), (5, 99.99, 0.004, -1),
+            (20.005, 99.98, 0.01, -1), (30, 100.03, 0.02, 1)]  # fmt: skip
+    run = _run(_tape(rows), [(2, 1), (20, -1)], skew_bp=1.0)
+    exits = [r for r in run.log.rows if r[5] == "exit"]
+    assert sum(r[3] for r in run.log.rows if r[5] == "entry") == pytest.approx(0.01)
+    assert exits[0][2] == pytest.approx(100.02) and exits[0][3] == pytest.approx(0.01)
+    known_all = _run(_tape([*rows[:3], (19.0, 99.98, 0.01, -1), rows[4]]), [(2, 1), (20, -1)],
+                     skew_bp=1.0)  # fmt: skip
+    assert next(r[2] for r in known_all.log.rows if r[5] == "exit") == pytest.approx(100.01)
+
+
+def test_an_audited_run_notes_every_resting_order() -> None:
+    run = _run(_tape(PRINTS), [(2, 1)], audit=True)
+    assert run.orders is not None and len(run.orders) == 2
+    side, price, size, start, end, stamps, sizes = run.orders[0]
+    assert (side, price, size) == (1, 100.00, 0.01) and start == T0 + 2 * S + 10_000_000
+    assert sizes.sum() == pytest.approx(0.01) and ((stamps >= start) & (stamps < end)).all()
+    assert _run(_tape(PRINTS), [(2, 1)]).orders is None

@@ -4,7 +4,14 @@
 default; a neighbourhood cell, the 110 ms re-run or a fill-rule variant changes
 one or two). :class:`DayRun` is what a run leaves: its fills, its counters, the
 realised holds (MK-S) and the touch proxies' widths at its quote instants (the
-quoters).
+quoters). With ``audit`` set, a run also notes every resting order it posted
+(side, price, size, live window and its fills), which stage 0's checks re-fill
+under the three rules.
+
+**The skew reads the position known at the decision**: the fills stamped at or
+before the instant a quote is decided; a fill stamped inside the latency after
+it is not yet known there (:func:`known_after`). A quote's size is cut at its
+arrival, when every earlier fill is known.
 """
 
 from __future__ import annotations
@@ -12,6 +19,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import time
+
+import numpy as np
 
 from trading_research.search_engine.walk_tables import clock_ns
 from trading_research.spot.fills import PrintTape
@@ -34,6 +43,7 @@ class MakerSettings:
     tick: float = rg.TICK
     latency_ns: int = rg.LATENCY_NS
     rule: str = "trade_through"
+    audit: bool = False
     posting_first: time = rg.POSTING_FIRST
     posting_last: time = rg.POSTING_LAST
     flatten_at: time = rg.FLATTEN_AT
@@ -73,6 +83,11 @@ def settings_for(slot: str, **changes: object) -> MakerSettings:
     return MakerSettings(**{**base, **changes})  # type: ignore[arg-type]
 
 
+#: An audited order: side, price, size, live from, live until (excluded), and its
+#: fills' print stamps and sizes.
+OrderNote = tuple[int, float, float, int, int, np.ndarray, np.ndarray]
+
+
 @dataclass
 class DayRun:
     """One run of one day."""
@@ -82,6 +97,28 @@ class DayRun:
     holds_s: list[float] = field(default_factory=list)
     widths_bp: list[float] = field(default_factory=list)
     posted_btc: float = 0.0
+    orders: list[OrderNote] | None = None
+
+    @classmethod
+    def start(cls, settings: MakerSettings) -> DayRun:
+        return cls(orders=[] if settings.audit else None)
+
+    def note(self, tape: PrintTape, side: int, price: float, size: float, start_ns: int,
+             end_ns: int, found: tuple[np.ndarray, np.ndarray]) -> None:  # fmt: skip
+        """Keep a posted order when the run is audited."""
+        if self.orders is not None:
+            idx, sizes = found
+            self.orders.append((int(side), float(price), float(size), int(start_ns), int(end_ns),
+                                tape.ts[idx].copy(), np.asarray(sizes, dtype=np.float64).copy()))  # fmt: skip
+
+
+def known_after(tape: PrintTape, found: tuple[np.ndarray, np.ndarray], instant_ns: int) -> float:
+    """The size of an order's fills stamped after ``instant_ns``: not yet known at a
+    decision taken then."""
+    idx, sizes = found
+    if not len(idx):
+        return 0.0
+    return float(np.asarray(sizes)[tape.ts[idx] > instant_ns].sum())
 
 
 def close_position(run: DayRun, tape: PrintTape, position: float, settings: MakerSettings,

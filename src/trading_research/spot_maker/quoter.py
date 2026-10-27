@@ -2,9 +2,9 @@
 
 As registered under "The slots": at every requote instant both resting orders
 are cancelled and reposted (each change taking effect after the latency), a
-buy at the bid proxy and a sell at the ask proxy, skewed by the position,
-post-only, the buy cut to ``limit - position`` and the sell to ``limit +
-position`` at their arrival; a side whose own proxy is undefined is not
+buy at the bid proxy and a sell at the ask proxy, skewed by the position known
+at the instant (the fills stamped at or before it), post-only, the buy cut to
+``limit - position`` and the sell to ``limit + position`` at their arrival; a side whose own proxy is undefined is not
 quoted; orders rest until the next instant or 23:59, with no replenishment in
 between; at 23:59 the position is flattened as a taker.
 
@@ -26,7 +26,7 @@ import numpy as np
 
 from trading_research.spot.fills import PrintTape
 from trading_research.spot_maker import resting
-from trading_research.spot_maker.executor import DayRun, MakerSettings, close_position
+from trading_research.spot_maker.executor import DayRun, MakerSettings, close_position, known_after
 from trading_research.spot_maker.registration import REMAINDER_BTC
 from trading_research.spot_maker.touch import Proxies, quote_price
 
@@ -72,7 +72,7 @@ def run_quoter(
     """One day of quoting; ``signal_ns``/``signal_side`` the decisions inside the hours."""
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
-    run = DayRun()
+    run = DayRun.start(settings)
     stamps = np.zeros(0, dtype=np.int64) if signal_ns is None else np.asarray(signal_ns, np.int64)
     sides = np.zeros(0, dtype=np.int64) if signal_side is None else np.asarray(signal_side, np.int64)
     at = instants(tape, settings, stamps if len(stamps) else None)
@@ -81,7 +81,7 @@ def run_quoter(
     ends = np.append(at[1:], flat).astype(np.int64)
     asks, bids = proxies.at(at)
     ranges = {side: resting.bounds(tape, side, at + lat, ends + lat) for side in (1, -1)}
-    position = 0.0
+    position, unknown = 0.0, 0.0
     run.counters["instants"] = len(at)
     for j in range(len(at)):
         ask, bid = float(asks[j]), float(bids[j])
@@ -89,22 +89,25 @@ def run_quoter(
             run.widths_bp.append((ask - bid) / ((ask + bid) / 2) * 1e4)
         want_bid, want_ask = _sizes(mode, int(sigma[j]), settings.clip)
         orders = ((1, min(want_bid, limit - position)), (-1, min(want_ask, limit + position)))
-        moved = 0.0
+        known = position - unknown  # the previous orders' fills stamped after this instant
+        moved, unknown = 0.0, 0.0
         for side, size in orders:
             if size <= REMAINDER_BTC:
                 continue
-            price = quote_price(side, ask, bid, position, skew_bp=settings.skew_bp,
+            price = quote_price(side, ask, bid, known, skew_bp=settings.skew_bp,
                                 clip=settings.clip, tick=settings.tick)  # fmt: skip
             if not math.isfinite(price):
                 continue
             run.counters["quotes_bid" if side > 0 else "quotes_ask"] += 1
             run.posted_btc += size
             lo, hi = ranges[side]
-            idx, filled = resting.fill_range(tape, side, price, size, int(lo[j]), int(hi[j]),
-                                             settings.rule)  # fmt: skip
-            for i, q in zip(idx, filled, strict=True):
+            found = resting.fill_range(tape, side, price, size, int(lo[j]), int(hi[j]),
+                                       settings.rule)  # fmt: skip
+            run.note(tape, side, price, size, int(at[j]) + lat, int(ends[j]) + lat, found)
+            for i, q in zip(*found, strict=True):
                 run.log.add(int(tape.ts[i]), side, price, float(q), True, "bid" if side > 0 else "ask")
-            moved += side * float(filled.sum())
+            moved += side * float(found[1].sum())
+            unknown += side * known_after(tape, found, int(ends[j]))
         position += moved
     if abs(position) > REMAINDER_BTC:
         close_position(run, tape, position, settings)

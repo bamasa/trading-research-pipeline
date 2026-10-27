@@ -18,7 +18,7 @@ S = 1_000_000_000
 
 
 def _tape(rows: list[tuple[float, float, float, int]]) -> PrintTape:
-    rows = sorted(rows) + [(86_370.0, 100.0, 0.05, -1), (86_371.0, 100.02, 0.05, 1)]
+    rows = [*sorted(rows), (86370.0, 100.0, 0.05, -1), (86371.0, 100.02, 0.05, 1)]
     return PrintTape(DAY, np.array([MID + round(r[0] * S) for r in rows]),
                      np.array([r[1] for r in rows]), np.array([r[2] for r in rows]),
                      np.array([r[3] for r in rows]))  # fmt: skip
@@ -56,7 +56,7 @@ def test_mk_sq_doubles_the_signal_side_within_its_limit() -> None:
     tape = _tape(BASE)
     run = qt.run_quoter(tape, Proxies.from_tape(tape), settings_for("MK-SQ"),
                         np.array([MID + 65 * S]), np.array([1]))  # fmt: skip
-    first = [r for r in run.log.rows if r[5] == "bid"][0]
+    first = next(r for r in run.log.rows if r[5] == "bid")
     assert first[0] == MID + 70 * S and first[3] == pytest.approx(0.02)
 
 
@@ -66,3 +66,17 @@ def test_one_sided_modes() -> None:
     assert {r[5] for r in long_only.log.rows} <= {"bid", "flatten"}
     with pytest.raises(ValueError):
         qt.run_quoter(tape, Proxies.from_tape(tape), settings_for("MK-Q"), mode="lean")
+
+
+def test_the_skew_reads_the_position_known_at_the_instant() -> None:
+    # the bid of 60 s fills at 120.005 s, inside the latency after the instant at 120 s:
+    # the ask of 120 s is priced unskewed (nothing known filled) but sized at its arrival
+    rows = [(30.0, 100.02, 0.01, 1), (31.0, 100.00, 0.01, -1), (120.005, 99.99, 0.03, -1),
+            (130.0, 100.03, 0.02, 1)]  # fmt: skip
+    tape = _tape(rows)
+    run = qt.run_quoter(tape, Proxies.from_tape(tape), settings_for("MK-Q"))
+    bids = [r for r in run.log.rows if r[5] == "bid"]
+    asks = [r for r in run.log.rows if r[5] == "ask"]
+    assert bids[0][:4] == (MID + 120_005_000_000, 1, 100.00, 0.01)
+    assert asks[0][:3] == (MID + 130 * S, -1, 100.02) and asks[0][3] == pytest.approx(0.01)
+    assert len(bids) == 1 or bids[1][0] > MID + 130 * S  # no bid at 120 s: the limit was full
