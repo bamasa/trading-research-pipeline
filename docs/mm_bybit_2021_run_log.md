@@ -70,8 +70,18 @@ Nothing is pushed.
 - Code freeze at `e1f9961` ([note](mm_bybit_2021_code_freeze.md)).
 - HEAD re-check of W and D, 16:55: 107 files, all 200, 0.047 GB and 0.487 GB,
   every size as committed with the registration. Disk: 27 GB free.
-- Stage 1, 16:57 to 16:59: W's 15 remaining days and D's 90 fetched, all
+- Stage 1, 16:56 to 17:00: W's 15 remaining days and D's 90 fetched, all
   newest first, no row outside its day, no 404, no unreadable file; funding of
   W and D fetched. W: no day excluded; tick 0.5 and lot 0.001 every day;
   sigma_ref 5.03 bp a minute and the quantiles 3.84 (0.33), 6.55 (0.67) and
   11.22 (0.9) bp, over 1,456,560 quoting seconds.
+- Stage D, 17:00 to 17:12 (704 s on 6 workers): the 40 cells on D's 90 days
+  under the primary rule, with the touch bracket and the 10 ms run beside as
+  measurements; no D day excluded; tick 0.5 and lot 0.001 on all 107 days of
+  W and D. Every cell's mean `y` on D is negative (development, selected,
+  biased upward): net −2.31 to −2.63 bp per fill at the rebate, a making part
+  of −2.29 to −4.27 bp per fill. The choice: F = `l2|vle0.33` (also the
+  outright peak), S = −42.63, A = −22.73, p_A = 1.000, p_B = 1.000: **not
+  admitted (conditions i and iv)**; it is run on H as a labelled measurement
+  and enters Holm with p = 1. σ_D 16.00 (F) and 146.68 (S0); MDE 6.70 and 61.46
+  USDT per 100 USDT of clip a day. Committed with this entry.
