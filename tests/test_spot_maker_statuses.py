@@ -37,7 +37,7 @@ def test_a_strong_positive_family_becomes_candidates() -> None:
     records = _records(values)
     summaries = {s: st.summarise(records, s) for s in rg.FAMILY}
     assert summaries["MK-S"]["days"] == 30 and summaries["MK-S"]["capacity"] == 0.01
-    found = st.assess(summaries, "H", {s: 0.1 for s in rg.FAMILY})
+    found = st.assess(summaries, "H", dict.fromkeys(rg.FAMILY, 0.1))
     assert {f["status"] for f in found.values()} == {"candidate"}
     assert st.after_p("candidate", None) == "candidate (P not yet read)"
     assert st.after_p("candidate", "passes") == "confirmed"

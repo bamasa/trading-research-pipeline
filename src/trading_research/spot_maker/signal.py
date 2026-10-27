@@ -105,11 +105,20 @@ class DayDecisions:
     scored_rows: int
 
 
+def day_features(prints: pd.DataFrame, history: pd.DataFrame | None) -> pd.DataFrame:
+    """The store ``binance``'s inputs at every row of the day's print grid."""
+    _, names = STORES[STORE]
+    return day_frame(prints, names=names, history=history, registry=dy.registry())
+
+
 def day_decisions(signal: FrozenSignal, prints: pd.DataFrame, history: pd.DataFrame | None,
                   scored_from: int) -> DayDecisions:  # fmt: skip
     """The frozen rule's decisions at every scored row of the day's print grid."""
-    _, names = STORES[STORE]
-    frame = day_frame(prints, names=names, history=history, registry=dy.registry())
+    return decide(signal, day_features(prints, history), scored_from)
+
+
+def decide(signal: FrozenSignal, frame: pd.DataFrame, scored_from: int) -> DayDecisions:
+    """The probabilities and the hold-first decisions on a day's inputs."""
     proba = dy.predict(signal.model, frame, StoreLayout(1.0, ()), scored_from)
     rows, side = decisions(proba, signal.rule)
     grid = np.asarray(stamps_ns(frame), dtype=np.int64)

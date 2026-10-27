@@ -7,6 +7,8 @@ taker fee at its instant, at one tier. From the day's fills:
 * :func:`money`: net, gross, fees and turnover in quote; ``net_bp_fill`` (net
   over turnover x 1e4, NaN on a day without a fill); ``net_bp_clip_day`` (net
   over one clip at the day's first print x 1e4, 0 on a day without a fill);
+  and, a measurement for MK-S, ``net_bp_round_trip`` (net over the entries'
+  notional x 1e4: a round trip is an entry and its exit of the same size);
 * :func:`markouts`: per maker fill, ``side x (mid proxy at t + h - p) / p x
   1e4`` at each horizon, and the spread part against the mid proxy just before
   the fill's print;
@@ -109,7 +111,10 @@ def money(fills: DayFills, first_price: float, clip: float) -> dict[str, float]:
     turnover = float(fills.notional.sum())
     net, fees = fills.net, float(fills.fees.sum())
     taker = ~fills.maker
+    entries = float(fills.notional[fills.kind == "entry"].sum())
     return {
+        "entry_notional": entries,
+        "net_bp_round_trip": net / entries * 1e4 if entries > 0 else math.nan,
         "net_quote": net, "gross_quote": net + fees, "fees_quote": fees, "turnover": turnover,
         "net_bp_fill": net / turnover * 1e4 if turnover > 0 else math.nan,
         "gross_bp_fill": (net + fees) / turnover * 1e4 if turnover > 0 else math.nan,

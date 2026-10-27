@@ -46,8 +46,8 @@ def test_walk_marks_warm_cold_and_excluded_days(tmp_path: Path) -> None:
     source, repo = tmp_path / "source", tmp_path / "repo"
     standin.write_source(source, DAYS)
     access = bk.development_access()
-    cp.copy_days(source, repo, DAYS[:3] + [date(2026, 5, 2)], access)
-    found = {d.day: d for d in cp.walk(repo, DAYS[1:3] + [date(2026, 5, 2)], access, _table())}
+    cp.copy_days(source, repo, [*DAYS[:3], date(2026, 5, 2)], access)
+    found = {d.day: d for d in cp.walk(repo, [*DAYS[1:3], date(2026, 5, 2)], access, _table())}
     assert found[date(2026, 5, 1)].warm  # W's last day before D's first
     assert found[date(2026, 5, 2)].reasons == ("no_prints_file",)
     third = found[date(2026, 5, 3)]

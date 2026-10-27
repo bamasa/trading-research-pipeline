@@ -13,6 +13,7 @@ maker fills, the capacity ratio, the fills and the void conditions.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -29,6 +30,52 @@ def _mean(values: Sequence[float]) -> float:
     return float(found.mean()) if len(found) else 0.0
 
 
+def _finite_mean(values: Sequence[float | None]) -> float:
+    """A measurement's mean over the days it is defined on; NaN when it never is."""
+    found = np.asarray([v for v in values if v is not None], dtype=np.float64)
+    found = found[np.isfinite(found)]
+    return float(found.mean()) if len(found) else math.nan
+
+
+def _ratio(numerator: float, denominator: float) -> float:
+    return numerator / denominator * 1e4 if denominator > 0 else math.nan
+
+
+TOTALS: tuple[str, ...] = ("net_quote", "gross_quote", "fees_quote", "turnover", "entry_notional",
+                           "taker_notional")  # fmt: skip
+
+
+def measurements(days: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """The block's measurements beside the verdict: pooled money, fills by kind, the
+    flattens, the executors' counters, the realised hold and the proxies' width."""
+    trues = [d["true"] for d in days]
+    totals = {k: float(sum(float(t.get(k, 0.0)) for t in trues)) for k in TOTALS}
+    counters: Counter[str] = Counter()
+    for t in trues:
+        counters.update({k: int(v) for k, v in t.get("counters", {}).items()})
+    n = len(days)
+    widths = [t.get("width_bp_median") for t in trues]
+    widths = [float(w) for w in widths if w is not None and math.isfinite(float(w))]
+    medians = [t["hold_s"][1] for t in trues if t.get("hold_s") and t["hold_s"][1] is not None]
+    held = sum(float(t.get("hold_s_n", 0.0)) for t in trues)
+    return {
+        "totals": totals,
+        "net_bp_fill_pooled": _ratio(totals["net_quote"], totals["turnover"]),
+        "gross_bp_fill_pooled": _ratio(totals["gross_quote"], totals["turnover"]),
+        "net_bp_round_trip": _finite_mean([t.get("net_bp_round_trip") for t in trues]),
+        "net_bp_round_trip_pooled": _ratio(totals["net_quote"], totals["entry_notional"]),
+        "maker_fills_a_day": sum(float(t["maker_fills"]) for t in trues) / n if n else math.nan,
+        "taker_fills_a_day": sum(float(t["taker_fills"]) for t in trues) / n if n else math.nan,
+        "flattens": int(counters.get("flattens", 0)),
+        "flatten_notional": totals["taker_notional"],
+        "counters": dict(sorted(counters.items())),
+        "hold_s_mean": sum(float(t.get("hold_s_sum", 0.0)) for t in trues) / held if held else math.nan,
+        "hold_s_median_of_days": float(np.median(medians)) if medians else math.nan,
+        "width_bp_median": float(np.median(widths)) if widths else math.nan,
+        "width_bp_range": [min(widths), max(widths)] if widths else [math.nan, math.nan],
+    }  # fmt: skip
+
+
 def _pooled(days: Sequence[Mapping[str, Any]], name: str) -> float:
     total = sum(float(d["true"].get(f"{name}_sum", 0.0)) for d in days)
     count = sum(float(d["true"].get(f"{name}_n", 0.0)) for d in days)
@@ -43,7 +90,7 @@ def summarise(records: Sequence[Mapping[str, Any]], slot: str) -> dict[str, Any]
     t, nw = day_t(series), newey_west_t(series, rg.NW_LAG)
     runs = [d["runs"] for d in days]
     out: dict[str, Any] = {
-        "usable_days": len(days), "days": int(len(series)), "mean": t.mean, "t": t.t,
+        "usable_days": len(days), "days": len(series), "mean": t.mean, "t": t.t,
         "p_one_sided": t.p_one_sided, "newey_west_t": nw.t,
         "median": float(np.median(series)) if len(series) else math.nan,
         "share_positive": float((series > 0).mean()) if len(series) else math.nan,
@@ -58,7 +105,9 @@ def summarise(records: Sequence[Mapping[str, Any]], slot: str) -> dict[str, Any]
         "void": sorted({v for d in days for v in d["void"]}),
     }  # fmt: skip
     out["fills_a_day"] = out["fills"] / len(days) if days else math.nan
+    out["days_positive"] = int((series > 0).sum())
     out["adverse_part"] = out["making_part"] - out["spread_part"]
+    out.update(measurements(days))
     slot_btc = sum(float(d["true"]["capacity_slot_btc"]) for d in days)
     venue_btc = sum(float(d["true"]["capacity_venue_btc"]) for d in days)
     out["capacity"] = slot_btc / venue_btc if venue_btc > 0 else (math.inf if slot_btc else 0.0)
@@ -164,6 +213,9 @@ P_TABLE: dict[str, str] = {
     "inconclusive (too few fills)": "candidate, not confirmed",
     "killed": "killed on P",
     "void": "void",
+    "not assessed (P unreadable on Binance)": "candidate, not confirmed (P unreadable)",
+    "not assessed (P read failed)": "candidate, not confirmed (P read failed)",
+    "not read by its deadline": "candidate, not confirmed (P not read by its deadline)",
 }
 
 

@@ -95,6 +95,7 @@ def _true_record(ctx: DayContext, run: DayRun, fills: mn.DayFills) -> dict[str, 
     out["posted_btc"] = run.posted_btc
     out["filled_maker_btc"] = float(fills.size[fills.maker].sum())
     out["hold_s"] = quantiles(np.asarray(run.holds_s))
+    out["hold_s_sum"], out["hold_s_n"] = float(np.sum(run.holds_s)), float(len(run.holds_s))
     out["width_bp_median"] = float(np.median(run.widths_bp)) if run.widths_bp else math.nan
     out["tiers"] = mn.tier_net_bp(fills, ctx.table, TIERS)
     return out
