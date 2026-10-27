@@ -25,7 +25,7 @@ Before the freeze:
   network) passed, the dry run among them: every stage, the amendment and H's
   read through the ledger on the synthetic venue, at this commit;
 - stage 0 ran twice on the reader-test days 2020-12-15 and 16. The first run,
-  at `78ef6c0`, proved the reader and excluded both days as `print_gap` under
+  at `78ef6c0`, passed the file checks and excluded both days as `print_gap` under
   the registered 120 s rule, which the gaps' smooth tail showed to be a quiet
   market, not a hole in the archive; the stage-0 amendment raised the
   threshold to 600 s and the code now reads it from the configuration. The

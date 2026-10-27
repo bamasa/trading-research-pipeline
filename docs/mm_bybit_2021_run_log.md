@@ -54,10 +54,10 @@ Nothing is pushed.
   the ledger).
 - HEAD re-check of the two reader-test days, 16:44: both 200, 4.24 MB together,
   the sizes committed with the registration. Disk: 28 GB free.
-- Stage 0, first run, 16:44 at `78ef6c0`: the reader's proof passed (files
+- Stage 0, first run, 16:44 at `78ef6c0`: the file checks passed (files
   newest first and reversed, four-decimal stamps, no duplicate id, no row
-  outside the day, tick 0.5, lot 0.001, settlements at 00:00, 08:00, 16:00),
-  and both days were excluded as `print_gap`: the longest gaps from 00:10 to
+  outside the day, both sides present), and both days were excluded as
+  `print_gap`: the longest gaps from 00:10 to
   23:59 were 158.7 s and 140.2 s, with a smooth tail (none over 180 s) and the
   price unchanged or within 3.0 USDT across each, a quiet market. No timing was
   taken, since neither day was usable.
