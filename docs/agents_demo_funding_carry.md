@@ -187,8 +187,10 @@ python -m experiments.funding_carry_2026 pages
 ```
 
 `open H` and `read H` run only on the owner's grant for the block,
-`--grant funding_carry_2026:H`, after the owner has committed the D amendment,
-and the first `read H` stops after the fetch for its records to be committed.
+`--grant funding_carry_2026:H`, after the owner has committed the D amendment;
+`read H` runs only once the owner has committed H's open entry, and the first
+`read H` stops after the fetch for its records to be committed. At each of
+these commits the executor hands back `waiting` and the loop stops.
 
 ## 3. Run (executor)
 
