@@ -353,15 +353,19 @@ def _edge_rows(
     )
     p = planted.placebo
     pt, worst = p.get("recovered_t", float("nan")), p.get("max_shift_t", float("nan"))
+    shifted = p.get("recovered_bp", float("nan"))
+    real = s.get("recovered_bp", float("nan"))
     readable = p.get("trades", 0) >= MIN_TRADES and s.get("test_days", 0) >= MIN_DAYS
     result.add(
         f"{tag}: placebo shifts kill it",
-        "0 bp on decisions moved to other days",
-        f"{_bp(p.get('recovered_bp', float('nan')))}, pooled t {_t(pt)}, max shift t {_t(worst)}",
-        f"|pooled t| < {T_BAR:g} (or too few trades or days to read) and real t above "
-        "every shift's",
-        (not readable or not _finite(pt) or abs(pt) < T_BAR)
+        f"0 bp on decisions moved to other days (owed {_bp(p.get('planted_bp', float('nan')))})",
+        f"{_bp(shifted)}, pooled t {_t(pt)}, max shift t {_t(worst)}",
+        f"pooled t < {T_BAR:g} (or too few to read), |mean| <= 10% of the real "
+        "one, real t above every shift's",
+        (not readable or not _finite(pt) or pt < T_BAR)
         and _finite(t)
+        and _finite(real)
+        and (not _finite(shifted) or abs(shifted) <= 0.1 * abs(real))
         and (not _finite(worst) or t > worst),
     )
     nt = n.get("recovered_t", float("nan"))
