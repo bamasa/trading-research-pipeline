@@ -32,6 +32,7 @@ read's commit.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
@@ -193,7 +194,9 @@ class Ledger:
         loaded: dict[str, list[dict[str, Any]]] = json.loads(text)
         return loaded
 
-    def ledger_versions(self, ref: str = "HEAD") -> list[tuple[str, dict[str, list[dict[str, Any]]]]]:
+    def ledger_versions(
+        self, ref: str = "HEAD"
+    ) -> list[tuple[str, dict[str, list[dict[str, Any]]]]]:
         """Every version of the ledger in ``ref``'s history, newest first, each with
         the commit that wrote it (a commit that deleted the file is skipped)."""
         ledger = self.ledger.as_posix()
@@ -219,10 +222,8 @@ class Ledger:
         erased by a later commit or a reset."""
         refs = ["HEAD"]
         if self.upstream is not None:
-            try:
+            with contextlib.suppress(HeldOutLocked):
                 refs.append(_git(self.repo, "rev-parse", "--verify", "-q", self.upstream).strip())
-            except HeldOutLocked:
-                pass
         have = {(e.get("utc"), e.get("commit")) for e in kept}
         erased: dict[tuple[Any, Any], dict[str, Any]] = {}
         for ref in refs:

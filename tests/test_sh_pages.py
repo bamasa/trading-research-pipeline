@@ -195,9 +195,10 @@ def test_the_search_sentence_quotes_n_trials_from_the_committed_manifest(
     manifest = tmp_path / tl.MANIFEST_PATH
     manifest.parent.mkdir(parents=True)
     manifest.write_text('{"n_trials": 2435}', encoding="utf-8")
-    monkeypatch.setattr(tl.TrialLedger, "record", lambda self: {"n_trials": 2435})
-    c = pages.Computed(SimpleNamespace(keys=(C_KEY, S25_KEY), repo=tmp_path,
-                                       catalogue=lambda: None))  # type: ignore[arg-type]
+    monkeypatch.setattr(tl.TrialLedger, "record", lambda _self: {"n_trials": 2435})
+    c = pages.Computed(
+        SimpleNamespace(keys=(C_KEY, S25_KEY), repo=tmp_path, catalogue=lambda: None)
+    )  # type: ignore[arg-type]
     for name in ("c", "e", "board"):
         c.__dict__[name] = None
     c.__dict__["d"], c.__dict__["read"] = record_d(), {}

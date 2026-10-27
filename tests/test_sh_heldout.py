@@ -295,7 +295,7 @@ def test_a_passive_shift_re_simulated_over_a_stale_day_reaches_the_series(
     )  # fmt: skip
     monkeypatch.setattr(
         ho, "passive_decisions",
-        lambda ctx, *_a, **_k: Decisions(np.array([1], np.int64), np.array([1]), np.array([1.0])),
+        lambda *_a, **_k: Decisions(np.array([1], np.int64), np.array([1]), np.array([1.0])),
     )  # fmt: skip
     # The read's first pass: day 1 is flagged stale by the true run; every day's shifted
     # run read the previous day's decisions (day 2's read day 1's, the stale day's: -5).

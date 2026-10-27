@@ -162,6 +162,7 @@ BYBIT_FEE_SOURCE = "https://www.bybit.com/en/help-center/article/Trading-Fee-Str
 #: When the rows below were transcribed from the source.
 BYBIT_FEE_RETRIEVED: str = "2026-10-02"
 
+
 def fee_caveat(period: str) -> str:
     """The caveat every number using a tier other than the base must carry, naming
     the ``period`` of the data the 2026 schedule is applied to."""

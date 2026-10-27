@@ -250,12 +250,12 @@ def reconstruct(
                 state.last_update is not None
                 and update is not None
                 and update != state.last_update + 1
+                and stamp < day_end
             ):
                 # The book is wrong from here until the next snapshot. Counted
                 # and carried on the result rather than raised: one gap in a day
                 # is a data-quality fact, not a reason to lose the day.
-                if stamp < day_end:
-                    gaps += 1
+                gaps += 1
             state.apply("b", data.get("b", []))
             state.apply("a", data.get("a", []))
             state.last_update = update
@@ -498,9 +498,9 @@ def archive_message_stats(path: Path | str) -> MessageStats:
             last = update
         elif kind == "delta":
             deltas += 1
-            if last is not None and update is not None and update != last + 1:
-                if day_end is None or stamp is None or stamp < day_end:
-                    gaps += 1
+            stamped_in_day = day_end is None or stamp is None or stamp < day_end
+            if last is not None and update is not None and update != last + 1 and stamped_in_day:
+                gaps += 1
             last = update
         else:
             continue
