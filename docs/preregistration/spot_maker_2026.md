@@ -848,4 +848,51 @@ and refuses every superseded one.
 
 ## Amendments
 
-None yet.
+Dated entries, appended in order; nothing above this heading changes after the code freeze.
+
+### 2026-10-27: the code's choices where the text left one open
+
+Committed before the code freeze and before this study copied, opened or
+computed on any print. The configuration is unchanged: with its placeholders
+reset it still has the registered sha256 `8af7842a…`, so no new
+null-placeholder hash is recorded. No reason below is drawn from data.
+
+- **This section's first line** replaces "None yet.": entries are appended in
+  order, and nothing above the heading changes after the code freeze.
+- **The skew reads the position known at the decision**: a quote's price is
+  skewed by the position of the fills stamped at or before the instant it is
+  decided; a fill stamped inside the 10 ms latency after that instant is not
+  yet known there. Its size is cut at its arrival, when every earlier fill is
+  known ("Orders sized at their arrival"). For MK-S's exit the same holds: an
+  entry fill inside the cancel's latency counts in the exit's size, not in its
+  first price.
+- **MK-S's exit at a requote whose own proxy is undefined** keeps its last
+  price; an exit that never had a price is not posted, and its position is
+  flattened at 23:59.
+- **Stage 0's fill-rule checks** run on every resting order of every slot's
+  run under each of the three rules: each order is filled again from its side,
+  price, size and live window, and must have its fills inside its life and
+  size, the fills its run recorded exactly those its own rule gives, and its
+  delayed fills within its trade-through fills within its touch fills. They
+  also run on probe orders, one a side at its proxy at every 60 s instant. The
+  account's identity is every run's void conditions. Stage 0 also checks the
+  print contract (`spot/prints.check`), both aggressor sides present and the
+  tick equal to 0.01, and times the copy, the load, the features, the signal,
+  the runs and the checks apart.
+- **Stage 1 computes the signal on D's usable days**, its decisions counted
+  under the work directory; nothing of it is reported.
+- **Free disk is checked and recorded** at stages 0, 1 and D and at each
+  process of a read, against the 1 GB budget and its 10 GB margin.
+- **Copies, not links**: the copies' 171 MB lie far inside the budget, so every
+  day file is copied as registered and none is hard-linked.
+- **Measurements beside the verdict**, each named under "Measurements without
+  a hypothesis" or computed from them, never a status: the block's net over its
+  turnover, pooled; for MK-S the net per round trip, the day's net over its
+  entries' notional (a round trip is an entry and its exit of the same size;
+  the quoters have none); fills a day, maker and taker; the days positive,
+  counted; the fees paid; the flattens and their notional; MK-S's counters and
+  its realised hold (the mean, and the median of the daily medians); the
+  proxies' width as the median of the daily medians.
+- **P's not-assessed statuses in the P table**: "not assessed (P unreadable on
+  Binance)" reads "candidate, not confirmed (P unreadable)", "not assessed (P
+  read failed)" reads "candidate, not confirmed (P read failed)".
