@@ -36,41 +36,51 @@ RULES: tuple[str, ...] = ("trade_through", "touch", "delayed")
 EMPTY = (np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.float64))
 
 
-def qualifying(
-    tape: PrintTape, side: int, price: float, start_ns: int, end_ns: int, rule: str
-) -> np.ndarray:
-    """Positions, in the other side's reachable prints, of the prints that may fill
-    the order under ``rule``, in archive order."""
+def bounds(tape: PrintTape, side: int, start_ns: np.ndarray, end_ns: np.ndarray
+           ) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
+    """For orders of ``side`` live on ``[start, end)``: the range of the other side's
+    reachable prints each may fill on."""
+    other = tape.side_prints(-side)
+    return (np.searchsorted(other.ts, start_ns, side="left").astype(np.int64),
+            np.searchsorted(other.ts, end_ns, side="left").astype(np.int64))  # fmt: skip
+
+
+def fill_range(tape: PrintTape, side: int, price: float, size: float, lo: int, hi: int,
+               rule: str) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
+    """``(tape positions, filled sizes)`` of an order whose live prints of the other side
+    are ``[lo, hi)``, in time order."""
     if rule not in RULES:
         raise ValueError(f"unknown fill rule {rule!r}; expected one of {RULES}")
+    if hi <= lo or size <= REMAINDER_BTC or not math.isfinite(price):
+        return EMPTY
     other = tape.side_prints(-side)
-    lo = int(np.searchsorted(other.ts, start_ns, side="left"))
-    hi = int(np.searchsorted(other.ts, end_ns, side="left"))
-    if hi <= lo or not math.isfinite(price):
-        return np.zeros(0, dtype=np.int64)
     seen = other.price[lo:hi]
-    beyond = (seen < price) if side > 0 else (seen > price)
     if rule == "touch":
         beyond = (seen <= price) if side > 0 else (seen >= price)
-    found = np.flatnonzero(beyond) + lo
-    return found[1:] if rule == "delayed" else found
-
-
-def fill(
-    tape: PrintTape, side: int, price: float, size: float, start_ns: int, end_ns: int, rule: str
-) -> tuple[np.ndarray, np.ndarray]:
-    """``(tape positions, filled sizes)`` of a resting order's fills, in time order."""
-    if size <= REMAINDER_BTC or end_ns <= start_ns:
-        return EMPTY
-    at = qualifying(tape, side, price, start_ns, end_ns, rule)
+    else:
+        beyond = (seen < price) if side > 0 else (seen > price)
+    at = np.flatnonzero(beyond) + lo
+    if rule == "delayed":
+        at = at[1:]
     if not len(at):
         return EMPTY
-    other = tape.side_prints(-side)
     sizes = other.size[at]
     before = np.cumsum(sizes) - sizes
     take = np.minimum(np.maximum(size - before, 0.0), sizes)
     keep = take > REMAINDER_BTC
     return other.index[at[keep]], take[keep]
+
+
+def fill(
+    tape: PrintTape, side: int, price: float, size: float, start_ns: int, end_ns: int, rule: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(tape positions, filled sizes)`` of a resting order live on ``[start, end)``."""
+    if end_ns <= start_ns:
+        if rule not in RULES:
+            raise ValueError(f"unknown fill rule {rule!r}; expected one of {RULES}")
+        return EMPTY
+    lo, hi = bounds(tape, side, np.array([start_ns]), np.array([end_ns]))
+    return fill_range(tape, side, price, size, int(lo[0]), int(hi[0]), rule)
 
 
 def flatten(tape: PrintTape, side: int, size: float, decision_ns: int,

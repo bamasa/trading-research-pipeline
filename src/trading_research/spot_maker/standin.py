@@ -30,8 +30,8 @@ from trading_research.spot_maker import blocks as bk
 from trading_research.spot_maker import registration as rg
 from trading_research.spot_maker.signal import SOURCE_DIR, SignalBinding
 
-#: The stand-in's thresholds: a few hundred decisions on a synthetic day.
-STAND_IN_THETA: dict[str, float] = {"theta_long": 0.47, "theta_short": 0.47}
+#: The stand-in's thresholds: a few hundred decisions on a synthetic day (six rows of one side).
+STAND_IN_THETA: dict[str, float] = {"theta_long": 0.499, "theta_short": 0.499}
 
 
 class StandInModel:

@@ -78,25 +78,30 @@ def run_quoter(
     at = instants(tape, settings, stamps if len(stamps) else None)
     sigma = signal_sides(at, stamps, sides, settings.hold_ns)
     flat, lat, limit = settings.flatten_ns(tape), settings.latency_ns, settings.limit
+    ends = np.append(at[1:], flat).astype(np.int64)
+    asks, bids = proxies.at(at)
+    ranges = {side: resting.bounds(tape, side, at + lat, ends + lat) for side in (1, -1)}
     position = 0.0
     run.counters["instants"] = len(at)
-    for j, tau in enumerate(at):
-        end = int(at[j + 1]) if j + 1 < len(at) else flat
-        ask, bid = proxies.one(int(tau))
+    for j in range(len(at)):
+        ask, bid = float(asks[j]), float(bids[j])
         if math.isfinite(ask) and math.isfinite(bid):
             run.widths_bp.append((ask - bid) / ((ask + bid) / 2) * 1e4)
         want_bid, want_ask = _sizes(mode, int(sigma[j]), settings.clip)
         orders = ((1, min(want_bid, limit - position)), (-1, min(want_ask, limit + position)))
         moved = 0.0
         for side, size in orders:
+            if size <= REMAINDER_BTC:
+                continue
             price = quote_price(side, ask, bid, position, skew_bp=settings.skew_bp,
                                 clip=settings.clip, tick=settings.tick)  # fmt: skip
-            if size <= REMAINDER_BTC or not math.isfinite(price):
+            if not math.isfinite(price):
                 continue
             run.counters["quotes_bid" if side > 0 else "quotes_ask"] += 1
             run.posted_btc += size
-            idx, filled = resting.fill(tape, side, price, size, int(tau) + lat, end + lat,
-                                       settings.rule)  # fmt: skip
+            lo, hi = ranges[side]
+            idx, filled = resting.fill_range(tape, side, price, size, int(lo[j]), int(hi[j]),
+                                             settings.rule)  # fmt: skip
             for i, q in zip(idx, filled, strict=True):
                 run.log.add(int(tape.ts[i]), side, price, float(q), True, "bid" if side > 0 else "ask")
             moved += side * float(filled.sum())
