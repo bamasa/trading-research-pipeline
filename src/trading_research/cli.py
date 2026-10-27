@@ -1736,3 +1736,8 @@ def _print_mm_decomposition(summary: dict[str, float]) -> None:
         table.add_row(label, value)
     console.print(table)
     console.print("  [dim]net = spread + adverse + inventory - fees + funding[/dim]")
+
+
+from trading_research.cli_plugins import plugins_app  # noqa: E402
+
+app.add_typer(plugins_app, name="strategies")
