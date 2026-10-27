@@ -26,7 +26,8 @@ S25-Z. From them, on the days a status is taken on (:func:`verdict_measures`):
 * the fill decomposition (the making part over the passive fills and the
   rest) for the passive slots.
 
-Every fee other than the base tier is a measurement, with ``BYBIT_FEE_CAVEAT``.
+Every fee other than the base tier is a measurement, with the fee caveat
+(``backtest.costs.fee_caveat``) naming the period of the days it is applied to.
 """
 
 from __future__ import annotations
@@ -40,9 +41,9 @@ import numpy as np
 
 from trading_research.backtest.costs import (
     BYBIT_BASE,
-    BYBIT_FEE_CAVEAT,
     BYBIT_MM_PROGRAMME_MAKER_BP,
     FeeTier,
+    fee_caveat,
     tiers_for,
 )
 
@@ -197,7 +198,7 @@ def verdict_measures(s: Any, days: Sequence[date]) -> dict[str, Any]:
         "funding_usdt": day_sum(s, "funding_usdt", mask), "by_side": by_side(s, mask),
         "tiers": tier_results(s, mask), "tiers_paying": tiers_paying(s, mask),
         "counters": {n: day_sum(s, n, mask) for n in (PASSIVE_COUNTERS if passive else TAKER_COUNTERS)},
-        "fee_caveat": BYBIT_FEE_CAVEAT,
+        "fee_caveat": fee_caveat(period_of(days)),
     }  # fmt: skip
     if s.kind == "taker":
         turnover = day_sum(s, "turnover", mask)
@@ -218,16 +219,25 @@ def verdict_measures(s: Any, days: Sequence[date]) -> dict[str, Any]:
     return out
 
 
+def period_of(days: Sequence[Any]) -> str:
+    """The period a fee caveat names: the first and last of ``days`` (ISO dates)."""
+    found = sorted(str(d) for d in days)
+    return f"{found[0]} to {found[-1]}" if found else "no day"
+
+
 def crossing_tiers(crossing: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     """A0's crossing run (at 0/0) at the base tier and every published tier: each
     day's net less the tier's taker fee on its turnover; the mean daily net in bp of
-    traded notional and the net in USDT over O's days."""
+    traded notional and the net in USDT over O's days. Every tier other than the
+    base carries the fee caveat with O's dates (the days in ``crossing``)."""
+    caveat = fee_caveat(period_of([c["day"] for c in crossing if "day" in c]))
     out = []
     for tier in tiers_for("g1"):
         cut = tier.taker_bp * 1e-4
         daily = [(c["net"] - cut * c["turnover"]) / c["notional"] * 1e4
                  for c in crossing if c["notional"] > 0]  # fmt: skip
-        out.append({"tier": tier.name, "taker_bp": tier.taker_bp,
-                    "mean_net_bp": float(np.mean(daily)) if daily else NAN,
-                    "net_usdt": float(sum(c["net"] - cut * c["turnover"] for c in crossing))})  # fmt: skip
+        row = {"tier": tier.name, "taker_bp": tier.taker_bp,
+               "mean_net_bp": float(np.mean(daily)) if daily else NAN,
+               "net_usdt": float(sum(c["net"] - cut * c["turnover"] for c in crossing))}  # fmt: skip
+        out.append(row if tier.name == BYBIT_BASE.name else row | {"fee_caveat": caveat})
     return out

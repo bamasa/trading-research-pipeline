@@ -162,17 +162,22 @@ def markdown_table(frame: pd.DataFrame, digits: int = 2) -> str:
     return "\n".join(lines)
 
 
-def s25_page(ladder: pd.DataFrame, regions: pd.DataFrame, rank: tuple[int, int]) -> str:
+def s25_page(
+    ladder: pd.DataFrame, regions: pd.DataFrame, rank: tuple[int, int], tier_caveat: str = ""
+) -> str:
     """The S25 page: its rank r of N on the D leaderboard, the edge ladder
-    (``edge_ladder.edge_ladder``) and the T1 and T2 rows
-    (``leaderboard.region_rows``), every D number labelled."""
+    (``edge_ladder.edge_ladder``) with, beside its tier rows, the fee caveat
+    (``tier_caveat``), and the T1 and T2 rows (``leaderboard.region_rows``),
+    every D number labelled."""
     r, n = rank
     steps = ladder[["step", "row", "block", "value", "unit", "reference", "label"]]
+    caveat = [f"Step 4, every tier other than the base: {tier_caveat}"] if tier_caveat else []
     return "\n\n".join(
         [
             f"S25 ranks {r} of {n} on the D leaderboard (on development data, selected, "
             "biased upward; S25 itself was fixed before D).",
             markdown_table(steps),
+            *caveat,
             "The leaderboard regions, measurements with no slot (on development data):",
             markdown_table(regions),
         ]

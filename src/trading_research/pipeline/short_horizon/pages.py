@@ -564,7 +564,17 @@ def s25_page(c: Computed, table: pd.DataFrame, out: Written) -> str | None:
     except ChoiceError as exc:
         out.pending.append(f"the S25 page: refused: {exc}")
         return None
-    return page(table, regions, rank)
+    return page(table, regions, rank, ladder_tier_caveat())
+
+
+def ladder_tier_caveat() -> str:
+    """The fee caveat beside the ladder's tier rows: S25's break-even on H's days
+    before 2025-08-01 against each published tier (``fee_caveat`` with their dates)."""
+    from trading_research.backtest.costs import fee_caveat
+    from trading_research.data import study_access as sa
+    from trading_research.pipeline.short_horizon.statuses import S25_WINDOW_END
+
+    return fee_caveat(f"{sa.BLOCKS['H'][0].isoformat()} to {S25_WINDOW_END.isoformat()}")
 
 
 # ---------------------------------------------------------------------------

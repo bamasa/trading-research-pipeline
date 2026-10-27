@@ -80,6 +80,7 @@ def test_a_tier_pays_when_its_own_maker_and_taker_fees_leave_a_positive_net() ->
     assert bv.tiers_paying(s, mask) == len(rows)
     assert st.fee_check(s, mask).value == pytest.approx(2.0 + 0.6 / 100.0 * 1e4)
     found = bv.verdict_measures(s, DAYS)
+    assert f"applied to data from {DAYS[0]} to {DAYS[-1]}, when" in found["fee_caveat"]
     assert found["break_even_maker_bp"]["exit_1.5"] == pytest.approx(
         2.0 + (0.6 + 4e-4 * 100) / 100 * 1e4
     )
@@ -153,3 +154,21 @@ def test_a0s_crossing_is_reported_at_the_base_and_every_published_tier() -> None
     assert base["mean_net_bp"] == pytest.approx(
         ((2.0 - 0.55) / 500 + (-1.0 - 1.1) / 1_000) / 2 * 1e4
     )
+
+
+def test_the_fee_caveat_names_the_period_of_the_days_it_is_applied_to() -> None:
+    from trading_research.backtest import costs
+
+    assert costs.BYBIT_FEE_CAVEAT == (
+        "Bybit's linear-perpetual schedule as published in 2026 (page last updated "
+        "2026-09-02, transcribed 2026-10-02), applied to data from February to April "
+        "2024, when the schedule may have differed. Volumes are 30-day derivatives "
+        "volume in USDT; Pro levels require more than 20% of volume through the API."
+    )  # rounds one and two keep their text byte for byte
+    caveat = costs.fee_caveat("2025-02-04 to 2025-02-26")
+    assert "applied to data from 2025-02-04 to 2025-02-26, when" in caveat
+    crossing = [{"day": "2025-02-04", "net": 2.0, "turnover": 1_000.0, "notional": 500.0},
+                {"day": "2025-02-26", "net": -1.0, "turnover": 2_000.0, "notional": 1_000.0}]  # fmt: skip
+    rows = bv.crossing_tiers(crossing)
+    assert "fee_caveat" not in rows[0] and all(r["fee_caveat"] == caveat for r in rows[1:])
+    assert bv.period_of([date(2025, 7, 31), date(2025, 7, 8)]) == "2025-07-08 to 2025-07-31"
