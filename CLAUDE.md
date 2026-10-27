@@ -76,7 +76,8 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `trading-research generate-demo-data` | nothing; writes synthetic data to `data/demo` | synthetic, never evidence about a market |
 | `trading-research validate-data`, `screen`, `review` | files already on disk | no network |
 | `trading-research prepare`, `select`, `train`, `predict`, `backtest`, `retrain-search`, `exit-search` | the pipeline's staged files | the window each is given, nothing else |
-| `trading-research download`, `download-book`, `breaks` | public archives over the network (`breaks --prices` reads a file instead) | free days only; `fundingRate` and `klines` come as whole months |
+| `trading-research download`, `download-book` | public archives over the network | free days only, written under `data/<study>/`; `fundingRate` and `klines` come as whole months |
+| `trading-research breaks` | the `--prices` file it is given | fetching bars would write the shared `data/bars` |
 | `trading-research discover` | the venue's current listing | no historical data |
 | `trading-research reproduce --no-fetch` | the panel already on disk | fetching is the owner's call |
 | `trading-research mm-backtest` | the market-making study's book, prints and funding | `--allow-heldout` only on the owner's grant; `--second-read` never |

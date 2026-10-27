@@ -30,7 +30,8 @@ Only these, one command per call, never chained with `;`, `&&` or a pipe:
   fetch and asks for the fetch records to be committed; you report that and
   stop. The owner commits; a later step resumes.
 - The CLI, on free days only: `trading-research download`,
-  `trading-research download-book`, `trading-research breaks`,
+  `trading-research download-book` (each into `data/<study>/`),
+  `trading-research breaks --prices <file>` (never fetching),
   `trading-research mm-backtest` (with `--allow-heldout` only on a grant),
   `trading-research validate-data`, `trading-research review`,
   `trading-research describe-schema`, and the pipeline's stages.
