@@ -3,6 +3,7 @@
   {
    "block": "H",
    "candidates": [],
+   "closed": "2026-10-27T21:47:50Z",
    "commit": "33c9ae842a8889e7f615c2613d5f1d5a0b162eb1",
    "config_sha256": "8dbd3181a474ae378ca6a9211bf17f487d963585de5c3056eb3198d33597a53b",
    "copies": {
@@ -16,10 +17,14 @@
     {
      "utc": "2026-10-27T21:43:54Z",
      "workers": 1
+    },
+    {
+     "utc": "2026-10-27T21:43:59Z",
+     "workers": 4
     }
    ],
    "read": "first read",
-   "results_sha256": null,
+   "results_sha256": "f43974b53153b6d074b89eb8675136ba8e0ec4b94f8aae1fb1b2736b6d0d8a37",
    "utc": "2026-10-27T21:43:48Z"
   }
  ]
