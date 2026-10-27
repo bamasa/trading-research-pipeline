@@ -229,9 +229,12 @@ def render(
         "Each step is a command a reader can run alone on the previous step's files:",
         "",
         "```bash",
+        f"trp search register --data {config.out}/data --run {config.out}/search --execution {config.execution}"
+        "   # from file names, before any day is read",
         f"trp data validate-data --input {config.out}/data/raw",
-        f"trp regimes breaks --prices {config.out}/regimes/<SYMBOL>/closes.csv --history 250 --online 60",
-        f"trp search instruments --data {config.out}/data --run {config.out}/search --execution {config.execution}",
+        f"trp regimes breaks --prices {config.out}/regimes/<SYMBOL>/closes.csv --history 250 --online 60"
+        "   # the search block's closes",
+        f"trp search instruments --run {config.out}/search",
         f"trp search frequency --run {config.out}/search      # prepare, select, walk-forward fits",
         f"trp search method --run {config.out}/search",
         f"trp search model --run {config.out}/search",
