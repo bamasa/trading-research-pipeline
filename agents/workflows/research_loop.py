@@ -271,6 +271,7 @@ class ResearchLoop:
     gate: Callable[[Path, str, str], str | None] = registration_gate
     calendar: tuple[Protected, ...] | None = None
     rules: Path | None = None
+    check: Callable[[Path], list[str]] = prompt_problems
 
     def __post_init__(self) -> None:
         self.config = self.config or f"configs/{self.study}.yaml"
@@ -279,7 +280,7 @@ class ResearchLoop:
 
     async def run(self) -> dict[str, Any]:
         assert self.rules is not None
-        problems = prompt_problems(self.rules)
+        problems = self.check(self.rules)
         if problems:
             return self.stop("start", f"the prompts name commands that do not exist: {problems}")
         done = self.log.handbacks()
@@ -532,6 +533,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--config", default="", help="the YAML, when not configs/<study>.yaml")
     run.add_argument("--document", default="", help="the document, when not by the study name")
     sub.add_parser("calendar", help="every range a registration protects")
+    sub.add_parser("prompts", help="every command the agent's documents name that does not exist")
     null_hash = sub.add_parser("null-hash", help="a YAML's null-placeholder sha256")
     null_hash.add_argument("config", type=Path)
     check = sub.add_parser("check", help="would the policy allow this command for this role")
@@ -544,6 +546,22 @@ def parser() -> argparse.ArgumentParser:
     )
     demo.add_argument("--into", type=Path, help="an empty directory for the scratch repository")
     return found
+
+
+def study_check(python: str) -> Callable[[Path], list[str]]:
+    """The prompts' commands checked by the study's interpreter, which imports
+    the study code; the loop's own environment holds the SDK and need not."""
+
+    def check(rules: Path) -> list[str]:
+        argv = [python, "-m", "agents.workflows.research_loop", "prompts"]
+        env = {**os.environ, "PYTHONPATH": str(rules / "src")}
+        try:
+            done = subprocess.run(argv, cwd=rules, env=env, capture_output=True, text=True)
+        except OSError as exc:
+            return [f"the study's interpreter {python} could not check them: {exc}"]
+        return [] if done.returncode == 0 else (done.stdout + done.stderr).strip().splitlines()
+
+    return check
 
 
 def here() -> Path:
@@ -560,6 +578,10 @@ def main(argv: list[str] | None = None) -> int:
         for p in protected_calendar(here()):
             print(f"{p.first} {p.last} {p.key}")
         return 0
+    if args.command == "prompts":
+        problems = prompt_problems(REPO)
+        print("\n".join(problems) or "every command the documents name exists")
+        return 1 if problems else 0
     if args.command == "null-hash":
         print(null_sha256(args.config.read_text()))
         return 0
@@ -600,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
     log.write_json("run.json", meta)
     python = os.environ.get("TRP_AGENT_PYTHON", "python")
     cli = os.environ.get("TRP_AGENT_CLI", "trading-research")
-    loop = ResearchLoop(REPO, meta["study"], meta["brief"], SdkRunner(REPO), log,
+    loop = ResearchLoop(REPO, meta["study"], meta["brief"], SdkRunner(REPO), log, check=study_check(python),
                         grants=frozenset(meta["grants"]), web_hosts=frozenset(meta.get("web_hosts", [])),
                         python=python, cli=cli, config=meta.get("config", ""),
                         document=meta.get("document", ""))  # fmt: skip

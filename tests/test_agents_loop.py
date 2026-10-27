@@ -413,6 +413,7 @@ def test_the_helpers_answer_without_a_model(
     from agents.workflows.research_loop import main
 
     monkeypatch.chdir(REPO)
+    assert main(["prompts"]) == 0
     assert main(["check", "--role", "executor", "git push"]) == 1
     assert main(["null-hash", str(REPO / "configs/spot_2026.yaml")]) == 0
     assert main(["calendar"]) == 0
@@ -438,3 +439,11 @@ def test_a_run_does_not_start_without_a_model_or_the_sdk(
 def test_the_run_directories_are_ignored_by_git() -> None:
     found = subprocess.run(["git", "check-ignore", "agents/runs/x/run.json"], cwd=REPO, check=False)
     assert found.returncode == 0
+
+
+def test_the_prompts_are_checked_by_the_studys_interpreter_from_a_thin_loop() -> None:
+    from agents.workflows.research_loop import study_check
+
+    assert study_check(sys.executable)(REPO) == []
+    assert study_check(sys.executable)(REPO / "no-such-tree")
+    assert "could not check" in study_check("no-such-python")(REPO)[0]
