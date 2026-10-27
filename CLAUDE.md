@@ -84,6 +84,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `trading-research discover` | the venue's current listing | no historical data |
 | `trading-research reproduce --no-fetch` | the panel already on disk | fetching is the owner's call |
 | `trading-research mm-backtest` | the market-making study's book, prints and funding | `--allow-heldout` only on the owner's grant; `--second-read` never |
+| `data`, `regimes`, `instruments`, `signal`, `search`, `backtest`, `study`, `agent`, `demo`, `fees` | as the commands they group | the `trp` command tree: the commands above grouped by step, under the same names; a role runs the flat names, which the policy knows |
 | `python -m experiments.short_horizon_2025` | its blocks, through its access and ledger | stages in order; `open` and `read` only on the owner's grant |
 | `python -m experiments.spot_2026` | its blocks, through its access and ledger | as above; `status`, `pages` and `--dry-run` freely |
 | `python -m pytest` | synthetic data and fixtures | no network |
