@@ -351,14 +351,46 @@ def test_fill_on_the_block_pools_the_passive_day_files(tmp_path: Any) -> None:
                          "gross_usdt": 1.0, "fees_usdt": -0.5, "net_usdt": 0.5})  # fmt: skip
     (tmp_path / "passive").mkdir()
     pd.DataFrame(rows).to_parquet(tmp_path / "passive" / "days.parquet", index=False)
-    found = pn.fill_rule_summary(SimpleNamespace(work=tmp_path))
+    kept = [date(2025, 7, 8), date(2025, 7, 9)]
+    found = pn.fill_rule_summary(SimpleNamespace(work=tmp_path), kept)
     assert list(found) == ["S-P"]  # S25-Z ran no day
     by = {row["rule"]: row for row in found["S-P"]}
     assert list(by) == ["touch", "trade_through", "queue"]
     assert by["queue"]["days"] == 2 and by["queue"]["orders_posted"] == 20.0
     assert by["queue"]["fill_ratio"] == pytest.approx(0.6) and by["touch"]["fill_ratio"] == 0.9
-    assert by["trade_through"]["net"] == 1.0 and by["touch"]["bias"] == "optimistic bound"
-    assert pn.fill_rule_summary(SimpleNamespace(work=tmp_path / "none")) == {}
+    assert by["trade_through"]["net_usdt"] == 1.0 and by["touch"]["bias"] == "optimistic bound"
+    assert pn.fill_rule_summary(SimpleNamespace(work=tmp_path / "none"), kept) == {}
+
+
+def test_the_pages_fill_table_is_the_results_files_on_the_kept_days(tmp_path: Any) -> None:
+    """A day another run of the read flagged stale is out of the pages' FILL table,
+    as it is out of the results file's (``heldout_measures.fill_rules``)."""
+    from trading_research.pipeline.short_horizon import heldout_measures as hm
+
+    columns = ("orders_posted", "orders_filled", "volume_posted", "volume_filled",
+               "notional_filled", "gross_usdt", "fees_usdt", "net_usdt")  # fmt: skip
+
+    def row(day: str, variant: str, filled: float, excluded: bool = False) -> dict[str, Any]:
+        return {"run_slot": "S25-Z", "variant": variant, "day": day, "excluded": excluded,
+                "fill_paths": "{}", **dict.fromkeys(columns, 1.0), "orders_posted": 10.0,
+                "orders_filled": filled}  # fmt: skip
+
+    folder = tmp_path / "passive"
+    folder.mkdir()
+    variants = ("true", "fill/touch", "fill/trade_through")
+    good = [row("2025-07-10", v, 2.0) for v in variants]
+    # 07-11: the flipped placebo walked a stale snapshot, so the day is out of every series
+    stale = [row("2025-07-11", v, 9.0) for v in variants] + [
+        row("2025-07-11", "flipped", 0.0, excluded=True)
+    ]
+    pd.DataFrame(good).to_parquet(folder / "2025-07-10.parquet", index=False)
+    pd.DataFrame(stale).to_parquet(folder / "2025-07-11.parquet", index=False)
+    kept = [date(2025, 7, 10)]  # compute_block's kept days
+    results = hm.fill_rules(pd.DataFrame(good + stale), "S25-Z", kept)["summary"]
+    pages = pn.fill_rule_summary(SimpleNamespace(work=tmp_path), kept)["S25-Z"]
+    queue = next(r for r in pages if r["rule"] == "queue")
+    assert queue["days"] == 1 and queue["fill_ratio"] == 0.2
+    assert pages == results
 
 
 def test_the_rows_for_the_register_and_the_readme_summary() -> None:

@@ -160,15 +160,14 @@ def save_close(block: Any) -> Path:
     return path
 
 
-def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
-    """FILL on the block: S-P's and S25-Z's orders under the three rules, every
-    usable day pooled, one table per slot in the form of
-    ``fill_rules.FillComparison.summary`` (the fill ratio is the share of posted
-    orders with a fill). Read from the passive runs' day files; nothing when the
-    block ran no passive slot, and nothing on a block without the other rules'
-    runs (the registration measures FILL on H's streams alone)."""
-    from trading_research.market_making.fill_rules import BIAS, RULES
-    from trading_research.market_making.queue import FillRule
+def fill_rule_summary(block: Any, days: Sequence[date]) -> dict[str, list[dict[str, Any]]]:
+    """FILL on the block: S-P's and S25-Z's orders under the three rules on ``days``,
+    the days the read kept (no run flagged them), one table per slot: the results
+    file's own (``heldout_measures.fill_rules``, its ``summary``), so the pages and
+    the results file show one FILL table. Read from the passive runs' day files;
+    nothing when the block ran no passive slot, and nothing on a block without the
+    other rules' runs (the registration measures FILL on H's streams alone)."""
+    from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
 
     files = sorted((block.work / "passive").glob("*.parquet"))
     if not files:
@@ -176,21 +175,9 @@ def fill_rule_summary(block: Any) -> dict[str, list[dict[str, Any]]]:
     rows = pd.concat([pd.read_parquet(p) for p in files], ignore_index=True)
     if "orders_posted" not in rows:
         return {}
-    totals = ["orders_posted", "orders_filled", "volume_posted", "volume_filled", "notional_filled",
-              "gross_usdt", "fees_usdt", "net_usdt"]  # fmt: skip
     out: dict[str, list[dict[str, Any]]] = {}
     for slot in ("S-P", "S25-Z"):
-        mine = rows[(rows["run_slot"] == slot) & ~rows["excluded"].astype(bool)]
-        summary = []
-        for rule in RULES:
-            variant = "true" if rule is FillRule.QUEUE else f"fill/{rule.value}"
-            part = mine[mine["variant"] == variant]
-            sums = {k.removesuffix("_usdt"): float(part[k].sum()) for k in totals}
-            posted, volume = sums["orders_posted"], sums["volume_posted"]
-            summary.append({"rule": rule.value, "days": len(part), **sums,
-                            "fill_ratio": sums["orders_filled"] / posted if posted else NAN,
-                            "volume_ratio": sums["volume_filled"] / volume if volume else NAN,
-                            "bias": BIAS[rule]})  # fmt: skip
+        summary = fill_rules(rows, slot, days)["summary"]
         if all(s["days"] for s in summary):
             out[slot] = summary
     return out
@@ -223,8 +210,9 @@ def block_numbers(block: Any, series: dict[str, SlotDays], found: dict[str, Any]
     from trading_research.pipeline.short_horizon import second_detector
 
     save_close(block)
+    kept = sorted({d for s in series.values() for d in s.days})  # the days no run flagged
     return {"slots": slots, "alarms": list(block.detector["alarms"]),
-            "fill_rules": fill_rule_summary(block)} | second_detector.beside_r(block)  # fmt: skip
+            "fill_rules": fill_rule_summary(block, kept)} | second_detector.beside_r(block)  # fmt: skip
 
 
 def _d_days(study: Study) -> list[date]:
