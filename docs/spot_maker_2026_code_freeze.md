@@ -28,3 +28,17 @@ Before the freeze, at the same code:
   opened, copied, committed, computed and closed through the ledger, and every
   gate refused a second open, a closed session and P without a candidate. Its
   numbers are a test of the code and are discarded.
+
+## 2026-10-28: the code freeze after the calibration's correction
+
+The registration's amendment of 2026-10-28 corrected the fill rule's
+calibration (Bybit spot BTCUSDT's book on D's days, all three slots); the code
+changed with it, so the freeze moves. Stage 0 ran and passed at the first
+freeze commit `4b5d7d3` on the reader-test days (every reader-test day usable,
+the print contract and the tick 0.01 checked, about 30,000 to 39,000 resting
+orders a day re-filled under the three rules without a violation, no void
+condition; features about 1 s, the signal 0.05 s and every run of every slot
+22 s a day); the correction touches nothing stage 0 runs. The package's 69
+tests pass at the new commit, the dry run among them.
+
+Code-freeze commit: `bf044ea3c2eb76710b33fe6e9528cb4faac2eccc`
