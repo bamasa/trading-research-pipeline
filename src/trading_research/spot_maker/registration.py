@@ -8,6 +8,13 @@ them, whose placeholders reset do not give the registered sha256
 under the document's ``## Amendments``), or that holds a superseded hash.
 :func:`freeze_text` writes the D amendment's values into the placeholders and
 nothing else.
+
+**The fee amendment**, the only amendment after H, adds intervals for P's days
+under ``fees.intervals`` from 2026-10-22 (``spot/registration.strip_p_intervals``,
+one line each): the text without them (``base_text``) is the one every hash and
+the placeholders are read from, so the file H was read with keeps its sha256
+as ``base_sha256``; the intervals are accepted only on a frozen configuration,
+each with its sources and the verdict tier's fees.
 """
 
 from __future__ import annotations
@@ -15,7 +22,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import time
+from datetime import date, time
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +36,7 @@ from trading_research.market_making.prereg import (
     sha256_bytes,
     unfrozen_text,
 )
+from trading_research.spot.registration import _check_p_intervals, strip_p_intervals
 from trading_research.spot_maker import blocks as bk
 
 CONFIG_PATH = Path("configs/spot_maker_2026.yaml")
@@ -47,7 +55,8 @@ CODE_PATHS: tuple[str, ...] = ("src", "experiments/spot_maker_2026.py", "pyproje
 
 #: The configuration as registered, every placeholder null (2026-10-27).
 REGISTERED_SHA256 = "8af7842a9b56d8108956548197985ee910993a7e87fc7253bf8de130e862ea6d"
-SUPERSEDED_SHA256: tuple[str, ...] = ()
+#: Superseded by the amendment of 2026-10-27 that registered the fill rule's calibration.
+SUPERSEDED_SHA256: tuple[str, ...] = (REGISTERED_SHA256,)
 NULL_HASH_PATTERN = re.compile(r"Null-placeholder sha256: `([0-9a-f]{64})`")
 FROZEN_HASH_PATTERN = re.compile(r"Frozen configuration sha256: `([0-9a-f]{64})`")
 AMENDMENTS_HEADING = "## Amendments"
@@ -58,6 +67,7 @@ PLACEHOLDERS: tuple[tuple[str, ...], ...] = (
     ("metrics", "mde", "sigma_d"),
     ("metrics", "mde", "value"),
     ("measurements", "result_D"),
+    ("calibration", "result"),
     ("compute", "record"),
     ("amendment", "date"),
 )
@@ -66,7 +76,8 @@ SECTIONS: tuple[str, ...] = (
     "instrument", "computed_before_registration", "prior_information", "information_set",
     "expected_outcome", "data", "fees", "blocks", "common", "signal", "fills", "slots",
     "metrics", "family", "statuses", "kill_conditions", "placebo_percentile", "placebos",
-    "measurements", "d_procedure", "copy_budget", "compute", "access", "amendment", "artefacts",
+    "measurements", "calibration", "d_procedure", "copy_budget", "compute", "access", "amendment",
+    "artefacts",
 )  # fmt: skip
 
 # --- the registered values --------------------------------------------------------
@@ -99,6 +110,17 @@ SIGNAL_THETA: dict[str, float] = {
     "theta_short": 0.4700717031955719,
 }
 SIGNAL_HOLD_S = 50.0
+
+# --- the fill rule's calibration (the amendment of 2026-10-27) --------------------
+CALIBRATION_SYMBOL = "BTCUSDT"
+CALIBRATION_TICK, CALIBRATION_LOT = 0.1, 0.001
+CALIBRATION_DAYS: tuple[date, date] = (date(2024, 2, 1), date(2024, 2, 25))
+CALIBRATION_SLOTS: tuple[str, ...] = ("MK-Q", "MK-SQ")
+CALIBRATION_RULES: tuple[str, ...] = ("trade_through", "queue", "touch")
+CALIBRATION_SEEDS: tuple[int, ...] = tuple(range(10))
+CALIBRATION_MIN_SHARE = 0.80
+CALIBRATION_LABEL = "uncalibrated fill rule"
+CALIBRATION_NOT_RUN = "not run (no book day on disk)"
 
 
 @dataclass(frozen=True)
@@ -194,6 +216,16 @@ def check_values(config: Mapping[str, Any]) -> None:
         _expect(f"blocks.{block}", (found["start"], found["end"]), (start, end))
     _expect("blocks.reader_test.days", tuple(config["blocks"]["reader_test"]["days"]),
             bk.READER_TEST_DAYS)  # fmt: skip
+    cal = config["calibration"]
+    _expect("calibration.instrument", (cal["instrument"]["symbol"], float(cal["instrument"]["tick"]),
+            float(cal["instrument"]["lot"])), (CALIBRATION_SYMBOL, CALIBRATION_TICK, CALIBRATION_LOT))  # fmt: skip
+    _expect("calibration.days", (cal["days"]["start"], cal["days"]["end"]), CALIBRATION_DAYS)
+    _expect("calibration.slots", tuple(cal["slots"]), CALIBRATION_SLOTS)
+    _expect("calibration.book_rules", tuple(cal["book_rules"]), CALIBRATION_RULES)
+    _expect("calibration.test.min_share_of_days", float(cal["test"]["min_share_of_days"]),
+            CALIBRATION_MIN_SHARE)  # fmt: skip
+    _expect("calibration.label", cal["label"], CALIBRATION_LABEL)
+    _expect("calibration.not_run", cal["not_run"], CALIBRATION_NOT_RUN)
 
 
 @dataclass(frozen=True)
@@ -203,6 +235,7 @@ class Registration:
     text: str
     config: Mapping[str, Any]
     document: str
+    base_text: str = ""
 
     @classmethod
     def load(cls, repo: Path) -> Registration:
@@ -212,7 +245,8 @@ class Registration:
 
     @classmethod
     def from_text(cls, text: str, document: str) -> Registration:
-        found = null_sha256(text)
+        base, added = strip_p_intervals(text)
+        found = null_sha256(base)
         if found in SUPERSEDED_SHA256:
             raise PreRegistrationError(f"the configuration has a superseded hash {found}")
         accepted = accepted_null_hash(document)
@@ -221,14 +255,23 @@ class Registration:
                 f"the configuration with its placeholders reset has sha256 {found}, "
                 f"not the registered {accepted}"
             )
-        _expect("placeholders", tuple(placeholder_lines(text)), PLACEHOLDERS)
+        _expect("placeholders", tuple(placeholder_lines(base)), PLACEHOLDERS)
         config = yaml.safe_load(text)
         check_values(config)
-        return cls(text, config, document)
+        found_registration = cls(text, config, document, base)
+        if added:
+            found_registration.require_frozen()  # the fee amendment comes after H
+            _check_p_intervals(added)
+        return found_registration
 
     @property
     def sha256(self) -> str:
         return sha256_bytes(self.text.encode())
+
+    @property
+    def base_sha256(self) -> str:
+        """The sha256 without the fee amendment's intervals: the file H was read with."""
+        return sha256_bytes((self.base_text or self.text).encode())
 
     def value(self, path: tuple[str, ...]) -> Any:
         node: Any = self.config

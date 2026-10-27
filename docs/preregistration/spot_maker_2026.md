@@ -896,3 +896,54 @@ null-placeholder hash is recorded. No reason below is drawn from data.
 - **P's not-assessed statuses in the P table**: "not assessed (P unreadable on
   Binance)" reads "candidate, not confirmed (P unreadable)", "not assessed (P
   read failed)" reads "candidate, not confirmed (P read failed)".
+
+### 2026-10-27: the fill rule's calibration against a book
+
+Committed before the code freeze and before this study copied, opened or
+computed on any print of BTC/FDUSD; no result of the calibration had been
+computed. Its reason is a review of the design, not data: every verdict here
+rests on a prints-only resting-order rule (the touch taken from the last
+print of each side, a fill only on a print through the order's price), which
+is uncalibrated unless the same quoters are also run on days where a book
+exists, under a book's queue model and its trade-through and touch rules,
+and the prints-only rule is seen to rank with them. A positive result at a
+zero maker fee could otherwise be an artefact of the proxy.
+
+- **Added as a registered measurement**, run in stage D and written into a new
+  placeholder, `calibration.result`, frozen by the D amendment; the
+  configuration's new section `calibration` holds every value below.
+- **The days**: Bybit linear BTCUSDT, 2024-02-01 to 25, the earlier
+  market-making rounds' development block D, whose book (ten levels every
+  100 ms), prints and funding were checked on 2026-10-27 to be on disk in the
+  main checkout's data, all 25 days; read in place, never copied, moved or
+  fetched. They belong to no block of this study and are read by the
+  calibration alone. Nothing is added to the disk budget.
+- **The runs**, for MK-Q and MK-SQ, each day: (a) with the book, in the
+  repository's market-making simulator, under its trade-through, queue and
+  touch rules, the slot's quoting rule as a quoter (its requote instants,
+  skew and limit; the book's best bid and ask as the touch; post-only against
+  the other side; no replenishment between instants; an order the simulator
+  keeps when its price is unchanged keeps its place); (b) with this study's
+  prints-only quoter on the same day's prints thinned to the median count of
+  BTC/FDUSD's aggregated prints a day over D's usable days, seeds 0 to 9, the
+  proxies cold. MK-SQ's decisions are S25-PF's, frozen, on the day's seed-0
+  thinned prints, cold. MK-S is not run apart: its orders rest at the same
+  proxies under the same rule, and the label below covers its verdict too.
+- **Recorded per day**: per slot and rule, the maker fills, their volume and
+  the making part (the mean 5 s markout of the maker fills, bp per fill).
+- **The registered test**: on at least 80% of the days the simulator does not
+  exclude (with a maker fill under every rule), the maker volume filled
+  orders trade-through <= queue <= touch (volume, since the book's touch rule
+  fills an order whole at one print), and the prints rule's making part lies
+  between the book's trade-through and touch making parts, inclusive; for
+  both slots. If it fails, or cannot run, every verdict of this study carries
+  the label "uncalibrated fill rule" on the page beside its number, and the
+  calibration is recorded "not run (no book day on disk)" when no book day is
+  found. Nothing else changes: no status, kill or threshold depends on it.
+- **The run log** gets a row for it in stage D.
+- The configuration changed outside its placeholders, so its null-placeholder
+  hash is recomputed as registered (the sha256 of
+  `market_making.prereg.unfrozen_text` of the file); the registered
+  `8af7842a…` is superseded.
+
+Null-placeholder sha256: `aa367b6434a7e8dc7553a2a3ce20eed2814d33f7844ff4d2e919bfe003be0db2`
