@@ -5,7 +5,7 @@ data, of the author's 2025 research on Binance spot BTC/FDUSD. That research
 covered these dates, so no day here is held out, and nothing
 here is a registered result: no registration is changed, and the spot study's
 blocks, statuses and verdicts are untouched. Its one question is where the 2025
-profit on this pair came from, asked by running the same decisions at two fees.
+profit on this pair came from, asked by running one recipe's decisions at two fees.
 
 ## What was run
 
@@ -18,11 +18,16 @@ profit on this pair came from, asked by running the same decisions at two fees.
   `gbm` at the repository's defaults (seed 42) on every tenth row, hold 50 s
   closed by time, the hold-first rule at 240 trades a day with θ set on the
   window's threshold days, the spot folds' purges (the hold plus 61 minutes,
-  and a training label that reads past the threshold days dropped), one clip
-  of 0.010 BTC, taker in and taker out by the side-correct print rule, no
-  entry before 00:01 or after 23:58 UTC, flat at 23:59.
-- **Windows**: A is the author's 2025 split; B is the same recipe on May and
-  June 2025.
+  and a training label that reads past the threshold days' first stamp
+  dropped), one clip of 0.010 BTC, taker in and taker out by the side-correct
+  print rule, no entry before 00:01 or after 23:58 UTC, flat at 23:59.
+- **Windows**: A combines the 2025 research's v0.5 training and threshold days
+  (2024-11-05 to 2025-01-14; 2025-01-15 to 01-21) with its v0.4 test days
+  (2025-02-04 to 02-26). The 13 days between (2025-01-22 to 02-03) are fetched
+  but unused, so A's fit is 3 to 6 weeks old on its test days: v0.4's fit,
+  trained to 2025-02-03, was 1 day to 3 weeks old on those days, and v0.5
+  began its test on 2025-01-22, the day after its threshold days. B is the
+  same recipe on May and June 2025.
 - **Fees**, from the spot study's registered fee table, whose BTC/FDUSD interval
   from 2024-04-25 06:00 to 2026-01-29 covers every day here: (a) zero maker and
   zero taker, as the author's 2025 backtest charged on this pair; (b) the
@@ -33,8 +38,25 @@ profit on this pair came from, asked by running the same decisions at two fees.
 
 Net in quote is in FDUSD, a dollar stablecoin, per 0.010 BTC clip. "Pooled" is
 the window's net over its entry notional (every trade weighted by its
-notional); "mean of days" and "day t" are over the days with a trade and are
-descriptive only.
+notional); "days positive", "mean of days" and "day t" are over the days with
+a trade, not over every test day, and are descriptive only (A+B two-sided at zero fees: 22 days positive of the 44 with a trade, of 46 test days).
+
+## How this recipe differs from the 2025 research
+
+S25-PF is this repository's 2026 registered configuration
+(`docs/preregistration/spot_2026.md`): S25's coordinates with its nine print
+inputs, because the public archive of this pair holds prints and no book. It is
+not the 2025 research's recipe. The 2025 column is as that research's code and
+printed outputs record it.
+
+| | The 2025 research | S25-PF, here |
+|---|---|---|
+| Inputs | about 150-160 book and trade features selected from 357-359 | 9 print members |
+| Label | entry at the 1 BTC book VWAP, exit after 3-30 ticks (about 0.3-3 s), profit threshold 1 FDUSD (about 1 bp) | 50 s print round trip at 0 bp |
+| Model | XGBoost, 300 trees, depth 6, learning rate 0.03, class weights 3 / 0.5 / 3 | `gbm`, 300 trees, depth 4, learning rate 0.05, inverse-frequency weights: the hold class weighted 11.7 on A (2.9% of its labels) and 12.0 on B (2.8% of its labels), long and short about 0.7 |
+| Volatility filter | rows with volatility at or below 2e-5 dropped and held | none |
+| Thresholds | Optuna for a trade target, best 450 trades a day (v0.5) | the hold-first rule at 240 a day |
+| Hold | `close_time` 500, unit unverified | 50 s |
 
 ## The windows and their fits
 
@@ -77,7 +99,7 @@ Test days excluded by the spot loader's rules: A: none; B: none.
 
 ## What it shows
 
-Over both windows the result is positive at neither fee. At zero fees it is -1.11 bp a trade on window A and -0.08 bp on B (-0.19 bp over both, -0.020 FDUSD a 0.010 BTC trade, day t -1.17 and -0.32); at the Regular account's 10 bp taker fee it is -21.11 and -20.08 bp, with 0% of days positive. The trades are the same in both tables; only the fee differs. A taker round trip pays the fee on both fills, so it is positive only when its gross edge per side exceeds the fee per side: that edge is the break-even fee, here -0.55 bp of turnover on A and -0.04 bp on B (-0.09 bp over both). It is not above zero, so no fee, zero included, makes this recipe positive on these days, and the 10 bp taker fee adds about 20 bp of entry notional a round trip, which is the whole of the loss at the Regular account. The model has little to act on: its mean rank IC on the test days is 0.0053 on A and 0.0042 on B, and its thresholds, set for 240 decisions a day on the threshold days, give 66 and 787 a day on the test days, of which the one-position rule keeps 9.4 and 74.2 trades. The long-only variant nets -3.02 and -0.29 bp a trade at zero fees, while BTC moved -79 and 8 bp a test day on average. So on these windows the print-only recipe does not reproduce a profit, even at the zero fee the 2025 backtest charged. What the two tables do show is the size of the fee: at the Regular account's fee a taker recipe needs a gross edge above 20 bp a round trip, several times the gross edges measured on this pair here and on the spot study's 2026 days (2.65 bp a trade for S25-PF at zero fees on H), so a profit of this kind on BTC/FDUSD needed the zero fee. S25 itself reads 31 book features, which the public archive of this pair does not hold, so this is S25-PF's recipe, not S25's.
+Over both windows the result is positive at neither fee. At zero fees it is -1.11 bp a trade on window A and -0.08 bp on B (-0.19 bp over both, -0.020 FDUSD a 0.010 BTC trade, day t -1.17 and -0.32); at the Regular account's 10 bp taker fee it is -21.11 and -20.08 bp, with 0% of days positive. The trades are the same in both tables; only the fee differs. A taker round trip pays the fee on both fills, so it is positive only when its gross edge per side exceeds the fee per side: that edge is the break-even fee, here -0.55 bp of turnover on A and -0.04 bp on B (-0.09 bp over both). It is not above zero, so no fee, zero included, makes this recipe positive on these days, and the 10 bp taker fee adds about 20 bp of entry notional a round trip, which is the whole of the loss at the Regular account. The model has little to act on: its mean rank IC on the test days is 0.0053 on A and 0.0042 on B, and its thresholds, set for 240 decisions a day on the threshold days, give 66 and 787 a day on the test days, of which the one-position rule keeps 9.4 and 74.2 trades. The long-only variant nets -3.02 and -0.29 bp a trade at zero fees, while BTC moved -79 and 8 bp a test day on average. So on these windows S25-PF, which shares the pair, the zero fee and the 0.010 BTC clip with the 2025 research but not its inputs, label, model, filter or thresholds, is positive at neither fee. What the two tables do show is the size of the fee: at the Regular account's fee a taker recipe needs a gross edge above 20 bp a round trip, several times the gross edges measured on this pair here and on the spot study's 2026 days (2.65 bp a trade for S25-PF at zero fees on H), so a profit of this kind on BTC/FDUSD needed the zero fee. Whether the 2025 research's own recipe would have made money on these days is not asked here: S25, the configuration S25-PF varies, reads 31 book features, and the 2025 research read book features and a book label, none of which the public archive of this pair holds.
 
 ## Window A, day by day (two-sided)
 

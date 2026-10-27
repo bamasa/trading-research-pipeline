@@ -35,7 +35,9 @@ from trading_research.spot.binance import read, verify
 from trading_research.spot.fetch import check_zip
 
 ROOT = Path("data/replication")
-#: The days fetched: the author's 2025 split with four warm-up days, and May to June 2025.
+#: The days fetched: four warm-up days, the 2025 research's v0.5 training and threshold
+#: days, the 13 days after them (fetched, unused by window A) and its v0.4 test days,
+#: then May to June 2025.
 SPANS: tuple[tuple[date, date], ...] = (
     (date(2024, 11, 1), date(2025, 2, 26)),
     (date(2025, 5, 1), date(2025, 6, 30)),

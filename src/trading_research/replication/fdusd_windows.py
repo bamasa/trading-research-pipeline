@@ -56,6 +56,8 @@ class Window:
                     tuple(span_days(*self.test)), self.inner[0], self.test[0])  # fmt: skip
 
 
+#: A: the 2025 research's v0.5 training and threshold days with its v0.4 test days
+#: (the 13 days between, 2025-01-22 to 02-03, unused); B: May and June 2025.
 WINDOWS: dict[str, Window] = {
     "A": Window("A", (date(2024, 11, 5), date(2025, 1, 14)), (date(2025, 1, 15), date(2025, 1, 21)),
                 (date(2025, 2, 4), date(2025, 2, 26))),
