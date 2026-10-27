@@ -1,0 +1,282 @@
+# Maker versions of S25-PF on Binance BTC/FDUSD at the fees charged, on 2026
+# data: the machine-readable half of the pre-registration.
+#
+# docs/preregistration/spot_maker_2026.md is the other half: it says what each
+# value means and why it was chosen. The two were committed together on 27
+# October 2026, on the local branch spot-maker/prereg cut from spot/prereg at
+# 8270e6a, before this study copied, opened or computed on any print. They must
+# agree.
+#
+# Every value here is fixed now, except those set to null with the comment
+# "frozen by the D amendment". Those are set on block D and written into this
+# file by the single dated amendment, before block H is read. The amendment
+# records the sha256 of this file after that write; the study's ledger refuses
+# to open a held-out block unless the file on disk has it and is committed and
+# clean. Nothing else here changes, except under the document's amendment
+# protocol.
+#
+# Conventions of the spot study hold: units in the key's suffix (_bp, _ms, _s,
+# _btc, _mb), UTC dates inclusive, seed ranges inclusive. The instrument is
+# keyed by venue and market, never by symbol alone.
+#
+# The study's code reads this file: spot_maker/registration.py validates it
+# against the code's constants and its registered sha256, and the fee table is
+# read from the fees block when the code runs.
+
+name: spot_maker_2026_preregistration
+registered: 2026-10-27
+registered_against: "8270e6a"  # spot/prereg after the spot study's H results were committed
+document: docs/preregistration/spot_maker_2026.md
+registers: maker versions of S25-PF on Binance spot BTC/FDUSD at the fees a Regular account is charged; three slots under Holm with m = 3
+searched: false  # no value chosen on an outcome; the signal is frozen, the quoting coordinates are fixed here
+instrument: {id: "binance-spot:BTCFDUSD", key: binance_spot_BTCFDUSD, venue: binance, market: spot, symbol: BTCFDUSD, quote: FDUSD, plane: prints, tick: 0.01, lot: 1.0e-05, steps_from: "the spot study's D amendment, configs/spot_2026.yaml data.instrument_spec"}
+computed_before_registration: "nothing: this study has copied, opened or computed on no print of any year; the sizes of the spot study's converted BTCFDUSD day files were listed (prior_information.file_listing)"
+
+prior_information:
+  spot_study: "the spot study's registration, configuration, code and frozen values on branch spot/prereg (configs/spot_2026.yaml at its frozen sha256 d1625173c0b7a15c8785a957d77596210f46893e792c834449152e39cf5476b7), its D amendment's development numbers included, and everything its own registration lists as known"
+  spot_H_page: "experiments/results/spot_2026_page.md, read in full on 2026-10-27: taker results only (document, What was known, item 3)"
+  spot_H_numbers_seen: {S25-PF: {status: killed, first_kill: "K1 at -17.35", net_bp_trade_regular: -17.35, gross_bp_trade_zero_fees: 2.65, gross_bp_turnover: 1.33, trades: 4427, placebo_percentile: 98.5, k_nbhd_median: -17.44, vip3: -9.35, vip9: -1.95, brackets: {optimistic: -17.26, pessimistic: -23.17, stale: -22.95, worse_of_two: -28.02}}, S25-PFT: {net_bp_trade_regular: -17.71, zero_fees: 2.29, trades: 5581}, thinned_calibration: {a_buy: -2.91, a_sell: -3.17, capacity_median: 0.0044}, bybit_rows: "S25-BB, S25-T, S25-PB and FILL-S as on the page"}
+  spot_H_results_file: "experiments/results/spot_2026_H.json, its per-day records, the spot ledger and the spot run log: not opened for this registration"
+  file_listing: "names and sizes of the spot study's converted BTCFDUSD day files (data/spot/binance/prints/BTCFDUSD/ in its checkout), listed on 2026-10-27: 200 files, the reader-test days, W, D and H's 75 days, no E day; monthly sizes and H's five smallest files (70.6 to 133.1 KB)"
+  study_2025_maker: "the 2025 registration's maker slot S-M: the making part (the 5 s markout over passive fills, bp per fill) and K-dir, reused as definitions; that study's held-out reads have not happened and none of its results is known"
+  not_known: "the width of BTC/FDUSD's touch in 2026, any markout of a passive fill, any fill rate of a resting order, any touch-proxy statistic: none was computed by this repository"
+
+information_set:
+  signal: "S25-PF's frozen fit (hold 50 s, label fee 0) and its hold-first thresholds at 240 a day, made by the spot study on D (fits on 2026-05-01..07-24, thresholds on 07-25..31); taken as frozen, nothing refitted"
+  author: "the spot study's confirmed information set: the author's ends on 2025-12-31; no print of D, H or P was seen before it"
+  spot_H_read: "the spot study's slots' results on H are known (prior_information.spot_H_numbers_seen); this study's slots are new; no maker number, resting-order fill, passive markout or touch-proxy statistic on H was computed by anyone in this repository"
+  signal_on_H: "the decision to run this study followed the spot H page, which shows S25-PF's gross edge at zero fees positive on H at taker fills; MK-S and MK-SQ are therefore not blind to the sign of their signal's gross edge on H's days"
+  successor_rule: "the spot registration spends H and P for its slots and sends a successor of its slots to days after 2026-12-31; by the owner's decision of 2026-10-27 this study's maker slots are new slots, not successors or corrections of the spot study's, and read H once under their own ledger"
+  consequence: "H can make a slot no more than a candidate; P (2026-11-01..12-31, after this registration) is the only confirmatory block"
+
+expected_outcome:
+  arithmetic: "S25-PF on H paid +2.65 bp a round trip before fees at taker fills (+1.33 bp of turnover per side); a maker pays 0 on both legs, but its buy at the bid fills only when sellers trade through it, mostly on decisions the price moved against; the touch of BTC/FDUSD is likely one tick (0.01 FDUSD, about 0.001 bp), so no spread is earned; an exit still resting at 23:59 pays 10 bp as a taker"
+  predictions: {MK-S: "killed by K1 on H, net between -1 and 0 bp per fill (-2 to 0 bp per round trip), inside the owner's range of -2 to +2 bp per round trip", MK-Q: "killed by K1 on H, its making part negative (K-dir also fires)", MK-SQ: "killed by K1 on H, between MK-Q and MK-S"}
+  not_predicted: [the fill rates, the sign of the touch bracket's result, the size of the making part]
+
+data:
+  plane: "Binance spot BTCFDUSD aggregated prints with the aggressor's side, in the spot print contract (spot/prints.py): timestamp, price, size, aggressor, trade_id, rpi, source"
+  source: "the spot study's converted day files, data/spot/binance/prints/BTCFDUSD/<day>.parquet in that study's checkout (ignored by git), which it fetched, checked against Binance's .CHECKSUM and converted by its strict parser"
+  copy: "each day this study may read is copied, read-only at the source, to this checkout's data/spot/binance/prints/BTCFDUSD/<day>.parquet; the copy's sha256 equals the source file's, recorded per file in data/spot_maker_2026/copies.json (never committed); a day is copied only inside an access that permits it; nothing is fetched from the network"
+  absent_at_source: no_prints_file  # an exclusion, as the spot loader names it
+  E: never copied (the spot study never fetched E; its days are absent at the source)
+  P: "not on disk; fetched only if P opens, by the spot study's fetch code and terms, into this checkout"
+  loader: "spot/loader.load_prints_day, unchanged, inside this study's access: the rows of the UTC day, the day's own tick, exclusions no_prints_file, no_print, off_grid_price; plus fee not sourced from the fee table"
+  unreadable: a block with more than a quarter of its days excluded
+  reader_test_result: null  # {day: {status, rows, tick, exclusions, notes, checks}} on the three reader-test days; frozen by the D amendment
+  excluded_days_D: null  # [[day, reason]] for each excluded day of W or D; frozen by the D amendment
+
+fees:
+  rule: "every fill pays the fee of the sourced interval in force at the fill's time, in bp of the fill's notional, booked in quote at the fill price; a resting order's fill pays the maker fee, a flatten the taker fee; a day not covered at the verdict tier is excluded, reason fee not sourced"
+  verdict_tier: {binance_spot_BTCFDUSD: regular}  # the tier an account holds with no 30-day volume, coin holdings or programme membership
+  discounts_applied: none
+  copied_from: "configs/spot_2026.yaml fees, the Binance rows and their sources, unchanged"
+  intervals:
+    binance_spot_BTCFDUSD:
+      - {start: "2024-04-25T06:00:00Z", end: "2026-01-29T00:00:00Z", sources: [B3, B4, B6, B8], tiers: {regular: [0.0, 10.0], vip1: [0.0, 10.0], vip2_to_vip9: [0.0, 0.0], spot_liquidity_provider: [0.0, 0.0]}, notes: "covers no block"}
+      - {start: "2026-01-29T00:00:00Z", end: "2026-10-22T00:00:00Z", sources: [B4, B5, B6, B7, B8], tiers: {regular: [0.0, 10.0], vip3: [0.0, 6.0], vip9: [0.0, 2.3]}, notes: "maker 0 for every account, taker each tier's standard taker; end: the live capture of 2026-10-22"}
+  maker_zero_since: "2024-04-25T06:00:00Z"  # B3: the pair's terms; every capture since lists a zero maker fee (B6)
+  P_days: "not covered; a dated fee amendment adds intervals for them by the spot study's P procedure (configs/spot_2026.yaml fees.P_procedure), before P opens, and adds nothing else"
+  sources:
+    binance_announcement: "https://www.binance.com/en/support/announcement/detail/{code}, read through https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query?articleCode={code}"
+    B3: {announcement: 3d8514bbc817423eba52fb23483bcbed, dated: 2024-04-17, what: "the pair's terms from 2024-04-25 06:00"}
+    B4: {announcement: 4856a6d4e4014d4e8a5a29ec5fb44857, dated: 2026-01-15, what: "the zero taker fee for VIP 2-9 and Spot Liquidity Provider accounts ends on 2026-01-29 00:00"}
+    B5: {url: "https://www.binance.com/bapi/accounts/v1/public/commission/symbol-activity-list?currentPage=1&pageSize=500", also: "https://www.binance.com/en/fee/tradingPromote", retrieved: 2026-10-22}
+    B6: {what: "B5's endpoint in web.archive.org captures", captures: [20240418104827, 20241002101447, 20250101172920, 20250201193444, 20250302084123, 20250311092840, 20250413120429, 20250504030612, 20250601144417, 20250707123021, 20250803084207, 20250902195812, 20251001083945, 20251101001651, 20251202190348, 20260102213736, 20260127234017, 20260130063053, 20260226155955, 20260404220420, 20260505173725, 20260601115622, 20260712063105, 20260801085657, 20260901093918, 20261002084516], empty: [20240426125251]}
+    B7: {url: "https://www.binance.com/en/fee/trading", retrieved: 2026-10-22}
+    B8: {url: "https://www.binance.com/bapi/composite/v1/public/commission/trade-level/get", captures: [20250312, 20250612, 20260110, 20260324, 20260830]}
+
+blocks:
+  reader_test: {days: [2026-03-03, 2026-03-04, 2026-03-05], use: "the readers' proof, stage 0's timing and the fill rule's checks; numbers discarded", read: freely}
+  W: {start: 2026-04-01, end: 2026-04-30, days: 30, use: "the signal's warm-up only (2026-04-30 as D's first day's history); never scored", read: freely}
+  D: {start: 2026-05-01, end: 2026-07-31, days: 92, use: "sigma_D and the minimum detectable effects; development summaries; the rehearsal on July; in-sample for the signal", read: freely}
+  E: {start: 2026-08-01, end: 2026-08-07, days: 7, use: embargo, read: never}
+  H: {start: 2026-08-08, end: 2026-10-21, days: 75, use: "the three slots' statuses and every measurement", read: "once, after the D amendment is committed, through the ledger"}
+  P: {start: 2026-11-01, end: 2026-12-31, days: 61, use: "confirmation of a candidate on H", read: "once, only for a candidate, after H's results are committed, the fee amendment covers P's days and 2026-12-31 is published", deadline: "the later of 2027-01-31 and 30 days after the commit that first adds H's results (committer date, UTC)"}
+  days_independent: "each day starts flat with no resting order; anything open at 23:59 is cancelled or flattened; no position is held across midnight"
+  warm_cold: "the signal's features read the previous calendar day's prints when it is usable and in the same block, or W before D; any other day starts cold and its first 61 minutes are not scored (H's first day and P's start cold); the touch proxies carry across midnight on a warm day"
+
+common:
+  clip_btc: 0.010  # S25's clip; every order of every slot is one clip, or two for MK-SQ's signal side
+  latency_ms: 10  # every post, requote and cancel takes effect 10 ms after its decision
+  posting_hours: {first: "00:01", last: "23:58"}  # no entry, quote or requote decided outside; an exit may be decided and requoted until the flatten
+  flatten_at: "23:59"  # every resting order cancelled, any position closed by a taker order
+  touch_proxies: "spot/grid.py's: the ask proxy is the price of the last buyer-initiated print stamped at or before the instant, the bid proxy the last seller-initiated one's, the mid proxy their mean; every print counts; a side's proxy is undefined until that side prints, and carries across midnight from the previous usable day on a warm day"
+  post_only: "a buy is posted at min(target, ask proxy - tick) and a sell at max(target, bid proxy + tick) when the other proxy is defined; a buy's price is rounded down to the tick, a sell's up"
+  skew: "a position q in BTC (positive long) moves both quote prices to price x (1 - skew_bp_per_clip x 1e-4 x q / clip) before the post-only rule"
+  short_side: "from held inventory, as the spot study: each day starts with one unit of BTC and quote worth three units at the day's first print, the unit being the slot's position limit; K-inv checked in both bookings (quote and received); the held unit's own P&L, marked from the day's first print to its last, is a separate line, never in a verdict"
+  decisions_at: "print-grid row stamps (the signal) and clock instants (the requotes); every quantity in time is measured on stamps"
+
+signal:
+  row: S25-PF
+  from: "the spot study's frozen files, in its checkout (ignored by git): models/spot_2026/slots/S25-PF.json and models/spot_2026/weights/S25-PF__hold_s=50__label_fee_bp=0.pkl"
+  slot_file_sha256: d4048fa0902a5490c0b2238b52d7f0f4ed9c7bb558dc60345068598c8697a5d8  # configs/spot_2026.yaml artefacts.frozen_slot_files_sha256.S25-PF
+  fit: S25-PF__hold_s=50__label_fee_bp=0.pkl
+  fit_sha256: 4cf14dd130d361f9f8159da9ca272b5d99d6d30dfee7eacd9e0cb5c6d13ec9ba  # configs/spot_2026.yaml models.weights_sha256
+  spot_config_sha256: d1625173c0b7a15c8785a957d77596210f46893e792c834449152e39cf5476b7  # the spot study's frozen configuration, which binds both
+  cell: "hold_s=50|trades_per_day=240|label_fee_bp=0"
+  theta: {theta_long: 0.46583154797554016, theta_short: 0.4700717031955719}  # configs/spot_2026.yaml models.thresholds.S25-PF, S25's cell
+  copies: "models/spot_maker_2026/signal/S25-PF.json and models/spot_maker_2026/signal/S25-PF__hold_s=50__label_fee_bp=0.pkl (ignored by git), each sha256 checked at the copy and at every gate"
+  inputs: "the nine print members (spot/features_prints.py, S25-PF's) on the print grid, the previous usable day's tail as history on a warm day"
+  probabilities: "spot/days.predict: every row at or after the day's first scored stamp with every input present, the inputs through the store's float16 cast; any other row holds"
+  decisions: "the hold-first rule with the frozen thresholds on every scored row: long, short or hold; a decision's instant is its row's stamp"
+  hold_s: 50
+  refitted: never
+
+fills:
+  order: "a resting limit order of side s (+1 buy, -1 sell), price p and size q, live from its decision + 10 ms until its cancel's decision + 10 ms (excluded)"
+  primary: "trade_through: it fills on reachable prints of the other aggressor side (a buy on seller-initiated prints, a sell on buyer-initiated ones) stamped while it is live at a price strictly beyond p (below p for a buy, above for a sell), in archive order, each print filling min(remaining size, the print's size) at p: the queue at p is assumed exhausted, the pessimistic rule"
+  touch: "the optimistic bracket: the same with prints at p or beyond"
+  delayed: "K-fill's run: the trade-through rule with the first qualifying print after the order goes live filling nothing, so every fill comes one further print later"
+  fill_time: "the print's stamp, also the fee's instant"
+  fee: maker fee of the table at the fill's instant (0 at regular)
+  cancel: an order's unfilled part at its cancel is cancelled and never fills
+  rounding: a remainder of at most 1e-12 BTC is none
+  flatten: "at 23:59 every resting order is cancelled and a position is closed by one taker order of its size, priced by the spot study's side-correct print rule (spot/fills.fill_orders with the position as its clip, arrival 23:59 + 10 ms, the day's end as its bound, its fallback when no print of its side follows), paying the table's taker fee at its instant (10 bp at regular); counted"
+  rule_variants: [trade_through, touch, delayed]
+
+slots:
+  MK-S:
+    question: "does S25-PF's signal pay as a maker at the fees charged"
+    signal: S25-PF
+    entry: "at a decision row t of side s, flat and with no resting order, inside the posting hours: one clip on side s at its own proxy at t (a buy at the bid proxy, a sell at the ask proxy), post-only; cancelled, its unfilled part, at the earliest of t + hold, the first later decision of the other side and 23:59; not posted when its own proxy is undefined (counted)"
+    exit: "decided at the earliest of the first print-grid row stamped at or after the entry's first fill + hold, the first decision of the other side after t, and 23:59; a resting order of the other side for the position, at its own proxy shifted by the skew, post-only, sized at its arrival; requoted every requote_s after its decision at the proxy then; a remainder at 23:59 is flattened as a taker (counted)"
+    one_position: "a decision is taken only at a row stamped at or after the previous entry's cancel decision when nothing filled, or the position's last fill when it did; the others are skipped and counted"
+    hold_s: 50
+    requote_s: 60
+    skew_bp_per_clip: 0
+    limit_clips: 1
+    neighbourhood: {requote_s: [30, 60, 120], skew_bp_per_clip: [-1, 0, 1]}
+  MK-Q:
+    question: "does plain two-sided quoting at the touch proxies pay; the control without a signal"
+    signal: none
+    quotes: "at every requote instant, the multiples of requote_s from midnight from 00:01 to 23:58: both orders cancelled and reposted, a buy at the bid proxy and a sell at the ask proxy, one clip each, shifted by the skew, post-only; the buy's size cut to limit - position and the sell's to limit + position, at their arrival; a side whose own proxy is undefined is not quoted; the orders rest until the next instant's cancel or 23:59"
+    requote_s: 60
+    skew_bp_per_clip: 1
+    limit_clips: 1
+    neighbourhood: {requote_s: [30, 60, 120], skew_bp_per_clip: [0, 1, 2]}
+  MK-SQ:
+    question: "does two-sided quoting with the signal's side doubled pay"
+    signal: S25-PF
+    quotes: "as MK-Q, with requote instants also at every S25-PF decision row inside the posting hours and at each such decision + hold (inside the posting hours); at an instant the signal's side is that of the latest such decision stamped at or before it and less than hold before it, or none; the signal side's order is two clips, the other side's one clip"
+    hold_s: 50
+    requote_s: 60
+    skew_bp_per_clip: 1
+    limit_clips: 2
+    neighbourhood: {requote_s: [30, 60, 120], skew_bp_per_clip: [0, 1, 2]}
+  verdict: "net_bp_fill at the regular tier (maker 0, taker 10 bp)"
+
+metrics:
+  primary: {MK-S: net_bp_fill, MK-Q: net_bp_fill, MK-SQ: net_bp_fill}
+  net_bp_fill: "the day's net in quote over every fill, maker and taker, fees included (the day ends flat), over the day's turnover, the sum of its fill notionals, x 1e4; the daily series has one value per day with at least one fill"
+  net_bp_clip_day: "the day's net in quote over the notional of one clip at the day's first print x 1e4: the net per day; a day without a fill counts 0"
+  gross_bp_fill: "the same before fees, labelled conditional on a zero-fee venue"
+  making_part: "the mean, over every maker fill of the block, of its 5 s markout side x (mid proxy at the fill's stamp + 5 s - the fill price) / the fill price x 1e4, in bp per fill; a fill without a defined mid proxy then has none"
+  markouts_s: [1, 5, 30]
+  spread_part: "side x (the mid proxy just before the fill's print - the fill price) / the fill price x 1e4; the adverse part is the 5 s markout less it"
+  daily_series_decides: "mean, day-level t, Newey-West t (lag 5), median day, K1, K-days, every run's block mean: on the daily series, one row per day, through evaluation/significance and market_making/verdicts.day_t and holm"
+  run_mean: "a run's block mean is the mean of its daily net_bp_fill over the block's days with a fill of that run; a run without a fill on the block scores 0"
+  mde:
+    formula: "(3 + 0.84) x sigma_D / sqrt(n_eff); sigma_D the standard deviation (ddof 1) of the slot's daily series over D's days with a fill; n_eff = 75 x the share of D's usable days with a fill; on P, x sqrt(75 / P's usable days)"
+    sigma_d: null  # {slot: sigma} over D; frozen by the D amendment
+    value: null  # {slot: mde}; frozen by the D amendment
+
+family: [MK-S, MK-Q, MK-SQ]
+statuses:
+  m: 3
+  bar: {holm_alpha: 0.05, one_sided: true, day_t_min: 3.0, newey_west_t_min: 2.0, newey_west_lag: 5, median_day_positive: true, min_days_with_fill: {H: 20, P: 10}}
+  precedence: ["void (K-units, K-acct, K-inv, K-pos; counted as killed)", "inconclusive (too few fills) (K-trades)", "killed (any kill)", "candidate on H, passes on P (the bar met)", "inconclusive, below the minimum detectable effect when |mean| < MDE, else inconclusive"]
+  holm_p_one: "a slot void, killed, inconclusive with too few fills, not assessed or not taken to the block enters Holm with p = 1"
+  P_table: {candidate_passes: confirmed, candidate_fails_no_kill: "candidate, not confirmed", candidate_killed: killed on P, candidate_void: void, candidate_P_unreadable: "candidate, not confirmed (P unreadable)", candidate_P_failed: "candidate, not confirmed (P read failed)", candidate_P_not_read: "candidate, not confirmed (P not read by its deadline)", other: that status}
+  unreadable: "a block with more than a quarter of its days excluded is unreadable: every slot not assessed (H unreadable on Binance); a read that fails twice at the same stage with the same exception, or not finished after five resumptions, closes: not assessed (H read failed)"
+  defect_after_read: "void (defect found after the <block> read): only lowers a status"
+
+kill_conditions:
+  per_slot:
+    MK-S: [K1, K-dir, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-fill, K-cap]  # the first kill is the first that fires in this order
+    MK-Q: [K1, K-dir, K-drift, K-nbhd, K-days, K-latency, K-fill, K-cap]  # no signal, so no K-placebo
+    MK-SQ: [K1, K-dir, K-placebo, K-drift, K-nbhd, K-days, K-latency, K-fill, K-cap]
+  void: [K-units, K-acct, K-inv, K-pos]
+  K1: "the mean of the slot's daily net_bp_fill on the block is <= 0 at the registered fees"
+  K-dir: "the making part, the mean 5 s markout over the block's maker fills, is <= 0 (bp per fill)"
+  K-placebo: "the true mean does not exceed both the 95th percentile of the 200 random-direction runs' means and the sign-flipped signal's run mean"
+  K-drift: "the true mean does not exceed the larger of the all-long and the all-short runs' means; for MK-S and MK-SQ every signal direction replaced by long (short); for MK-Q, quoting the buy side only (the sell side only)"
+  K-nbhd: "the median, over the slot's nine neighbourhood cells (requote x skew, its own cell included), of each cell's block mean is <= 0; a cell without a fill scores 0"
+  K-days: "half or fewer of the series' days are positive"
+  K-latency: "a positive result whose run with every post, requote and cancel taking effect 110 ms after its decision has a block mean <= 0"
+  K-fill: "a positive result whose run under the delayed rule (every fill one further qualifying print later) has a block mean <= 0"
+  K-cap: "capacity: the slot's maker fills on the block exceed 10% of the venue's printed volume at the fills' prices: the sum of the maker fill sizes over the sum, over each day and each distinct price the slot filled at that day, of the volume of every print at that price that day (BTC)"
+  K-units: "any fill's fee in bp of its notional differs from the table's for its kind (maker or taker), tier and instant, at a relative tolerance of 1e-12"
+  K-acct: "the day's net differs from the account's change (spot/account.account_day, both bookings), or turnover from the sum of fill notionals, in any run of the read"
+  K-inv: "the spot account would hold less than zero of either coin at any fill (spot/account, the unit the slot's limit)"
+  K-pos: "the position exceeds the slot's limit either way at any fill (spot/account's position check, the unit the limit)"
+  K-trades: "fewer than 100 fills (maker and taker) over the block: inconclusive (too few fills), before any kill"
+  K-MDE: "a result that does not pass, with no kill, smaller in size than the MDE: inconclusive, below the minimum detectable effect"
+  fire_only_when_positive: [K-latency, K-fill]
+
+placebo_percentile: 95
+placebos:
+  runs_through: "the same executor, fee, account and day rules as the true run, at the true run's decision instants, each re-applying its own position and order rules"
+  sign_flipped: {what: every signal direction reversed, slots: [MK-S, MK-SQ]}
+  random_direction: {what: each direction drawn +1 or -1 at random, draws: 200, seeds: "0-199, numpy.random.default_rng([seed, day ordinal])", slots: [MK-S, MK-SQ]}
+  all_long_all_short: {what: K-drift's two runs, slots: [MK-S, MK-Q, MK-SQ]}
+
+measurements:
+  beside_every_slot: [net_bp_clip_day, gross_bp_fill, making_part, spread_part, adverse_part, "markouts at 1, 5 and 30 s", fills a day (maker and taker), "fill ratio (filled size over posted size)", the touch bracket, the delayed run, the 110 ms run, the nine cells, the drift runs, "every tier of the fee table and zero fees", the flattens (count and notional), the held unit's own P&L, max drawdown of the cumulative daily net, days positive and the median day, capacity ratio, "the touch proxies' width (ask - bid proxy, bp of mid) at the requote instants, median per day", prints a day]
+  MK-S_only: [entries posted, entries filled (any part), entries cancelled unfilled, entries skipped busy or without a proxy, exits flattened, realised hold]
+  tiers: "net_bp_fill at vip3 (0 / 6.0) and vip9 (0 / 2.3), conditional on that tier's eligibility; only the flattens' fees change"
+  no_number_beside_the_verdict_tier: "no number at another tier, at zero fees, under the touch bracket, in a cell, or in the held unit's P&L may be described as a slot working"
+  result_D: null  # {slot: development summary}, labelled development; frozen by the D amendment
+
+d_procedure:
+  stage_0: "the reader-test days: copied, loaded through the loader, the print contract and tick checked; the signal computed and every slot run once per day; the fill rule's checks (trade-through fills within touch fills, delayed within trade-through, fills inside each order's life and size, the account's identity); timings; every number discarded but the checks and timings"
+  code_freeze: "docs/spot_maker_2026_code_freeze.md names the commit on a line Code-freeze commit: `<sha>`; stage 1, D and the amendment start only if the study code is unchanged since it"
+  stage_1: "W and D copied; the signal computed on D's days (W's last day as D's first day's history)"
+  D: "every run of every slot on D's 92 days; sigma_D and the MDEs; development summaries; the rehearsal: H's status rules applied to July with the values about to be frozen, labelled rehearsal; nothing is chosen, nothing is searched"
+  in_sample: "D is in-sample for the signal: its frozen fit was trained on D's first 85 days and its thresholds set on the last 7; D's numbers describe, they never decide"
+  run_log: "every computation on a D day appends a row (date, run, stage, days) to data/spot_maker_2026/run_log.json, never committed; its sha256 and row count are frozen in compute.record.trials and checked at H's and P's gates"
+
+copy_budget:
+  sizes_mb: {reader_test: 8.04, W: 35.09, D: 76.31, H: 51.33}  # the spot study's converted files, listed 2026-10-27
+  network: none
+  disk_margin_gb: 10  # each stage starts only if free disk exceeds 1 GB by this margin
+  stage_budget_gb: 1
+
+compute:
+  estimate: "features about 1 s a day; MK-S and MK-Q under 3 s a day for every run; MK-SQ about 30 s a day with its 200 random draws; D and H each under an hour on four worker processes"
+  workers: runtime argument, days in parallel, at most four
+  record: null  # stage 0's timings and checks, free disk at each stage, the copy log's sha256 and counts, the code-freeze commit at code_freeze.commit, the run log's {sha256, rows} at trials; frozen by the D amendment
+
+access:
+  development: "the reader-test days, W and D; nothing else of any year; the reader-test days alone also for one of the purposes readers' proof, stage 0 timing and dry run, stamped reader test (<purpose>)"
+  never: ["E", "any day of 2025", "the 2025 study's reader-test days 2026-01-05..07"]
+  ledger: experiments/results/spot_maker_2026_ledger.json
+  H_opens_if: ["the amendment records the configuration's sha256, the file on disk has it and is committed", "the study code is the code the amendment froze: the code-freeze commit compute.record names, HEAD descending from it, nothing of src/, experiments/spot_maker_2026.py, pyproject.toml or uv.lock changed since", "the configuration changed since that commit only in its placeholders and the document only by appending one Frozen configuration sha256 line and no Null-placeholder sha256 line", "the tree clean but for the ledger", "the signal's copies at the registered sha256s", "the run log at its frozen sha256 and row count", "no file of H on disk: no path under data/spot/ names a day of H or a month holding one"]
+  open_entry: "block, the session's commit, the configuration's sha256, the environment fingerprint and the UTC time, committed before the block is copied; every later process checks it in HEAD's ledger, the tree and git diff since the session's commit list nothing but the ledger, and the fingerprint equals the open entry's"
+  session: "a read is bound to (block, commit, configuration sha256, fingerprint); its first process copies the block and records the copies; they are committed; its second computes, writes experiments/results/spot_maker_2026_<block>.json and the page, and closes with the results file's sha256"
+  P_opens_if: ["a slot is a candidate on H", "by P's deadline", "H's results file committed unchanged", "since H's read only README.md, experiments/results/ and docs/ outside docs/preregistration/ changed, but for the fee amendment's intervals", "2026-12-31 published on Binance's archive"]
+  second_read: "raises unless forced; stamped second read; changes no status"
+  spent: "H and P are spent for these slots"
+
+amendment:
+  placeholder_comment: frozen by the D amendment
+  D_amendment: "after D and before H: one dated entry under the document's Amendments, written by the entry point and reviewed before it is committed, recording every placeholder's value and the configuration's sha256 after they are written, on a line Frozen configuration sha256: `<hash>`"
+  corrections_before_H: "a bug fixed only by a further dated amendment that states it and re-runs D in full if it could change a D number; no amendment may cite a D number or anything seen on spot data as its reason, except a fault it names; a change outside the placeholders records a new null-placeholder hash on a line Null-placeholder sha256: `<hash>` before the code freeze"
+  fee_amendment: "the only amendment after H: P's intervals, one line each, from 2026-10-22, by P's deadline, before P opens"
+  after_H: "nothing changes and nothing is re-run under another rule; a defect only lowers a status, stated in docs/spot_maker_2026_defects.md"
+  date: null  # the D amendment's date; frozen by the D amendment
+
+artefacts:
+  results: experiments/results/spot_maker_2026_<block>.json
+  page: experiments/results/spot_maker_2026_page.md
+  trials_manifest: experiments/results/spot_maker_2026_trials.json
+  code_freeze_note: docs/spot_maker_2026_code_freeze.md
+  work: "artifacts/spot_maker_2026/ and data/spot_maker_2026/ (never committed)"
+  headlines:
+    each_slot: "[slot] on H, Binance spot BTC/FDUSD at the fees charged: [status]; first kill [K-x] at [value] against [reference]."
+    MK-S: "S25-PF's signal as a maker on Binance BTC/FDUSD, August to October 2026: [net] bp per fill at a 0 bp maker fee, [fills] fills a day, making part [making] bp per fill; [status]."
+    MK-Q: "Two-sided quoting at the touch proxies on Binance BTC/FDUSD, August to October 2026: [net] bp per fill, making part [making] bp per fill; [status]."
+    MK-SQ: "Quoting with S25-PF's side doubled on Binance BTC/FDUSD, August to October 2026: [net] bp per fill, making part [making] bp per fill; [status]."
+    fill_rule: "Under the touch rule MK-S's net was [touch] bp per fill against [net] under trade-through."
+    P: "[slot] on P: [status]."
+  sentence_rules: "values with two decimals and their unit (K-days: share of days positive; K-cap: share of printed volume; every other: bp, per fill where the quantity is per fill); a slot with no kill reads none at n/a against n/a; [fills] has one decimal"
