@@ -26,7 +26,10 @@ from typer.core import TyperGroup
 
 #: The help panels, in the order the pipeline runs.
 STEPS_PANEL = "The pipeline, step by step"
+EXTEND_PANEL = "Extend: your own strategy as a plugin"
+CHECK_PANEL = "Check: the code against planted answers"
 STUDIES_PANEL = "Registered studies and the agent loop"
+DEPLOY_PANEL = "Deploy: paper trading, no order path"
 RUN_PANEL = "End to end, and reference"
 
 #: The top-level commands in the order the help lists them: the map.
@@ -38,8 +41,12 @@ ORDER: tuple[str, ...] = (
     "search",
     "backtest",
     "review",
+    "strategies",
+    "synthetic",
+    "verify",
     "study",
     "agent",
+    "paper",
     "demo",
     "reproduce",
     "fees",
@@ -48,7 +55,7 @@ ORDER: tuple[str, ...] = (
 #: The map, as one line under the help.
 MAP = (
     "data → regimes → instruments → signal → search → execution (taker | passive | maker) "
-    "→ verdict → study → agent"
+    "→ verdict → study → agent → paper"
 )
 
 #: Top-level commands that stay visible: the panel each sits in and its line of help.
@@ -60,6 +67,27 @@ VISIBLE: dict[str, tuple[str, str]] = {
     "reproduce": (
         RUN_PANEL,
         "The finding of §27 end to end on the perpetuals' panel; the held-out block read once.",
+    ),
+}
+
+
+#: Groups registered from their own modules: the panel each sits in and its line of help.
+GROUPS: dict[str, tuple[str, str]] = {
+    "strategies": (
+        EXTEND_PANEL,
+        "Plugins: list, show, write a new one from a template, check, backtest.",
+    ),
+    "synthetic": (
+        CHECK_PANEL,
+        "Synthetic datasets with a planted, known answer (and their nulls).",
+    ),
+    "verify": (
+        CHECK_PANEL,
+        "The components run on planted data and its null; a page each, non-zero on a failure.",
+    ),
+    "paper": (
+        DEPLOY_PANEL,
+        "10 Paper: a model on a public stream or a replayed day; no key, no order is ever sent.",
     ),
 }
 
@@ -151,6 +179,9 @@ def as_map(app: typer.Typer) -> None:
         if sub.typer_instance is not None
         for info in sub.typer_instance.registered_commands
     }
+    for sub in app.registered_groups:
+        if isinstance(sub.name, str) and sub.name in GROUPS:
+            sub.rich_help_panel, sub.short_help = GROUPS[sub.name]
     for info in app.registered_commands:
         if info.name in VISIBLE:
             info.rich_help_panel, info.short_help = VISIBLE[str(info.name)]

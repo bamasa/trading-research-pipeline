@@ -105,3 +105,43 @@ def test_the_package_runs_as_a_module_with_every_group() -> None:
     assert done.returncode == 0, done.stderr
     for group in GROUPS:
         assert f" {group} " in done.stdout
+
+
+#: Every top-level group the ``trp`` script exposes, and the panel its help sits in.
+EVERY_GROUP = {
+    "data": "The pipeline, step by step",
+    "regimes": "The pipeline, step by step",
+    "instruments": "The pipeline, step by step",
+    "signal": "The pipeline, step by step",
+    "search": "The pipeline, step by step",
+    "backtest": "The pipeline, step by step",
+    "review": "The pipeline, step by step",
+    "strategies": "Extend",
+    "synthetic": "Check",
+    "verify": "Check",
+    "study": "Registered studies",
+    "agent": "Registered studies",
+    "paper": "Deploy",
+    "demo": "End to end",
+    "reproduce": "End to end",
+    "fees": "End to end",
+}
+
+
+def test_trp_exposes_every_group_in_its_panel_in_pipeline_order() -> None:
+    assert tuple(EVERY_GROUP) == ORDER
+    result = runner.invoke(app, ["--help"], terminal_width=200)
+    assert result.exit_code == 0
+    panel, where, seen = "", {}, []
+    for line in result.output.splitlines():
+        if line.startswith("╭─"):
+            panel = line.strip("╭─ ╮").strip("─ ")
+        elif line.startswith("│") and panel != "Options":
+            name = line.strip("│ ").split(" ")[0]
+            if name in EVERY_GROUP:
+                where[name] = panel
+                seen.append(name)
+    assert seen == list(ORDER)
+    for name, prefix in EVERY_GROUP.items():
+        assert where[name].startswith(prefix), (name, where[name])
+    assert "agent → paper" in result.output

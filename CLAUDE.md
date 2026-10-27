@@ -79,6 +79,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `trading-research generate-demo-data` | nothing; writes synthetic data to `data/demo` | synthetic, never evidence about a market |
 | `trading-research synthetic` | nothing; writes generated data and its `truth.json` under `data/synthetic/` | synthetic, never evidence about a market |
 | `trading-research verify` | nothing; generates its own data, writes pages under `artifacts/verify/` | checks code against planted answers, never a market |
+| `trading-research strategies` | the plugin registry; `check` and `backtest` run on the synthetic demo market unless `backtest --input` names a dataset | pages under `artifacts/plugins/`; `new` writes a plugin file and its test |
 | `trading-research validate-data`, `screen`, `review` | files already on disk | no network |
 | `trading-research prepare`, `select`, `train`, `predict`, `backtest`, `retrain-search`, `exit-search` | the pipeline's staged files | the window each is given, nothing else |
 | `trading-research download`, `download-book` | public archives over the network | free days only, written under `data/<study>/`; `fundingRate` and `klines` come as whole months |
@@ -86,7 +87,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `trading-research discover` | the venue's current listing | no historical data |
 | `trading-research reproduce --no-fetch` | the panel already on disk | fetching is the owner's call |
 | `trading-research mm-backtest` | the market-making study's book, prints and funding | `--allow-heldout` only on the owner's grant; `--second-read` never |
-| `data`, `regimes`, `instruments`, `signal`, `search`, `backtest`, `study`, `agent`, `demo`, `fees` | as the commands they group | the `trp` command tree: the commands above grouped by step, under the same names; a role runs the flat names, which the policy knows |
+| `data`, `regimes`, `instruments`, `signal`, `search`, `backtest`, `study`, `agent`, `demo`, `fees`, `strategies`, `synthetic`, `verify`, `paper` | as the commands they group | the `trp` command tree: the commands above grouped by step, under the same names; a role runs the flat names, which the policy knows |
 | `trading-research paper` | public market-data streams (`run`, `record`) or a stored day (`replay`, `parity`, `status`) | public endpoints only, no key and no order; recordings under `data/paper/`, runs under `runs/paper/` |
 | `python -m experiments.short_horizon_2025` | its blocks, through its access and ledger | stages in order; `open` and `read` only on the owner's grant |
 | `python -m experiments.spot_2026` | its blocks, through its access and ledger | as above; `status`, `pages` and `--dry-run` freely |
