@@ -20,10 +20,28 @@ testable on its own:
     Cost model, execution simulation and trading metrics.
 ``trading_research.reporting``
     Run manifests, plots and reports.
+
+The pipeline end to end from Python is :mod:`trading_research.api`, whose
+three objects are re-exported here and imported on first use:
+:class:`~trading_research.api.Pipeline` (with
+:class:`~trading_research.api.PipelineConfig`),
+:class:`~trading_research.api.Backtest` and :class:`~trading_research.api.Study`.
 """
 
 from __future__ import annotations
 
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+__all__ = ["Backtest", "Pipeline", "PipelineConfig", "Study", "__version__"]
+
+#: Imported from :mod:`trading_research.api` on first use, so that importing the
+#: package (or its command line) does not load the whole pipeline.
+_API = frozenset({"Backtest", "Pipeline", "PipelineConfig", "Study"})
+
+
+def __getattr__(name: str) -> object:
+    if name in _API:
+        from trading_research import api
+
+        return getattr(api, name)
+    raise AttributeError(f"module 'trading_research' has no attribute {name!r}")

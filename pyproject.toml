@@ -71,6 +71,7 @@ dev = [
 
 [project.scripts]
 trading-research = "trading_research.cli:app"
+trp = "trading_research.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/bamasa/trading-research-pipeline"

@@ -1736,3 +1736,39 @@ def _print_mm_decomposition(summary: dict[str, float]) -> None:
         table.add_row(label, value)
     console.print(table)
     console.print("  [dim]net = spread + adverse + inventory - fees + funding[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# The command tree
+# ---------------------------------------------------------------------------
+#
+# One sub-app per step of the pipeline, each in its own cli_<area>.py and
+# registered by one line below. A group holds the flat commands above under
+# their own names, unchanged; the flat names keep working, hidden from the help
+# (cli_common.as_map), which lists the steps in the order the pipeline runs.
+
+from trading_research import (  # noqa: E402
+    cli_agent,
+    cli_backtest,
+    cli_common,
+    cli_data,
+    cli_demo,
+    cli_fees,
+    cli_instruments,
+    cli_regimes,
+    cli_search,
+    cli_signal,
+    cli_study,
+)
+
+app.add_typer(cli_data.build(app))
+app.add_typer(cli_regimes.build(app))
+app.add_typer(cli_instruments.build(app))
+app.add_typer(cli_signal.build(app))
+app.add_typer(cli_search.app)
+app.add_typer(cli_backtest.build(app))
+app.add_typer(cli_study.app)
+app.add_typer(cli_agent.app)
+app.add_typer(cli_demo.app)
+app.add_typer(cli_fees.app)
+cli_common.as_map(app)

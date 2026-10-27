@@ -134,7 +134,15 @@ uv run trading-research reproduce --execution both     # taker against passive e
 uv run trading-research mm-backtest --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25 \
     --strategy s1 --frozen                             # the market maker on the development block
 uv run python -m experiments.grand_search --symbol BTCUSDT --execution-axis
+uv run trp --help                                      # the map: one group per step
+uv run trp demo --execution all                        # the walkthrough on a synthetic market, a page per mode
+uv run trp search register --data <dataset>            # then instruments, frequency, method, model, execution, read
+uv run trp study list                                  # the registered studies, through their entry points
+uv run trp fees                                        # every fee table the costs are read from
 ```
+
+`trp` is `trading-research` under a shorter name; every command above keeps its
+flat name too (`trp backtest`, `trp download`, ...).
 
 `reproduce` fetches what it needs. `mm-backtest` reads the book, prints and
 funding the market-making study fetched (`data/book`, `data/trades`,
