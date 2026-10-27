@@ -166,6 +166,18 @@ class StudyAccess:
                 "access beyond W, D, the reader-test and the timing days is issued only by "
                 "the study's ledger, which checks the frozen configuration and records the read"
             )
+        if beyond:  # bound to its session's block: a copy cannot widen to a later one
+            block = self.session[0] if self.session else None
+            if block not in OPENS:
+                raise HeldOutLocked(
+                    "an access beyond development names the read session it was issued for"
+                )
+            wider = set(self.grants) - grants_for(opened_pairs(block))
+            if wider:
+                raise HeldOutLocked(
+                    f"an access issued for {block}'s read session grants no later block: "
+                    f"{sorted(wider)[:3]}"
+                )
 
     @property
     def open_through(self) -> date:

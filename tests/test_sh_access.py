@@ -27,7 +27,8 @@ def registered() -> dict:
 def opened(block: str) -> sa.StudyAccess:
     """An access as the ledger issues it (the token is the ledger's)."""
     pairs = sa.opened_pairs(block)
-    return sa.StudyAccess(sa.grants_for(pairs), "first read", issuer=sa._ISSUER)
+    session = (block, "commit", "config", "env")
+    return sa.StudyAccess(sa.grants_for(pairs), "first read", session=session, issuer=sa._ISSUER)
 
 
 def test_the_blocks_are_the_registered_ones() -> None:
@@ -116,7 +117,7 @@ def test_an_issued_access_survives_a_worker_process() -> None:
     copy = pickle.loads(pickle.dumps(opened("H")))
     assert copy.issuer is sa._ISSUER
     assert copy.allows("BTCUSDT", date(2025, 7, 8), sa.BOOK)
-    sa.StudyAccess(copy.grants, copy.stamp, issuer=copy.issuer)
+    sa.StudyAccess(copy.grants, copy.stamp, session=copy.session, issuer=copy.issuer)
 
 
 def monthly(root: Path, month: str, interval: str = "1h") -> Path:
@@ -140,3 +141,17 @@ def test_a_monthly_kline_file_past_the_opened_blocks_is_refused(tmp_path: Path) 
     monthly(tmp_path, "2025-08")
     with pytest.raises(HeldOutLocked):
         opened("H").refuse_monthly_bars("BTCUSDT", tmp_path)
+
+
+def test_an_issued_access_never_widens_to_a_later_block() -> None:
+    """An access issued for H's session grants nothing of F or P, however it is
+    copied (``dataclasses.replace`` keeps the issuer), and one beyond development
+    names its session."""
+    import dataclasses
+
+    h = opened("H")
+    with pytest.raises(HeldOutLocked, match="grants no later block"):
+        dataclasses.replace(h, grants=sa.grants_for(sa.opened_pairs("P")))
+    with pytest.raises(HeldOutLocked, match="names the read session"):
+        dataclasses.replace(h, session=())
+    assert dataclasses.replace(h, stamp="second read").allows("BTCUSDT", date(2025, 7, 8), sa.BOOK)
