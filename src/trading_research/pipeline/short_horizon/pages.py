@@ -142,6 +142,8 @@ class Written:
 
     sentences: dict[str, list[dict[str, str]]] = field(default_factory=dict)
     pending: list[str] = field(default_factory=list)
+    #: Notes beside a registered sentence, by its name.
+    notes: dict[str, list[str]] = field(default_factory=dict)
 
     def attempt(self, name: str, about: str, make: Callable[[], str]) -> None:
         """Write one sentence; a refusal by the registered fillers is pending, named so."""
@@ -161,6 +163,11 @@ class Written:
             return
         for sentence in found:
             self.sentences.setdefault(name, []).append({"about": about, "sentence": sentence})
+
+    def note(self, name: str, text: str) -> None:
+        """A note beside a registered sentence (its text is never edited): what the
+        sentence's wording leaves out, from the same records."""
+        self.notes.setdefault(name, []).append(text)
 
     def wait(self, name: str, why: str) -> None:
         self.pending.append(f"{name}: {why}")
@@ -226,6 +233,39 @@ def development_sentences(c: Computed, out: Written) -> None:
         out.wait("payoff_on_D", "S-P's and S-M's admission waits for stage C")
         return
     out.attempt_each("payoff_on_D", "D", lambda: hl.payoff_on_d(admitted_on_d(c)))
+    found = payoff_note(c.board)
+    if found and "payoff_on_D" in out.sentences and not admitted_on_d(c):
+        out.note("payoff_on_D", found)
+
+
+def payoff_note(board: pd.DataFrame | None) -> str | None:
+    """Beside "No configuration paid the 5.5 bp taker fee on development data": no
+    admissible cell had a positive net, and the cells that had one, from the D
+    leaderboard (on development data, selected)."""
+    if board is None or "net" not in board or "admissible" not in board:
+        return None
+    admissible = board["admissible"].astype(bool)
+    net = pd.to_numeric(board["net"], errors="coerce")
+    if (net[admissible] > 0).any():
+        return None
+    positive = board[net > 0]
+    text = "no admissible cell had a positive net"
+    if len(admissible) and admissible.any():
+        text += f" (the highest admissible net was {net[admissible].max():.2f} bp per trade)"
+    if positive.empty:
+        return text + "."
+    strata = sorted({str(k).split("|")[1] for k in positive["key"]})
+    trades = (pd.to_numeric(positive["trades_per_day"]) * 150).round().astype(int)
+    groups = []
+    for count in sorted(set(trades)):
+        values = pd.to_numeric(positive.loc[trades == count, "net"])
+        low, high = values.min(), values.max()
+        span = f"+{low:.1f}" if np.isclose(low, high) else f"+{low:.1f} to +{high:.1f}"
+        groups.append(f"{len(values)} at {span} bp on {count} trades")
+    where = " and ".join(strata)
+    return (f"{text}; the {len(positive)} cells with a positive net, all in stratum {where} and "
+            f"none admissible (fewer than 5 trades a day), had " + ", ".join(groups) +
+            " over the 150 days (on development data, selected).")  # fmt: skip
 
 
 def assessed_slots(c: Computed, block: str) -> list[str]:
@@ -304,6 +344,21 @@ def passive_sentence(c: Computed, out: Written) -> None:
         return hl.passive_and_maker(signal, statuses["S-P"], statuses["S-M"], making)
 
     out.attempt("passive_and_maker", signal, sentence)
+    found = making_note(admission.get("S-M") or {})
+    if found and "passive_and_maker" in out.sentences:
+        out.note("passive_and_maker", found)
+
+
+def making_note(s_m: dict[str, Any]) -> str | None:
+    """S-M's condition (i) on D when it failed on the making part alone: its S was
+    positive (one round trip in 150 days) while its making part was not."""
+    making, s = _number(s_m.get("making_bp_per_fill")), _number(s_m.get("S"))
+    if not (math.isfinite(making) and math.isfinite(s)) or making > 0 or s <= 0:
+        return None
+    sign = "\u2212" if making < 0 else ""
+    return (f"S-M (i: making part {sign}{abs(making):.2f} bp per fill; S = +{s:.4f}): its S, "
+            "net per 100 USDT of clip a day, was positive on D, and its making part was not "
+            "(on development data, selected).")  # fmt: skip
 
 
 def attribution(record: dict[str, Any] | None) -> Any:
@@ -624,7 +679,15 @@ def register_rows(c: Computed, written: Written) -> str:
             "point and quoted from `experiments/results/short_horizon_2025_pages.md`; a D number "
             "is never one.")  # fmt: skip
     rows = [latest[slot] for slot in ROW_ORDER if slot in latest]
-    return "\n\n".join([REGISTER_HEADING, head, _bullets(rows)])
+    notes = [
+        note
+        for name in ("payoff_on_D", "passive_and_maker")
+        for note in written.notes.get(name, [])
+    ]
+    found = [REGISTER_HEADING, head, _bullets(rows)]
+    if notes:
+        found += ["On development data, beside the statuses set there:", _bullets(notes)]
+    return "\n\n".join(found)
 
 
 def readme_summary(written: Written, figures: dict[str, str]) -> str:
@@ -636,10 +699,19 @@ def readme_summary(written: Written, figures: dict[str, str]) -> str:
 
     sentences = [row["sentence"] for name in TEMPLATES if name != "slot_on_block"
                  for row in written.sentences.get(name, [])]  # fmt: skip
+    notes = [
+        note
+        for name in TEMPLATES
+        if name != "slot_on_block"
+        for note in written.notes.get(name, [])
+    ]
     pictures = [
         block.replace(f"{FROM_PAGES}/", f"{IMAGES.as_posix()}/") for block in figures.values()
     ]
-    return "\n\n".join([" ".join(sentences) or "No sentence written yet.", *pictures])
+    text = " ".join(sentences) or "No sentence written yet."
+    if notes:
+        text += " (" + " ".join(notes) + ")"
+    return "\n\n".join([text, *pictures])
 
 
 def markdown(c: Computed, written: Written, finalists: pd.DataFrame | None,
@@ -656,7 +728,14 @@ def markdown(c: Computed, written: Written, finalists: pd.DataFrame | None,
     rows = [(name, row) for name in TEMPLATES for row in written.sentences.get(name, [])]
     shown = [f"**{row['about']}**: {row['sentence']}" if name == "break" else row["sentence"]
              for name, row in rows]  # fmt: skip
-    parts += [_bullets(shown), "### Pending", _bullets(written.pending)]
+    notes = [f"{note}" for name in TEMPLATES for note in written.notes.get(name, [])]
+    parts += [_bullets(shown)]
+    if notes:
+        parts += [
+            "Notes beside the sentences (their registered text is not edited):",
+            _bullets(notes),
+        ]
+    parts += ["### Pending", _bullets(written.pending)]
     sections = (("The placebo search", ("placebo_search",)),
                 ("The D leaderboard and marginals", ("leaderboard", "marginals")))  # fmt: skip
     for title, names in sections:

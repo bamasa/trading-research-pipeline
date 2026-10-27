@@ -436,3 +436,27 @@ def test_the_rows_for_the_register_and_the_readme_summary() -> None:
     assert FROM_PAGES not in summary
     text = pages.markdown(c, out, None, None, figures)
     assert "## Rows for docs/findings.md" in text and "## The README summary" in text
+
+
+def test_the_notes_beside_the_payoff_and_passive_sentences() -> None:
+    """Beside "No configuration paid ...": no admissible cell had a positive net, and
+    the cells that had one; beside the passive sentence, S-M's (i) when it failed on
+    the making part alone while S was positive. The registered text is unchanged."""
+    board = pd.DataFrame({
+        "key": ["BTCUSDT|R|tcn|a", "BTCUSDT|R|tcn|b", "BTCUSDT|C|gbm|c"],
+        "net": [83.2, 73.6, -5.1], "admissible": [False, False, True],
+        "trades_per_day": [0.02, 0.02, 7.4],
+    })  # fmt: skip
+    note = pages.payoff_note(board)
+    assert note is not None and note.startswith("no admissible cell had a positive net")
+    assert "2 at +73.6 to +83.2 bp on 3 trades" in note and "stratum R" in note
+    board.loc[2, "net"] = 1.0
+    assert pages.payoff_note(board) is None
+    making = pages.making_note({"making_bp_per_fill": -0.4299, "S": 0.000525})
+    assert making is not None
+    assert making.startswith("S-M (i: making part \u22120.43 bp per fill; S = +0.0005)")
+    assert pages.making_note({"making_bp_per_fill": 0.1, "S": 0.0005}) is None
+    out = pages.Written()
+    out.sentences["payoff_on_D"] = [{"about": "D", "sentence": "x."}]
+    out.note("payoff_on_D", "no admissible cell had a positive net.")
+    assert pages.readme_summary(out, {}) == "x. (no admissible cell had a positive net.)"
