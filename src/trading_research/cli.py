@@ -32,6 +32,7 @@ from rich.console import Console
 from rich.table import Table
 
 from trading_research import __version__
+from trading_research.cli_synthetic import synthetic_app, verify_app
 from trading_research.data import store, synthetic
 from trading_research.data.schema import BARS_SCHEMA, BOOK_SCHEMA, TRADE_SCHEMA
 from trading_research.data.validate import (
@@ -47,6 +48,8 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+app.add_typer(synthetic_app, name="synthetic")
+app.add_typer(verify_app, name="verify")
 
 console = Console()
 err_console = Console(stderr=True)
