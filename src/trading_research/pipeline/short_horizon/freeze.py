@@ -275,9 +275,13 @@ def mde(series: pd.Series | np.ndarray, n: int, usable_days: int) -> tuple[float
 def slot_mdes(
     study: Study, record_d: dict[str, Any], slots: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
-    """sigma_D and the MDE of each slot's daily series on D (24 for a slot on S25's signal)."""
+    """sigma_D and the MDE of each slot's daily series on D (24 for a slot on S25's signal),
+    the passive slots' on the days no simulated run flagged (``passive.kept_rows``), as
+    stage C's admission reads them."""
+    from trading_research.pipeline.short_horizon.passive import kept_rows
+
     days = [date.fromisoformat(d) for d in record_d["usable_test_days"]]
-    rows = pd.read_parquet(study.work / "C" / "cells.parquet")
+    rows = kept_rows(pd.read_parquet(study.work / "C" / "cells.parquet"))
     on_s25 = slots["S-P"]["key"] == S25_KEY
     out: dict[str, Any] = {}
     for slot in ("S25", "S-C", "S-R"):

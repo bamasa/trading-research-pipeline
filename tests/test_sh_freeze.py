@@ -8,6 +8,7 @@ from typing import Any
 from unittest import mock
 
 import pandas as pd
+import pytest
 
 from trading_research.pipeline.short_horizon import flags, freeze, reads
 from trading_research.pipeline.short_horizon.context import Study
@@ -155,3 +156,28 @@ def test_the_amendment_records_the_sha256_of_ds_results_files(tmp_path: Path) ->
     ]
     document = "# x\n\n## Amendments\n\n" + "\n".join(lines) + "\n"
     assert set(shr.recorded_results_files(document)) == {p.as_posix() for p in shr.D_RESULTS_FILES}
+
+
+def test_the_passive_mdes_leave_out_every_day_any_run_flagged(tmp_path: Path) -> None:
+    """sigma_D of S-P, S-M and S25-Z is taken on the days no simulated run flagged
+    (stage C's kept rows), not row by row: a day another cell's run flagged is out."""
+    import numpy as np
+
+    from trading_research.reporting.search_keys import S25_KEY
+
+    days = [f"2025-02-{d:02d}" for d in range(1, 6)]
+    rows = []
+    for i, day in enumerate(days):
+        for slot, key, label in (("S-P", "kp", "S-P|kp|entry"), ("S-M", "km", "S-M|km|lean=1|policy=none"),
+                                 ("S25-Z", S25_KEY, "S25-Z|z")):  # fmt: skip
+            rows.append({"slot": slot, "key": key, "label": label, "day": day, "excluded": False,
+                         "net_per_100": float(i), "gross_bp_trade": float(i)})  # fmt: skip
+    rows.append({"slot": "S-P", "key": "other", "label": "S-P|other|entry", "day": days[4],
+                 "excluded": True, "net_per_100": 0.0, "gross_bp_trade": 0.0})  # fmt: skip
+    (tmp_path / "C").mkdir()
+    pd.DataFrame(rows).to_parquet(tmp_path / "C" / "cells.parquet", index=False)
+    study = SimpleNamespace(work=tmp_path)
+    slots = {"S-P": {"key": "kp"}, "S-M": {"key": "km", "guard": "none"}, "S25-Z": {"key": S25_KEY}}
+    found = freeze.slot_mdes(study, {"usable_test_days": days}, slots)  # type: ignore[arg-type]
+    assert found["S-P"][0] == pytest.approx(float(np.std([0.0, 1.0, 2.0, 3.0], ddof=1)))
+    assert found["S25-Z"][0] == found["S-M"][0] == found["S-P"][0]
