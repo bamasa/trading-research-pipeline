@@ -35,11 +35,11 @@ command does not discover (it reads books and trades only): bars are checked
 with `validate_bars`, funding with `bybit_funding.load_day` and
 `settlement_interval_h`, in the tests.
 
-Defaults, on this laptop: book days 16 sessions of an hour in about a second
-(52 MB written); break days two whole days at 100 ms (1.7 million snapshots) in
-about two seconds (131 MB); the cross-section 20 instruments over 16 days in
-about twelve seconds (388 MB); order flow four hours in about five seconds;
-funding a year in under a second. `--days N` scales each.
+Defaults, on this laptop, generated and written: book days 16 sessions of an
+hour (52 MB) and break days two whole days at 100 ms (1.7 million snapshots,
+131 MB) in a few seconds each; the cross-section, 20 instruments over 16 days,
+in about twelve seconds (388 MB); order flow, four hours, in about five
+seconds; funding, a year, in under a second. `--days N` scales each.
 
 ### Causality
 
