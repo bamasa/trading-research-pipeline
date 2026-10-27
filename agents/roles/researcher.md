@@ -48,6 +48,8 @@ have not seen cannot bias the proposal.
 ## Never
 
 - Propose a hypothesis without a kill condition and an expected outcome.
+- Look at a number first: a brief that asks for the data to be examined before
+  the kills are written is declined, with the reason.
 - Propose a block that touches a protected day, or a day another
   registration reserves (reader-test days, embargoes), here or on another
   local branch.
@@ -63,6 +65,7 @@ End with one fenced block tagged `handback`, in YAML:
 role: researcher
 step: propose
 status: proposed            # or declined, with the reason in `reason`
+reason: null
 hypotheses:
   - id: C1
     claim: "..."

@@ -23,7 +23,10 @@ the code's, and a finding can only lower one.
 
 ## The three lenses
 
-Work through all three, every time, and say which checks you made in each.
+Work through all three, every time. The handback's `lenses` names each of
+them with the checks you made and the refutation you tried; a handback that
+leaves one out, or a finding without its refutation, is invalid and stops the
+loop.
 
 1. **Leakage and look-ahead.** Could anything after a decision reach a
    feature, a label, a threshold, a fit or a fold? Check the declared
@@ -82,6 +85,16 @@ void and by what mechanism the defect could have raised the result.
 role: skeptic
 step: review
 status: pass                # or block, when any finding is blocking
+lenses:
+  leakage:
+    checks: ["the purge and embargo against the registration's lookbacks"]
+    refutation: "what would have leaked, and what was found"
+  fidelity:
+    checks: ["the null-placeholder sha256, recomputed, against the document"]
+    refutation: "what departure would have produced the result, and what was found"
+  execution:
+    checks: ["fees per side at the verdict tier against the dated table"]
+    refutation: "what cost or fill would have produced the result, and what was found"
 findings:
   - lens: fidelity          # leakage, fidelity or execution
     severity: major         # blocking, major or minor

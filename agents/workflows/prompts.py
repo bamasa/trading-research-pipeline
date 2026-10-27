@@ -34,7 +34,7 @@ STEPS: tuple[tuple[str, str], ...] = (
 STATUSES: dict[str, frozenset[str]] = {
     "researcher": frozenset({"proposed", "declined"}),
     "registrar": frozenset({"registered", "refused"}),
-    "executor": frozenset({"ran", "refused", "failed"}),
+    "executor": frozenset({"ran", "waiting", "refused", "failed"}),
     "skeptic": frozenset({"pass", "block"}),
     "scribe": frozenset({"recorded"}),
 }
@@ -44,8 +44,11 @@ GATES: dict[str, str] = {
     "propose": "Every hypothesis has a kill condition and an expected outcome, stated now.",
     "register": "The YAML and the document agree, nothing is left open but the placeholders, "
     "and the document holds the YAML's null-placeholder sha256. The owner commits it.",
-    "run": "Only the registered commands, in order; a refusal is reported and ends the step.",
-    "review": "A blocking finding stops the loop; every finding has a file:line.",
+    "run": "Only the registered commands, in order; a refusal is reported and ends the step; "
+    "a commit the owner must make first (an amendment, an open entry, fetch records) ends it "
+    "as `waiting`, with what the owner commits in `waiting_on`.",
+    "review": "All three lenses, each with the checks made and the refutation tried; a blocking "
+    "finding stops the loop; every finding has a file:line and its refutation.",
     "record": "Every sentence you write is one of the verdict's headline sentences, verbatim.",
 }
 HANDBACK = re.compile(r"```handback[ \t]*\n(.*?)```", re.DOTALL)
@@ -71,6 +74,7 @@ class StepContext:
     prefix: str = "python"
     cli: str = "trading-research"
     earlier: tuple[tuple[str, dict[str, Any]], ...] = ()
+    resumed: str = ""
 
 
 def step_prompt(step: str, role: str, ctx: StepContext) -> str:
@@ -94,6 +98,15 @@ def step_prompt(step: str, role: str, ctx: StepContext) -> str:
         lines += [f"### {name}", "", "```yaml", dumped.rstrip(), "```", ""]
     if not ctx.earlier:
         lines += ["None: this is the first step.", ""]
+    if ctx.resumed:
+        lines += [
+            "## This step again",
+            "",
+            f"An earlier attempt of this step stopped the loop: {ctx.resumed}",
+            "The owner has acted since. Start from where the repository now stands (an entry "
+            "point's `status` says), and never repeat what already ran.",
+            "",
+        ]
     lines += [
         "## Your gate",
         "",
@@ -128,13 +141,30 @@ def read_handback(role: str, step: str, reply: str) -> dict[str, Any]:
         for h in hypotheses:
             _require(isinstance(h, dict) and bool(h.get("kills")), f"no kill condition: {h}")
             _require(bool(h.get("expected")), f"no expected outcome: {h}")
+            missing = [k for k in ("id", "claim", "metric") if not h.get(k)]
+            _require(not missing and "placebos" in h, f"a hypothesis without {missing}: {h}")
+        _require(isinstance(data.get("known"), list), "no information set (`known`, a list)")
+        _require(bool(data.get("blocks")), "no blocks")
+    if role == "researcher" and status == "declined":
+        _require(bool(data.get("reason")), "a declined proposal says why (`reason`)")
     if role == "registrar" and status == "registered":
         _require(bool(SHA256.fullmatch(str(data.get("null_sha256", "")))), "no null_sha256")
+    if role == "executor" and status == "waiting":
+        _require(bool(data.get("waiting_on")), "waiting, but not on anything (`waiting_on`)")
     if role == "skeptic":
+        lenses = data.get("lenses")
+        _require(isinstance(lenses, dict), "no `lenses`: each of the three, with its checks")
+        for lens in LENSES:
+            done = lenses.get(lens) if isinstance(lenses, dict) else None
+            ok = (
+                isinstance(done, dict) and bool(done.get("checks")) and bool(done.get("refutation"))
+            )
+            _require(ok, f"the {lens} lens without its checks and its refutation")
         findings = data.setdefault("findings", []) or []
         for f in findings:
             _require(isinstance(f, dict) and f.get("severity") in SEVERITIES, f"severity: {f}")
             _require(f.get("lens") in LENSES and bool(f.get("where")), f"lens or where: {f}")
+            _require(bool(f.get("refutation")), f"a finding without its refutation: {f}")
     if role == "scribe":
         _require(isinstance(data.get("sentences", []), list), "sentences is a list")
     return data
@@ -146,7 +176,7 @@ def blocking(findings: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
 
 #: The documents an agent is given, whose commands must all exist.
 DOCUMENTS = ("CLAUDE.md", "agents/protocol.md", "agents/README.md")
-HARNESS_COMMANDS = frozenset({"run", "calendar", "null-hash", "check"})
+HARNESS_COMMANDS = frozenset({"run", "calendar", "null-hash", "check", "demo"})
 
 
 @lru_cache(maxsize=1)

@@ -86,9 +86,18 @@ rounded.
 **Gate.** Only the commands of the [command table](../CLAUDE.md#commands-and-what-each-may-read)
 run, one at a time. The entry point refuses a stage out of order
 (`StageOrderError`) and a block the ledger has not opened (`HeldOutLocked`);
-the harness's tool policy refuses a fetch that touches a protected day, and
-`open`, `read` and `--allow-heldout` without the owner's grant. A refusal is
-reported as it came and ends the step; it is never worked around.
+the harness's tool policy refuses a fetch that touches a protected day (a
+plain download fetches free days only, whatever was granted), `open`, `read`
+and `--allow-heldout` without the owner's grant, and `read` unless the block's
+open entry is committed in HEAD's ledger and its read unfinished. A refusal is
+reported as it came and ends the step; it is never worked around. Where the
+owner must commit first (the D amendment, an open entry, a read's fetch
+records), the step ends `waiting`, names the commit in `waiting_on`, and the
+loop stops; the resumed run takes the step again from where the repository
+then stands. After the turn, the orchestrator checks that the tree changed only
+where an entry point writes (`experiments/results/`, `docs/` outside the
+registrations, and the study's own configuration and document for its
+amendment), never code, tests, the harness or another registration.
 
 **In the repository.** `spot/state.py` (`STAGES`, `READS`, the stage machine),
 `spot/ledger.py` (`Ledger.open`, `Ledger.session`: a clean tree, the frozen
@@ -106,8 +115,11 @@ sentence as registered; the null-placeholder and frozen hashes; the trial
 count); **execution realism and money** (fills, fees per side on notional,
 latency, capacity, the accounting identity, gross against net).
 
-**Gate.** A finding of severity `blocking` stops the loop: nothing is recorded
-until the owner has read it. `major` and `minor` findings are recorded beside
+**Gate.** The handback names all three lenses under `lenses`, each with the
+checks made and the refutation tried, and every finding carries its own
+`refutation`; a handback without them is invalid and stops the loop. A finding
+of severity `blocking` stops the loop: nothing is recorded until the owner has
+read it. `major` and `minor` findings are recorded beside
 the result. After a read, a defect can only lower a status: it is written to
 `docs/<study>_defects.md` with the mechanism by which it could have raised the
 result, and the status becomes `void (defect found after the <block> read)`.
@@ -136,7 +148,9 @@ verdict, and says so: development numbers are never results.
 roadmap row, and nothing else.
 
 **Gate.** Every sentence the scribe hands back is one of the verdict's headline
-sentences, verbatim; the orchestrator checks it.
+sentences and stands verbatim in a file the scribe changed; when a block was
+read, at least one is recorded; and the turn changed nothing but the scribe's
+four files. The orchestrator checks all three.
 
 ## The owner's gates
 
@@ -153,16 +167,21 @@ Common keys: `role`, `step`, `status`. The rest by role:
 
 | Role | `status` | Further keys |
 |---|---|---|
-| researcher | `proposed` or `declined` | `hypotheses`: each with `id`, `claim`, `metric`, `kills`, `placebos`, `expected`; `known`; `blocks` |
+| researcher | `proposed` or `declined` | `hypotheses`: each with `id`, `claim`, `metric`, `kills`, `placebos` (a list, empty only with the reason in the prose), `expected`; `known`, the information set; `blocks`; `reason` when declined |
 | registrar | `registered` or `refused` | `files`; `null_sha256`; `missing` when refused |
-| executor | `ran`, `refused` or `failed` | `commands`; `records`; `results`, `ledger`, `page` and `block` after a read |
-| skeptic | `pass` or `block` | `findings`: each with `lens`, `severity` (`blocking`, `major`, `minor`), `where`, `finding`, `refutation` |
+| executor | `ran`, `waiting`, `refused` or `failed` | `commands`; `records`; `waiting_on` when waiting; `results`, `ledger`, `page` and `block` after a read |
+| skeptic | `pass` or `block` | `lenses`: `leakage`, `fidelity` and `execution`, each with `checks` and `refutation`; `findings`: each with `lens`, `severity` (`blocking`, `major`, `minor`), `where`, `finding`, `refutation` |
 | scribe | `recorded` | `files`; `sentences` |
 
 ## The run directory
 
 Each run writes `agents/runs/<UTC time>-<study>/` (ignored by git, so a ledger's
 clean-tree check never sees it): `run.json` (the study, the brief, the grants,
-the model's name, the commit), and per step the prompt, the reply, the
-handback, and `events.jsonl` with every tool call and the policy's decision;
-then `verdict.json`, and a line in `stops.jsonl` each time a gate stopped the loop.
+the model's name, the commit, and each resumption with its grants); each
+role's system prompt, `system-<role>.md`; per step `NN-<step>.prompt.md`,
+`.reply.md`, `.handback.yaml`, `.events.jsonl` (every tool call and the
+policy's decision with its reason) and `.changed.json` (the paths the turn
+changed in the tree, as git sees them); `verdict.json`; a line in
+`stops.jsonl` each time a gate stopped the loop; and, under
+`superseded/<UTC time>-NN-<step>/`, every earlier attempt of a step that was
+taken again. No key, and no file of `data/`, is ever written there.

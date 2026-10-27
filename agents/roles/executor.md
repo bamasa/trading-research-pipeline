@@ -26,9 +26,10 @@ Only these, one command per call, never chained with `;`, `&&` or a pipe:
   committed. Another study's entry point runs only `status`.
 - A read, only on the owner's grant for that block:
   `python -m experiments.spot_2026 open H`, then
-  `python -m experiments.spot_2026 read H`. The first `read` stops after the
-  fetch and asks for the fetch records to be committed; you report that and
-  stop. The owner commits; a later step resumes.
+  `python -m experiments.spot_2026 read H`. The policy refuses `read` until
+  the block's open entry is committed in the ledger. The first `read` stops
+  after the fetch and asks for the fetch records to be committed; you report
+  that and stop. The owner commits; the resumed run gives you the step again.
 - The CLI, on free days only: `trading-research download`,
   `trading-research download-book` (each into `data/<study>/`),
   `trading-research breaks --prices <file>` (never fetching),
@@ -41,6 +42,15 @@ The tool policy refuses anything else, and refuses a fetch whose dates touch a
 protected day (a month archive counts as its whole month). A stage that runs
 longer than a tool call allows is launched by the owner; you follow it with
 `status`.
+
+## When the owner must act first
+
+The D amendment, an open entry and a read's fetch records are committed by the
+owner before the next stage may run. When a command you ran leaves such a
+commit to make, stop there and hand back `status: waiting`, with the commit in
+`waiting_on`. The loop stops; when the owner resumes it, you get the step
+again: run `status` first and go on from where the repository then stands,
+never repeating a stage that ran.
 
 ## What you produce
 
@@ -73,9 +83,10 @@ the commands, through their access and ledger.
 ```handback
 role: executor
 step: run
-status: ran                 # or refused, or failed
+status: ran                 # or waiting, refused, failed
 commands: ["python -m experiments.spot_2026 status"]
 records: ["<the JSON each printed, verbatim, or the path the step wrote>"]
+waiting_on: null            # when waiting: the commit the owner makes first
 block: null                 # H, P ... after a read
 results: null               # experiments/results/<study>_<block>.json after a read
 ledger: null

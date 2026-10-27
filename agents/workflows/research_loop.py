@@ -14,6 +14,7 @@ logged under ``agents/runs/<UTC time>-<study>/``, which git ignores::
     python -m agents.workflows.research_loop calendar
     python -m agents.workflows.research_loop null-hash configs/spot_2026.yaml
     python -m agents.workflows.research_loop check --role executor "git push"
+    python -m agents.workflows.research_loop demo
 
 The model comes from ``TRP_AGENT_MODEL`` (``TRP_AGENT_MODEL_<ROLE>`` overrides
 it per role); the SDK reads its credentials from the environment itself, and
@@ -116,6 +117,47 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def tree_state(repo: Path) -> dict[str, str]:
+    """Every path git sees changed or untracked (ignored ones aside), with its
+    content's sha256: what a turn changed is the difference of two of these."""
+    records = git(repo, "status", "--porcelain", "-z", "--untracked-files=all").split("\0")
+    paths: list[str] = []
+    origin = False  # a rename's or copy's record is followed by its original path
+    for record in records:
+        if not origin and len(record) > 3:
+            paths.append(record[3:])
+            origin = record[0] in "RC"
+        else:
+            origin = False
+    state = {}
+    for path in paths:
+        target = repo / path
+        state[path] = file_sha256(target) if target.is_file() else "absent"
+    return state
+
+
+def changed(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    return sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
+
+
+#: What no turn may change, whatever its commands wrote: code, tests, the
+#: harness, the rules and the environment's lock.
+NEVER_CHANGED = ("src/", "tests/", "agents/", "scripts/", "CLAUDE.md", "pyproject.toml", "uv.lock")
+
+
+def executor_may_change(path: str, config: str, document: str) -> bool:
+    """The entry points write results, ledgers, pages, figures and run logs,
+    and the D amendment their own study's configuration and document; never
+    code, another registration, or the scribe's findings register."""
+    if path in {config, document}:
+        return True
+    if path.startswith(NEVER_CHANGED) or path.endswith(".py") or path == "docs/findings.md":
+        return False
+    if path.startswith(("configs/", "docs/preregistration/")):
+        return False
+    return path.startswith(("experiments/results/", "docs/"))
+
+
 def null_sha256(config_text: str) -> str:
     """The YAML's sha256 with every placeholder put back to ``null``, by the
     repository's own helpers (``market_making/prereg.py``)."""
@@ -185,6 +227,8 @@ def stop_reason(step: str, handback: dict[str, Any], done: dict[str, dict[str, A
         return f"the researcher declined: {handback.get('reason', 'no reason given')}"
     if step == "register" and status == "refused":
         return f"the registrar refused; missing: {handback.get('missing', [])}"
+    if step == "run" and status == "waiting":
+        return f"waiting on the owner: {handback.get('waiting_on')}"
     if step == "run" and status in {"refused", "failed"}:
         return f"the run was {status}; the owner reads the records before anything else"
     if step == "review":
@@ -195,15 +239,23 @@ def stop_reason(step: str, handback: dict[str, Any], done: dict[str, dict[str, A
         return "the results file is not the one the ledger recorded for the block's first read"
     if step == "record":
         registered = set(done.get("verdict", {}).get("sentences", []))
-        extra = [s for s in handback.get("sentences", []) if s not in registered]
+        sentences = handback.get("sentences") or []
+        extra = [s for s in sentences if s not in registered]
         if extra:
             return f"sentences that are not registered headline sentences: {extra}"
+        if registered and not sentences:
+            return "a block was read and the scribe recorded none of its headline sentences"
     return None
 
 
 @dataclass
 class ResearchLoop:
-    """One run of the loop for one study, resumable from its run directory."""
+    """One run of the loop for one study, resumable from its run directory.
+
+    ``repo`` is the working tree the study lives in and the roles act on;
+    ``rules`` the tree whose ``CLAUDE.md``, protocol and role files make the
+    prompts, the same tree unless a demonstration runs in a scratch one.
+    """
 
     repo: Path
     study: str
@@ -218,28 +270,28 @@ class ResearchLoop:
     document: str = ""
     gate: Callable[[Path, str, str], str | None] = registration_gate
     calendar: tuple[Protected, ...] | None = None
+    rules: Path | None = None
 
     def __post_init__(self) -> None:
         self.config = self.config or f"configs/{self.study}.yaml"
         self.document = self.document or f"docs/preregistration/{self.study}.md"
-        if self.calendar is None:
-            self.calendar = protected_calendar(self.repo)
+        self.rules = self.rules or self.repo
 
     async def run(self) -> dict[str, Any]:
-        problems = prompt_problems(self.repo)
+        assert self.rules is not None
+        problems = prompt_problems(self.rules)
         if problems:
             return self.stop("start", f"the prompts name commands that do not exist: {problems}")
         done = self.log.handbacks()
         for number, (step, role) in enumerate(STEPS, start=1):
             if step in done and stop_reason(step, done[step], done) is None:
                 continue
-            if step in done:  # it stopped the loop: the step is taken again
-                self.supersede(number, step)
-                del done[step]
+            done.pop(step, None)  # it stopped the loop, or never handed back: taken again
             if step == "run":
                 problem = self.gate(self.repo, self.config, self.document)
                 if problem is not None:
                     return self.stop(step, f"waiting on the owner: {problem}")
+            resumed = self.supersede(number, step)
             if role == "code":
                 handback = {"role": "code", "step": step, "status": "computed"}
                 try:
@@ -249,7 +301,7 @@ class ResearchLoop:
                 self.log.write_json("verdict.json", handback)
                 self.log.write(f"{number:02d}-{step}.handback.yaml", yaml.safe_dump(handback))
             else:
-                found = await self.turn(number, step, role, done)
+                found = await self.turn(number, step, role, done, resumed)
                 if isinstance(found, str):
                     return self.stop(step, found)
                 handback = found
@@ -260,6 +312,8 @@ class ResearchLoop:
         return {"status": "complete", "run": str(self.log.path)}
 
     def policy(self, role: str) -> ToolPolicy:
+        """The role's policy, its calendar read afresh unless one was given, so
+        that a registration committed since the run began protects its blocks."""
         return ToolPolicy(
             self.repo,
             role,
@@ -272,10 +326,12 @@ class ResearchLoop:
         )
 
     async def turn(
-        self, number: int, step: str, role: str, done: dict[str, dict[str, Any]]
+        self, number: int, step: str, role: str, done: dict[str, dict[str, Any]], resumed: str
     ) -> dict[str, Any] | str:
-        """One role's turn: its prompts, its reply, its handback (or why it has none)."""
-        system = system_prompt(self.repo, role)
+        """One role's turn: its prompts, its reply, what it changed in the tree,
+        and its handback (or why the loop stops instead)."""
+        assert self.rules is not None
+        system = system_prompt(self.rules, role)
         context = StepContext(
             self.study,
             self.brief,
@@ -285,28 +341,66 @@ class ResearchLoop:
             prefix=self.python,
             cli=self.cli,
             earlier=tuple(done.items()),
+            resumed=resumed,
         )
         prompt = step_prompt(step, role, context)
         stem = f"{number:02d}-{step}"
         self.log.write(f"system-{role}.md", system)
         self.log.write(f"{stem}.prompt.md", prompt)
-        reply = await self.runner(RoleCall(role, step, system, prompt, self.policy(role)))
+        policy = self.policy(role)
+        before = tree_state(self.repo)
+        reply = await self.runner(RoleCall(role, step, system, prompt, policy))
+        moved = changed(before, tree_state(self.repo))
         self.log.write(f"{stem}.reply.md", reply.text)
         events = "".join(json.dumps(e, sort_keys=True, default=str) + "\n" for e in reply.events)
         self.log.write(f"{stem}.events.jsonl", events)
+        self.log.write_json(f"{stem}.changed.json", moved)
+        problem = self.changes_problem(role, policy, moved)
+        if problem is not None:
+            return problem
         try:
             handback = read_handback(role, step, reply.text)
         except HandbackError as exc:
             self.log.write(f"{stem}.invalid.txt", str(exc) + "\n")
             return f"the {role}'s handback is not valid: {exc}"
         self.log.write(f"{stem}.handback.yaml", yaml.safe_dump(handback, sort_keys=False))
+        if role == "scribe":
+            unwritten = [s for s in handback.get("sentences") or [] if not self.written(s, moved)]
+            if unwritten:
+                return f"sentences the scribe handed back but did not write: {unwritten}"
         return handback
 
-    def supersede(self, number: int, step: str) -> None:
-        """Keep a step's earlier handback beside the run, out of the resumed loop's way."""
-        old = self.log.path / f"{number:02d}-{step}.handback.yaml"
+    def changes_problem(self, role: str, policy: ToolPolicy, moved: list[str]) -> str | None:
+        """Why what a turn changed in the tree is more than its role may change."""
+        if role == "executor":
+            bad = [p for p in moved if not executor_may_change(p, self.config, self.document)]
+        else:
+            bad = [p for p in moved if p not in policy.writable()]
+        return f"the {role} changed what it may not: {bad}" if bad else None
+
+    def written(self, sentence: str, moved: list[str]) -> bool:
+        """Whether ``sentence`` stands verbatim in a file the turn changed."""
+        return any(
+            (self.repo / p).is_file() and sentence in (self.repo / p).read_text() for p in moved
+        )
+
+    def supersede(self, number: int, step: str) -> str:
+        """Move an earlier attempt of a step aside, under ``superseded/``, and
+        say why it stopped; an empty string when there was none."""
+        stem = f"{number:02d}-{step}"
+        earlier = sorted(self.log.path.glob(f"{stem}.*"))
+        if not earlier:
+            return ""
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-        old.rename(old.with_name(f"{number:02d}-{step}.superseded-{stamp}.yaml"))
+        aside = self.log.path / "superseded" / f"{stamp}-{stem}"
+        aside.mkdir(parents=True)
+        for path in earlier:
+            path.rename(aside / path.name)
+        stops = self.log.path / "stops.jsonl"
+        lines = stops.read_text().splitlines() if stops.exists() else []
+        reasons = [json.loads(line) for line in lines]
+        last = [r["reason"] for r in reasons if r.get("step") == step]
+        return last[-1] if last else "the earlier attempt left no handback"
 
     def stop(self, step: str, reason: str) -> dict[str, Any]:
         record = {"status": "stopped", "step": step, "reason": reason, "run": str(self.log.path)}
@@ -422,23 +516,42 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--study", default="adhoc")
     check.add_argument("--grant", action="append", default=[])
     check.add_argument("text", help="the command, quoted")
+    demo = sub.add_parser(
+        "demo", help="the whole loop on a synthetic study, a scripted client in place of a model"
+    )
+    demo.add_argument("--into", type=Path, help="an empty directory for the scratch repository")
     return found
+
+
+def here() -> Path:
+    """The repository the helpers answer for: the working directory, its root."""
+    root = Path.cwd()
+    if not (root / "configs").is_dir():
+        raise SystemExit("run the helpers from the repository's root, where configs/ is")
+    return root
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if args.command == "calendar":
-        for p in protected_calendar(REPO):
+        for p in protected_calendar(here()):
             print(f"{p.first} {p.last} {p.key}")
         return 0
     if args.command == "null-hash":
         print(null_sha256(args.config.read_text()))
         return 0
     if args.command == "check":
-        policy = ToolPolicy(REPO, args.role, args.study, grants=frozenset(args.grant))
+        policy = ToolPolicy(here(), args.role, args.study, grants=frozenset(args.grant))
         decision = policy.bash(args.text)
         print(f"{'allowed' if decision.allowed else 'refused'}: {decision.reason}")
         return 0 if decision.allowed else 1
+    if args.command == "demo":
+        from agents.workflows.demo import run_demo
+
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        summary = run_demo(args.into or REPO / RUNS / f"demo-{stamp}")
+        print(json.dumps(summary, indent=2, default=str))
+        return 0 if summary["status"] == "complete" else 3
     missing = ready_to_run()
     if missing is not None:
         print(f"not started: {missing}", file=sys.stderr)
@@ -447,6 +560,10 @@ def main(argv: list[str] | None = None) -> int:
         log = RunLog(args.resume)
         meta = json.loads((log.path / "run.json").read_text())
         meta["grants"] = sorted({*meta.get("grants", []), *args.grant})
+        resumed = {"utc": datetime.now(UTC).isoformat(), "grants": sorted(args.grant),
+                   "model": os.environ.get("TRP_AGENT_MODEL"),
+                   "commit": git(REPO, "rev-parse", "HEAD").strip()}  # fmt: skip
+        meta.setdefault("resumes", []).append(resumed)
     else:
         brief = args.brief_file.read_text() if args.brief_file else args.brief
         if not args.study or not brief:

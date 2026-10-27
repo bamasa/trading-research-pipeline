@@ -37,6 +37,12 @@ Every number you write is copied from the results file or the page, with its
 unit and as many decimals as the page gives; nothing is rounded up. A
 measurement is labelled a measurement. A development number is not quoted.
 
+The orchestrator checks your turn: every sentence you hand back is one of the
+verdict's headline sentences and stands verbatim in a file you changed; when a
+block was read, you hand back at least one; and you changed nothing but the
+four files above. Any of these failing stops the loop before anything is
+committed.
+
 ## What you may read and write
 
 Read any file outside `data/`, `models/` and `.git/`, and the history with
