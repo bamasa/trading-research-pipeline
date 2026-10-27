@@ -241,7 +241,8 @@ def overfitting(
     from trading_research.validation.choice import ChoiceError, pbo_of_choice
 
     panel = pd.DataFrame(cells.g_bp.T)
-    out: dict[str, Any] = {"N_eff": effective_trials(n_trials, panel), "pbo": {}, "dsr": {}}
+    out: dict[str, Any] = {"N_eff": effective_trials(n_trials, panel), "pbo": {}, "dsr": {},
+                           "dsr_inputs": {}}  # fmt: skip
     variance = sharpe_variance(panel)
     for name, members in grid.strata.items():
         try:
@@ -254,17 +255,29 @@ def overfitting(
         for series, values in (("G", cells.g_bp[cell]), ("net", cells.net_bp[cell])):
             finite = values[np.isfinite(values)]
             if len(finite) >= 3 and np.isfinite(variance):
-                out["dsr"][f"{name}*/{series}"] = deflated_sharpe_ratio(
-                    finite, n_trials, variance
-                ).dsr
+                found = deflated_sharpe_ratio(finite, n_trials, variance)
+                out["dsr"][f"{name}*/{series}"] = found.dsr
+                out["dsr_inputs"][f"{name}*/{series}"] = dsr_inputs(found, variance)
     s25 = grid.position(S25_KEY)
     for series, values in (
         () if s25 is None else (("G", cells.g_bp[s25]), ("net", cells.net_bp[s25]))
     ):
         finite = values[np.isfinite(values)]
         if len(finite) >= 3 and np.isfinite(variance):
-            out["dsr"][f"S25/{series}"] = deflated_sharpe_ratio(finite, n_trials, variance).dsr
+            found = deflated_sharpe_ratio(finite, n_trials, variance)
+            out["dsr"][f"S25/{series}"] = found.dsr
+            out["dsr_inputs"][f"S25/{series}"] = dsr_inputs(found, variance)
     return out
+
+
+def dsr_inputs(found: Any, variance: float) -> dict[str, float]:
+    """What a deflated Sharpe ratio rests on, recorded beside it: the variance of the
+    trials' Sharpe ratios it is deflated against, the benchmark SR0 (the expected
+    maximum Sharpe ratio of N_trials trials of no skill), the series' own Sharpe
+    ratio and its days."""
+    return {"variance": float(variance), "benchmark_sr0": float(found.benchmark),
+            "sharpe": float(found.sharpe), "days": int(found.days),
+            "n_trials": float(found.n_trials)}  # fmt: skip
 
 
 def power(

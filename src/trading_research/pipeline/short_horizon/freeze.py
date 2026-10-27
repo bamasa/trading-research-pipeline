@@ -387,6 +387,12 @@ def slot_dsr(found: dict[str, Any], name: str, series: tuple[str, ...], against:
     return {s: found.get(f"{name}/{s}") for s in series} | {"deflated_against": against}
 
 
+def slot_dsr_inputs(inputs: dict[str, Any], name: str, series: tuple[str, ...]) -> dict[str, Any]:
+    """Beside each deflated Sharpe ratio: the variance it is deflated against, the
+    benchmark SR0, the series' Sharpe ratio and its days (None where not recorded)."""
+    return {s: inputs.get(f"{name}/{s}") for s in series}
+
+
 def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, ...], Any]:
     """Every placeholder the D amendment fills, from the stages' records."""
     record1, record_b = study.record("1"), study.record("B")
@@ -396,10 +402,12 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
     excluded += [[date.fromisoformat(d), "flatten_stale"] for d in record_b["stale_days"]]
     slots, fits, mdes, trials = parts["slots"], parts["fits"], parts["mdes"], parts["trials"]
     dsr = trials["overfitting"].get("dsr", {})  # at N_trials with the simulator trials counted
+    inputs = trials["overfitting"].get("dsr_inputs", {})
     power = record_d.get("power_at_bar", {})
     admission = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null",
                          "against_its_own_nulls": record_d["S25"],
-                         "dsr": slot_dsr(dsr, "S25", ("G", "net"), TAKER_DSR_VARIANCE)},
+                         "dsr": slot_dsr(dsr, "S25", ("G", "net"), TAKER_DSR_VARIANCE),
+                         "dsr_inputs": slot_dsr_inputs(inputs, "S25", ("G", "net"))},
                  "S25-Z": {"status_on_D": "fixed before D; outside the family"}}  # fmt: skip
     for stratum, slot in (("C", "S-C"), ("R", "S-R")):
         admission[slot] = {
@@ -410,12 +418,14 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
             "pbo": record_d["overfitting"]["pbo"].get(stratum),
             "selection_premium": record_d["selection_premium"][stratum],
             "dsr": slot_dsr(dsr, f"{stratum}*", ("G", "net"), TAKER_DSR_VARIANCE),
+            "dsr_inputs": slot_dsr_inputs(inputs, f"{stratum}*", ("G", "net")),
             "power_at_bar": power.get(slot),
         }
     passive_dsr = record_c.get("overfitting", {}).get("dsr", {})
     for slot in ("S-P", "S-M"):
         admission[slot] = dict(record_c["admission"][slot]) | {
-            "dsr": slot_dsr(passive_dsr, slot, ("net",), PASSIVE_DSR_VARIANCE)
+            "dsr": slot_dsr(passive_dsr, slot, ("net",), PASSIVE_DSR_VARIANCE),
+            "dsr_inputs": slot_dsr_inputs(passive_dsr, f"inputs/{slot}", ("net",)),
         }
     detector = parts["detector"]
     s25_cells = [k for k in slots["S25"]["neighbourhood"] if parse_key(k).stratum == "C"]
@@ -533,6 +543,15 @@ def overfitting_lines(admission: dict[str, Any]) -> list[str]:
     lines.append(
         "- Power of the t >= 3 bar: " + ("; ".join(power) if power else "not computed") + "."
     )
+    inputs = []
+    for slot in ("S25", "S-C", "S-R", "S-P", "S-M"):
+        for series, found in (admission.get(slot, {}).get("dsr_inputs") or {}).items():
+            if found:
+                inputs.append(f"{slot} {series}: variance {_number(found.get('variance'))}, "
+                              f"SR0 {_number(found.get('benchmark_sr0'))}, Sharpe ratio "
+                              f"{_number(found.get('sharpe'))}, {found.get('days')} days")  # fmt: skip
+    if inputs:
+        lines.append("- Beside each deflated Sharpe ratio: " + "; ".join(inputs) + ".")
     return lines
 
 
