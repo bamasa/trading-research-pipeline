@@ -267,9 +267,11 @@ def test_h_refuses_a_misrecorded_part_and_a_missing_manifest(repo: Path) -> None
         open_h(repo)
 
 
-def test_h_refuses_another_catalogue_and_an_unlocked_library(repo: Path) -> None:
+def test_h_refuses_another_catalogue_and_an_unlocked_library(repo: Path, monkeypatch: Any) -> None:
     with pytest.raises(HeldOutLocked, match="catalogue"):
         ledger(repo).open("H", catalogue_sha256="0" * 64)
+    # wherever the detector library is installed, the test reads it as not at its locked commit
+    monkeypatch.setattr(shl, "library_commit", lambda *_: None)
     with pytest.raises(HeldOutLocked, match="locked commit"):
         open_h(repo, require_locked_library=True)
 
