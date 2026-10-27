@@ -55,8 +55,11 @@ CODE_PATHS: tuple[str, ...] = ("src", "experiments/spot_maker_2026.py", "pyproje
 
 #: The configuration as registered, every placeholder null (2026-10-27).
 REGISTERED_SHA256 = "8af7842a9b56d8108956548197985ee910993a7e87fc7253bf8de130e862ea6d"
-#: Superseded by the amendment of 2026-10-27 that registered the fill rule's calibration.
-SUPERSEDED_SHA256: tuple[str, ...] = (REGISTERED_SHA256,)
+#: Superseded by the amendments of 2026-10-27 and 2026-10-28 (the fill rule's calibration).
+SUPERSEDED_SHA256: tuple[str, ...] = (
+    REGISTERED_SHA256,
+    "aa367b6434a7e8dc7553a2a3ce20eed2814d33f7844ff4d2e919bfe003be0db2",
+)
 NULL_HASH_PATTERN = re.compile(r"Null-placeholder sha256: `([0-9a-f]{64})`")
 FROZEN_HASH_PATTERN = re.compile(r"Frozen configuration sha256: `([0-9a-f]{64})`")
 AMENDMENTS_HEADING = "## Amendments"
@@ -111,11 +114,11 @@ SIGNAL_THETA: dict[str, float] = {
 }
 SIGNAL_HOLD_S = 50.0
 
-# --- the fill rule's calibration (the amendment of 2026-10-27) --------------------
+# --- the fill rule's calibration (the amendments of 2026-10-27 and 2026-10-28) ------
 CALIBRATION_SYMBOL = "BTCUSDT"
-CALIBRATION_TICK, CALIBRATION_LOT = 0.1, 0.001
-CALIBRATION_DAYS: tuple[date, date] = (date(2024, 2, 1), date(2024, 2, 25))
-CALIBRATION_SLOTS: tuple[str, ...] = ("MK-Q", "MK-SQ")
+CALIBRATION_TICK, CALIBRATION_LOT = 0.1, 1e-06
+CALIBRATION_DAYS: tuple[date, date] = (date(2026, 5, 1), date(2026, 7, 31))
+CALIBRATION_SLOTS: tuple[str, ...] = ("MK-S", "MK-Q", "MK-SQ")
 CALIBRATION_RULES: tuple[str, ...] = ("trade_through", "queue", "touch")
 CALIBRATION_SEEDS: tuple[int, ...] = tuple(range(10))
 CALIBRATION_MIN_SHARE = 0.80

@@ -228,19 +228,19 @@ measurements:
   no_number_beside_the_verdict_tier: "no number at another tier, at zero fees, under the touch bracket, in a cell, or in the held unit's P&L may be described as a slot working"
   result_D: null  # {slot: development summary}, labelled development; frozen by the D amendment
 
-calibration:  # registered by the amendment of 2026-10-27, before the code freeze and before any block is read
-  question: "whether the prints-only resting-order rule every verdict rests on ranks with a book's: the quoters run on days with a book under the market-making simulator's trade-through, queue and touch rules, and under this study's prints-only rule on the same days' prints thinned to BTC/FDUSD's print rate"
-  instrument: {venue: bybit, product: linear_perpetual, symbol: BTCUSDT, tick: 0.1, lot: 0.001}
-  days: {start: 2024-02-01, end: 2024-02-25, count: 25}  # the market-making rounds' development block D
-  source: "the main checkout's data/book and data/book_fresh, data/trades and data/funding for BTCUSDT, read in place, never copied or moved; the path is a runtime argument (--book-data)"
-  slots: [MK-Q, MK-SQ]
+calibration:  # registered by the amendment of 2026-10-27, its days, venue and slots corrected by that of 2026-10-28, before stage 1 and before any block is read
+  question: "whether the prints-only resting-order rule every verdict rests on ranks with a book's: the three slots run on days with a book under the market-making simulator's trade-through, queue and touch rules, and under this study's prints-only rule on the same days' prints thinned to BTC/FDUSD's print rate"
+  instrument: {venue: bybit, market: spot, id: "bybit-spot:BTCUSDT", symbol: BTCUSDT, tick: 0.1, lot: 1.0e-06}  # the spot study's D amendment
+  days: {start: 2026-05-01, end: 2026-07-31, block: D}  # D's days only, with a usable BTC/FDUSD day; development
+  source: "the spot study's checkout: data/spot/bybit/book/BTCUSDT and data/spot/bybit/prints/BTCUSDT, read in place inside the spot study's development access (D only), never copied or moved; the checkout is the stage's --source"
+  slots: [MK-S, MK-Q, MK-SQ]
   book_rules: [trade_through, queue, touch]
-  book_run: "market_making/simulator.simulate_day with the slot's quoting rule as a quoter (spot_maker/calibration.BookQuoter): the registered requote instants, skew and limit, the touch the book's best bid and ask, post-only against the other side, no replenishment between instants, an order kept by the simulator when its price is unchanged; clip 0.010 BTC (MK-SQ 0.020, its orders 0.010 or 0.020), soft limit one clip of the simulator, maker fee 0, taker 10 bp, latency 10 ms, quoting from 00:01, stop 23:58, flatten 23:59; every other setting the simulator's default"
-  prints_run: "spot_maker's quoter at the registered settings with the tick 0.1, on the day's prints thinned to the median count of BTC/FDUSD's aggregated prints a day over D's usable days (spot/calibration.thin_prints), seeds 0-9, cold"
-  signal: "MK-SQ's decisions: S25-PF, frozen, on the day's seed-0 thinned prints, cold (its first 61 minutes unscored); the same decisions in every run of the day"
+  book_run: "market_making/simulator.simulate_day with the slot's rule as a quoter (spot_maker/book_quoters: BookSignalMaker for MK-S, BookQuoter for MK-Q and MK-SQ): the registered requote instants, hold, skew and limit, the touch the book's best bid and ask, post-only against the other side, no replenishment between instants, an order kept by the simulator when its price is unchanged; its tape the day's reachable prints on the book's tick (prints off it counted and left out); clip 0.010 BTC (MK-SQ 0.020, its orders 0.010 or 0.020), soft limit one clip of the simulator, maker fee 0, taker 10 bp, latency 10 ms, quoting from 00:01, stop 23:58, flatten 23:59, no funding (its flag excludes nothing); every other setting the simulator's default"
+  prints_run: "spot_maker's executors at the registered settings with the book's tick, on the day's prints thinned to BTC/FDUSD's count of aggregated prints that day (spot/calibration.thin_prints), seeds 0-9, cold"
+  signal: "MK-S's and MK-SQ's decisions: S25-PF, frozen, on the day's seed-0 thinned prints, cold (its first 61 minutes unscored); the same decisions in every run of the day"
   per_day: "per slot and rule: the maker fills, their volume in BTC, and the making part (the mean 5 s markout of the maker fills, bp per fill; the book's mid under the book's rules, the mid proxy under the prints rule, pooled over the seeds)"
   test: {ordering: "the maker volume filled under trade-through <= queue <= touch (the book's touch rule fills an order whole at one print, so fills are not counted alike across rules; volume is)", bracket: "the prints rule's making part between the trade-through and touch rules' making parts, inclusive", min_share_of_days: 0.80, days: "days the simulator does not exclude, with a maker fill under every rule"}
-  passes: "both tests on at least 80% of the days, for both slots"
+  passes: "both tests on at least 80% of the days, for every slot"
   label: uncalibrated fill rule  # beside every verdict on the page when the calibration does not pass or is not run; nothing else changes
   not_run: "not run (no book day on disk)"
   result: null  # {slot: {days, ordering_share, bracket_share, passes}, passes, label}; frozen by the D amendment

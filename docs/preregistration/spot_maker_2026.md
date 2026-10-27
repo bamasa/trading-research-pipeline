@@ -947,3 +947,46 @@ zero maker fee could otherwise be an artefact of the proxy.
   `8af7842a…` is superseded.
 
 Null-placeholder sha256: `aa367b6434a7e8dc7553a2a3ce20eed2814d33f7844ff4d2e919bfe003be0db2`
+
+### 2026-10-28: the calibration's days, venue and slots corrected, after the code freeze and before stage 1
+
+A correction under this protocol: it changes the study code after the
+code-freeze note of 2026-10-28 (commit `4b5d7d3`), so the note names a new
+code-freeze commit. It is made before stage 1, before any day of W, D, H or P
+is copied, and before any number of the calibration was computed (one day of
+it was run for its timing and memory only). Its reason is the design, not
+data: the calibration of 2026-10-27 ran on another instrument (Bybit's linear
+perpetual, 2024) and left MK-S out; the closest book to this study's pair and
+period is Bybit spot BTCUSDT on D's days, which the spot study holds.
+
+- **The days and the venue**: Bybit spot BTCUSDT on D's days, 2026-05-01 to
+  07-31, each with a usable BTC/FDUSD day; its book (ten levels) and prints in
+  the spot study's checkout, read in place inside the spot study's own
+  development access (D only), never copied or moved. Development days only:
+  no day of E, H or P of either venue is read. Nothing is added to the disk
+  budget.
+- **The slots**: MK-S, MK-Q and MK-SQ. MK-S's rule on the book is a quoter of
+  the simulator (its entry at its own side's best price, cancelled at the
+  hold, the opposite decision or 23:59; its exit at the other side's best
+  price from the first fill seen + hold, requoted every 60 s), the fill seen
+  at the snapshot after it.
+- **The book run**: the repository's market-making simulator and its queue
+  model (the spot study has a taker's print rule, no resting order's queue),
+  under its trade-through, queue and touch rules; its tape the day's reachable
+  prints on the book's tick 0.1 (Bybit spot prints at a finer price are
+  counted and left out of the book run only); no funding.
+- **The prints run**: this study's executors on the day's prints thinned to
+  BTC/FDUSD's count of aggregated prints that same day, seeds 0 to 9, the tick
+  the book's.
+- **Unchanged**: what is recorded per day, the registered test (80% of the
+  days, for every slot, the maker volume ordered trade-through <= queue <=
+  touch and the prints rule's making part inside the book's bracket), the
+  label "uncalibrated fill rule" and "nothing else changes".
+- **Stage 0** ran at `4b5d7d3` on 2026-10-28 and passed; this correction
+  touches only the calibration (its module, the simulator's quoters, its
+  call in stage D and its line on the page), none of which stage 0 runs, so
+  stage 0 is not run again.
+- The configuration changed outside its placeholders, so its null-placeholder
+  hash is recomputed; `aa367b64…` is superseded.
+
+Null-placeholder sha256: `147aea710dbef9c390b5efff27816ab72d93d39fa636ab44c2b22160b33298e7`
