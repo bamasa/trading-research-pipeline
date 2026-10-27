@@ -59,8 +59,9 @@ and date, a family without its m) and says what is missing.
 
 **In the repository.** `market_making/prereg.py` (`placeholder_lines`,
 `unfrozen_text`, `sha256_bytes`, `freeze_text`); each study's loader with its
-`REGISTERED_SHA256` and `SUPERSEDED_SHA256` (`spot/registration.py`,
-`pipeline/short_horizon_registration.py`); the amendment lines
+`REGISTERED_SHA256` (`pipeline/short_horizon_registration.py`, and
+`spot/registration.py`, which also refuses its `SUPERSEDED_SHA256`); the
+amendment lines
 ``Null-placeholder sha256: `<hash>` `` and ``Frozen configuration sha256: `<hash>` ``.
 
 ### Between register and run: the code to come
