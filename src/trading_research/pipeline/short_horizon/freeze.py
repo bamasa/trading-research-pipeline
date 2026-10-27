@@ -646,7 +646,7 @@ class FrozenValues:
         return self.values[path]
 
 
-def rehearsal_read(block: Any, statuses: Any) -> dict[str, Any]:
+def rehearsal_read(block: Any, statuses: Any, preset: Any = ()) -> dict[str, Any]:
     """One stand-in block's read as ``reads.compute_results`` computes it: the
     usable days under the frozen threshold (or the block unreadable), every
     slot's series with its kills and placebos, the gap days put back, the MDEs,
@@ -656,7 +656,7 @@ def rehearsal_read(block: Any, statuses: Any) -> dict[str, Any]:
 
     if block.validated["unreadable"]:
         return {"unreadable": True, "excluded": block.validated["reasons"], "found": None}
-    series, info = compute_block(block)
+    series, info = compute_block(block, preset=preset)
     gaps = (
         compute_block(block.put_back(), days=block.gap_days, kills=False)[0]
         if block.gap_days
@@ -699,16 +699,20 @@ def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> d
         )
 
     h_block, f_block, p_block = block("H", days), block("F", reader), block("P", reader)
-    h = rehearsal_read(h_block, lambda s, i, g: reads.statuses_h(study, s, i, g, h_block.flags_ns))
+    preset = reads.preset_on_d(
+        study, frozen
+    )  # the statuses set on D, as the amendment freezes them
+    h = rehearsal_read(h_block, lambda s, i, g: reads.statuses_h(
+        study, s, i, g, h_block.flags_ns, h_block.detector["alarms"], frozen), preset)  # fmt: skip
     skipped: dict[str, Any] = {"unreadable": None, "found": None,
                                "skipped": "the stand-in before it was unreadable"}  # fmt: skip
     f, p = skipped, skipped
     if h["found"] is not None:
         f = rehearsal_read(f_block, lambda s, i, g: reads.statuses_f(
-            study, s, f_block.detector["alarms"], frozen, i, g, f_block.flags_ns, h=h["found"]))  # fmt: skip
+            study, s, f_block.detector["alarms"], frozen, i, g, f_block.flags_ns, h=h["found"]), preset)  # fmt: skip
     if f["found"] is not None:
         p = rehearsal_read(p_block, lambda s, i, g: reads.statuses_p(
-            study, s, i, g, p_block.flags_ns, f=f["found"]))  # fmt: skip
+            study, s, i, g, p_block.flags_ns, f=f["found"]), preset)  # fmt: skip
     outputs = {"stand_in_H": h, "stand_in_F": f, "stand_in_P": p}
     save_json(study.dir("E", "rehearsal") / "discarded_outputs.json", outputs)
     return {"ran": True, "parity_repeated_ok": True, "stand_in_H_days": len(days),
