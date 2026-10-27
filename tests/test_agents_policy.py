@@ -21,6 +21,7 @@ from agents.workflows.policy import (
     ROLES,
     Protected,
     ToolPolicy,
+    calendar_of,
     protected_calendar,
     whole_months,
 )
@@ -149,7 +150,8 @@ def test_the_calendar_holds_every_unread_or_spent_block_and_no_development_block
     assert found["short_horizon_2025:H"] == (date(2025, 7, 8), date(2025, 8, 20))
     assert found["mm_prereg:F"] == (date(2024, 3, 12), date(2024, 4, 7))
     assert found["spot_2026:never_in_a_block"] == (date(2026, 1, 5), date(2026, 1, 7))
-    assert not [k for k in found if k.endswith((":D", ":W", ":O", ":reader_test"))]
+    assert not [k for k in found if k.endswith((":D", ":W", ":O"))]
+    assert "spot_2026:reader_test" not in found  # no dates: its days are never_in_a_block
 
 
 def test_a_fetch_that_touches_a_protected_day_is_refused() -> None:
@@ -402,3 +404,114 @@ def test_the_web_is_closed_but_for_the_owners_fee_pages_to_the_registrar() -> No
     for role in ROLES:
         assert not policy(role).decide("WebSearch", {"query": "BTC funding"}).allowed
         assert not policy(role).decide("Task", {"prompt": "x"}).allowed
+
+
+def test_a_block_is_protected_whatever_its_name_and_form_unless_it_is_free() -> None:
+    text = """
+blocks:
+  W: [2021-01-01, 2021-01-31]
+  D: {start: 2021-02-01, end: 2021-03-31}
+  reader_test: [2020-12-15, 2020-12-16]
+  E: [2021-04-01, 2021-04-07]
+  H: [2021-04-08, 2021-06-30]
+  Z: {start: 2021-07-01, end: 2021-07-31}
+  V: {start: 2021-08-01, end: 2021-08-31, role: development}
+  R: {start: 2021-09-01, end: 2021-09-30, reads: free}
+  D2: {start: 2021-10-01, end: 2021-10-31, role: held_out}
+  stress_days: [2021-05-19]
+  scattered: [2021-11-01, 2021-11-02, 2021-11-05]
+  share: 0.25
+"""
+    found = {
+        p.block: (str(p.first), str(p.last))
+        for p in calendar_of("toy", text)
+        if p.block != "scattered"
+    }
+    assert found == {
+        "reader_test": ("2020-12-15", "2020-12-16"),
+        "E": ("2021-04-01", "2021-04-07"),
+        "H": ("2021-04-08", "2021-06-30"),
+        "Z": ("2021-07-01", "2021-07-31"),
+        "D2": ("2021-10-01", "2021-10-31"),
+        "stress_days": ("2021-05-19", "2021-05-19"),
+    }
+    runs = [(str(p.first), str(p.last)) for p in calendar_of("toy", text) if p.block == "scattered"]
+    assert runs == [("2021-11-01", "2021-11-02"), ("2021-11-05", "2021-11-05")]
+
+
+def _commit_on_branch(repo: Path, branch: str, name: str, text: str) -> None:
+    """Commit ``configs/<name>`` on ``branch`` by git's plumbing, no checkout."""
+
+    def git(*args: str, data: str | None = None) -> str:
+        done = subprocess.run(["git", *args], cwd=repo, input=data, capture_output=True,
+                              text=True, check=True)  # fmt: skip
+        return done.stdout.strip()
+
+    blob = git("hash-object", "-w", "--stdin", data=text)
+    configs = git("mktree", data=f"100644 blob {blob}\t{name}\n")
+    root = git("mktree", data=f"040000 tree {configs}\tconfigs\n")
+    identity = {"GIT_AUTHOR_NAME": "owner", "GIT_AUTHOR_EMAIL": "owner",
+                "GIT_COMMITTER_NAME": "owner", "GIT_COMMITTER_EMAIL": "owner"}  # fmt: skip
+    commit = subprocess.run(["git", "commit-tree", root, "-m", "x"], cwd=repo, text=True,
+                            capture_output=True, check=True,
+                            env={**__import__("os").environ, **identity}).stdout.strip()  # fmt: skip
+    git("update-ref", f"refs/heads/{branch}", commit)
+
+
+def test_a_registration_on_another_local_branch_protects_its_days(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "here.yaml").write_text("blocks:\n  H: [2030-01-01, 2030-01-31]\n")
+    _commit_on_branch(
+        tmp_path, "other/prereg", "far.yaml", "blocks:\n  H: [2021-04-08, 2021-06-30]\n"
+    )
+    found = {p.key: (str(p.first), str(p.last)) for p in protected_calendar(tmp_path)}
+    assert found == {"here:H": ("2030-01-01", "2030-01-31"), "far:H": ("2021-04-08", "2021-06-30")}
+    ex = ToolPolicy(tmp_path, "executor", "carry_x", calendar=None)
+    out = "--symbol BTCUSDT --output data/carry_x/raw"
+    assert not bash(ex, f"trading-research download --start 2021-05-01 --end 2021-05-02 {out}")
+    assert bash(ex, f"trading-research download --start 2021-07-01 --end 2021-07-02 {out}")
+    if "mm-bitmex/prereg" in subprocess.run(["git", "branch"], cwd=REPO, capture_output=True,
+                                            text=True, check=False).stdout:  # fmt: skip
+        assert "mm_bybit_2021:H" in {p.key for p in CALENDAR}
+
+
+@pytest.mark.parametrize(
+    ("tool", "data"),
+    [
+        ("Grep", {"pattern": "x", "path": ".", "glob": "data/**"}),
+        ("Grep", {"pattern": "x", "glob": "**/*.parquet"}),
+        ("Grep", {"pattern": "x", "path": ".", "glob": "*.csv"}),
+        ("Grep", {"pattern": "x", "path": ".", "glob": "{data,docs}/**"}),
+        ("Grep", {"pattern": "x", "path": ".", "glob": "artifacts/trades.csv"}),
+        ("Grep", {"pattern": "x", "path": "artifacts"}),
+        ("Glob", {"pattern": "data/**/*"}),
+        ("Glob", {"pattern": "**/*.parquet"}),
+        ("Glob", {"pattern": "*/spot_2026/*"}),
+        ("Glob", {"pattern": "d?ta/*"}),
+        ("Glob", {"pattern": "models/*", "path": "."}),
+        ("Glob", {"pattern": "*", "path": "data"}),
+        ("Glob", {"pattern": "../harness/data/*"}),
+        ("Read", {"file_path": "artifacts/trades.csv"}),
+    ],
+)
+def test_no_search_reaches_the_data_by_its_glob(tool: str, data: dict[str, str]) -> None:
+    for role in ROLES:
+        assert not policy(role).decide(tool, data).allowed, (role, tool, data)
+
+
+@pytest.mark.parametrize(
+    ("tool", "data"),
+    [
+        ("Grep", {"pattern": "K1", "path": "."}),
+        ("Grep", {"pattern": "K1", "path": "docs", "glob": "*.md"}),
+        ("Grep", {"pattern": "K1", "path": ".", "glob": "docs/**/*.md"}),
+        ("Grep", {"pattern": "K1", "path": ".", "glob": "!data/**"}),
+        ("Glob", {"pattern": "docs/**/*.md"}),
+        ("Glob", {"pattern": "**/*.py", "path": "src"}),
+        ("Glob", {"pattern": "README.md"}),
+    ],
+)
+def test_a_scoped_search_is_allowed(tool: str, data: dict[str, str]) -> None:
+    decision = policy("skeptic").decide(tool, data)
+    assert decision.allowed, decision.reason

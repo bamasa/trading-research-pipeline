@@ -9,9 +9,13 @@ time; never a push, a remote, an edit of study code or a write under ``data/``;
 no command whose dates touch a day a registration protects.
 
 **The protected calendar** is read from every ``configs/*.yaml`` with a
-``blocks`` section: each dated block whose role is not free (development,
-warm-up, a descriptive window inside development, or ``reads: free``), each
-``*_embargo`` pair and each ``never_in_a_block`` day. An archive published by
+``blocks`` section, in the working tree and on every local branch (a study
+registered on another branch protects its days here too): each dated block,
+given as a start/end mapping or as a two-date list, whatever its name, unless
+it is free: its role is development, warm-up or a descriptive window inside
+development, or it reads ``free``, or, given without a role, it is named D or
+W, the repository's names for development and warm-up; and each date of any
+other list of dates. An archive published by
 the month (``fundingRate``, and ``klines``, fetched a month at a time) counts
 as its whole month, since the month's file holds every day of it. Only the
 owner's grant for the run, ``<config stem>:<block>``, lifts a block, and only
@@ -68,6 +72,9 @@ DATA_HOSTS: tuple[str, ...] = (
     "s3-ap-northeast-1.amazonaws.com",
 )
 GIT_READ = frozenset({"log", "diff", "status", "show"})
+#: Directories no role reads or searches by hand: the data, the fitted models,
+#: the pipeline's artefacts and git's own store.
+UNREAD = frozenset({"data", "models", "artifacts", ".git"})
 GIT_WRITES_FILES = ("--output", "--ext-diff", "--textconv")
 OPERATORS = ";&|<>()"
 
@@ -100,35 +107,77 @@ class Protected:
         return f"{self.config}:{self.block}"
 
 
-def _span(name: str, value: Any) -> tuple[date, date] | None:
+#: Blocks without a role that are free by the repository's naming.
+FREE_NAMES = frozenset({"D", "W"})
+
+
+def _span(name: str, value: Any) -> tuple[date, date] | bool | None:
+    """A block's range; ``True`` when it is free; ``None`` when it is not a range."""
     if isinstance(value, dict):
+        role = value.get("role")
+        if (
+            role in FREE_ROLES
+            or value.get("reads") == "free"
+            or (role is None and name in FREE_NAMES)
+        ):
+            return True
         first, last = value.get("start"), value.get("end")
-        free = value.get("role") in FREE_ROLES or value.get("reads") == "free"
-        if isinstance(first, date) and isinstance(last, date) and not free:
-            return first, last
-    pair = isinstance(value, list) and len(value) == 2
-    if name.endswith("_embargo") and pair and all(isinstance(d, date) for d in value):
-        return value[0], value[1]
-    return None
+        return (first, last) if isinstance(first, date) and isinstance(last, date) else None
+    pair = isinstance(value, list) and len(value) == 2 and all(isinstance(d, date) for d in value)
+    if pair and name in FREE_NAMES:
+        return True
+    return (value[0], value[1]) if pair and value[0] <= value[1] else None
+
+
+def calendar_of(stem: str, text: str) -> list[Protected]:
+    """The ranges one registration's YAML protects."""
+    loaded = yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+    blocks = loaded.get("blocks") if isinstance(loaded, dict) else None
+    found: list[Protected] = []
+    for name, value in (blocks or {}).items() if isinstance(blocks, dict) else []:
+        span = _span(str(name), value)
+        if isinstance(span, tuple):
+            found.append(Protected(stem, str(name), *span))
+        elif span is None and isinstance(value, list):
+            days = sorted(d for d in value if isinstance(d, date))
+            found += [Protected(stem, str(name), a, b) for a, b in _runs(days)]
+    return found
+
+
+_BLOBS: dict[str, list[Protected]] = {}
+
+
+def _git(repo: Path, *args: str) -> str | None:
+    done = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=False)
+    return done.stdout if done.returncode == 0 else None
+
+
+def branch_configs(repo: Path) -> dict[str, list[tuple[str, str]]]:
+    """Each local branch's registration YAMLs, as (stem, blob id)."""
+    found: dict[str, list[tuple[str, str]]] = {}
+    for branch in (
+        _git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads") or ""
+    ).split():
+        listing = _git(repo, "ls-tree", branch, "configs/") or ""
+        rows = [line.split(None, 3) for line in listing.splitlines()]
+        found[branch] = [
+            (Path(r[3]).stem, r[2]) for r in rows if len(r) == 4 and r[3].endswith(".yaml")
+        ]
+    return found
 
 
 def protected_calendar(repo: Path) -> tuple[Protected, ...]:
-    """Every range a registration protects, in file and block order."""
+    """Every range a registration protects, in the working tree's ``configs/``
+    and on every local branch, each range once."""
     found: list[Protected] = []
     for path in sorted((repo / "configs").glob("*.yaml")):
-        loaded = yaml.load(path.read_text(), Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
-        blocks = loaded.get("blocks") if isinstance(loaded, dict) else None
-        if not isinstance(blocks, dict):
-            continue
-        for name, value in blocks.items():
-            span = _span(str(name), value)
-            if span is not None:
-                found.append(Protected(path.stem, str(name), *span))
-            elif name == "never_in_a_block" and isinstance(value, list):
-                days = sorted(d for d in value if isinstance(d, date))
-                for first, last in _runs(days):
-                    found.append(Protected(path.stem, str(name), first, last))
-    return tuple(found)
+        found += calendar_of(path.stem, path.read_text())
+    for _branch, configs in sorted(branch_configs(repo).items()):
+        for stem, blob in configs:
+            if blob not in _BLOBS:
+                _BLOBS[blob] = calendar_of(stem, _git(repo, "cat-file", "blob", blob) or "")
+            found += _BLOBS[blob]
+    return tuple(dict.fromkeys(found))
 
 
 def _runs(days: Sequence[date]) -> list[tuple[date, date]]:
@@ -294,7 +343,7 @@ class ToolPolicy:
                 return deny("a command runs in the foreground and in the sandbox")
             return self.bash(str(data.get("command", "")))
         if tool in {"Read", "Glob", "Grep", "NotebookRead"}:
-            return self.read(data)
+            return self.read(tool, data)
         if tool in {"Write", "Edit", "MultiEdit", "NotebookEdit"}:
             return self.write(tool, data)
         if tool == "WebFetch":
@@ -446,18 +495,29 @@ class ToolPolicy:
             return None
         return resolved.relative_to(self.repo).as_posix()
 
-    def read(self, data: dict[str, Any]) -> Decision:
+    def read(self, tool: str, data: dict[str, Any]) -> Decision:
         path = str(data.get("file_path") or data.get("notebook_path") or data.get("path") or ".")
-        pattern = str(data.get("pattern", "")) if "glob" not in data else ""
-        if ".." in pattern.split("/") or pattern.startswith("/"):
-            return deny("a pattern stays inside the repository")
         rel = self.relative(path)
         if rel is None:
             return deny(f"{path} is outside the repository")
-        top = rel.split("/")[0]
-        if top in {"data", "models", ".git"} or rel.split("/")[-1].startswith(".env"):
+        if rel.split("/")[0] in UNREAD or rel.split("/")[-1].startswith(".env"):
             return deny(f"{rel}: data is read only by the commands, through their access")
+        pattern = data.get("pattern") if tool == "Glob" else data.get("glob")
+        if tool in {"Glob", "Grep"} and pattern:
+            problem = pattern_problem(tool, rel, str(pattern))
+            if problem is not None:
+                return deny(problem)
+        elif tool == "Grep" and rel == "." and not self.unread_ignored():
+            return deny("a search from the root needs data/, models/ and artifacts/ ignored by git")
         return allow(f"read {rel}")
+
+    def unread_ignored(self) -> bool:
+        """Whether git ignores every unread directory, so a search from the root,
+        which honours the ignore rules, skips them."""
+        names = sorted(f"{name}/" for name in UNREAD - {".git"})
+        done = subprocess.run(["git", "check-ignore", *names], cwd=self.repo,
+                              capture_output=True, text=True, check=False)  # fmt: skip
+        return set(done.stdout.split()) == set(names)
 
     def writable(self) -> dict[str, str]:
         """The files this role may write for this study: ``any`` or ``append``."""
@@ -503,6 +563,29 @@ class ToolPolicy:
         if self.role != "registrar" or host not in self.web_hosts:
             return deny(f"{host or url} is not a source the owner listed for the registrar")
         return allow(f"the registrar reads {host} for its fees")
+
+
+def pattern_problem(tool: str, rel: str, pattern: str) -> str | None:
+    """Why a search's glob could reach an unread directory, or ``None``.
+
+    A glob is read from the search's path; one without a slash in a search's
+    ``glob`` matches at any depth. From the repository's root a glob must start
+    with a named directory or file, never a wildcard, so that no match can fall
+    under ``data/``, ``models/``, ``artifacts/`` or ``.git/``."""
+    if pattern.startswith("!"):
+        return None  # an exclusion narrows a search
+    if pattern.startswith("/") or ".." in pattern.split("/"):
+        return "a pattern stays inside the repository"
+    if tool == "Grep" and "/" not in pattern:
+        pattern = "**/" + pattern
+    full = pattern if rel == "." else f"{rel}/{pattern}"
+    first = full.split("/")[0]
+    if first in UNREAD or any(c in first for c in "*?[{"):
+        return (
+            f"{full} could reach data/, models/, artifacts/ or .git/; give the search a "
+            "path, or start its glob with a directory"
+        )
+    return None
 
 
 CODE = re.compile(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", re.DOTALL)

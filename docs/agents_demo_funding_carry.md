@@ -32,12 +32,16 @@ PYTHONPATH=src python -m agents.workflows.research_loop calendar
 
 | Range | Held by |
 |---|---|
+| 2020-12-15 to 2020-12-16, 2021-04-01 to 2021-06-30 | the Bybit 2021 study, registered on the local branch `mm-bitmex/prereg`: its reader-test days, E and H |
 | 2024-02-26 to 2024-06-02 | the market-making studies: H, the buffer, F (unread), P and Q |
 | 2025-07-01 to 2025-12-31 | the 2025 study: E, H, F and P, none read yet |
 | 2026-01-05 to 2026-01-07 | the 2025 study's reader-test days, in no block of any study |
-| 2026-08-01 to 2026-12-31 | the spot study: E, H (read), the P embargo and P |
+| 2026-08-01 to 2026-12-31 | the spot study: E, H (read), the P embargo and P; the spot maker study (local branch `spot-maker/prereg`): E, H and P |
 
-A replication on another local branch reads Bybit ETHUSDT days of late July and
+The calendar reads the registrations of the working tree and of every local
+branch, so a study registered on a branch not checked out here protects its
+days all the same; each turn's run record names the branches it read. A
+replication on another local branch reads Bybit ETHUSDT days of late July and
 August 2026 (its plan, read with `git show`, never checked out); the registrar keeps
 the carry's blocks clear of them as well.
 
@@ -114,7 +118,7 @@ by the month only and the policy counts a month archive as every day of it:
 
 | Block | Dates (UTC, inclusive) | Use | Why its edges |
 |---|---|---|---|
-| D | 2020-01-01 to 2024-01-31 and 2024-07-01 to 2025-06-30 | θ for C2 and C3, the neighbourhood, σ of daily results, the minimum detectable effect | February to June 2024 hold the market-making studies' days |
+| D | 2020-01-01 to 2020-11-30, 2021-07-01 to 2024-01-31 and 2024-07-01 to 2025-06-30 | θ for C2 and C3, the neighbourhood, σ of daily results, the minimum detectable effect | December 2020 to June 2021 hold the Bybit 2021 study's reader-test days, E and H (its D between them is left out with them, as one gap); February to June 2024 hold the market-making studies' days |
 | E | 2025-07-01 to 2026-03-31 | never fetched | holds the 2025 study's E, H, F and P, its reader-test days and the spot study's reader-test days |
 | H | 2026-04-01 to 2026-06-30 | the three statuses, read once after the D amendment | 91 days, the last whole months before the spot study's and the replication's days |
 | E2 | 2026-07-01 to 2026-12-31 | never fetched | holds the spot study's E, H and P and the replication's days |
@@ -201,20 +205,22 @@ calendar:
 
 | Command | Today | Registered |
 |---|---|---|
-| `trading-research download --start 2020-01-01 --end 2024-01-31 --symbol BTCUSDT --kind fundingRate --market futures-um --output data/funding_carry_2026/raw` | allowed | allowed |
+| `trading-research download --start 2021-07-01 --end 2024-01-31 --symbol BTCUSDT --kind fundingRate --market futures-um --output data/funding_carry_2026/raw` | allowed | allowed |
 | `trading-research download --start 2024-07-01 --end 2025-06-30 --symbol ETHUSDT --kind klines --interval 1h --market spot --output data/funding_carry_2026/raw` | allowed | allowed |
+| `trading-research download --start 2020-01-01 --end 2024-01-31 --symbol BTCUSDT --kind fundingRate --market futures-um --output data/funding_carry_2026/raw` | refused | refused |
 | `trading-research download --start 2024-02-01 --end 2024-02-25 --symbol BTCUSDT --kind fundingRate --market futures-um --output data/funding_carry_2026/raw` | refused | refused |
 | `trading-research download --start 2025-01-01 --end 2025-07-31 --symbol BTCUSDT --kind klines --interval 1h --market futures-um --output data/funding_carry_2026/raw` | refused | refused |
 | `trading-research download --start 2026-04-01 --end 2026-06-30 --symbol BTCUSDT --kind fundingRate --market futures-um --output data/funding_carry_2026/raw` | allowed | refused |
 | `trading-research download --start 2026-08-01 --end 2026-08-31 --symbol BTCUSDT --kind klines --interval 1h --market spot --output data/funding_carry_2026/raw` | refused | refused |
-| `trading-research download --start 2020-01-01 --end 2024-01-31 --symbol BTCUSDT --kind fundingRate --market futures-um` | refused | refused |
+| `trading-research download --start 2021-07-01 --end 2024-01-31 --symbol BTCUSDT --kind fundingRate --market futures-um` | refused | refused |
 | `python -m experiments.spot_2026 open H` | refused | refused |
 
-The third is refused because February 2024's archive holds the market-making
-studies' H; the fourth because July 2025 is the 2025 study's E and H; the fifth
-is allowed today only because no registration protects H yet, which is why the
-run step waits for the committed registration; the seventh writes to
-`data/raw`, outside the study's root. The fetch itself belongs to the entry
+The third is refused because April to June 2021 hold the Bybit 2021 study's E
+and H, registered on another local branch; the fourth because February 2024's
+archive holds the market-making studies' H; the fifth because July 2025 is the
+2025 study's E and H; the sixth is allowed today only because no registration
+protects H yet, which is why the run step waits for the committed
+registration; the eighth writes to `data/raw`, outside the study's root. The fetch itself belongs to the entry
 point's stage 1, after the code freeze, with its records and checksums.
 
 ## 4. Review (skeptic)
