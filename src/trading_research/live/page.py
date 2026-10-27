@@ -150,9 +150,12 @@ def render(session: Session, summary: dict[str, Any], manifest: dict[str, Any]) 
         f"- model: `{manifest['model']['name']}`, sha256 `{manifest['model']['sha256'][:16]}...`, "
         f"{len(manifest['model']['features'])} features ({manifest['model']['feature_set']}), "
         f"min confidence {config.min_confidence}, a boundary every {config.every} rows",
-        f"- fees: tier `{fees['tier']}`; fills paid at "
-        + ", ".join(f"{k} x{v}" for k, v in pnl["fee_statuses"].items())
-        + (" (no fill)" if not pnl["fee_statuses"] else ""),
+        f"- fees: tier `{fees['tier']}`; "
+        + (
+            "fills paid at " + ", ".join(f"{k} x{v}" for k, v in pnl["fee_statuses"].items())
+            if pnl["fee_statuses"]
+            else "no fill"
+        ),
         f"- code: {manifest['code'].get('commit')} (dirty: {manifest['code'].get('dirty')})",
         "",
         "## Money",

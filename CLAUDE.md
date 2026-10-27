@@ -84,6 +84,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `trading-research discover` | the venue's current listing | no historical data |
 | `trading-research reproduce --no-fetch` | the panel already on disk | fetching is the owner's call |
 | `trading-research mm-backtest` | the market-making study's book, prints and funding | `--allow-heldout` only on the owner's grant; `--second-read` never |
+| `trading-research paper` | public market-data streams (`run`, `record`) or a stored day (`replay`, `parity`, `status`) | public endpoints only, no key and no order; recordings under `data/paper/`, runs under `runs/paper/` |
 | `python -m experiments.short_horizon_2025` | its blocks, through its access and ledger | stages in order; `open` and `read` only on the owner's grant |
 | `python -m experiments.spot_2026` | its blocks, through its access and ledger | as above; `status`, `pages` and `--dry-run` freely |
 | `python -m pytest` | synthetic data and fixtures | no network |

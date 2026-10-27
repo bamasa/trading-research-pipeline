@@ -15,7 +15,7 @@ import pytest
 from typer.testing import CliRunner
 
 from trading_research.cli import app
-from trading_research.live.parity import ROUNDING_SENSITIVE, parity
+from trading_research.live.parity import parity
 from trading_research.live.replay import open_day
 
 runner = CliRunner()
@@ -59,7 +59,7 @@ def test_the_parity_command_prints_the_table_and_exits_zero(tmp_path: Path) -> N
 
 @pytest.mark.slow
 def test_parity_on_the_default_demo_day_beyond_the_declared_look_back(tmp_path: Path) -> None:
-    """20,000 rows, longer than the prepared set's 13,810-row look-back: the windows are cut.
+    """20,000 rows, longer than the prepared set's 13,816-row look-back: the windows are cut.
 
     Everything is held to the tolerance except the rolling dispersions and their
     z-scores, whose deviation must stay at the rounding level of the input.
@@ -68,7 +68,7 @@ def test_parity_on_the_default_demo_day_beyond_the_declared_look_back(tmp_path: 
     report = parity(day, subsample=50, workdir=tmp_path / "work")
     table = report.table
     assert report.ok
-    held = table[~table["feature"].str.contains(ROUNDING_SENSITIVE)]
+    held = table[~table["rounding_sensitive"]]
     assert held["within_tolerance"].all()
     dispersions = table[table["feature"].str.contains(r"_std\d+$")]
     assert float(dispersions["max_abs_dev"].max()) < 1e-8

@@ -24,7 +24,7 @@ declares it reads, so the value equals the batch value over the whole day:
   with a 60 s as-of tolerance, but its exponentially weighted means remember
   every row since the frame began. They are given a declared look-back here:
   the rows after which an earlier start moves the value by less than
-  ``ewm_tolerance`` of the starting difference (13,810 rows at span 1,000 and
+  ``ewm_tolerance`` of the starting difference (13,816 rows at span 1,000 and
   1e-12). ``prepare`` also starts each day's frame 1,200 rows before midnight
   and reads only that day's prints, and the window keeps both rules, so the
   streaming frame starts where the batch frame starts whenever the batch frame
