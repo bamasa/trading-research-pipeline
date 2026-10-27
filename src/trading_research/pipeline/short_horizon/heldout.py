@@ -1040,22 +1040,22 @@ def compute_block(block: Block, *, days: list[date] | None = None,
         if passive and days
         else pd.DataFrame()
     )
+    stale = {days[i] for t in takers for i in t.stale}
+    if len(rows):
+        stale |= {date.fromisoformat(d) for d in rows.loc[rows["excluded"].astype(bool), "day"]}
+    if kills and days:  # the one-day shift stepping over stale days, before any series is built
+        stale, rows = step_over_stale(block, takers, passive, days, stale, rows)
     series: dict[str, Any] = {}
     for t in takers:
         series[t.slot] = SlotDays(t.slot, "taker", days, t.value, t.trades, t.gross, t.turnover, t.ic,
                                   t.random, t.flipped, t.shifted, t.long_only, t.short_only, t.cells,
                                   t.latency, void=tuple(sorted(t.void)), on_s25_signal=t.slot == "S25",
                                   window_h=t.window_h, extra=t.extra())  # fmt: skip
-    for p in passive:
+    for p in passive:  # from the rows step_over_stale returns: the re-simulated shifts among them
         on_s25 = p.slot == "S25-Z" or signal_is_s25
         series[p.slot] = passive_series(
             p, rows, days, draws, parse_key(p.cell.key).regime_h, on_s25
         )
-    stale = {days[i] for t in takers for i in t.stale}
-    if len(rows):
-        stale |= {date.fromisoformat(d) for d in rows.loc[rows["excluded"].astype(bool), "day"]}
-    if kills and days:
-        stale, rows = step_over_stale(block, takers, passive, days, stale, rows)
     keep = np.array([d not in stale for d in days], dtype=bool)
     series = {slot: subset(s, keep) for slot, s in series.items()}
     in_block = [a for a in block.detector["alarms"]
