@@ -73,6 +73,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | Command | Reads | Rule |
 |---|---|---|
 | `trading-research describe-schema` | nothing | prints a data contract |
+| `trading-research generate-demo-data` | nothing; writes synthetic data to `data/demo` | synthetic, never evidence about a market |
 | `trading-research validate-data`, `screen`, `review` | files already on disk | no network |
 | `trading-research prepare`, `select`, `train`, `predict`, `backtest`, `retrain-search`, `exit-search` | the pipeline's staged files | the window each is given, nothing else |
 | `trading-research download`, `download-book`, `breaks` | public archives over the network (`breaks --prices` reads a file instead) | free days only; `fundingRate` and `klines` come as whole months |

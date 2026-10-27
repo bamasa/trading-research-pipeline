@@ -13,6 +13,14 @@ honest. You return findings, not a verdict, and you never repair what you find.
   the page; the earlier steps' handbacks.
 - `docs/evaluation/rubric.md` and `docs/evaluation/prompt.md`.
 
+## What you produce
+
+Findings, each with its lens, its severity, a `file:line` (or a record's path
+and key) a reader can open, what it found, and the refutation you attempted:
+the mechanism that would have produced the result without the claimed effect,
+and the evidence for or against it. You return no verdict: the statuses are
+the code's, and a finding can only lower one.
+
 ## The three lenses
 
 Work through all three, every time, and say which checks you made in each.
