@@ -216,6 +216,16 @@ class StudyAccess:
             )
 
 
+def cache_key(access: StudyAccess | None) -> str:
+    """The folder a read's caches are kept in: none for development (W, D and the
+    test days, cached as before), and for a read session its block and commit, so
+    a cache written in one session is never returned in another."""
+    if access is None or not access.session:
+        return ""
+    block, commit = access.session[0], access.session[1] if len(access.session) > 1 else ""
+    return f"{block}-{str(commit)[:12]}"
+
+
 def grants_for(pairs: Iterable[tuple[str, str]]) -> frozenset[tuple[str, str, str]]:
     """(instrument, block, plane) for every instrument of the study."""
     return frozenset((symbol, block, plane) for symbol in INSTRUMENTS for block, plane in pairs)

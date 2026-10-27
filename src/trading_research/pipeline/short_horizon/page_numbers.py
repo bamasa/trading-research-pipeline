@@ -169,7 +169,9 @@ def fill_rule_summary(block: Any, days: Sequence[date]) -> dict[str, list[dict[s
     other rules' runs (the registration measures FILL on H's streams alone)."""
     from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
 
-    files = sorted((block.work / "passive").glob("*.parquet"))
+    from trading_research.pipeline.short_horizon.heldout import cache_dir
+
+    files = sorted((cache_dir(block) / "passive").glob("*.parquet"))
     if not files:
         return {}
     rows = pd.concat([pd.read_parquet(p) for p in files], ignore_index=True)

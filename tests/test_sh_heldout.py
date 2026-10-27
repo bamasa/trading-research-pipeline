@@ -342,3 +342,33 @@ def test_a_passive_shift_re_simulated_over_a_stale_day_reaches_the_series(
     # with the shift re-sourced (1, 7, 1: mean 3) K-placebo fires on a true mean of 2
     k_placebo = next(k for k in st.kills(s, np.ones(3, bool)) if k.name == "K-placebo")
     assert k_placebo.fired
+
+
+def test_a_cached_output_is_returned_only_under_an_access_that_permits_its_day(
+    tmp_path: Path,
+) -> None:
+    """The simulator's day file and the second detector's grid are refused, cached
+    or not, to an access that does not permit the day; a session's caches are kept
+    under its block and commit."""
+    from trading_research.data import study_access as sa
+    from trading_research.market_making.prereg import HeldOutLocked
+    from trading_research.pipeline.short_horizon import heldout_passive as hp
+    from trading_research.pipeline.short_horizon import second_detector as sd
+
+    day = date(2025, 7, 8)
+    (tmp_path / f"{day}.parquet").write_bytes(b"cached")
+    job = hp.VariantJob(tmp_path, "BTCUSDT", day, sa.development_access(), (),
+                        np.zeros(0, np.int64), 0, 1.0, tmp_path)  # fmt: skip
+    with pytest.raises(HeldOutLocked, match="cached output"):
+        hp.run_variants(job)
+    study = SimpleNamespace(symbol="BTCUSDT", dir=lambda *parts: tmp_path.joinpath(*parts))
+    grid = tmp_path / "detector2" / "grid"
+    grid.mkdir(parents=True)
+    pd.DataFrame({"mid": [1.0]}).to_parquet(grid / f"{day}.parquet")
+    with pytest.raises(HeldOutLocked, match="cached grid"):
+        sd.cached_grid(study, day, sa.development_access())
+    session = sa.StudyAccess(sa.grants_for(sa.opened_pairs("H")), "first read",
+                             session=("H", "0123456789abcdef", "c", "e"), issuer=sa._ISSUER)  # fmt: skip
+    assert sa.cache_key(session) == "H-0123456789ab" and sa.cache_key(sa.development_access()) == ""
+    block = SimpleNamespace(work=tmp_path, access=session)
+    assert ho.cache_dir(block) == tmp_path / "H-0123456789ab"

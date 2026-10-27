@@ -141,6 +141,19 @@ class Block:
     def work(self) -> Path:
         return self.study.dir("reads", self.label or self.name)
 
+    @property
+    def cache(self) -> Path:
+        """Where the read's caches are kept: keyed by the session (its block and
+        commit), so no cache of another session is returned."""
+        return cache_dir(self)
+
+    def require_day(self, day: date, planes: tuple[str, ...] = (sa.BOOK, sa.PRINTS)) -> None:
+        """The session's access permits the day in ``planes``: checked before a cached
+        output of the day is returned, as the readers check it before reading."""
+        access = sa.resolve(self.access)
+        for plane in planes:
+            access.require(self.study.symbol, [day], plane, what="return a cached output of")
+
     @cached_property
     def validated(self) -> dict[str, Any]:
         """Each planned day's exclusions under the frozen threshold, and the usable days."""
@@ -261,10 +274,18 @@ class Block:
             frame = ft.day_frame(self.book(day), self.prints(day), calibration, history)
             return to_stored(frame, StoreLayout.from_dict(self.fitted["store_layout"]))
 
-        return ft.read_or_build(self.work / "features" / f"{day}.parquet", build)
+        for needed in (day, *([] if self.previous(day) is None else [self.previous(day)])):
+            self.require_day(needed)
+        return ft.read_or_build(self.cache / "features" / f"{day}.parquet", build)
 
     def scored_from(self, day: date) -> int:
         return ft.scored_from_ns(day, self.cold(day))
+
+
+def cache_dir(block: Any) -> Path:
+    """A read's cache folder: the block's work folder, under the session's key."""
+    key = sa.cache_key(getattr(block, "access", None))
+    return Path(block.work) / key if key else Path(block.work)
 
 
 def slot_keys(block: Block, slot: str) -> list[str]:
@@ -325,12 +346,13 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
     for cfg in configs:
         path = block.study.repo / WEIGHTS_DIR / fit_key(cfg)
         control_path = block.study.repo / WEIGHTS_DIR / fit_key(cfg, control=True)
-        out = block.work / "network" / cfg.folder
+        out = cache_dir(block) / "network" / cfg.folder
         out.mkdir(parents=True, exist_ok=True)
         model = load(path, kind="tcn") if path.exists() else None
         control = load(control_path, kind="tcn") if model and control_path.exists() else None
         for day in days:
             target = out / f"{day}.npz"
+            block.require_day(day)
             if target.exists():
                 continue
             rows = len(block.features(day))
@@ -419,7 +441,7 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
             scores[cfg.name] = proba[:, 2] - proba[:, 0]
             continue
         if cfg.model == "tcn":
-            with np.load(block.work / "network" / cfg.folder / f"{day}.npz") as saved:
+            with np.load(cache_dir(block) / "network" / cfg.folder / f"{day}.npz") as saved:
                 mu, sigma = saved["mu"].astype(np.float64), np.exp(0.5 * saved["log_variance"])
                 if "control_mu" in saved:
                     guess = np.where(unscored, np.nan, saved["control_mu"].astype(np.float64))
@@ -878,7 +900,7 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
 
     draws = block.study.scale.random_direction_draws
     rngs = {p.slot: [np.random.default_rng(k) for k in range(draws)] for p in slots}
-    out = block.work / ("passive" if kills else "passive_gap_days")
+    out = cache_dir(block) / ("passive" if kills else "passive_gap_days")
     sources = {p.slot: shift_sources(days, list(range(len(days))), p.wrap_end) for p in slots}
     jobs = []
     for i, day in enumerate(days):
@@ -958,7 +980,7 @@ def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[Passive
                                tuple(shifted_run(p.slot, p.cell, p.decisions[p.cell.key][j],
                                                  midnight_ns(days[i]), midnight_ns(days[j])) for p, j in pairs),
                                block.flags_ns, block.threshold, float(block.fitted["sigma_ref"]),
-                               block.work / "passive_shifted" / f"round_{rounds}")
+                               cache_dir(block) / "passive_shifted" / f"round_{rounds}")
                     for i, pairs in sorted(redo.items())]  # fmt: skip
             new = pd.concat([pd.read_parquet(path) for path in simulate_jobs(block, jobs)])
             redone = {(p.slot, days[i].isoformat()) for i, pairs in redo.items() for p, _ in pairs}
