@@ -89,3 +89,34 @@ Nothing is pushed.
   (code freeze `e1f9961`, one D run, the run log's sha256 as committed in
   `c157a09`), reviewed against the D record and committed: frozen
   configuration sha256 `219b5aa02b8769cb85831f963c2d5839656693ce0f67452a4f01bc113a3d604a`.
+
+## 2026-10-28
+
+Times below are UTC on 27 October (MSK 28 October).
+
+- HEAD re-check of H, 21:13: 84 files, all 200, 0.635 GB, every size as
+  committed with the registration. Disk: 27 GB free; the study's data 145 MB
+  before H.
+- H opened through the ledger at 21:13:53 on the clean tree at `38cf355`
+  (frozen configuration `219b5aa0…`), the open entry committed as `b6a6e38`
+  before the fetch; H's 84 days fetched (newest first, no 404, no unreadable
+  file, no row outside its day), none excluded; the read closed at 21:20 with
+  the results' sha256 `b19a334a…` in the ledger.
+- H, every verdict with the label **uncalibrated fill rule** (the
+  registration carries no calibration of the prints-only fill rule against a
+  book; it is left to a follow-up study, since H was open when it was asked
+  for and nothing may change after the read):
+  - S0 (`l0|none`): **killed**, first kill K1 at −227.27 against 0.00 USDT per
+    100 USDT of clip a day; net −2.69 bp per fill at −2.5 / +7.5 bp, −5.19 bp
+    without the rebate, making part −3.75 bp; 13,979 fills a day; no day
+    positive. K-dir, K-days, K-nbhd and K-placebo also fire.
+  - F (`l2|vle0.33`): **not admitted on D (i, iv)**, a labelled measurement
+    with Holm p = 1; under the precedence it would be killed, first kill K1 at
+    −39.13; net −2.64 bp per fill, −5.14 bp without the rebate, making part
+    −2.54 bp; 2,544 fills a day; no day positive.
+  - Neither is paid with the rebate nor ex-rebate; both are "paid at the touch
+    only" (the optimistic touch bracket is positive), an upper bound and not a
+    result. The negative control is negative and the positive control positive
+    on D and H, as expected.
+- No primary is a candidate, so nothing further is read (the registration has
+  no block P).
