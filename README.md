@@ -1424,3 +1424,21 @@ would be profitable in future.
 ## License
 
 [MIT](LICENSE).
+
+## Running the research loop with an agent
+
+[`CLAUDE.md`](CLAUDE.md) holds the rules any agent follows in this repository,
+and [`agents/`](agents/README.md) a harness that runs an LLM agent through the
+loop the registered studies followed by hand: propose, register, run, review,
+verdict, record ([`agents/protocol.md`](agents/protocol.md)). Five roles, a
+researcher, a registrar, an executor, a skeptic and a scribe, each with its own
+prompt; every tool call passes a policy that allows only the repository's own
+commands, one at a time, refuses any fetch that touches a day a registration
+protects, and never pushes. The verdict is the study code's, checked against
+its ledger; the loop stops at every gate the owner holds. How it would run the
+roadmap's funding-rate carry study is in
+[`docs/agents_demo_funding_carry.md`](docs/agents_demo_funding_carry.md).
+
+```bash
+PYTHONPATH=src python -m agents.workflows.research_loop run --study funding_carry_2026 --brief-file <brief.md>
+```
