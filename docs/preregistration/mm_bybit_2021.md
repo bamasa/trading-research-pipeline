@@ -761,3 +761,24 @@ beyond the reader-test days, of D or of H has been fetched; no quoter has been
 scored. Stage 0 is re-run under the corrected rule before the code freeze.
 
 Null-placeholder sha256: `17fca5f80713ae1618f2acc598370833af2ccac275a58b4ad0d3d313f26289e3`
+
+### 2026-10-27: the D amendment
+
+Values frozen on W and D, written into the configuration's placeholders and
+nothing else. Every number here is development: selected, biased upward.
+
+- `reader_test_result`: `{"2020-12-15": {"day": "2020-12-15", "direction": "descending", "duplicate_match_ids": 0, "funding_settlements": [1607990400000000000, 1608019200000000000, 1608048000000000000], "gz_bytes": 1597065, "gz_sha256": "495c480f3cbfa70f43e1443b686fac13b4675ef0580663fa0cbbbf26975c595e", "ids_unique": true, "lot": 0.001, "max_gap_s": 158.742, "prints_on_day": 40829, "rows": 40829, "rows_grid": 18110, "rows_out_of_order": 0, "rows_outside_day": 0, "seconds_per_cell_day": {"l0|none": 0.11, "l1|vle0.67": 0.082}, "sides": {"buy": 18864, "sell": 21965}, "stamp_decimals": 4, "stamps_ordered": true, "status": "usable", "tick": 0.5}, "2020-12-16": {"day": "2020-12-16", "direction": "descending", "duplicate_match_ids": 0, "funding_settlements": [1608076800000000000, 1608105600000000000, 1608134400000000000], "gz_bytes": 2647229, "gz_sha256": "1e50fc1b2e833450cbca727768cce8502850b050000eedc64a8666268b09b9f8", "ids_unique": true, "lot": 0.001, "max_gap_s": 140.24, "prints_on_day": 65420, "rows": 65420, "rows_grid": 25927, "rows_out_of_order": 0, "rows_outside_day": 0, "seconds_per_cell_day": {"l0|none": 0.156, "l1|vle0.67": 0.12}, "sides": {"buy": 33922, "sell": 31498}, "stamp_decimals": 4, "stamps_ordered": true, "status": "usable", "tick": 0.5}}`
+- `excluded_days_W`: `[]`
+- `excluded_days_D`: `[]`
+- `instrument_spec`: `{"days": 107, "days_other_lot": 0, "days_other_tick": 0, "lot": 0.001, "tick": 0.5}`
+- `sigma_ref_bp`: `5.0269980940242736`
+- `vol_quantiles_bp`: `{"0.33": 3.838253720449603, "0.67": 6.546746316430293, "0.9": 11.217684264364907}`
+- `chosen_cell`: `"l2|vle0.33"`
+- `outright_peak`: `"l2|vle0.33"`
+- `admission`: `{"A": -22.728026573957674, "S": -42.63058289113803, "admitted": false, "count_A": 999, "count_B": 77, "draws_A": 999, "null_A_q95": 1.77507429156602, "null_B_q95": 1.0323589016646268, "p_A": 1.0, "p_B": 1.0, "reasons": "i, iv", "shifts_B": 77}`
+- `neighbourhood`: `["l1|vle0.33", "l1|vle0.67", "l2|vle0.33", "l2|vle0.67"]`
+- `sigma_d`: `{"F": 15.9958414878783, "S0": 146.68429856016377}`
+- `mde`: `{"F": 6.701911261505588, "S0": 61.45754527208708}`
+- `compute`: `{"code_freeze_commit": "e1f996159b49d70e68652d621950bdf32643d0ff", "d_runs": 1, "run_log_sha256": "503ce1826377dd4a97d2df61449e959705d280b45d162e26b3c317530fd127e2", "seconds": {"D_day_median": 45.01706252095755, "D_wall": 704.2, "stage0_cell_day_max": 0.156}}`
+
+Frozen configuration sha256: `219b5aa02b8769cb85831f963c2d5839656693ce0f67452a4f01bc113a3d604a`

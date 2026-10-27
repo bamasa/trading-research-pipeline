@@ -96,16 +96,16 @@ heldout:
   mde_z: 3.84
 
 frozen:
-  reader_test_result: null  # {day: {rows, sides, stamps_ordered, ids_unique, rows_outside_day, tick, lot, seconds_per_cell_day}} on the two reader-test days; frozen by the D amendment
-  excluded_days_W: null  # [[day, reason]] over W; frozen by the D amendment
-  excluded_days_D: null  # [[day, reason]] over D; frozen by the D amendment
-  instrument_spec: null  # {tick, lot}, the values every usable day of W and D derived; frozen by the D amendment
-  sigma_ref_bp: null  # median one-minute volatility of the mid proxy over W's quoting seconds; frozen by the D amendment
-  vol_quantiles_bp: null  # {0.33, 0.67, 0.9} quantiles of the same sample; frozen by the D amendment
-  chosen_cell: null  # the key of F, chosen on D; frozen by the D amendment
-  outright_peak: null  # the key with the highest S whatever its fills; frozen by the D amendment
-  admission: null  # {S, A, p_A, p_B, admitted, reasons}; frozen by the D amendment
-  neighbourhood: null  # F's neighbourhood keys; frozen by the D amendment
-  sigma_d: null  # {F, S0}: standard deviation of the daily series over D; frozen by the D amendment
-  mde: null  # {F, S0}: 3.84 x sigma_d / sqrt(84); frozen by the D amendment
-  compute: null  # {code_freeze_commit, d_runs, run_log_sha256, seconds}; frozen by the D amendment
+  reader_test_result: {'2020-12-15': {day: '2020-12-15', direction: descending, duplicate_match_ids: 0, funding_settlements: [1607990400000000000, 1608019200000000000, 1608048000000000000], gz_bytes: 1597065, gz_sha256: 495c480f3cbfa70f43e1443b686fac13b4675ef0580663fa0cbbbf26975c595e, ids_unique: true, lot: 0.001, max_gap_s: 158.742, prints_on_day: 40829, rows: 40829, rows_grid: 18110, rows_out_of_order: 0, rows_outside_day: 0, seconds_per_cell_day: {l0|none: 0.11, l1|vle0.67: 0.082}, sides: {buy: 18864, sell: 21965}, stamp_decimals: 4, stamps_ordered: true, status: usable, tick: 0.5}, '2020-12-16': {day: '2020-12-16', direction: descending, duplicate_match_ids: 0, funding_settlements: [1608076800000000000, 1608105600000000000, 1608134400000000000], gz_bytes: 2647229, gz_sha256: 1e50fc1b2e833450cbca727768cce8502850b050000eedc64a8666268b09b9f8, ids_unique: true, lot: 0.001, max_gap_s: 140.24, prints_on_day: 65420, rows: 65420, rows_grid: 25927, rows_out_of_order: 0, rows_outside_day: 0, seconds_per_cell_day: {l0|none: 0.156, l1|vle0.67: 0.12}, sides: {buy: 33922, sell: 31498}, stamp_decimals: 4, stamps_ordered: true, status: usable, tick: 0.5}}  # {day: {rows, sides, stamps_ordered, ids_unique, rows_outside_day, tick, lot, seconds_per_cell_day}} on the two reader-test days; frozen by the D amendment
+  excluded_days_W: []  # [[day, reason]] over W; frozen by the D amendment
+  excluded_days_D: []  # [[day, reason]] over D; frozen by the D amendment
+  instrument_spec: {days: 107, days_other_lot: 0, days_other_tick: 0, lot: 0.001, tick: 0.5}  # {tick, lot}, the values every usable day of W and D derived; frozen by the D amendment
+  sigma_ref_bp: 5.0269980940242736  # median one-minute volatility of the mid proxy over W's quoting seconds; frozen by the D amendment
+  vol_quantiles_bp: {'0.33': 3.838253720449603, '0.67': 6.546746316430293, '0.9': 11.217684264364907}  # {0.33, 0.67, 0.9} quantiles of the same sample; frozen by the D amendment
+  chosen_cell: l2|vle0.33  # the key of F, chosen on D; frozen by the D amendment
+  outright_peak: l2|vle0.33  # the key with the highest S whatever its fills; frozen by the D amendment
+  admission: {A: -22.728026573957674, S: -42.63058289113803, admitted: false, count_A: 999, count_B: 77, draws_A: 999, null_A_q95: 1.77507429156602, null_B_q95: 1.0323589016646268, p_A: 1.0, p_B: 1.0, reasons: 'i, iv', shifts_B: 77}  # {S, A, p_A, p_B, admitted, reasons}; frozen by the D amendment
+  neighbourhood: [l1|vle0.33, l1|vle0.67, l2|vle0.33, l2|vle0.67]  # F's neighbourhood keys; frozen by the D amendment
+  sigma_d: {F: 15.9958414878783, S0: 146.68429856016377}  # {F, S0}: standard deviation of the daily series over D; frozen by the D amendment
+  mde: {F: 6.701911261505588, S0: 61.45754527208708}  # {F, S0}: 3.84 x sigma_d / sqrt(84); frozen by the D amendment
+  compute: {code_freeze_commit: e1f996159b49d70e68652d621950bdf32643d0ff, d_runs: 1, run_log_sha256: 503ce1826377dd4a97d2df61449e959705d280b45d162e26b3c317530fd127e2, seconds: {D_wall: 704.2, D_day_median: 45.01706252095755, stage0_cell_day_max: 0.156}}  # {code_freeze_commit, d_runs, run_log_sha256, seconds}; frozen by the D amendment
