@@ -20,3 +20,21 @@ summarised in the D amendment; this log records what happened and when.
   2024-04-25 06:00 to 2026-10-22 00:00; the taker fee at Regular is 10 bp.
 - The dry run on stand-ins passed end to end (stages 0, 1, D, the amendment,
   H's read through the ledger); its numbers are discarded.
+
+## 2026-10-28
+
+- Code freeze at `4b5d7d3` (note committed in `a81565b`).
+- Stage 0 on the reader-test days 2026-03-03 to 05 (21:1x UTC on 10-27):
+  every day usable, the print contract and the tick 0.01 checked, both sides
+  present; 31,830, 38,701 and 29,101 resting orders of every slot's runs
+  re-filled under the three rules with no violation, probe orders nested, no
+  void condition. Timings a day: load 0.1 s, features 1.0 s, signal 0.05 s,
+  every run of every slot 21.8 s, checks 1.8 s. Every other number discarded.
+- The registration corrected before stage 1 (the amendment of 2026-10-28):
+  the fill rule's calibration moved to Bybit spot BTCUSDT's book on D's days,
+  with MK-S added; null-placeholder sha256 `147aea71…`. One calibration day
+  was run for its timing (32 s, 1.6 GB) and its numbers were not read. Code
+  freeze moved to `bf044ea` (note in `9d66d81`).
+- Stage 1, 21:20 UTC: W and D copied from the spot study's checkout, 122
+  files, 111.4 MB, none absent, every sha256 equal to its source's; no day of
+  W or D excluded; the signal computed on D's 92 days; 28.6 GB free.
