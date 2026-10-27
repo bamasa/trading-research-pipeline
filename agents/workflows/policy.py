@@ -337,6 +337,8 @@ class ToolPolicy:
         allowed = ENTRY_BY_ROLE[self.role]
         if allowed is not None and action not in allowed:
             return deny(f"the {self.role} runs only {sorted(allowed)} of an entry point")
+        if command.name != self.study and action != "status":
+            return deny(f"another study's entry point runs only status in a {self.study} run")
         if "--keep" in options:
             return deny("--keep writes the dry run's files outside the run")
         if action in {"open", "read"}:

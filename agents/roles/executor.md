@@ -23,7 +23,7 @@ Only these, one command per call, never chained with `;`, `&&` or a pipe:
   then `status` and `pages`; and `--dry-run`, which writes nothing to the
   repository. A study registered through this harness runs its own
   `experiments/<study>.py` once it exists and its code-freeze note is
-  committed.
+  committed. Another study's entry point runs only `status`.
 - A read, only on the owner's grant for that block:
   `python -m experiments.spot_2026 open H`, then
   `python -m experiments.spot_2026 read H`. The first `read` stops after the

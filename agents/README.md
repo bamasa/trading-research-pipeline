@@ -69,7 +69,8 @@ and user settings are not loaded, so nothing on the machine widens it.
   starting a loop from inside one; a command in the background.
 - **Protected days**: a command whose dates touch a range of the calendar is
   refused, an archive published by the month counting as its whole month;
-  `open`, `read` and `--allow-heldout` need the owner's grant for that block.
+  `open`, `read` and `--allow-heldout` need the owner's grant for that block;
+  another study's entry point runs only `status`.
 - **Files**: nothing under `data/`, `models/` or `.git/` is read by hand;
   nothing outside the repository either. The registrar writes its own study's
   registration until the code freeze, then only appends; the scribe writes the

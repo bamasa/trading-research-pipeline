@@ -89,8 +89,8 @@ def test_one_known_command_at_a_time_and_nothing_else(command: str) -> None:
         "uv run --no-sync trading-research describe-schema trades",
         "python -m experiments.spot_2026 status",
         "PYTHONPATH=src .venv/bin/python -m experiments.short_horizon_2025 status",
-        "python -m experiments.spot_2026 --dry-run",
-        "python -m experiments.short_horizon_2025 1 --workers 8",
+        "python -m experiments.spot_2026 status",
+        "python -m experiments.short_horizon_2025 status",
         "python -m pytest tests/test_agents_policy.py -q",
         "git log --oneline -5",
         "git diff --name-only HEAD~1..HEAD",
@@ -105,6 +105,16 @@ def test_one_known_command_at_a_time_and_nothing_else(command: str) -> None:
 def test_the_executor_runs_the_repository_commands(command: str) -> None:
     decision = policy("executor").decide("Bash", {"command": command})
     assert decision.allowed, decision.reason
+
+
+def test_the_executor_runs_the_stages_of_its_own_study_only() -> None:
+    assert bash(
+        policy("executor", "short_horizon_2025"), "python -m experiments.short_horizon_2025 1"
+    )
+    assert bash(policy("executor", "spot_2026"), "python -m experiments.spot_2026 --dry-run")
+    assert not bash(policy("executor"), "python -m experiments.spot_2026 1")
+    assert not bash(policy("executor"), "python -m experiments.spot_2026 pages")
+    assert not bash(policy("executor", "spot_2026"), "python -m experiments.short_horizon_2025 E")
 
 
 def test_the_policy_knows_every_cli_command_and_no_other() -> None:
@@ -164,9 +174,10 @@ def test_a_fetch_writes_under_data_only_into_the_study_root() -> None:
 
 
 def test_open_read_and_allow_heldout_need_the_owners_grant_for_that_block() -> None:
-    assert not bash(policy("executor"), "python -m experiments.spot_2026 open H")
-    assert not bash(policy("executor"), "python -m experiments.short_horizon_2025 read H")
-    granted = policy("executor", grants=frozenset({"spot_2026:H"}))
+    assert not bash(policy("executor", "spot_2026"), "python -m experiments.spot_2026 open H")
+    sh = policy("executor", "short_horizon_2025")
+    assert not bash(sh, "python -m experiments.short_horizon_2025 read H")
+    granted = policy("executor", "spot_2026", grants=frozenset({"spot_2026:H"}))
     assert bash(granted, "python -m experiments.spot_2026 open H")
     assert not bash(granted, "python -m experiments.spot_2026 read P")
     assert not bash(granted, "python -m experiments.short_horizon_2025 open H")
@@ -182,8 +193,8 @@ def test_each_role_runs_only_its_own_commands() -> None:
     assert not bash(policy("researcher"), "python -m experiments.spot_2026 1")
     assert not bash(policy("skeptic"), "trading-research download-book --start 2024-01-01")
     assert bash(policy("skeptic"), "trading-research review --trades artifacts/t.csv")
-    assert bash(policy("skeptic"), "python -m experiments.spot_2026 --dry-run")
-    assert not bash(policy("scribe"), "python -m experiments.spot_2026 pages")
+    assert bash(policy("skeptic", "spot_2026"), "python -m experiments.spot_2026 --dry-run")
+    assert not bash(policy("scribe", "spot_2026"), "python -m experiments.spot_2026 pages")
     assert bash(policy("scribe"), "python -m experiments.spot_2026 status")
     assert not bash(policy("executor"), "python -m agents.workflows.research_loop run")
     assert not bash(policy("executor"), "python -m experiments.grand_search")
