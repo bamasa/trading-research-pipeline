@@ -68,3 +68,10 @@ Nothing is pushed.
   passed; 0.08 to 0.16 s a cell-day for S0 and `l1|vle0.67`. The dry run
   passed again at the same commit.
 - Code freeze at `e1f9961` ([note](mm_bybit_2021_code_freeze.md)).
+- HEAD re-check of W and D, 16:55: 107 files, all 200, 0.047 GB and 0.487 GB,
+  every size as committed with the registration. Disk: 27 GB free.
+- Stage 1, 16:57 to 16:59: W's 15 remaining days and D's 90 fetched, all
+  newest first, no row outside its day, no 404, no unreadable file; funding of
+  W and D fetched. W: no day excluded; tick 0.5 and lot 0.001 every day;
+  sigma_ref 5.03 bp a minute and the quantiles 3.84 (0.33), 6.55 (0.67) and
+  11.22 (0.9) bp, over 1,456,560 quoting seconds.
