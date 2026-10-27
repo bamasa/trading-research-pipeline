@@ -167,9 +167,8 @@ def fill_rule_summary(block: Any, days: Sequence[date]) -> dict[str, list[dict[s
     the results file show one FILL table. Read from the passive runs' day files;
     nothing when the block ran no passive slot, and nothing on a block without the
     other rules' runs (the registration measures FILL on H's streams alone)."""
-    from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
-
     from trading_research.pipeline.short_horizon.heldout import cache_dir
+    from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
 
     files = sorted((cache_dir(block) / "passive").glob("*.parquet"))
     if not files:
