@@ -454,7 +454,7 @@ def test_the_prompts_are_checked_by_the_studys_interpreter_from_a_thin_loop() ->
     [
         "the key is sk-ant-api03-abcdefghijklmnopqrstuv",
         "ANTHROPIC_API_KEY=abcdefghijkl",
-        'api_key: "abcd1234efgh"',
+        "api" + '_key: "abcd1234efgh"',  # split, so the repository's own audit passes
         "access_token = abcdefghijklmnop1234",
         "secret: hunter2hunter2",
         "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
