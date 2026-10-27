@@ -731,3 +731,33 @@ their H runs under the rule. D numbers are never quoted as results.
 ### 2026-10-27: the registration
 
 Null-placeholder sha256: `0ece0d7d66099b86f8eac46d7e73abdfe2b1219585a2da590bf821b54da36558`
+
+### 2026-10-27: stage 0, the print-gap threshold (before the code freeze)
+
+**What stage 0 found.** On the two reader-test days, which this document lets
+stage 0 read freely and on which nothing is scored, the reader passed every
+check (files newest first, reversed; stamps with four decimals and in order; no
+duplicate match id; no row outside its day; both sides present), and **both
+days were excluded as `print_gap`**. Their longest gaps between consecutive
+prints stamped from 00:10 to 23:59 were 158.7 s and 140.2 s. The tail of the
+gaps is smooth: on 2020-12-15, 459 gaps over 30 s, 92 over 60 s, 20 over 90 s,
+7 over 120 s, none over 180 s; on 2020-12-16, 392, 89, 19, 4 and none. Across
+the eleven gaps over 120 s the price is unchanged six times and moves by at most
+3.0 USDT (about 1.5 bp). That is a quiet market at 520 to 9,300 prints an hour,
+not a hole in the archive: the
+premise of the 120 s rule in [Day exclusions](#the-data-model-prints-only) and
+[Choices and their reasons](#choices-and-their-reasons) ("two minutes without a
+print in BTCUSDT's 2021 market is an archive gap, not a quiet market") is false
+at W's rate, and the rule would drop most of W and a share of D and H unknown
+in advance for a reason the registration did not intend.
+
+**The correction.** A day is excluded as `print_gap` when two consecutive
+prints stamped between 00:10 and 23:59 are more than **600 s** apart (was
+120 s): four times the longest gap seen on the reader-test days, so that a
+quiet market is kept and a hole of ten minutes or more is still caught. The
+configuration's `settings.print_gap_exclusion_s` changes from 120 to 600 and
+the code reads the threshold from it. Nothing else changes. No file of W
+beyond the reader-test days, of D or of H has been fetched; no quoter has been
+scored. Stage 0 is re-run under the corrected rule before the code freeze.
+
+Null-placeholder sha256: `17fca5f80713ae1618f2acc598370833af2ccac275a58b4ad0d3d313f26289e3`

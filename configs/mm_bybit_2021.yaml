@@ -58,7 +58,7 @@ settings:
   stop_quoting_at: "23:58"
   flatten_at: "23:59"
   pause_s: 5
-  print_gap_exclusion_s: 120
+  print_gap_exclusion_s: 600
   markout_horizons_s: [1, 5, 30]
   making_horizon_s: 5
   vol_half_life_s: 60
