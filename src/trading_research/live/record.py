@@ -20,10 +20,10 @@ appends a gzip member, so several sessions on one day make one valid file.
   :func:`trading_research.data.bybit_trades.parse`, from a CSV in the linear
   archive's columns.
 * Both venues: the staged pipeline's layout,
-  ``raw/<SYMBOL>/bookTicker/<day>.parquet`` (the ten-level rows; ``prepare``
-  reads the touch) and ``raw/<SYMBOL>/aggTrades/<day>.parquet`` (the trade
+  ``staged/<SYMBOL>/bookTicker/<day>.parquet`` (the ten-level rows; ``prepare``
+  reads the touch) and ``staged/<SYMBOL>/aggTrades/<day>.parquet`` (the trade
   contract), each directory with a manifest, so
-  ``trading-research prepare --raw <root>/<venue>-<market>/raw`` runs on a
+  ``trading-research prepare --raw <root>/<venue>-<market>/<SYMBOL>/staged`` runs on a
   recorded day.
 
 A day is a UTC day; a message is filed under the day of its receipt.
@@ -113,8 +113,10 @@ class RawRecorder:
 
 
 def read_raw_log(path: Path | str) -> Iterator[tuple[int, str, str]]:
-    """``(recv_ns, connection, message)`` for every line of a raw log, in file order."""
-    with gzip.open(path, "rt", encoding="utf-8") as handle:
+    """``(recv_ns, connection, message)`` for every line of a raw log (gzipped or plain)."""
+    name = str(path)
+    opener = gzip.open if name.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as handle:
         for line in handle:
             line = line.rstrip("\n")
             if not line:
@@ -156,7 +158,7 @@ def export_day(
     tag = source_tag(venue, market)
     if venue == "bybit":
         written.update(_export_bybit(raw, base, symbol, day, tag))
-    stage = base / "raw" / symbol
+    stage = base / "staged" / symbol
     if rows:
         book = rows_to_frame(rows, symbol=symbol, source=tag)
         target = stage / "bookTicker" / f"{day.isoformat()}.parquet"

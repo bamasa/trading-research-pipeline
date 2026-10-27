@@ -78,6 +78,8 @@ class PaperLedger:
     refused: int = 0
     fee_statuses: dict[str, int] = field(default_factory=dict)
     last_mid: float = float("nan")
+    #: Fills booked since the last mark (the run's end marks again only if there were any).
+    fills_since_mark: int = 0
 
     def kill(self, reason: str, ts_ns: int) -> None:
         if self.killed is None:
@@ -130,6 +132,7 @@ class PaperLedger:
                 self.account.cash,
             )
         )
+        self.fills_since_mark += 1
         if abs(self.account.position) > self.limits.max_position * (1 + 1e-12):
             self.kill("max_position", ts_ns)
         return fee
@@ -137,6 +140,7 @@ class PaperLedger:
     def mark(self, ts_ns: int, mid: float) -> float:
         """Mark at ``mid``; returns net equity and latches ``max_loss`` when it is reached."""
         self.last_mid = mid
+        self.fills_since_mark = 0
         self.account.check_identity(mid)
         equity = self.account.equity(mid)
         self.marks.append((ts_ns, mid, self.account.position, equity, self.account.fees))

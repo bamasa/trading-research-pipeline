@@ -165,7 +165,7 @@ class Session:
         self.ended_wall_ns = time.time_ns()
         if self.execution is not None and self.last_ns is not None:
             self.execution.finish(self.last_ns)
-            if self.last_row is not None:
+            if self.last_row is not None and self.ledger.fills_since_mark:
                 self.ledger.mark(self.last_ns, self.last_row.mid)
         return self.summary()
 

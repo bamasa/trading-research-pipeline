@@ -50,7 +50,6 @@ flagged ``no_print``.
 from __future__ import annotations
 
 import hashlib
-import math
 import pickle
 from collections import deque
 from dataclasses import dataclass, field
@@ -306,6 +305,7 @@ class Execution:
         self._next = 1
         self._open: list[PaperOrder] = []
         self._entry: PaperOrder | None = None
+        self._need_walk: list[PaperOrder] = []
         self.quoter: TouchQuoter | SkewQuoter | None = None
         if self.settings.mode == "maker":
             self.quoter = (
@@ -341,6 +341,8 @@ class Execution:
             order.queue = Order(order.oid, side, self._ticks(price), size, size, decided, arrival)
         self.orders.append(order)
         self._open.append(order)
+        if kind == "taker":
+            self._need_walk.append(order)
         self._count(f"orders_{kind}")
         return order
 
@@ -434,16 +436,16 @@ class Execution:
     def on_row(self, row: BookRow, delay_ns: int = 0) -> None:
         """Advance to a new row: close sweeps, land cancels, run the timers, quote."""
         self._close_sweeps(row.ts_ns)
+        waiting = []
+        for order in self._need_walk:
+            if order.arrival_ns > row.ts_ns:
+                waiting.append(order)
+                continue
+            px, sz = (row.ask_px, row.ask_sz) if order.side > 0 else (row.bid_px, row.bid_sz)
+            walk = walk_book(np.asarray(px), np.asarray(sz), order.size)
+            order.book_walk_price = float(walk.vwap[0])
+        self._need_walk = waiting
         for order in self.working():
-            if (
-                order.kind == "taker"
-                and math.isnan(order.book_walk_price)
-                and order.arrival_ns <= row.ts_ns
-            ):
-                px, sz = (row.ask_px, row.ask_sz) if order.side > 0 else (row.bid_px, row.bid_sz)
-                order.book_walk_price = float(
-                    walk_book(np.asarray(px), np.asarray(sz), order.size).vwap[0]
-                )
             if (
                 order.kind == "limit"
                 and order.cancel_ns is not None
@@ -561,7 +563,7 @@ class Execution:
         hard = self.settings.clip * (self.settings.soft_limit_clips + 1.0)
         logged: list[Any] = [row.ts_ns, position]
         for side, quote in ((1, quotes.bid), (-1, quotes.ask)):
-            price = None if quote.price is None else quote.price * self.tick
+            price = None if quote.price is None else round(quote.price * self.tick, 10)
             size = quote.size
             if price is not None and abs(position + side * size) > hard + 1e-12:
                 price = None

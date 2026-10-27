@@ -481,8 +481,15 @@ def parity_cmd(
             f"{int(group['boundaries'].max()):,}",
             f"{group['max_abs_dev'].max():.2e}",
             f"{group['max_rel_dev'].max():.2e}",
-            ", ".join(group.loc[~group["within_tolerance"], "feature"]) or "none",
+            ", ".join(
+                f"{feature}*" if sensitive else feature
+                for feature, sensitive in group.loc[
+                    ~group["within_tolerance"], ["feature", "rounding_sensitive"]
+                ].itertuples(index=False)
+            )
+            or "none",
         )
     console.print(table)
+    console.print("* a rolling dispersion or its z-score: reported, not held (see live/parity.py)")
     if not report.ok:
         raise typer.Exit(code=1)

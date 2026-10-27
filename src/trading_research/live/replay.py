@@ -147,7 +147,7 @@ def open_day(
         if not path.exists():
             raise ReplayError(f"no recording for {venue}-{market} {symbol} on {when}: {path}")
     name = path.name
-    if name.endswith(".jsonl.gz"):
+    if name.endswith((".jsonl.gz", ".jsonl")):
         if not (venue and market):
             # The recorder's layout names both: <root>/<venue>-<market>/<SYMBOL>/raw/<day>.
             pair = path.parent.parent.parent.name
