@@ -410,17 +410,35 @@ class ResearchLoop:
         return record
 
 
+#: The SDK's built-in tools each role is given at all; the policy still decides
+#: every call. No role gets a subagent, a web search or a notebook.
+TOOLS_BY_ROLE: dict[str, list[str]] = {
+    "researcher": ["Bash", "Read", "Glob", "Grep"],
+    "registrar": ["Bash", "Read", "Glob", "Grep", "Write", "Edit", "WebFetch"],
+    "executor": ["Bash", "Read", "Glob", "Grep"],
+    "skeptic": ["Bash", "Read", "Glob", "Grep"],
+    "scribe": ["Bash", "Read", "Glob", "Grep", "Write", "Edit"],
+}
+DISALLOWED = ["WebSearch", "Task", "Agent", "NotebookEdit", "Bash(git push)", "Bash(git push *)",
+              "Bash(git remote *)", "Bash(git commit *)"]  # fmt: skip
+
+
 class SdkRunner:
     """A role's turn through the agent SDK, every tool call decided by the policy.
 
-    The policy runs as a hook before every tool call, which no allow rule or mode
-    can bypass, and again as the SDK's tool callback. Project and user settings
-    are not loaded (``setting_sources=[]``), so nothing on the machine widens it.
+    The role is given only its tools (:data:`TOOLS_BY_ROLE`); the policy runs as
+    a hook before every tool call, which no allow rule or mode can bypass, and
+    again as the SDK's tool callback. Project and user settings are not loaded
+    (``setting_sources=[]``), so nothing on the machine widens it. The model's
+    name comes from the environment; the key is the SDK's to read from the
+    environment, and nothing here reads, logs or stores it.
     """
 
     def __init__(self, repo: Path, max_turns: int | None = None) -> None:
         self.repo = repo
         self.max_turns = max_turns or int(os.environ.get("TRP_AGENT_MAX_TURNS", "40"))
+        budget = os.environ.get("TRP_AGENT_MAX_BUDGET_USD")
+        self.max_budget = float(budget) if budget else None
 
     @staticmethod
     def model(role: str) -> str:
@@ -431,11 +449,8 @@ class SdkRunner:
             raise RuntimeError("set TRP_AGENT_MODEL (or TRP_AGENT_MODEL_<ROLE>) to a model name")
         return found
 
-    async def __call__(self, call: RoleCall) -> RoleReply:
-        import importlib
-
-        sdk = importlib.import_module("claude_agent_sdk")
-        events: list[dict[str, Any]] = []
+    def options(self, call: RoleCall, events: list[dict[str, Any]], sdk: Any) -> Any:
+        """The SDK's options for one turn, the policy installed twice."""
 
         async def hook(
             data: dict[str, Any], tool_use_id: str | None, _context: Any
@@ -456,28 +471,36 @@ class SdkRunner:
                 return sdk.PermissionResultAllow(updated_input=given)
             return sdk.PermissionResultDeny(message=decision.reason)
 
-        denied = ["WebSearch", "Task", "Bash(git push)", "Bash(git push *)", "Bash(git remote *)"]
-        options = sdk.ClaudeAgentOptions(
+        return sdk.ClaudeAgentOptions(
             system_prompt=call.system,
             cwd=str(self.repo),
             model=self.model(call.role),
             max_turns=self.max_turns,
+            max_budget_usd=self.max_budget,
             setting_sources=[],
+            tools=list(TOOLS_BY_ROLE[call.role]),
             allowed_tools=[],
-            disallowed_tools=denied,
+            disallowed_tools=list(DISALLOWED),
             permission_mode="default",
             can_use_tool=can_use,
             hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[hook])]},
             env={"PYTHONPATH": str(self.repo / "src")},
         )
+
+    async def __call__(self, call: RoleCall) -> RoleReply:
+        import importlib
+
+        sdk = importlib.import_module("claude_agent_sdk")
+        events: list[dict[str, Any]] = []
         texts: list[str] = []
-        async with sdk.ClaudeSDKClient(options=options) as client:
+        async with sdk.ClaudeSDKClient(options=self.options(call, events, sdk)) as client:
             await client.query(call.prompt)
             async for message in client.receive_response():
                 if isinstance(message, sdk.AssistantMessage):
                     texts += [b.text for b in message.content if isinstance(b, sdk.TextBlock)]
                 elif isinstance(message, sdk.ResultMessage):
-                    events.append({"result": message.subtype, "turns": message.num_turns})
+                    events.append({"result": message.subtype, "turns": message.num_turns,
+                                   "cost_usd": message.total_cost_usd})  # fmt: skip
         return RoleReply("\n".join(texts), events)
 
 
