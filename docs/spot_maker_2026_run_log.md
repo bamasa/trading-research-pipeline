@@ -24,7 +24,7 @@ summarised in the D amendment; this log records what happened and when.
 ## 2026-10-28
 
 - Code freeze at `4b5d7d3` (note committed in `a81565b`).
-- Stage 0 on the reader-test days 2026-03-03 to 05 (21:1x UTC on 10-27):
+- Stage 0 on the reader-test days 2026-03-03 to 05, 21:12 to 21:14 UTC:
   every day usable, the print contract and the tick 0.01 checked, both sides
   present; 31,830, 38,701 and 29,101 resting orders of every slot's runs
   re-filled under the three rules with no violation, probe orders nested, no
@@ -35,10 +35,10 @@ summarised in the D amendment; this log records what happened and when.
   with MK-S added; null-placeholder sha256 `147aea71…`. One calibration day
   was run for its timing (32 s, 1.6 GB) and its numbers were not read. Code
   freeze moved to `bf044ea` (note in `9d66d81`).
-- Stage 1, 21:20 UTC: W and D copied from the spot study's checkout, 122
+- Stage 1, 21:22 to 21:23 UTC: W and D copied from the spot study's checkout, 122
   files, 111.4 MB, none absent, every sha256 equal to its source's; no day of
   W or D excluded; the signal computed on D's 92 days; 28.6 GB free.
-- Stage D, 21:23 to about 21:55 UTC, four workers: every run of every slot on
+- Stage D, 21:23 to 21:43 UTC, four workers: every run of every slot on
   D's 92 days (none excluded) and the fill rule's calibration on Bybit spot
   BTCUSDT's book on the same days. Development numbers, in-sample for the
   signal, never results: sigma_D 1.24 (MK-S), 0.38 (MK-Q), 0.36 (MK-SQ) bp
@@ -51,3 +51,14 @@ summarised in the D amendment; this log records what happened and when.
   label "uncalibrated fill rule".
 - The D amendment written by `amend` and committed after review (`266babb`):
   frozen configuration `8dbd3181…`, the run log's manifest (3 rows).
+- The D amendment's date and its heading are UTC (2026-10-27); this log is
+  dated by Moscow time.
+- H opened at 21:43:48 UTC (open entry committed in `05db841`, the copy records in `82434d1`);
+  H's 75 days copied from the spot study's checkout, none absent, the copy
+  records committed; the computing read ran on four workers and closed with
+  the results file's sha256 `f43974b5…`; results, page and ledger committed
+  in `bd99397`. Every slot killed by K1 at the fees charged: MK-S −2.35,
+  MK-Q −2.88, MK-SQ −2.79 bp per fill, each labelled "uncalibrated fill
+  rule". No slot is a candidate: P is not opened.
+- A summary added to the results page by hand, its numbers copied from the
+  results file.

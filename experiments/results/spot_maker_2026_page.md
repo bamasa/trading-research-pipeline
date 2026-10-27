@@ -2,6 +2,47 @@
 
 Written by `experiments/spot_maker_2026.py` from the results files of the reads; registered in `docs/preregistration/spot_maker_2026.md`. The verdict of every slot is `net_bp_fill`, the day's net over its turnover in bp, averaged over the days with a fill, at the fees a Regular account was charged on each day: 0 bp on a resting order's fill and 10 bp on the 23:59 taker flatten. Resting orders fill only when a print trades through their price (the queue ahead taken as exhausted). Every other number is a measurement; the zero-fee figures are references beside the fee-inclusive ones, never a result.
 
+## Summary
+
+Added by hand after the read; every number below is copied from
+`experiments/results/spot_maker_2026_H.json` and the tables under it.
+
+- **H, 2026-08-08 to 2026-10-21, 75 of 75 days usable, the first and only
+  read.** Every slot is **killed by K1** at the fees a Regular account was
+  charged (maker 0 bp, the 23:59 taker flatten 10 bp). No slot is a candidate,
+  so P is not read and these statuses are final.
+- **Every verdict carries the label "uncalibrated fill rule".** On Bybit spot
+  BTCUSDT's book on D's days the three fill rules ranked as they should on
+  every counted day, but the prints rule's making part fell inside the book's
+  trade-through to touch bracket on 22% (MK-S), 64% (MK-Q) and 58% (MK-SQ) of
+  the days, under the registered 80%.
+
+| Slot | Net bp per fill (verdict) | Net bp per round trip | Gross bp per fill (zero-fee reference) | Making part, bp per fill | Fills a day (maker / taker) | Days positive | First kill |
+|---|---|---|---|---|---|---|---|
+| MK-S | −2.35 | −4.70 (mean of days) | −2.35 | −1.62 | 426.6 (426.6 / 0.03) | 3 of 75 | K1 at −2.35 against 0 |
+| MK-Q | −2.88 | no round trips | −2.87 | −1.21 | 4,360.6 (4,359.8 / 0.8) | 0 of 75 | K1 at −2.88 against 0 |
+| MK-SQ | −2.79 | no round trips | −2.77 | −1.31 | 6,148.3 (6,147.4 / 1.0) | 0 of 75 | K1 at −2.79 against 0 |
+
+- **The loss is in the fill price, not the fee.** The maker fee is 0, and the
+  flattens were few (2, 60 and 72 over the block), so the net and the gross
+  differ by at most 0.02 bp per fill. The 5 s markout of the maker fills is
+  negative for every slot (K-dir fires on all three), and it worsens with the
+  horizon (1 s, 5 s, 30 s: MK-S −0.48, −1.62, −2.68; MK-Q −0.69, −1.21, −2.37;
+  MK-SQ −0.72, −1.31, −2.41 bp per fill): a resting order filled only when
+  the market trades through it is filled against the move.
+- **The predictions registered in advance**: MK-S was predicted killed by K1
+  with a net between −1 and 0 bp per fill; it was killed, at −2.35, below the
+  predicted range. MK-Q was predicted killed by K1 with a negative making part
+  (K-dir firing too): as predicted. MK-SQ was predicted between MK-Q and MK-S:
+  −2.79 lies between −2.88 and −2.35.
+- **What else fired**: K-nbhd and K-days on all three slots, K-cap on MK-Q
+  (0.17 of printed volume) and MK-SQ (0.31), K-drift on MK-Q, K-placebo on
+  MK-SQ. MK-S beat its placebos (percentile 100 of its 200 random-direction
+  runs) and its drift runs, whose references were negative too (−2.49 and
+  −2.56 bp per fill). No void condition fired in any run.
+- Under the touch rule (the optimistic bracket) MK-S's net was −2.21 bp per
+  fill and the quoters' −2.82 and −2.73: still negative.
+
 ## H (first read)
 
 ### Headline sentences
