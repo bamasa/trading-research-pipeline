@@ -96,13 +96,19 @@ PYTHONPATH=src python -m agents.workflows.research_loop calendar
 PYTHONPATH=src python -m agents.workflows.research_loop check --role executor "git push"
 PYTHONPATH=src python -m agents.workflows.research_loop null-hash configs/spot_2026.yaml
 PYTHONPATH=src python -m agents.workflows.research_loop prompts
+PYTHONPATH=src python -m agents.workflows.research_loop audit agents/runs/<run>
 ```
 
-`calendar` prints every range a registration protects; `check` says whether
+`calendar` prints every range a registration protects, read from the working
+tree's `configs/` and from every local branch's (a study registered on a
+branch not checked out here protects its days all the same): every dated
+block, as a start/end mapping or a two-date list whatever its name, except
+development and warm-up (by role, or named D or W when it has none); `check` says whether
 the policy would let a role run a command, and why; `null-hash` prints a
 YAML's null-placeholder sha256 by the repository's own `unfrozen_text` and
 `sha256_bytes`; `prompts` checks that every command the agent's documents name
-exists, with its options.
+exists, with its options; `audit` lists what in a run directory looks like a
+secret, by file, line and pattern, never the value.
 
 ## A live run
 
@@ -167,8 +173,11 @@ only through its last fenced `handback` block, which the orchestrator checks.
 | skeptic | [`skeptic.md`](../agents/roles/skeptic.md) | `pytest`, `review`, `validate-data`, `status`, `--dry-run`, read-only git, the helpers | nothing | `lenses` (leakage, fidelity, execution, each with `checks` and `refutation`); `findings`, each with `refutation` |
 | scribe | [`scribe.md`](../agents/roles/scribe.md) | `describe-schema`, an entry point's `status`, read-only git, the helpers | `README.md`, `docs/findings.md`; appends to the study's run log and defects | `sentences`, each a registered headline sentence it wrote |
 
-Every role may read the repository outside `data/`, `models/` and `.git/`,
-and nothing outside it. No role commits, pushes, opens a subagent or searches
+Every role may read the repository outside `data/`, `models/`,
+`artifacts/` and `.git/`, and nothing outside it. A Grep or Glob from the
+root must start its glob with a named directory or file, so that no match can
+fall under those directories; a Grep from the root without a glob runs only
+while git ignores them. No role commits, pushes, opens a subagent or searches
 the web; a role is given only its own tools (`TOOLS_BY_ROLE`).
 
 ## Each rule, how it is enforced, and its test
@@ -178,16 +187,16 @@ mechanically is marked as the owner's review.
 
 | Rule | Enforced by | Tests |
 |---|---|---|
-| Nothing is published; a role never commits | the policy allows only `git log`, `diff`, `status`, `show`; the SDK's disallowed tools | `test_no_role_pushes_touches_a_remote_or_moves_a_branch`, `test_a_turns_options_load_no_settings_and_give_the_role_only_its_tools`, `test_the_scratch_repository_has_only_the_owners_commits_and_no_remote` |
+| Nothing is published; a role never commits | the policy allows only `git log`, `diff`, `status`, `show`; the SDK's disallowed tools | `test_no_role_pushes_touches_a_remote_or_moves_a_branch`, `test_a_turns_options_load_no_settings_and_give_the_role_only_its_tools`, `test_the_scratch_repository_has_only_the_owners_commits_and_no_remote`, `test_the_canary_remote_received_nothing` |
 | Frozen study code is never edited | the policy's writable files per role; the orchestrator's check of what each turn changed | `test_no_role_writes_study_code_results_data_or_the_harness`, `test_no_command_writes_study_code_either`, `test_a_turn_that_changes_what_its_role_may_not_stops_the_loop` |
-| A held-out day is reached only through the ledger | the protected calendar; downloads of free days only; the grant for `open`, `read`, `--allow-heldout`; `read` only with the open entry committed; no hand reads of `data/` | `test_a_fetch_of_any_day_of_any_registered_block_is_refused_even_under_a_grant`, `test_a_fetch_that_touches_a_protected_day_is_refused`, `test_open_read_and_allow_heldout_need_the_owners_grant_for_that_block`, `test_reading_a_held_out_block_needs_its_open_entry_committed`, `test_reads_stay_inside_the_repository_and_out_of_the_data`, `test_the_calendar_holds_every_unread_or_spent_block_and_no_development_block` |
+| A held-out day is reached only through the ledger | the protected calendar, from every local branch, every dated block whatever its form; downloads of free days only; the grant for `open`, `read`, `--allow-heldout`; `read` only with the open entry committed; no hand read or search of `data/` | `test_a_block_is_protected_whatever_its_name_and_form_unless_it_is_free`, `test_a_registration_on_another_local_branch_protects_its_days`, `test_no_search_reaches_the_data_by_its_glob`, `test_no_canary_reaches_the_run_directory_or_a_tools_output`, `test_a_fetch_of_any_day_of_any_registered_block_is_refused_even_under_a_grant`, `test_a_fetch_that_touches_a_protected_day_is_refused`, `test_open_read_and_allow_heldout_need_the_owners_grant_for_that_block`, `test_reading_a_held_out_block_needs_its_open_entry_committed`, `test_reads_stay_inside_the_repository_and_out_of_the_data`, `test_the_calendar_holds_every_unread_or_spent_block_and_no_development_block` |
 | Nothing that decides a status changes after a freeze | the registrar appends only after the freeze; the run waits for the registration committed and unchanged with its null hash | `test_the_registrar_writes_its_own_registration_until_the_freeze_then_only_appends`, `test_a_registration_changed_since_its_commit_holds_the_run`, `test_the_run_waits_for_the_owner_to_commit_the_registration_and_resumes` |
 | Provenance | the owner's review; the scribe writes only registered sentences | `test_claude_md_states_each_rule` |
 | Language and attribution | no role commits; no trailer or credit in any commit or harness file; the rest is the owner's review | `test_no_commit_and_no_harness_file_credits_a_co_author_or_a_tool` |
-| Secrets | the model's name from the environment; the key is the SDK's to read; nothing of either in the run directory | `test_the_sdk_is_optional_and_the_model_comes_from_the_environment`, `test_the_run_directory_is_readable_and_logs_every_decision` |
+| Secrets | the model's name from the environment; the key is the SDK's to read; the run directory scanned after every turn, a finding stopping the loop | `test_the_sdk_is_optional_and_the_model_comes_from_the_environment`, `test_the_audit_finds_each_shape_of_a_secret`, `test_a_secret_in_a_reply_stops_the_loop_and_is_named_not_shown`, `test_the_run_directory_names_no_machine_and_holds_no_secret` |
 | Size and checks | the owner's (no role writes code) | `test_claude_md_states_each_rule` |
 | Hypothesis and kill condition first | the researcher's handback check; the researcher reads no data | `test_a_handback_must_carry_its_roles_keys`, `test_each_role_prompt_states_the_duties_its_gate_enforces`, `test_each_role_runs_only_its_own_commands` |
-| Every run is logged | the run directory | `test_the_run_directory_is_readable_and_logs_every_decision`, `test_the_steps_run_in_the_registered_order_and_the_verdict_is_the_codes` |
+| Every run is logged | the run directory: every decision, each output's sha256 and size, each turn's usage and calendar | `test_the_run_directory_is_readable_and_logs_every_decision`, `test_the_steps_run_in_the_registered_order_and_the_verdict_is_the_codes`, `test_the_run_directory_names_no_machine_and_logs_usage_and_calendar`, `test_the_runner_logs_each_outputs_hash_and_size_and_the_turns_usage` |
 | Amendments are dated and appended | append-only writes for the registrar after the freeze and for the run log | `test_the_scribe_appends_to_the_run_log_and_edits_only_the_registers` |
 | No re-ranking after a read | a finished read is never run again; the verdict is the results file's, checked against the ledger | `test_reading_a_held_out_block_needs_its_open_entry_committed`, `test_the_verdict_on_the_spot_studys_committed_read_is_the_codes` |
 | Results with their kills, placebos and neighbourhoods | the skeptic's three lenses with checks and refutations | `test_a_handback_must_carry_its_roles_keys`, `test_a_blocking_finding_stops_the_loop_before_the_verdict` |
@@ -206,11 +215,22 @@ Each run writes `agents/runs/<UTC time>-<study>/`:
   and each resumption with its grants;
 - `system-<role>.md`: each role's system prompt;
 - per step, `NN-<step>.prompt.md`, `.reply.md`, `.handback.yaml`,
-  `.events.jsonl` (every tool call, the policy's decision and its reason) and
-  `.changed.json` (the paths the turn changed, as git sees them);
+  `.events.jsonl` (every tool call, the policy's decision and its reason, and
+  each output's sha256 and size, never its text), `.changed.json` (the paths
+  the turn changed, as git sees them), `.usage.json` (the turn's tokens, cost
+  and duration) and `.calendar.json` (the ranges the turn's policy enforced
+  and the local branches whose registrations it read);
 - `verdict.json`; `stops.jsonl`, one line per stop with its reason;
 - `superseded/<UTC time>-NN-<step>/`: every earlier attempt of a step taken
   again.
+
+Every path in it is relative to the repository's root, and the home directory
+reads `~`, so it names no machine. After every turn and at the end the whole
+directory is scanned for the shapes of a secret (a provider key, an
+assignment to an API key, a token, a secret or a password, a bearer header, a
+private key block, long hex other than a sha256 or a commit, long base64); a
+finding stops the loop, named by file, line and pattern, and the owner removes
+it before resuming.
 
 ## What is published, and what is not
 
@@ -225,8 +245,9 @@ Never published:
 
 - **keys**: never read, logged or stored by the harness; the SDK reads its own
   from the environment;
-- **the run directories**: the model's replies and every tool call, with
-  absolute paths; they stay on the machine that ran them;
+- **the run directories**, by default: the model's replies and every tool
+  call. They name no machine and pass the audit, so the owner can choose to
+  share one, but nothing does so on its own;
 - **data**: nothing under `data/` or `models/` (both ignored), and no
   held-out day, which no role can fetch or read except through its study's
   ledger, on the owner's grant;

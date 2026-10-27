@@ -180,8 +180,12 @@ clean-tree check never sees it): `run.json` (the study, the brief, the grants,
 the model's name, the commit, and each resumption with its grants); each
 role's system prompt, `system-<role>.md`; per step `NN-<step>.prompt.md`,
 `.reply.md`, `.handback.yaml`, `.events.jsonl` (every tool call and the
-policy's decision with its reason) and `.changed.json` (the paths the turn
-changed in the tree, as git sees them); `verdict.json`; a line in
+policy's decision with its reason, each output's sha256 and size),
+`.changed.json` (the paths the turn changed in the tree, as git sees them),
+`.usage.json` (tokens and cost) and `.calendar.json` (the ranges enforced and
+the branches read); `verdict.json`; a line in
 `stops.jsonl` each time a gate stopped the loop; and, under
 `superseded/<UTC time>-NN-<step>/`, every earlier attempt of a step that was
-taken again. No key, and no file of `data/`, is ever written there.
+taken again. Paths are relative to the repository's root; the directory is
+scanned for the shapes of a secret after every turn, and a finding stops the
+loop. No key, and no file of `data/`, is ever written there.

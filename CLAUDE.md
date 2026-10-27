@@ -88,7 +88,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `python -m experiments.spot_2026` | its blocks, through its access and ledger | as above; `status`, `pages` and `--dry-run` freely |
 | `python -m pytest` | synthetic data and fixtures | no network |
 | `git log`, `git diff`, `git status`, `git show` | the history | read-only |
-| `python -m agents.workflows.research_loop` | the registrations | `calendar`, `null-hash`, `check`, `prompts`, `run`; `demo` on synthetic data in a scratch repository |
+| `python -m agents.workflows.research_loop` | the registrations | `calendar`, `null-hash`, `check`, `prompts`, `audit`, `run`; `demo` on synthetic data in a scratch repository |
 
 `python -m agents.workflows.research_loop calendar` prints every protected
 range the registrations hold; `check` says whether a command would be allowed

@@ -67,15 +67,18 @@ may change, whatever command changed it.
 - **Never**: `git push`, `git remote`, `git commit` or any git that writes;
   `--second-read`; starting a loop from inside one; a command in the
   background; a subagent; a web search.
-- **Protected days**: a command whose dates touch a range of the calendar is
-  refused, an archive published by the month counting as its whole month; a
+- **Protected days**: the calendar holds every dated block of every
+  registration, in the working tree and on every local branch, whatever its
+  name or form, but development and warm-up. A command whose dates touch a
+  range of it is refused, an archive published by the month counting as its whole month; a
   plain `download` or `download-book` fetches free days only, whatever was
   granted; `open`, `read` and `--allow-heldout` need the owner's grant for that
   block, and `read` also needs the block's open entry committed in
   `experiments/results/<study>_ledger.json` with its read unfinished; another
   study's entry point runs only `status`.
-- **Files**: nothing under `data/`, `models/` or `.git/` is read by hand;
-  nothing outside the repository either. The registrar writes its own study's
+- **Files**: nothing under `data/`, `models/`, `artifacts/` or `.git/` is read
+  or searched by hand (a Grep or Glob from the root starts its glob with a
+  named directory); nothing outside the repository either. The registrar writes its own study's
   registration until the code freeze, then only appends; the scribe writes the
   README, the findings register and appends to the study's run log; no role
   writes `src/`, `experiments/`, `tests/`, another registration, a result, a
