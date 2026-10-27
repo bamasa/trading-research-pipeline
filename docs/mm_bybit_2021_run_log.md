@@ -85,3 +85,7 @@ Nothing is pushed.
   admitted (conditions i and iv)**; it is run on H as a labelled measurement
   and enters Holm with p = 1. σ_D 16.00 (F) and 146.68 (S0); MDE 6.70 and 61.46
   USDT per 100 USDT of clip a day. Committed with this entry.
+- The D amendment, 21:12, written by the entry point from the stage records
+  (code freeze `e1f9961`, one D run, the run log's sha256 as committed in
+  `c157a09`), reviewed against the D record and committed: frozen
+  configuration sha256 `219b5aa02b8769cb85831f963c2d5839656693ce0f67452a4f01bc113a3d604a`.
