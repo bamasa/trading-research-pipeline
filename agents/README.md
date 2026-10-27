@@ -36,7 +36,8 @@ environment, say); `TRP_AGENT_MAX_TURNS` bounds a role's turn (40 by default).
 
 A run stops at every gate the owner holds and says why. The owner acts (commits
 the registration, commits an open entry, reads a blocking finding) and resumes
-it, granting a block if the next step reads one:
+it, granting a block if the next step reads one. A resumed run takes again the
+step that stopped it, keeping the earlier handback beside it as `superseded`:
 
 ```bash
 PYTHONPATH=src python -m agents.workflows.research_loop run --resume agents/runs/<run> --grant funding_carry_2026:H

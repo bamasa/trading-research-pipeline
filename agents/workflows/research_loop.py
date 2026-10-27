@@ -231,8 +231,11 @@ class ResearchLoop:
             return self.stop("start", f"the prompts name commands that do not exist: {problems}")
         done = self.log.handbacks()
         for number, (step, role) in enumerate(STEPS, start=1):
-            if step in done:
+            if step in done and stop_reason(step, done[step], done) is None:
                 continue
+            if step in done:  # it stopped the loop: the step is taken again
+                self.supersede(number, step)
+                del done[step]
             if step == "run":
                 problem = self.gate(self.repo, self.config, self.document)
                 if problem is not None:
@@ -298,6 +301,12 @@ class ResearchLoop:
             return f"the {role}'s handback is not valid: {exc}"
         self.log.write(f"{stem}.handback.yaml", yaml.safe_dump(handback, sort_keys=False))
         return handback
+
+    def supersede(self, number: int, step: str) -> None:
+        """Keep a step's earlier handback beside the run, out of the resumed loop's way."""
+        old = self.log.path / f"{number:02d}-{step}.handback.yaml"
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        old.rename(old.with_name(f"{number:02d}-{step}.superseded-{stamp}.yaml"))
 
     def stop(self, step: str, reason: str) -> dict[str, Any]:
         record = {"status": "stopped", "step": step, "reason": reason, "run": str(self.log.path)}

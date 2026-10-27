@@ -140,6 +140,20 @@ def test_the_run_waits_for_the_owner_to_commit_the_registration_and_resumes(
     assert roles(resumed) == ["executor", "skeptic", "scribe"]
 
 
+def test_a_resumed_run_takes_again_the_step_that_stopped_it_and_keeps_the_old_one(
+    tmp_path: Path,
+) -> None:
+    blocking = "status: block\nfindings:\n  - {lens: leakage, severity: blocking, where: 'a:1'}\n"
+    first = asyncio.run(make_loop(tmp_path, FakeClient(skeptic=blocking)).run())
+    assert first["step"] == "review"
+    again = FakeClient()
+    result = asyncio.run(make_loop(tmp_path, again).run())
+    assert result["status"] == "complete"
+    assert roles(again) == ["skeptic", "scribe"]
+    kept = list((tmp_path / "run").glob("04-review.superseded-*.yaml"))
+    assert len(kept) == 1 and "blocking" in kept[0].read_text()
+
+
 @pytest.mark.parametrize(
     ("role", "reply", "step"),
     [
