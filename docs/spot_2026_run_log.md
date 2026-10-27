@@ -35,3 +35,14 @@ in the D amendment; this log records what happened and when.
   and closed. Every slot killed by K1: S25-PF −17.35 bp, S25-BB −19.43 bp,
   S25-T −19.28 bp a trade at the Regular / non-VIP tier. P is not read: no
   slot was a candidate on H.
+
+## 2026-10-27
+
+- Nothing of this study was run; H is read and P is not read, as recorded
+  above. Two exploratory replications of the author's 2025 results ran on
+  separate local branches (Binance BTC/FDUSD prints; Bybit ETHUSDT books, whose
+  frozen test on 2026-08-08 to 21 collapsed on its frozen label threshold and
+  lost on every day at 2.2 bp). A maker study of this study's frozen signal
+  S25-PF on Binance BTC/FDUSD at the fees charged, and a prints-only maker
+  study on Bybit BTCUSDT at the 2021 rebate, are registered on separate local
+  branches; neither writes into this study.
