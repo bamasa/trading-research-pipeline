@@ -14,60 +14,59 @@ adds no study code and changes none: it runs the commands that exist.
 | [`roles/`](roles/) | one prompt per role: researcher, registrar, executor, skeptic, scribe |
 | [`workflows/policy.py`](workflows/policy.py) | the tool policy: what each role may run, read and write |
 | [`workflows/prompts.py`](workflows/prompts.py) | each role's system prompt and step prompt, and the handback it must end with |
-| [`workflows/research_loop.py`](workflows/research_loop.py) | the orchestrator, its gates, the code's verdict, and the helpers |
+| [`workflows/research_loop.py`](workflows/research_loop.py) | the orchestrator, its gates, the code's verdict, the SDK runner and the helpers |
+| [`workflows/demo.py`](workflows/demo.py) and [`demo/`](demo/) | the demonstration on a synthetic study, with a scripted client in place of the model |
+| [`../docs/agents.md`](../docs/agents.md) | how to run it, the roles, each rule with its test, what is logged and published |
 | [`../docs/agents_demo_funding_carry.md`](../docs/agents_demo_funding_carry.md) | how the loop would run the roadmap's funding-rate carry study |
 
 ## Running it
 
-The SDK's Python package, `claude-agent-sdk`, is an optional dependency: it is
-not in `pyproject.toml`, and it is installed only into the environment that
-runs a loop, with what its documentation requires. The model is named by an
-environment variable and the SDK reads its credentials from the environment
-itself; the harness never reads, logs or stores a key.
+[`../docs/agents.md`](../docs/agents.md) has the exact commands: the
+demonstration a reviewer re-runs on synthetic data in seconds, the helpers,
+and a live run. In short:
 
 ```bash
-export TRP_AGENT_MODEL=<model name>            # TRP_AGENT_MODEL_<ROLE> overrides it per role
-PYTHONPATH=src python -m agents.workflows.research_loop run --study funding_carry_2026 --brief-file <brief.md>
+PYTHONPATH=src python -m agents.workflows.research_loop demo
+PYTHONPATH=src python -m agents.workflows.research_loop calendar
+PYTHONPATH=src python -m agents.workflows.research_loop check --role executor "git push"
+PYTHONPATH=src python -m agents.workflows.research_loop null-hash configs/spot_2026.yaml
+PYTHONPATH=src python -m agents.workflows.research_loop prompts
 ```
 
-`TRP_AGENT_PYTHON` and `TRP_AGENT_CLI` name the interpreter and the CLI when
-they are not `python` and `trading-research` on the path (a study's own
-environment, say); `TRP_AGENT_MAX_TURNS` bounds a role's turn (40 by default).
+A live run needs the model's name in `TRP_AGENT_MODEL` and the optional SDK,
+`claude-agent-sdk`, installed in a small environment of its own
+(`agents/.venv-agents/`, ignored), never in the study's: the ledgers
+fingerprint every distribution installed where an entry point runs, and an
+extra one would block a held-out read. The loop runs from that environment
+and the agent's commands run in the study's (`TRP_AGENT_PYTHON`,
+`TRP_AGENT_CLI`). The SDK reads its credentials from the environment itself;
+the harness never reads, logs or stores a key.
 
-A run stops at every gate the owner holds and says why. The owner acts (commits
-the registration, commits an open entry, reads a blocking finding) and resumes
-it, granting a block if the next step reads one. A resumed run takes again the
-step that stopped it, keeping the earlier handback beside it as `superseded`:
+A run stops at every gate the owner holds and says why. The owner acts and
+resumes it, granting a block if the next step reads one; the step that stopped
+is taken again, its earlier attempt kept under `superseded/`:
 
 ```bash
 PYTHONPATH=src python -m agents.workflows.research_loop run --resume agents/runs/<run> --grant funding_carry_2026:H
 ```
 
-The helpers need no model and no SDK:
-
-```bash
-PYTHONPATH=src python -m agents.workflows.research_loop calendar
-PYTHONPATH=src python -m agents.workflows.research_loop null-hash configs/spot_2026.yaml
-PYTHONPATH=src python -m agents.workflows.research_loop check --role executor "git push"
-```
-
-`calendar` prints every range a registration protects; `null-hash` prints a
-YAML's null-placeholder sha256 by the repository's own `unfrozen_text` and
-`sha256_bytes`; `check` says whether the policy would let a role run a
-command, and why.
-
 ## What the policy enforces
 
-Every tool call passes `ToolPolicy.decide` twice: as a hook before the call,
-which no allow rule or mode can bypass, and as the SDK's tool callback. Project
-and user settings are not loaded, so nothing on the machine widens it.
+A role is given only its own tools (`TOOLS_BY_ROLE` in
+`workflows/research_loop.py`), and every tool call passes `ToolPolicy.decide`
+twice: as a hook before the call, which no allow rule or mode can bypass, and
+as the SDK's tool callback. Project and user settings are not loaded, so
+nothing on the machine widens it. After each turn the orchestrator also reads
+from git what the turn changed and stops the loop if it is more than the role
+may change, whatever command changed it.
 
 - **Commands**: one at a time, never chained, piped, redirected or
   substituted: `trading-research` and its subcommands, the study entry points,
   `pytest`, read-only `git` (`log`, `diff`, `status`, `show`) and the helpers
   above, each role only its own (the table in `workflows/policy.py`).
-- **Never**: `git push`, `git remote`, any git that writes; `--second-read`;
-  starting a loop from inside one; a command in the background.
+- **Never**: `git push`, `git remote`, `git commit` or any git that writes;
+  `--second-read`; starting a loop from inside one; a command in the
+  background; a subagent; a web search.
 - **Protected days**: a command whose dates touch a range of the calendar is
   refused, an archive published by the month counting as its whole month; a
   plain `download` or `download-book` fetches free days only, whatever was
@@ -89,8 +88,8 @@ and user settings are not loaded, so nothing on the machine widens it.
 ```bash
 ruff format --check agents tests
 ruff check agents tests
-MYPYPATH=src mypy --explicit-package-bases agents/workflows tests/test_agents_policy.py tests/test_agents_loop.py tests/test_agents_prompts.py tests/test_agents_demo.py
-PYTHONPATH=src python -m pytest tests/test_agents_policy.py tests/test_agents_loop.py tests/test_agents_prompts.py tests/test_agents_demo.py
+MYPYPATH=src mypy --explicit-package-bases agents/workflows agents/demo tests/test_agents_policy.py tests/test_agents_loop.py tests/test_agents_prompts.py tests/test_agents_demo.py tests/test_agents_demo_run.py tests/test_agents_sdk.py
+PYTHONPATH=src python -m pytest tests/test_agents_policy.py tests/test_agents_loop.py tests/test_agents_prompts.py tests/test_agents_demo.py tests/test_agents_demo_run.py tests/test_agents_sdk.py
 ```
 
 The tests run from the repository's root (`python -m pytest` puts it on the
@@ -98,9 +97,11 @@ path, as the entry points' tests need). Before any model is called, a run also
 checks that every command its documents name exists, with its options, and
 stops if one does not.
 
-No test reaches a model or the network: the loop's tests answer each role with
-a fake client, and the verdict's test reads the spot study's committed results,
-ledger and page.
+No test reaches a model or the network. The loop's tests answer each role
+with a fake client in a scratch repository on the synthetic study; the
+demonstration's test runs the whole loop with the scripted client; the
+verdict's test reads the spot study's committed results, ledger and page; the
+SDK's test is skipped unless the SDK is installed.
 
 ## What it does not do
 

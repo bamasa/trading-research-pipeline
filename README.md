@@ -1439,6 +1439,11 @@ its ledger; the loop stops at every gate the owner holds. How it would run the
 roadmap's funding-rate carry study is in
 [`docs/agents_demo_funding_carry.md`](docs/agents_demo_funding_carry.md).
 
+How to run it, each rule with the test that holds it, and what is logged and
+published are in [`docs/agents.md`](docs/agents.md). A reviewer re-runs the
+whole loop on a synthetic study in seconds, with a scripted client in place of
+the model, and reads the run directory it leaves:
+
 ```bash
-PYTHONPATH=src python -m agents.workflows.research_loop run --study funding_carry_2026 --brief-file <brief.md>
+PYTHONPATH=src python -m agents.workflows.research_loop demo
 ```

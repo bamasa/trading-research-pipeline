@@ -180,3 +180,32 @@ def test_no_commit_and_no_harness_file_credits_a_co_author_or_a_tool() -> None:
     for path in harness:
         if "runs" not in path.relative_to(REPO).parts and path.suffix in {".md", ".py", ".yaml"}:
             assert not trailer.search(path.read_text()), path
+
+
+AGENTS_DOC = REPO / "docs" / "agents.md"
+
+
+def test_the_harness_page_names_only_commands_that_exist() -> None:
+    named = named_commands(AGENTS_DOC.read_text())
+    assert len(named) >= 6
+    for text in named:
+        command = parse_command(text)
+        assert command is not None and problem(command) is None, text
+
+
+def test_every_test_the_rules_table_names_exists() -> None:
+    text = AGENTS_DOC.read_text()
+    table = text[text.index("## Each rule, how it is enforced") : text.index("## What is logged")]
+    named = set(re.findall(r"`(test_[a-z0-9_]+)`", table))
+    defined = {
+        name
+        for path in REPO.glob("tests/test_agents_*.py")
+        for name in re.findall(r"^def (test_[a-z0-9_]+)\(", path.read_text(), re.MULTILINE)
+    }
+    assert len(named) >= 25 and not named - defined, sorted(named - defined)
+    rules = re.findall(r"^\d\. \*\*([^*]+)\*\*", (REPO / "CLAUDE.md").read_text(), re.MULTILINE)
+    first = [
+        row.split("|")[1].strip().lower() for row in table.splitlines() if row.startswith("| ")
+    ]
+    for rule in rules:
+        assert any(rule.rstrip(".").lower()[:20] in r for r in first), rule
