@@ -346,6 +346,7 @@ def test_a_handback_must_carry_its_roles_keys() -> None:
         ("researcher", full.replace("placebos: [], ", "")),
         ("researcher", "status: declined\n"),
         ("registrar", "status: registered\nnull_sha256: x\n"),
+        ("registrar", "status: refused\nmissing: []\n"),
         ("executor", "status: waiting\ncommands: []\n"),
         ("skeptic", "status: pass\nfindings: [{lens: taste, severity: blocking, where: a}]\n"),
         ("skeptic", "status: pass\n" + LENSES.replace("  execution:", "  money:")),

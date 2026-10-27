@@ -4,6 +4,7 @@ command a role prompt, the protocol or CLAUDE.md names exists, with its options.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from agents.workflows.prompts import (
     cli_options,
     command_problem,
     prompt_problems,
+    read_handback,
     system_prompt,
 )
 from agents.workflows.research_loop import parser as harness_parser
@@ -70,7 +72,8 @@ def test_the_checker_catches_a_command_that_does_not_exist() -> None:
 
 #: Each binding rule and protocol rule of CLAUDE.md, by the words that state it.
 RULES = {
-    "nothing is published": ["No `git push`", "no `git remote`", "no pull request", "`main` is never"],
+    "nothing is published": ["No `git push`", "no `git remote`", "no pull request", "`main` is never",
+                             "A role of the harness never commits"],
     "worktrees": ["another worktree is never checked out or edited"],
     "frozen code": ["Frozen study code is never edited", "`src/`", "`experiments/`",
                     "`configs/`", "`docs/preregistration/`", "`pyproject.toml`", "`uv.lock`"],
@@ -78,8 +81,10 @@ RULES = {
                       "open entry is committed", "A month archive"],
     "after a freeze": ["Nothing that decides a status changes after a freeze", "Fees, thresholds"],
     "provenance": ["\"the author's 2025 research\"", "another organisation"],
-    "language": ["English", "No emoji", "No co-author lines", "credits an assistant"],
-    "secrets": ["only from environment variables", "Nothing secret is committed"],
+    "language": ["English", "No emoji", "No `Co-Authored-By`", "trailer line",
+                 "credits an assistant, a model or a tool"],
+    "secrets": ["only from environment variables", "read at run time", "Nothing secret is committed",
+                "logged or written to a run directory"],
     "size and checks": ["about 120 lines", "`ruff format`", "`ruff check`", "`mypy`", "five minutes"],
     "registration first": ["Registration before data", "null-placeholder sha256"],
     "kill first": ["Hypothesis and kill condition first", "committed, before the run"],
@@ -125,3 +130,53 @@ def test_a_system_prompt_is_the_rules_the_loop_and_the_role_in_that_order() -> N
              ("CLAUDE.md", "agents/protocol.md", "agents/roles/skeptic.md")]  # fmt: skip
     assert order == sorted(order)
     assert set(STATUSES) == {p.stem for p in ROLE_FILES}
+
+
+STEP_OF = {"researcher": "propose", "registrar": "register", "executor": "run",
+           "skeptic": "review", "scribe": "record"}  # fmt: skip
+
+
+@pytest.mark.parametrize("path", ROLE_FILES, ids=lambda p: p.stem)
+def test_each_roles_handback_example_passes_the_orchestrators_check(path: Path) -> None:
+    example = re.findall(r"```handback\n(.*?)```", path.read_text(), re.DOTALL)[0]
+    reply = "```handback\n" + example.replace("<64 hex>", "a" * 64) + "```"
+    assert read_handback(path.stem, STEP_OF[path.stem], reply)["role"] == path.stem
+
+
+#: What each role's prompt must say, in its own words, beside the gate that enforces it.
+DUTIES = {
+    "researcher": ["the condition that would refute it and the outcome you expect, before anything "
+                   "is computed", "You read no market data", "Propose a hypothesis without a kill "
+                   "condition and an expected outcome", "is declined, with the reason",
+                   "**The information set**"],
+    "registrar": ["Fill a gap in the plan yourself: refuse", "null-placeholder sha256",
+                  "only append a dated amendment"],
+    "executor": ["never work around a refusal: a refusal is a result", "`status: waiting`",
+                 "Re-run a read, a stage or a placebo because of what its result was"],
+    "skeptic": ["Your job is to refute", "Work through all three, every time",
+                "the refutation you tried", "**Leakage and look-ahead.**",
+                "**Fidelity to the registration.**", "**Execution realism and money.**",
+                "Soften a finding"],
+    "scribe": ["the only headline you write is a sentence the registration fixed",
+               "Write a sentence about a result that is not one of the verdict's headline "
+               "sentences", "stands verbatim in a file you changed", "Commit or push"],
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("role", sorted(DUTIES))
+def test_each_role_prompt_states_the_duties_its_gate_enforces(role: str) -> None:
+    text = " ".join((REPO / f"agents/roles/{role}.md").read_text().split())
+    missing = [d for d in DUTIES[role] if " ".join(d.split()) not in text]
+    assert not missing, f"{role}.md does not say {missing}"
+
+
+def test_no_commit_and_no_harness_file_credits_a_co_author_or_a_tool() -> None:
+    trailer = re.compile(r"(?im)^(co-authored-by|generated with|signed-off-by):")
+    log = subprocess.run(["git", "log", "--format=%B"], cwd=REPO, capture_output=True,
+                         text=True, check=True).stdout  # fmt: skip
+    assert not trailer.search(log)
+    harness = [*REPO.glob("agents/**/*.*"), *REPO.glob("tests/test_agents_*.py"),
+               *REPO.glob("docs/agents*.md"), REPO / "CLAUDE.md"]  # fmt: skip
+    for path in harness:
+        if "runs" not in path.relative_to(REPO).parts and path.suffix in {".md", ".py", ".yaml"}:
+            assert not trailer.search(path.read_text()), path

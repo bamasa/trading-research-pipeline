@@ -16,7 +16,8 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
    nothing that changes a remote. `main` is never checked out, merged into or
    edited. Work happens on a local branch in its own worktree; a branch held by
    the main checkout or by another worktree is never checked out or edited
-   (reading it with `git show <branch>:<path>` is allowed).
+   (reading it with `git show <branch>:<path>` is allowed). A role of the
+   harness never commits: the owner reviews and commits what it hands back.
 2. **Frozen study code is never edited.** Existing files under `src/`,
    `experiments/`, `configs/` and `docs/preregistration/`, and `pyproject.toml`
    and `uv.lock`, belong to studies whose ledgers check the tree: a change to
@@ -35,11 +36,13 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 5. **Provenance.** The owner's earlier work is cited only as "the author's 2025
    research". No file or commit names another organisation, or anyone's role,
    contract or sign-off.
-6. **Language and attribution.** English. No emoji. No co-author lines; no file
-   or commit credits an assistant.
-7. **Secrets.** API keys and model names come only from environment variables.
-   Nothing secret is committed, and no absolute local path, email address or IP
-   address either (`scripts/audit_repo.py` checks).
+6. **Language and attribution.** English. No emoji. No `Co-Authored-By` or
+   other trailer line in a commit message, and no file, commit, comment or
+   note credits an assistant, a model or a tool as an author.
+7. **Secrets.** API keys and model names come only from environment variables,
+   read at run time. Nothing secret is committed, logged or written to a run
+   directory, and no absolute local path, email address or IP address is
+   committed either (`scripts/audit_repo.py` checks).
 8. **Size and checks.** One piece at a time, edits under about 120 lines, a
    commit after each piece. `ruff format`, `ruff check`, `mypy` and the tests
    pass before handing back. A foreground command finishes in about five
@@ -85,7 +88,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `python -m experiments.spot_2026` | its blocks, through its access and ledger | as above; `status`, `pages` and `--dry-run` freely |
 | `python -m pytest` | synthetic data and fixtures | no network |
 | `git log`, `git diff`, `git status`, `git show` | the history | read-only |
-| `python -m agents.workflows.research_loop` | the registrations | `calendar`, `null-hash`, `check`, `run` |
+| `python -m agents.workflows.research_loop` | the registrations | `calendar`, `null-hash`, `check`, `run`; `demo` on synthetic data in a scratch repository |
 
 `python -m agents.workflows.research_loop calendar` prints every protected
 range the registrations hold; `check` says whether a command would be allowed

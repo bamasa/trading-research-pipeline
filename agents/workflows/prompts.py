@@ -149,6 +149,8 @@ def read_handback(role: str, step: str, reply: str) -> dict[str, Any]:
         _require(bool(data.get("reason")), "a declined proposal says why (`reason`)")
     if role == "registrar" and status == "registered":
         _require(bool(SHA256.fullmatch(str(data.get("null_sha256", "")))), "no null_sha256")
+    if role == "registrar" and status == "refused":
+        _require(bool(data.get("missing")), "a refusal lists what is missing (`missing`)")
     if role == "executor" and status == "waiting":
         _require(bool(data.get("waiting_on")), "waiting, but not on anything (`waiting_on`)")
     if role == "skeptic":
