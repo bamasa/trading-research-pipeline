@@ -73,10 +73,11 @@ def calibration_lines(results: Mapping[str, Any]) -> list[str]:
             for slot in rg.CALIBRATION_SLOTS]  # fmt: skip
     verdict = ("it passes; no verdict carries a label" if label is None
                else f"it does not pass; every verdict above carries the label \"{label}\"")
-    return [*head, "Bybit linear BTCUSDT, 2024-02-01 to 25, with a book: the share of days on which "
-            "the maker volume filled orders trade-through <= queue <= touch, and on which the "
-            f"prints rule's making part (prints thinned to {found.get('thinned_to')} a day) lies "
-            f"between the book's trade-through and touch making parts; {verdict}.", "",
+    return [*head, "Bybit spot BTCUSDT on D's days, with its book: the share of days on which the "
+            "maker volume filled orders trade-through <= queue <= touch in the market-making "
+            "simulator, and on which the prints rule's making part (the prints thinned to "
+            "BTC/FDUSD's count that day) lies between the book's trade-through and touch making "
+            f"parts; {verdict}.", "",
             *_table(("Slot", "Days", "Ordered", "Inside the bracket", "Passes"), rows), ""]  # fmt: skip
 
 

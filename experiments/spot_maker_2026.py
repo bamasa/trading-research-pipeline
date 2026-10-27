@@ -7,7 +7,7 @@ complete and returns its record without computing when it is already complete::
 
     python -m experiments.spot_maker_2026 0 --source <the spot study's checkout>
     python -m experiments.spot_maker_2026 1 --source <the spot study's checkout>
-    python -m experiments.spot_maker_2026 D --workers 4 --book-data <the main checkout's data>
+    python -m experiments.spot_maker_2026 D --workers 4 --source <the spot study's checkout>
     python -m experiments.spot_maker_2026 amend
     python -m experiments.spot_maker_2026 open H
     python -m experiments.spot_maker_2026 read H --source <...>   # copies H, then asks for a commit
@@ -45,8 +45,6 @@ def parser() -> argparse.ArgumentParser:
     found.add_argument("command", nargs="?", choices=[*STAGES, "open", "read", "status", "pages"])
     found.add_argument("block", nargs="?", choices=("H", "P"))
     found.add_argument("--source", type=Path, default=None, help="the spot study's checkout")
-    found.add_argument("--book-data", type=Path, default=None,
-                       help="the data directory holding the calibration's book days (stage D)")
     found.add_argument("--workers", type=int, default=1)
     found.add_argument("--run", type=int, default=1, help="the complete D run's number")
     found.add_argument("--dry-run", action="store_true")
@@ -67,8 +65,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from trading_research.spot_maker.context import MakerStudy
 
     source = None if args.source is None else args.source.resolve()
-    book = None if args.book_data is None else args.book_data.resolve()
-    study = MakerStudy(REPO, source=source, workers=args.workers, run=args.run, book_data=book)
+    study = MakerStudy(REPO, source=source, workers=args.workers, run=args.run)
     if args.command == "status":
         result: object = study.state.status()
     elif args.command == "pages":

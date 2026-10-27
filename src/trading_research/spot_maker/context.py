@@ -48,8 +48,6 @@ class MakerStudy:
     disk: Callable[[Path], float] = free_gb
     #: What serves P's archives and the published check (None: the network).
     opener: Any = None
-    #: The data directory holding the calibration's book days, read in place.
-    book_data: Path | None = None
 
     @property
     def state(self) -> StageState:

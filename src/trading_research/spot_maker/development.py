@@ -57,7 +57,7 @@ def calibration_line(found: dict[str, Any]) -> str:
              f"part inside the book's bracket on {_g(found[s]['bracket_share'])} of {found[s]['days']} "
              f"days" for s in rg.CALIBRATION_SLOTS]  # fmt: skip
     verdict = "passes" if found["passes"] else f"does not pass; every verdict labelled \"{found['label']}\""
-    return "; ".join(parts) + f"; thinned to {found['thinned_to']} prints a day; it {verdict}"
+    return "; ".join(parts) + f"; it {verdict}"
 
 
 def sigma_and_mde(records: list[dict[str, Any]], slot: str) -> tuple[float, float, float]:
@@ -90,12 +90,11 @@ def stage_d(study: MakerStudy, stage_1: dict[str, Any]) -> dict[str, Any]:
                            study.work / f"run{study.run}" / "D")  # fmt: skip
     summaries = {s: st.summarise(records, s) for s in rg.FAMILY}
     mde = {s: sigma_and_mde(records, s) for s in rg.FAMILY}
-    prints = [int(r["prints"]) for r in records if r.get("usable")]
-    count = int(np.median(prints)) if prints else 0
-    log_run(study.repo, f"C{study.run}", "D", calibration.calibration_days(),
-            "the fill rule's calibration on the book days")  # fmt: skip
+    counts = {r["day"]: int(r["prints"]) for r in records if r.get("usable")}
+    log_run(study.repo, f"C{study.run}", "D", [date.fromisoformat(d) for d in sorted(counts)],
+            "the fill rule's calibration on Bybit spot's book")  # fmt: skip
     calibrated = calibration.run_calibration(
-        study.repo, study.book_data, count, study.binding,
+        study.repo, study.source, counts, study.binding,
         study.work / f"run{study.run}" / "calibration", study.workers)  # fmt: skip
     july = [r for r in records if date.fromisoformat(r["day"]).month == 7]
     rehearsal_summaries = {s: st.summarise(july, s) for s in rg.FAMILY}
