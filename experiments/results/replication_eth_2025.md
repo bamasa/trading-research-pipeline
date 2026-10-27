@@ -1,7 +1,11 @@
 # The author's 2025 ETH result, replicated on public data and tested frozen
 
-Part 1 is complete; part 2 (the frozen test on 2026-08-08 .. 21) is running.
-The summary is written when it lands.
+- **Part 1**, the reproduction on 2025-02-05 .. 06 (exploratory): none of the
+  29 gate configurations is positive after a 2.2 or a 5.5 bp fee; the best
+  gross edge is 0.98 bp of turnover.
+- **Part 2**, the frozen test on 2026-08-08 .. 21: the frozen recipe loses on
+  each of the fourteen days at both fees; its gross edge, 0.31 bp of turnover,
+  is no worse than part 1's.
 
 ## What was replicated
 
@@ -9,12 +13,15 @@ The author's 2025 research trained a TCN on ten days of ETH/USDT spot books
 (2025-01-28 .. 2025-02-06): seven days to train, one to validate, the last two
 to test. Its gate turned the three-class probabilities into signals, and a
 backtest held 0.01 ETH on them. Of about thirty gate configurations run on the
-two test days, one ended positive after the backtester's fee: +3.1 USDT before
-it and +0.9 after, 358 fills, turnover 9,865 USDT, so the fee was about 2.2 bp
-of turnover. That configuration (its notebook's cell 48) held positions from
-one signal to the next opposite one (`baseline_strategy`), not for a fixed time:
-the close-by-time lines are commented out in that cell. Its close-by-time runs
-are in the sweep below.
+two test days, three ended positive after the backtester's fee: sweep cells 206
+and 218 at +1 USDT rounded, and REF cell 48 at +3.1 USDT before the fee and +0.9
+after, the best of them by profit per million. REF cell 48 made 358 fills on a
+turnover of 9,865 USDT, so the fee was about 2.2 bp of turnover. It held
+positions from one signal to the next opposite one (`baseline_strategy`), not
+for a fixed time: the close-by-time lines are commented out in that cell. Its
+close-by-time runs, and cells 206 and 218, are in the sweep below. The plan
+(`docs/replication_eth_plan.md`) calls this "one crypto result" positive after a
+fee; it was one of three, and this page corrects that wording.
 
 ## Venue
 
@@ -34,26 +41,37 @@ The code is in `src/trading_research/replication_eth/`, the run in
 - **Grid.** Each day replayed by `data.bybit.reconstruct` at 20 levels a side;
   each 100 ms boundary takes the latest replayed book at or before it and the
   prints since the previous boundary. Every 2025 and 2026 day replayed without
-  a sequence gap, at 863,980 of 863,999 boundaries.
+  a sequence gap, at 863,980 (2025) and 863,982 (2026) of 863,999 boundaries
+  (`logs/fetch_2025.log`, `logs/fetch_2026.log`).
 - **Inputs.** The original's 16 auxiliary inputs and 40 book inputs (56), its
   volatility filter (rows below 2e-5 carry no label) and its gate's three
   inputs, re-typed from its preprocessing. Checked against the original's own
   functions on a synthetic day: the 16 auxiliary inputs agree within 6e-7 (the
   original rounds per-row sums to nine decimals), the 40 book inputs and the
-  labels exactly, the gate's decisions exactly.
+  labels exactly, the gate's decisions exactly. Each of the 20 book size inputs
+  is a z-score on the previous 100 rows whose standard deviation is floored at
+  a level read from the whole day (`lob.py`), as in the original: a look-ahead
+  within the day, which does not cross a split because the splits are whole
+  days.
 - **Labels.** 5 s ahead against 5 s behind, at +-5e-4. The original's code holds
   two thresholds (2e-4 printed when it ran on one day, 5e-4 in its source); on
   the seven training days 5e-4 gives 7.7 / 84.6 / 7.7 % (down / flat / up, on
   filtered rows) against the original's printed 9.1 / 81.9 / 9.1 %, and 2e-4
-  gives 24.8 / 51.0 / 24.2 % (`replication_eth_2025_label_shares.csv`).
+  gives 24.8 / 50.9 / 24.2 % (`replication_eth_2025_label_shares.csv`).
 - **Network and training.** As the original: five residual blocks of 128
   channels, kernel 3, dilations 1 to 16, channel dropout 0.5, head on the last
   step and the window mean; windows of 50 rows; class-weighted cross-entropy
   with label smoothing 0.05, AdamW 3e-5, five epochs, the epoch with the best
   validation accuracy kept. Seed 0, on Apple MPS.
-- **Gate.** The original's `futures_taker` scenario, including its reading of
-  three z-scored columns as basis points (the audit's units bug), kept as it
-  computed them.
+- **Gate.** The original's `futures_taker` scenario, kept as it computed it:
+  rv_bp and spread_bp are 1e4 × z-scores, not basis points, and the fee,
+  slippage and buffer terms practically never bind. For the best gate (REF cell
+  48), once the two probability conditions hold, `ev > buffer_bp` binds on only
+  11 test rows in part 1 and 14 in part 2; on the scored test rows the median
+  rv_bp is 2,902 and 8,282, and spread_bp is 0 on 50% and 61% of rows. The
+  effective gate is p_flat ≤ 0.10; |p_up − p_down| ≥ 0.45; rv_50 above its
+  100-row mean (rv_bp > 0); and rv_bp / spread_bp, a ratio of z-scores, at least
+  t_min.
 - **Execution.** `backtest.taker.execute_day`: every fill crosses the spread
   0.01 ETH at the next 100 ms snapshot after a 10 ms latency, entries 00:01 to
   23:58 UTC, flatten at 23:59, no funding. Fees are taker fees per side on each
@@ -116,9 +134,10 @@ fifth kept (the original: 0.657 to 0.671, its third kept). On the test days,
 Every configuration tried, in USDT over the two days, 0.01 ETH, all twenty-nine
 of them, none chosen. "Gross bp of turnover" is the gross PnL over the fills'
 notional, which is also the break-even taker fee per side. The original's
-columns are its printed tables (Binance spot, its backtester, its fills).
+columns are its printed tables (Binance spot, its backtester, its fills); its
+fills are over the two days, so ref48's 808 fills a day compare with its 179.
 
-| run | holding | signals | fills/day | gross | net 2.2 bp | net 5.5 bp | gross bp of turnover | orig. fills | orig. PnL | orig. after fee |
+| run | holding | signals | fills/day | gross | net 2.2 bp | net 5.5 bp | gross bp of turnover | orig. fills (two days) | orig. PnL | orig. after fee |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | ref37 | signal_to_signal | 1,261 | 409 | 0.07 | -4.89 | -12.34 | 0.03 | 185 | 1.0 | 0.0 |
 | c121 | signal_to_signal | 1,840 | 608 | -2.43 | -9.81 | -20.89 | -0.72 | 298 | -1.0 | -2.0 |
@@ -167,15 +186,34 @@ with 2026-08-07 to validate, nothing tuned on 2026 data, the results committed
 in `bbcba80`.
 
 The frozen recipe did not transfer. Its label threshold, plus or minus 5e-4
-over 5 s, was fixed in part 1 from the original's printed class mix of
-February 2025 (24 / 51 / 24% down / flat / up). On the 2026 days ETH moved less
-over 5 s, and the same threshold leaves 92.5% of the scored test rows flat
-(down 3.6%, up 3.9%). With the inverse-frequency class weights the network
-then predicts up or down on 98% of rows (predicted mix 27.5 / 1.6 / 70.9%):
-validation accuracy 3 to 5% at every epoch against 61 to 67% in part 1, and
-accuracy on the test days 8.2% where always-flat scores 92.5%
+over 5 s, was fixed in part 1 as the one whose class mix on the 2025 training
+days (7.7 / 84.6 / 7.7% down / flat / up, filtered rows) came closest to the
+original's printed 9.1 / 81.9 / 9.1%. On the 2026 days ETH moved less over 5 s.
+The same threshold leaves 96.9% of the training targets flat (1.6 / 96.9 /
+1.5%) and 96.9% of the validation day's (1.6 / 96.9 / 1.6%), against 84.6% on
+the 2025 training days. It leaves 92.5% of the scored test rows flat (3.6 /
+92.5 / 3.8%), against 87.8% on the 2025 test days. Every part and split, at
+5e-4 and at 2e-4: `replication_eth_2025_split_shares.csv`.
+
+A second absolute threshold, the volatility filter at 2e-5, leaves a target on
+18.1% of the 2026 training rows (1,095,764 of 6,045,074) against 54.4% in 2025
+(3,290,408 of 6,045,060). At 96.9% flat, the original's loss (inverse-frequency
+class weights with label smoothing 0.05, which PyTorch weights by the class
+weights) is best met by a constant prediction near (0.40, 0.19, 0.41) down /
+flat / up, whose argmax is never flat. The fit stays near such a constant: its
+mean probabilities on the test rows are 0.345 / 0.293 / 0.362, and a constant
+at those values scores close to the logged losses (training 2.42 to 2.43,
+depending on the batch order, and validation 3.220, against 2.28 to 2.40 and
+3.208 to 3.227 logged). Labels, the filter, the windows, the class weights, the
+kept-epoch rule and the MPS probabilities were checked; no code defect was
+found.
+
+The network predicts up or down on 98% of the test rows (predicted mix 27.5 /
+1.6 / 70.8%): validation accuracy 3 to 5% at every epoch against 61 to 67% in
+part 1, and accuracy on the test days 8.2% where always-flat scores 92.5%
 (`replication_eth_2025_part2_training.csv`, `logs/predict_part2.log`). The gate
-fires on that noise: 4,255 signals over the fourteen days.
+fires where the near-constant output dips below p_flat 0.1: 4,255 signals over
+the fourteen days.
 
 | run | holding | signals | fills/day | gross | net 2.2 bp | net 5.5 bp | gross bp of turnover | days net > 0 at 0 / 2.2 / 5.5 bp |
 |---|---|---:|---:|---:|---:|---:|---:|---|
@@ -185,9 +223,12 @@ fires on that noise: 4,255 signals over the fourteen days.
 At 2.2 bp a side, the fee the original's +0.9 USDT was reported after, the
 frozen recipe loses on every one of the fourteen days (-10.55 USDT pooled over
 the primary holding); at 5.5 bp likewise. Gross is +1.72 USDT, 0.31 bp of
-turnover, below any fee, as in part 1. The frozen test fails, and the reason
-is identifiable: a label threshold fixed in absolute relative units rather than
-in units of the period's volatility. A volatility-scaled threshold would be a
+turnover, below any fee, as in part 1. The frozen test fails. The absolute
+label threshold explains why the classifier collapsed, not why the test lost
+money. In part 1, where the fit did not collapse, the same gate had a gross
+edge of 0.17 bp of turnover held signal to signal and 0.02 bp held 100 s, and
+no configuration exceeded 0.98 bp; all are below the 2.2 bp fee. The collapsed
+fit's 0.31 and 0.21 bp are no worse. A volatility-scaled threshold would be a
 different recipe from the original's; it is not run here, and if it were it
 would be exploratory and labelled as such. Per day and per fee:
 `replication_eth_2025_part2_days.csv`.
@@ -202,7 +243,12 @@ would be exploratory and labelled as such. Per day and per fee:
 - `replication_eth_2025_part1_summary.csv`, `replication_eth_2025_part2_summary.csv`:
   pooled per run and fee.
 - `replication_eth_2025_part1_training.csv`, `replication_eth_2025_part2_training.csv`:
-  the fits' epochs.
+  the fits' epochs. Their `kept` column marks an epoch that set a new best
+  validation accuracy, not the epoch whose weights were kept; the weights kept
+  are the last such epoch's, the fifth in part 1 and the third in part 2.
 - `replication_eth_2025_label_shares.csv`: the threshold's choice.
+- `replication_eth_2025_split_shares.csv`: the class mix on the filtered rows
+  of every part's training, validation and test days, at 5e-4 and 2e-4 (the
+  `split-shares` stage).
 - `docs/replication_eth_plan.md`: part 2's plan, committed before any 2026 day
   was fetched.

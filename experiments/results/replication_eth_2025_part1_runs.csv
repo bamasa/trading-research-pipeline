@@ -1,4 +1,4 @@
-run,strategy,source,days,signals,fills_per_day,gross_usdt,net_2.2bp_usdt,days_net_positive_2.2bp,net_5.5bp_usdt,days_net_positive_5.5bp,gross_bp_of_turnover,original_fills,original_pnl,original_pnl_after_fee
+run,strategy,source,days,signals,fills_per_day,gross_usdt,net_2.2bp_usdt,days_net_positive_2.2bp,net_5.5bp_usdt,days_net_positive_5.5bp,gross_bp_of_turnover,original_fills_two_days,original_pnl,original_pnl_after_fee
 ref37,signal_to_signal,REF cell 37 / sweep cell 108,2,1261,409.0,0.07049999999997425,-4.892358714000027,0,-12.336646785000026,0,0.031252149000819476,185.0,1.0,0.0
 c121,signal_to_signal,"sweep cells 121, 123, 127",2,1840,608.0,-2.426199999999999,-9.81047668,0,-20.8868917,0,-0.7228385705612533,298.0,-1.0,-2.0
 c122,signal_to_signal,sweep cell 122,2,1853,613.0,-2.1527000000000136,-9.599167622000015,0,-20.768869055000014,0,-0.6359981994695135,300.0,0.0,-2.0

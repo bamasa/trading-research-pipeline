@@ -11,6 +11,7 @@ Stages, each resumable and run separately (training takes hours)::
 
     python experiments/replication_eth_2025.py fetch 2025-01-28 2025-02-06
     python experiments/replication_eth_2025.py shares 2025-01-28 2025-02-03
+    python experiments/replication_eth_2025.py split-shares
     python experiments/replication_eth_2025.py train part1
     python experiments/replication_eth_2025.py predict part1
     python experiments/replication_eth_2025.py backtest part1
@@ -30,7 +31,7 @@ import pandas as pd
 
 from trading_research.replication_eth.days import MIN_VOLATILITY
 from trading_research.replication_eth.lob import labels
-from trading_research.replication_eth.store import fetch_day, load_span, span
+from trading_research.replication_eth.store import day_path, fetch_day, load_span, span
 from trading_research.replication_eth.sweep import FROZEN, SWEEP, Run
 
 ROOT = Path("data/replication_eth")
@@ -164,8 +165,9 @@ def summarise(table: pd.DataFrame) -> pd.DataFrame:
 
 
 #: The original's printed backtests (Binance spot, 2025-02-05 .. 06, 0.01 ETH):
-#: fills, PnL before and after its fee, in USDT, rounded as its tables show
-#: them; keyed by the replication's run and holding.
+#: fills over the two days (not per day), PnL before and after its fee, in
+#: USDT, rounded as its tables show them; keyed by the replication's run and
+#: holding.
 ORIGINAL: dict[tuple[str, str], tuple[int, float, float]] = {
     ("ref37", "signal_to_signal"): (185, 1, 0),
     ("c121", "signal_to_signal"): (298, -1, -2),
@@ -206,7 +208,8 @@ def wide(summary: pd.DataFrame) -> pd.DataFrame:
         out[f"net_{fee:g}bp_usdt"] = part["net_usdt"]
         out[f"days_net_positive_{fee:g}bp"] = part["days_net_positive"]
     out["gross_bp_of_turnover"] = base["gross_bp_of_turnover"]
-    for i, name in enumerate(("original_fills", "original_pnl", "original_pnl_after_fee")):
+    names = ("original_fills_two_days", "original_pnl", "original_pnl_after_fee")
+    for i, name in enumerate(names):
         out[name] = [ORIGINAL.get(key, (np.nan, np.nan, np.nan))[i] for key in out.index]
     return out.reset_index()
 
@@ -279,6 +282,39 @@ def cmd_shares(args: argparse.Namespace) -> None:
     print(table.round(4).to_string(index=False))
 
 
+def cmd_split_shares(_: argparse.Namespace) -> None:
+    """Class shares on the filtered rows of each part's training, validation and
+    test days, at the frozen threshold and at 2e-4: how the threshold fixed on
+    the 2025 training days reads on every split, the 2026 ones included."""
+    rows = []
+    for part in PARTS:
+        for split, key in (("train", "train"), ("validation", "val"), ("test", "test")):
+            days = _days(part, key)
+            rel, vol = [], []
+            for day in days:
+                with np.load(day_path(ROOT, day)) as stored:
+                    rel.append(stored["rel50"])
+                    vol.append(stored["volatility"])
+            kept = np.concatenate(vol) >= MIN_VOLATILITY
+            changes = np.concatenate(rel)[kept]
+            row: dict[str, object] = {
+                "part": part,
+                "split": split,
+                "first_day": days[0],
+                "last_day": days[-1],
+                "rows": len(kept),
+                "filtered_rows": int(kept.sum()),
+            }
+            for alpha in (ALPHA, 2e-4):
+                shares = np.bincount(labels(changes, alpha), minlength=4)[1:] / kept.sum()
+                for name, share in zip(("down", "flat", "up"), shares, strict=True):
+                    row[f"{name}_{alpha:g}"] = share
+            rows.append(row)
+    table = pd.DataFrame(rows)
+    table.to_csv(RESULTS / "replication_eth_2025_split_shares.csv", index=False)
+    print(table.round(4).to_string(index=False))
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -291,6 +327,8 @@ def main(argv: list[str] | None = None) -> None:
     shares.add_argument("start", type=_date)
     shares.add_argument("end", type=_date)
     shares.set_defaults(run=cmd_shares)
+    split_shares = sub.add_parser("split-shares", help="label shares on every split")
+    split_shares.set_defaults(run=cmd_split_shares)
     for name, run in (("train", cmd_train), ("predict", cmd_predict), ("backtest", cmd_backtest)):
         stage = sub.add_parser(name)
         stage.add_argument("part", choices=sorted(PARTS))
