@@ -38,3 +38,16 @@ summarised in the D amendment; this log records what happened and when.
 - Stage 1, 21:20 UTC: W and D copied from the spot study's checkout, 122
   files, 111.4 MB, none absent, every sha256 equal to its source's; no day of
   W or D excluded; the signal computed on D's 92 days; 28.6 GB free.
+- Stage D, 21:23 to about 21:55 UTC, four workers: every run of every slot on
+  D's 92 days (none excluded) and the fill rule's calibration on Bybit spot
+  BTCUSDT's book on the same days. Development numbers, in-sample for the
+  signal, never results: sigma_D 1.24 (MK-S), 0.38 (MK-Q), 0.36 (MK-SQ) bp
+  per fill; MDEs 0.55, 0.17, 0.16 bp per fill; every D day had fills for every
+  slot; the July rehearsal killed all three. The calibration: the maker
+  volume ordered trade-through <= queue <= touch on every counted day for all
+  three slots, but the prints rule's making part lay inside the book's
+  bracket on 22% (MK-S, 89 days), 64% (MK-Q) and 58% (MK-SQ) of the days,
+  under the registered 80%: it does not pass, and every verdict carries the
+  label "uncalibrated fill rule".
+- The D amendment written by `amend` and committed after review (`266babb`):
+  frozen configuration `8dbd3181…`, the run log's manifest (3 rows).
