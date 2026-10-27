@@ -548,6 +548,9 @@ class TakerSlot:
         self.cells = np.full((len(self.neighbours), n), np.nan)
         self.rngs = [np.random.default_rng(k) for k in range(self.draws)]
         self.void: set[str] = set()
+        #: Each void condition's days (K-units, K-acct, K-cap): a slot on S25's signal
+        #: takes its status on H's days to 07-31, and only a fault inside them voids it.
+        self.void_days: dict[str, set[date]] = {}
         self.stale: set[int] = set()
         #: Each day's signal tape, and the day whose tape each day's one-day shift read.
         self.signals: dict[int, SignalTape] = {}
@@ -604,7 +607,7 @@ class TakerSlot:
         try:
             true = scored(self.key)
         except UnitsError:
-            self.void.add("K-units")
+            self.fault("K-units", i)
             return
         if true is None:
             return
@@ -612,7 +615,7 @@ class TakerSlot:
         try:
             day = execute_day(ctx.book, ctx.stamps[rows], side, hold, TakerSettings())
         except IdentityError:
-            self.void.add("K-acct")
+            self.fault("K-acct", i)
             return
         trades = day.trades
         if day.excluded:
@@ -623,7 +626,7 @@ class TakerSlot:
                 < trades["exit_snapshot_ns"].to_numpy()[:-1]
             )
         ):
-            self.void.add("K-cap")
+            self.fault("K-cap", i)
         self.value[i], self.trades[i] = day.day_bp("net"), len(trades)
         for name, total in taker_day_sums(day).items():
             self.sums.setdefault(name, np.full(len(self.days), np.nan))[i] = total
@@ -657,6 +660,11 @@ class TakerSlot:
         if cell.configuration in ctx.control:
             self.has_control = True
             self.control_label[i], self.control_move[i] = ctx.control[cell.configuration]
+
+    def fault(self, name: str, i: int) -> None:
+        """A void condition on day ``i``, recorded with its day."""
+        self.void.add(name)
+        self.void_days.setdefault(name, set()).add(self.days[i])
 
     def flag(self, i: int, found: Any) -> None:
         """A run of the slot on day ``i`` that walked a stale snapshot makes the day stale."""
@@ -799,14 +807,22 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
             len(sets), len(days)
         )
     void = []  # K-acct: an accounting fault in any run of the slot; K-cap: its true run's position
-    if (
-        "accounting_failed" in mine
-        and mine["accounting_failed"].fillna("").astype(str).ne("").any()
-    ):
-        void.append("K-acct")
+    void_days: dict[str, tuple[date, ...]] = {}  # each with the days it occurred on
+    if "accounting_failed" in mine:
+        failed = mine["accounting_failed"].fillna("").astype(str).ne("")
+        if failed.any():
+            void.append("K-acct")
+            void_days["K-acct"] = tuple(
+                sorted({date.fromisoformat(str(d)) for d in mine.loc[failed, "day"]})
+            )
     true = mine[mine["variant"] == "true"]
-    if "cap_exceeded" in true and true["cap_exceeded"].fillna(False).astype(bool).any():
-        void.append("K-cap")
+    if "cap_exceeded" in true:
+        capped = true["cap_exceeded"].fillna(False).astype(bool)
+        if capped.any():
+            void.append("K-cap")
+            void_days["K-cap"] = tuple(
+                sorted({date.fromisoformat(str(d)) for d in true.loc[capped, "day"]})
+            )
 
     def claim(column: str) -> SlotDays:
         """The slot's series and every variant's under one claim's column."""
@@ -822,7 +838,7 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
             brackets={name: series(f"bracket/{name}", column) for name in ("pessimistic", "none", "all_ahead")},
             making=series("true", "making_usdt") if p.slot == "S-M" else None,
             passive_notional=series("true", "passive_notional"),
-            on_s25_signal=on_s25, window_h=window_h, void=tuple(void),
+            on_s25_signal=on_s25, window_h=window_h, void=tuple(void), void_days=dict(void_days),
         )  # fmt: skip
 
     found = claim(primary)
@@ -1050,7 +1066,8 @@ def compute_block(block: Block, *, days: list[date] | None = None,
         series[t.slot] = SlotDays(t.slot, "taker", days, t.value, t.trades, t.gross, t.turnover, t.ic,
                                   t.random, t.flipped, t.shifted, t.long_only, t.short_only, t.cells,
                                   t.latency, void=tuple(sorted(t.void)), on_s25_signal=t.slot == "S25",
-                                  window_h=t.window_h, extra=t.extra())  # fmt: skip
+                                  window_h=t.window_h, extra=t.extra(),
+                                  void_days={k: tuple(sorted(v)) for k, v in t.void_days.items()})  # fmt: skip
     for p in passive:  # from the rows step_over_stale returns: the re-simulated shifts among them
         on_s25 = p.slot == "S25-Z" or signal_is_s25
         series[p.slot] = passive_series(

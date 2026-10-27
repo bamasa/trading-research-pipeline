@@ -258,18 +258,25 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
     from trading_research.pipeline.short_horizon import statuses as st
 
     preset = preset_on_d(study, registration)
-    masks, windows = {}, {}
+    masks, windows, assessed, faults_after = {}, {}, {}, {}
     for slot, s in series.items():
         first, last = sa.BLOCKS["H"]
         windows[slot] = (first, st.S25_WINDOW_END if s.on_s25_signal else last)
         masks[slot] = s.mask(within(s.days, windows[slot]))
-    found = st.family(series, masks, "H", preset)
+        # only a void condition inside the status window voids it (F10)
+        assessed[slot], faults_after[slot] = st.in_window(s, windows[slot])
+    found = st.family(assessed, masks, "H", preset)
     out = {slot: a.record() for slot, a in found.items()}
     if "S25-Z" in series:
-        out["S25-Z"] = st.s25_z(series["S25-Z"], masks["S25-Z"]).record()
+        out["S25-Z"] = st.s25_z(assessed["S25-Z"], masks["S25-Z"]).record()
     taken = [slot for slot, a in found.items()
              if slot not in preset and slot in series and st.taken_to_f(a, series[slot].on_s25_signal)]  # fmt: skip
     measurements = beside("H", series, info or NO_INFO, gaps or {}, flags_ns, windows)
+    for slot, outside in faults_after.items():
+        if outside and "inside_s25_information_set" in measurements[slot]:
+            measurements[slot]["inside_s25_information_set"]["void_conditions"] = outside
+        elif outside:
+            measurements[slot]["void_conditions_outside_status_window"] = outside
     for slot, s in series.items():
         if not s.on_s25_signal:
             measurements[slot]["H_before_2025_08_01"] = measured(
