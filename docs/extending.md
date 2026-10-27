@@ -130,16 +130,16 @@ class BookImbalance:
     lookback = 0
 
     def __init__(self, *, hold: int = 30, share: float = 0.05) -> None:
-        self.horizon = hold          # the clock exit, in rows
+        self.horizon = hold  # the clock exit, in rows
         self.share = share
         self.threshold = float("nan")
 
-    def fit(self, history):          # the threshold from a trade rate, on history only
+    def fit(self, history):  # the threshold from a trade rate, on history only
         values = np.abs(self.imbalance(history))
         self.threshold = float(np.nanquantile(values, 1.0 - self.share))
         return self
 
-    def decide(self, frame):         # with the heavier side, where the imbalance is large
+    def decide(self, frame):  # with the heavier side, where the imbalance is large
         value = self.imbalance(frame)
         out = np.zeros(len(frame), dtype=np.int8)
         strong = np.isfinite(value) & (np.abs(value) >= self.threshold)
@@ -200,8 +200,8 @@ runner calls:
 from trading_research.plugins import get, resolve
 from trading_research.plugins.conformance import check, make_setup
 
-spec = get("book_imbalance", "strategy")        # refuses an unknown or ambiguous name
-assert check(spec, make_setup()).passed         # refuse a part that fails its checks
+spec = get("book_imbalance", "strategy")  # refuses an unknown or ambiguous name
+assert check(spec, make_setup()).passed  # refuse a part that fails its checks
 strategy = resolve("strategy", "book_imbalance", hold=30)
 ```
 
