@@ -457,3 +457,20 @@ def test_a_process_refuses_frozen_files_that_moved_after_the_open(repo: Path) ->
     write(repo, shl.FINALISTS_DIR / "S25.json", b'{"theta": 0.7}')
     with pytest.raises(HeldOutLocked, match=r"S25\.json has sha256"):
         ledger(repo).session("H")
+
+
+def test_an_open_entry_erased_by_a_later_commit_is_not_opened_again_as_a_first_read(
+    repo: Path,
+) -> None:
+    """The open reads every version of the ledger in HEAD's history: an entry a later
+    commit erased refuses a new open, and a forced one is a second read."""
+    open_h(repo)
+    commit(repo, "H opened")
+    assert ledger(repo).session("H").access.stamp == "first read"  # a process starts (and crashes)
+    git(repo, "checkout", "-q", "--", shr.LEDGER_PATH.as_posix())
+    (repo / shr.LEDGER_PATH).write_text(json.dumps({}) + "\n", encoding="utf-8")
+    commit(repo, "ledger tidied")
+    with pytest.raises(HeldOutLocked, match="cannot be erased and opened again"):
+        open_h(repo)
+    again = ledger(repo).open("H", catalogue_sha256=shr.REGISTERED_CATALOGUE_SHA256, force=True)
+    assert again["read"] == "second read"

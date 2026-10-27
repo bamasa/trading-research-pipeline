@@ -193,6 +193,46 @@ class Ledger:
         loaded: dict[str, list[dict[str, Any]]] = json.loads(text)
         return loaded
 
+    def ledger_versions(self, ref: str = "HEAD") -> list[tuple[str, dict[str, list[dict[str, Any]]]]]:
+        """Every version of the ledger in ``ref``'s history, newest first, each with
+        the commit that wrote it (a commit that deleted the file is skipped)."""
+        ledger = self.ledger.as_posix()
+        try:
+            commits = _git(self.repo, "log", "--format=%H", ref, "--", ledger).split()
+        except HeldOutLocked:
+            return []
+        out = []
+        for found in commits:
+            try:
+                text = _git(self.repo, "show", f"{found}:{ledger}")
+            except HeldOutLocked:
+                continue
+            try:
+                out.append((found, json.loads(text)))
+            except json.JSONDecodeError:
+                continue
+        return out
+
+    def erased_entries(self, block: str, kept: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """``block``'s entries some version of the ledger held (in HEAD's history, and
+        in the upstream's when one is set) that ``kept`` (HEAD's) lacks: an open entry
+        erased by a later commit or a reset."""
+        refs = ["HEAD"]
+        if self.upstream is not None:
+            try:
+                refs.append(_git(self.repo, "rev-parse", "--verify", "-q", self.upstream).strip())
+            except HeldOutLocked:
+                pass
+        have = {(e.get("utc"), e.get("commit")) for e in kept}
+        erased: dict[tuple[Any, Any], dict[str, Any]] = {}
+        for ref in refs:
+            for _, entries in self.ledger_versions(ref):
+                for entry in entries.get(block, []):
+                    key = (entry.get("utc"), entry.get("commit"))
+                    if key not in have:
+                        erased.setdefault(key, dict(entry))
+        return list(erased.values())
+
     def _write(self, entries: Mapping[str, Any]) -> None:
         path = self.repo / self.ledger
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -454,9 +494,17 @@ class Ledger:
                 f"{block} was opened on {first['utc']} at commit {first['commit'][:7]}; "
                 "a second read needs force=True and is stamped 'second read'"
             )
+        erased = self.erased_entries(block, previous)
+        if erased and not force:
+            first = erased[-1]
+            raise HeldOutLocked(
+                f"{block}'s open entry of {first.get('utc')} at commit {str(first.get('commit'))[:7]} "
+                "is in the ledger's history but not in HEAD's: a read cannot be erased and opened "
+                "again; a second read needs force=True and is stamped 'second read'"
+            )
         entry: dict[str, Any] = {
             "block": block,
-            "read": SECOND_READ if previous else FIRST_READ,
+            "read": SECOND_READ if previous or erased else FIRST_READ,
             "commit": self._head(),
             "config_sha256": registration.sha256,
             "environment": environment,
