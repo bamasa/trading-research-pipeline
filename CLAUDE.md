@@ -77,6 +77,8 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 |---|---|---|
 | `trading-research describe-schema` | nothing | prints a data contract |
 | `trading-research generate-demo-data` | nothing; writes synthetic data to `data/demo` | synthetic, never evidence about a market |
+| `trading-research synthetic` | nothing; writes generated data and its `truth.json` under `data/synthetic/` | synthetic, never evidence about a market |
+| `trading-research verify` | nothing; generates its own data, writes pages under `artifacts/verify/` | checks code against planted answers, never a market |
 | `trading-research validate-data`, `screen`, `review` | files already on disk | no network |
 | `trading-research prepare`, `select`, `train`, `predict`, `backtest`, `retrain-search`, `exit-search` | the pipeline's staged files | the window each is given, nothing else |
 | `trading-research download`, `download-book` | public archives over the network | free days only, written under `data/<study>/`; `fundingRate` and `klines` come as whole months |
