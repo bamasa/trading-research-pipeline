@@ -34,6 +34,8 @@ def test_a_block_unreadable_once_its_stale_days_are_counted_assesses_nothing(
     from trading_research.pipeline.short_horizon import heldout
 
     monkeypatch.setattr(heldout.Block, "validated", property(lambda _: _validated(H_DAYS)))
+    monkeypatch.setattr(heldout.Block, "registration", None)
+    monkeypatch.setattr(reads, "preset_on_d", lambda *_: {})
     stale = [d.isoformat() for d in H_DAYS[:12]]
     monkeypatch.setattr(
         heldout, "compute_block", lambda *_, **__: ({}, {"unreadable": True, "stale_days": stale})

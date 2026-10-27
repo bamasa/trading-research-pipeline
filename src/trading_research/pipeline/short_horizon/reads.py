@@ -502,7 +502,7 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
     if blk.validated["unreadable"]:
         return head | {"unreadable": True, "excluded": blk.validated["reasons"]} | unreadable_results(
             study, block, "unreadable")  # fmt: skip
-    series, info = compute_block(blk)
+    series, info = compute_block(blk, preset=preset_on_d(study, blk.registration))
     if info["unreadable"]:  # the days flagged stale in the read's runs counted too
         return head | {"unreadable": True, "excluded": blk.validated["reasons"],
                        "stale_days": info["stale_days"]} | unreadable_results(study, block, "unreadable")  # fmt: skip

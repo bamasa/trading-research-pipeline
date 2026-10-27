@@ -372,3 +372,38 @@ def test_a_cached_output_is_returned_only_under_an_access_that_permits_its_day(
     assert sa.cache_key(session) == "H-0123456789ab" and sa.cache_key(sa.development_access()) == ""
     block = SimpleNamespace(work=tmp_path, access=session)
     assert ho.cache_dir(block) == tmp_path / "H-0123456789ab"
+
+
+def test_a_passive_slot_preset_on_d_runs_its_true_run_and_measurements_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slot whose status was set on D is a labelled measurement on H and F: no
+    placebo, neighbour, bracket, re-run or shift is simulated for it."""
+    from trading_research.pipeline.short_horizon import heldout_passive as hp
+
+    seen: list[hp.VariantJob] = []
+    monkeypatch.setattr(hp, "run_variants", lambda job: seen.append(job))
+    monkeypatch.setattr(pd, "read_parquet", lambda _: pd.DataFrame({"variant": ["true"]}))
+    block = SimpleNamespace(study=SimpleNamespace(scale=SimpleNamespace(random_direction_draws=2), workers=1,
+                                                  repo="repo", symbol="BTCUSDT"), work=Path("work"),
+                            access=None, flags_ns=np.zeros(0, dtype=np.int64), threshold=9, name="H",
+                            fitted={"sigma_ref": 1.0})  # fmt: skip
+    own = SimpleNamespace(stamps_ns=np.zeros(0, dtype=np.int64), side=np.zeros(0, dtype=np.int64),
+                          strength_bp=np.zeros(0), event=None)  # fmt: skip
+    p = ho.PassiveSlot("S-P", SimCell("S-P", C_KEY, "entry", 50.0, policy="pull_4h"), [],
+                       [("regime/none", SimCell("S-P", S25, "entry", 50.0))],
+                       decisions={C_KEY: [own, own], S25: [own, own]}, flagged=[[own, own]], preset=True)  # fmt: skip
+    ho.run_passive(block, [p], DAYS[:2], [np.zeros(0, dtype=np.int64)], kills=True)  # type: ignore[arg-type]
+    names = [r.variant for r in seen[0].runs]
+    assert names[0] == "true" and {"regime/none", "exit/passive", "fill/touch", "flagset/0"} <= set(
+        names
+    )
+    assert not {"flipped", "long_only", "short_only", "stale", "shifted", "latency"} & set(names)
+    assert not [n for n in names if n.startswith(("random/", "bracket/", "neighbour/"))]
+
+
+def test_a_taker_slot_preset_on_d_runs_no_placebo_and_no_shift() -> None:
+    preset = ho.TakerSlot("S-C", C_KEY, [], DAYS, 2, preset=True)
+    preset.first = object()
+    preset.finish()
+    assert preset.shifted_from == {} and np.isnan(preset.flipped).all()
