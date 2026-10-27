@@ -175,3 +175,31 @@ def test_the_statuses_set_on_d_are_the_frozen_configurations() -> None:
     del frozen["S-P"]
     with pytest.raises(ValueError, match="no status on D for S-P"):
         reads.preset_on_d(study, registration)  # type: ignore[arg-type]
+
+
+def test_a_logged_hand_run_sets_every_searched_slot_on_c_or_r_not_admitted(tmp_path: Any) -> None:
+    """A hand run logged in the trial ledger's manifest sets S-C, S-R, and S-P and S-M
+    when their signal is C* or R*, to "not admitted on D (hand run)" (p = 1)."""
+    import json
+
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    admission = {"S-C": {"status_on_D": "not admitted on D (i, ii)"},
+                 "S-R": {"status_on_D": "not run (no admissible cell on D)"},
+                 "S-P": {"status_on_D": "not admitted on D (i, ii)", "signal": "C*"},
+                 "S-M": {"status_on_D": "not admitted on D (i, ii)", "signal": "S25"}}  # fmt: skip
+    values = {
+        ("search", "result_admission"): admission,
+        ("search", "result_trials"): {"hand_runs": []},
+    }
+    registration = SimpleNamespace(value=lambda path: values[path])
+    study = SimpleNamespace(repo=tmp_path)
+    manifest = tmp_path / shr.TRIALS_MANIFEST_PATH
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"hand_runs": []}), encoding="utf-8")
+    assert reads.preset_on_d(study, registration)["S-C"] == "not admitted on D (i, ii)"  # type: ignore[arg-type]
+    entry = {"date": "2026-10-26", "computed": "returns", "days": ["2025-02-05"]}
+    manifest.write_text(json.dumps({"hand_runs": [entry]}), encoding="utf-8")
+    preset = reads.preset_on_d(study, registration)  # type: ignore[arg-type]
+    assert preset == {"S-C": reads.HAND_RUN, "S-R": reads.HAND_RUN, "S-P": reads.HAND_RUN,
+                      "S-M": "not admitted on D (i, ii)"}  # fmt: skip

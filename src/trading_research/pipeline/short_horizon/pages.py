@@ -326,8 +326,11 @@ def passive_sentence(c: Computed, out: Written) -> None:
     admission = c.c["admission"]
     h = c.read.get("H")
     statuses = {}
+    presets = statuses_set_on_d(c)
     for slot in ("S-P", "S-M"):
         on_d = admission[slot]["status_on_D"]
+        if presets is not None:  # as a read applies them: frozen, and any hand run logged since
+            on_d = presets.get(slot, "admitted")
         if on_d != "admitted":
             statuses[slot] = on_d
         elif h is not None:
@@ -349,6 +352,19 @@ def passive_sentence(c: Computed, out: Written) -> None:
         out.note("passive_and_maker", found)
 
 
+def statuses_set_on_d(c: Computed) -> dict[str, str] | None:
+    """The statuses set on D as a block's read applies them (``reads.preset_on_d``: the
+    frozen configuration's, with the hand-run log), once the configuration is frozen."""
+    from trading_research.pipeline import short_horizon_registration as shr
+    from trading_research.pipeline.short_horizon.reads import preset_on_d
+
+    repo = getattr(c.study, "repo", None)
+    if repo is None or not (repo / shr.CONFIG_PATH).is_file():
+        return None
+    registration = shr.Registration.load(repo=repo)
+    return preset_on_d(c.study, registration) if registration.frozen else None
+
+
 def making_note(s_m: dict[str, Any]) -> str | None:
     """S-M's condition (i) on D when it failed on the making part alone: its S was
     positive (one round trip in 150 days) while its making part was not."""
@@ -356,9 +372,10 @@ def making_note(s_m: dict[str, Any]) -> str | None:
     if not (math.isfinite(making) and math.isfinite(s)) or making > 0 or s <= 0:
         return None
     sign = "\u2212" if making < 0 else ""
-    return (f"S-M (i: making part {sign}{abs(making):.2f} bp per fill; S = +{s:.4f}): its S, "
-            "net per 100 USDT of clip a day, was positive on D, and its making part was not "
-            "(on development data, selected).")  # fmt: skip
+    status = str(s_m.get("status_on_D") or "not admitted on D (i)")
+    return (f"S-M, {status} on D's own conditions (i: making part {sign}{abs(making):.2f} bp per "
+            f"fill; S = +{s:.4f}): its S, net per 100 USDT of clip a day, was positive on D and its "
+            "making part was not (on development data, selected).")  # fmt: skip
 
 
 def attribution(record: dict[str, Any] | None) -> Any:

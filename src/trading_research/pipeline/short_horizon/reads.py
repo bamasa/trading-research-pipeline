@@ -247,7 +247,30 @@ def preset_on_d(study: Study, registration: Any = None) -> dict[str, str]:
             raise ValueError(f"the frozen configuration records no status on D for {slot}")
         if status != "admitted":
             preset[slot] = str(status)
+    if hand_runs(study, registration):  # every searched slot on C* or R*: not admitted (hand run)
+        for slot in SEARCHED_SLOTS:
+            signal = (admission.get(slot) or {}).get("signal")
+            if slot in ("S-C", "S-R") or signal in ("C*", "R*"):
+                preset[slot] = HAND_RUN
     return preset
+
+
+#: The status a hand run sets for every searched slot (S-P and S-M on C* or R*).
+HAND_RUN = "not admitted on D (hand run)"
+
+
+def hand_runs(study: Study, registration: Any) -> list[dict[str, Any]]:
+    """The hand-run log: the trial ledger's committed manifest's (where a hand run is
+    logged), and the D amendment's frozen copy (``search.result_trials``)."""
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    found = list((registration.value(("search", "result_trials")) or {}).get("hand_runs") or [])
+    repo = getattr(study, "repo", None)
+    manifest = None if repo is None else Path(repo) / shr.TRIALS_MANIFEST_PATH
+    if manifest is not None and manifest.is_file():
+        logged = json.loads(manifest.read_text(encoding="utf-8")).get("hand_runs") or []
+        found += [entry for entry in logged if entry not in found]
+    return found
 
 
 def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,

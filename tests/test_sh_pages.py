@@ -452,9 +452,12 @@ def test_the_notes_beside_the_payoff_and_passive_sentences() -> None:
     assert "2 at +73.6 to +83.2 bp on 3 trades" in note and "stratum R" in note
     board.loc[2, "net"] = 1.0
     assert pages.payoff_note(board) is None
-    making = pages.making_note({"making_bp_per_fill": -0.4299, "S": 0.000525})
+    making = pages.making_note(
+        {"making_bp_per_fill": -0.4299, "S": 0.000525, "status_on_D": "not admitted on D (i, ii)"}
+    )
     assert making is not None
-    assert making.startswith("S-M (i: making part \u22120.43 bp per fill; S = +0.0005)")
+    assert "(i: making part \u22120.43 bp per fill; S = +0.0005)" in making
+    assert making.startswith("S-M, not admitted on D (i, ii) on D's own conditions")
     assert pages.making_note({"making_bp_per_fill": 0.1, "S": 0.0005}) is None
     out = pages.Written()
     out.sentences["payoff_on_D"] = [{"about": "D", "sentence": "x."}]
