@@ -227,12 +227,26 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
     return out
 
 
-def preset_on_d(study: Study) -> dict[str, str]:
-    """Statuses set on D, each entering Holm with p = 1 on every block."""
-    preset = {s: v for s, v in study.record("D")["statuses_on_D"].items() if v != "admitted"}
-    for slot, found in study.record("C")["admission"].items():
-        if found["status_on_D"] != "admitted":
-            preset[slot] = found["status_on_D"]
+#: The searched slots, whose statuses D may set.
+SEARCHED_SLOTS = ("S-C", "S-R", "S-P", "S-M")
+
+
+def preset_on_d(study: Study, registration: Any = None) -> dict[str, str]:
+    """Statuses set on D, each entering Holm with p = 1 on every block: as the D
+    amendment froze them (``search.result_admission`` of the frozen configuration,
+    whose sha256 the ledger checks), never the run's local stage records."""
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    if registration is None:
+        registration = shr.Registration.load(repo=study.repo).require_frozen()
+    admission = registration.value(("search", "result_admission")) or {}
+    preset = {}
+    for slot in SEARCHED_SLOTS:
+        status = (admission.get(slot) or {}).get("status_on_D")
+        if status is None:
+            raise ValueError(f"the frozen configuration records no status on D for {slot}")
+        if status != "admitted":
+            preset[slot] = str(status)
     return preset
 
 
@@ -243,7 +257,7 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
     what is taken to F, and every slot's numbers on all of H as measurements."""
     from trading_research.pipeline.short_horizon import statuses as st
 
-    preset = preset_on_d(study)
+    preset = preset_on_d(study, registration)
     masks, windows = {}, {}
     for slot, s in series.items():
         first, last = sa.BLOCKS["H"]

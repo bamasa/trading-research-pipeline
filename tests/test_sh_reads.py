@@ -151,3 +151,25 @@ def test_the_gap_days_put_back_are_those_inside_the_status_window() -> None:
     )
     assert whole["S25"]["gap_days_included"]["gap_days"] == 2
     assert whole["S25"]["gap_days_included"]["days"] == 44
+
+
+def test_the_statuses_set_on_d_are_the_frozen_configurations() -> None:
+    """H's presets come from the frozen ``search.result_admission``, not from the
+    run's local stage records, which a rerun or an edit could change."""
+    frozen = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null"},
+              "S25-Z": {"status_on_D": "fixed before D; outside the family"},
+              "S-C": {"status_on_D": "not admitted on D (i, ii)"},
+              "S-R": {"status_on_D": "not run (no admissible cell on D)"},
+              "S-P": {"status_on_D": "not admitted on D (i, ii)"},
+              "S-M": {"status_on_D": "not admitted on D (i, ii)"}}  # fmt: skip
+    registration = SimpleNamespace(
+        value=lambda path: frozen if path == ("search", "result_admission") else None
+    )
+    records = {"D": {"statuses_on_D": {"S-C": "admitted", "S-R": "admitted"}},
+               "C": {"admission": {"S-P": {"status_on_D": "admitted"}, "S-M": {"status_on_D": "admitted"}}}}  # fmt: skip
+    study = SimpleNamespace(record=lambda stage: records[stage], repo=None)
+    preset = reads.preset_on_d(study, registration)  # type: ignore[arg-type]
+    assert preset == {s: frozen[s]["status_on_D"] for s in ("S-C", "S-R", "S-P", "S-M")}
+    del frozen["S-P"]
+    with pytest.raises(ValueError, match="no status on D for S-P"):
+        reads.preset_on_d(study, registration)  # type: ignore[arg-type]
