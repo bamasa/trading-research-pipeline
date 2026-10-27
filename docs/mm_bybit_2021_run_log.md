@@ -120,3 +120,6 @@ Times below are UTC on 27 October (MSK 28 October).
     on D and H, as expected.
 - No primary is a candidate, so nothing further is read (the registration has
   no block P).
+- The results page written from the H record, the table and the gross
+  aggregates (`mm_bybit_2021_H_gross.json`, sums of the read's row file;
+  nothing re-run), every verdict labelled "uncalibrated fill rule".
