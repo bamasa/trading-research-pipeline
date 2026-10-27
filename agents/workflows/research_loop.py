@@ -378,6 +378,17 @@ class SdkRunner:
         return RoleReply("\n".join(texts), events)
 
 
+def ready_to_run() -> str | None:
+    """What a run lacks before it may start, or ``None``: the model's name and the SDK."""
+    import importlib.util
+
+    if not os.environ.get("TRP_AGENT_MODEL"):
+        return "set TRP_AGENT_MODEL to the model's name"
+    if importlib.util.find_spec("claude_agent_sdk") is None:
+        return "install the optional SDK package, claude-agent-sdk, into this environment"
+    return None
+
+
 def parser() -> argparse.ArgumentParser:
     found = argparse.ArgumentParser(
         prog="python -m agents.workflows.research_loop",
@@ -419,6 +430,10 @@ def main(argv: list[str] | None = None) -> int:
         decision = policy.bash(args.text)
         print(f"{'allowed' if decision.allowed else 'refused'}: {decision.reason}")
         return 0 if decision.allowed else 1
+    missing = ready_to_run()
+    if missing is not None:
+        print(f"not started: {missing}", file=sys.stderr)
+        return 2
     if args.resume is not None:
         log = RunLog(args.resume)
         meta = json.loads((log.path / "run.json").read_text())

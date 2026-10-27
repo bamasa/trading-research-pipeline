@@ -204,6 +204,18 @@ def test_the_helpers_answer_without_a_model(capsys: pytest.CaptureFixture[str]) 
     assert len(CALENDAR) == len([line for line in printed.splitlines() if ":" in line[22:]])
 
 
+def test_a_run_does_not_start_without_a_model_or_the_sdk(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from agents.workflows.research_loop import main
+
+    monkeypatch.delenv("TRP_AGENT_MODEL", raising=False)
+    before = sorted((REPO / "agents" / "runs").glob("*"))
+    assert main(["run", "--study", "funding_carry_2026", "--brief", "b"]) == 2
+    assert "TRP_AGENT_MODEL" in capsys.readouterr().err
+    assert sorted((REPO / "agents" / "runs").glob("*")) == before
+
+
 def test_the_run_directories_are_ignored_by_git() -> None:
     found = subprocess.run(["git", "check-ignore", "agents/runs/x/run.json"], cwd=REPO, check=False)
     assert found.returncode == 0
