@@ -518,6 +518,53 @@ class Ledger:
         self._write({**committed, block: [*previous, entry]})
         return entry
 
+    # -- the open entry on the remote ---------------------------------------------
+
+    def entry_commit(self, block: str, entry: Mapping[str, Any]) -> str:
+        """The commit that first wrote ``entry`` into the ledger (HEAD when none did)."""
+        for found, entries in reversed(self.ledger_versions("HEAD")):
+            if any((e.get("utc"), e.get("commit")) == (entry["utc"], entry["commit"])
+                   for e in entries.get(block, [])):  # fmt: skip
+                return found
+        return self._head()
+
+    def require_pushed(self, block: str, entry: Mapping[str, Any]) -> None:
+        """The open entry has reached the upstream: a remote-tracking branch (never a
+        local branch set as upstream) whose ledger holds it, and the remote itself,
+        asked with ``git ls-remote``, at a tip that contains the commit that wrote
+        it. A remote that cannot be reached refuses: the push cannot be confirmed."""
+        if self.upstream is None:
+            return
+        where = f"{block}'s open entry has not reached {self.upstream}"
+        try:
+            name = _git(self.repo, "rev-parse", "--symbolic-full-name", self.upstream).strip()
+        except HeldOutLocked as exc:
+            raise HeldOutLocked(f"{where}: no upstream is set") from exc
+        if not name.startswith("refs/remotes/"):
+            raise HeldOutLocked(
+                f"{where}: the upstream {name or self.upstream} is not a remote-tracking branch"
+            )
+        pushed = self.committed_entries(name).get(block, [])
+        if not any(e["utc"] == entry["utc"] and e["commit"] == entry["commit"] for e in pushed):
+            raise HeldOutLocked(where)
+        remote, _, branch = name.removeprefix("refs/remotes/").partition("/")
+        try:
+            listed = _git(self.repo, "ls-remote", "--exit-code", remote, f"refs/heads/{branch}")
+        except HeldOutLocked as exc:
+            raise HeldOutLocked(
+                f"{where}: the remote {remote!r} cannot be reached (or has no branch "
+                f"{branch!r}) to confirm the push; a session starts only once it can"
+            ) from exc
+        tip = listed.split()[0]
+        written = self.entry_commit(block, entry)
+        try:
+            _git(self.repo, "merge-base", "--is-ancestor", written, tip)
+        except HeldOutLocked as exc:
+            raise HeldOutLocked(
+                f"{where}: the remote's tip {tip[:7]} does not contain {written[:7]}, the "
+                "commit that wrote it (push it, then fetch)"
+            ) from exc
+
     # -- a process of a read session ---------------------------------------------
 
     def session(self, block: str, *, workers: int = 1) -> ReadSession:
@@ -532,10 +579,7 @@ class Ledger:
         if not committed.get(block):
             raise HeldOutLocked(f"{block}'s open entry is not in HEAD's ledger: commit it first")
         entry = committed[block][-1]
-        if self.upstream is not None:
-            pushed = self.committed_entries(self.upstream).get(block, [])
-            if not any(e["utc"] == entry["utc"] and e["commit"] == entry["commit"] for e in pushed):
-                raise HeldOutLocked(f"{block}'s open entry has not reached {self.upstream}")
+        self.require_pushed(block, entry)
         if entry.get("results_sha256"):
             raise HeldOutLocked(f"{block}'s read session is closed: its results file is written")
         self.verify_tree(since=entry["commit"])

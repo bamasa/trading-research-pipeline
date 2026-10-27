@@ -329,17 +329,51 @@ def test_a_resumption_at_another_commit_or_environment_is_refused(repo: Path) ->
         ledger(repo).session("H")
 
 
-def test_the_entry_must_have_reached_the_upstream(repo: Path) -> None:
-    before = git(repo, "rev-parse", "HEAD").strip()
+def with_remote(repo: Path, tmp_path: Path) -> Path:
+    """A bare repository beside the test's, as its remote ``origin`` (no network)."""
+    bare = tmp_path / "origin.git"
+    git(repo, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    return bare
+
+
+def test_the_entry_must_have_reached_the_upstream(repo: Path, tmp_path: Path) -> None:
+    with_remote(repo, tmp_path)
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
     opened_h(repo)
     upstream = "refs/remotes/origin/main"
-    git(repo, "update-ref", upstream, before)
     with pytest.raises(HeldOutLocked, match="has not reached"):
         ledger(repo, upstream=upstream).session("H")
     with pytest.raises(HeldOutLocked, match="has not reached"):
         ledger(repo, upstream="@{upstream}").session("H")
-    git(repo, "update-ref", upstream, "HEAD")
+    git(repo, "update-ref", upstream, "HEAD")  # the tracking ref moved by hand, nothing pushed
+    with pytest.raises(HeldOutLocked, match="does not contain"):
+        ledger(repo, upstream=upstream).session("H")
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
     assert ledger(repo, upstream=upstream).session("H").stamp == "first read"
+    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    git(repo, "branch", "-q", f"--set-upstream-to={upstream}", branch)
+    assert ledger(repo, upstream="@{upstream}").session("H").stamp == "first read"
+
+
+def test_a_local_branch_as_upstream_or_an_unreachable_remote_refuses(
+    repo: Path, tmp_path: Path
+) -> None:
+    opened_h(repo)
+    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    git(repo, "branch", "-q", "mirror", "HEAD")  # a local branch, no remote anywhere
+    git(repo, "branch", "-q", "--set-upstream-to=mirror", branch)
+    with pytest.raises(HeldOutLocked, match="not a remote-tracking branch"):
+        ledger(repo, upstream="@{upstream}").session("H")
+    bare = with_remote(repo, tmp_path)
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
+    git(repo, "branch", "-q", "--set-upstream-to=origin/main", branch)
+    git(repo, "remote", "set-url", "origin", str(bare.with_name("gone.git")))
+    with pytest.raises(HeldOutLocked, match="cannot be reached"):
+        ledger(repo, upstream="@{upstream}").session("H")
 
 
 def test_a_read_that_fails_twice_alike_or_resumes_too_often_must_close(repo: Path) -> None:
