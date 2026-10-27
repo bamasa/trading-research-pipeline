@@ -76,7 +76,7 @@ def _values(
     with_fix_records: bool, dsr: dict[str, float]
 ) -> tuple[Any, dict[tuple[str, ...], Any]]:
     records = _records(with_fix_records)
-    study = SimpleNamespace(record=lambda name: records[name])
+    study = SimpleNamespace(record=lambda name: records[name], repo=Path("no-repository"))
     parts = {"slots": {"S25": {"neighbourhood": []}, "S-P": {"key": "p"}}, "fits": {
         "weights_sha256": {}, "checkpoint_epoch": {}, "thresholds": {}, "gate_levels": {}},
         "mdes": {}, "trials": {"N_trials": 3, "ledger_sha256": "a" * 64, "ledger_rows": 0,
@@ -140,3 +140,18 @@ def test_the_amendment_is_written_when_the_stages_records_lack_the_fixed_keys() 
     assert "- Power of the t >= 3 bar: not computed." in text
     assert "- Fits that lacked a class: none." in text
     assert "0 alarms over 0 days read (not run by stage C at this commit)." in text
+
+
+def test_the_amendment_records_the_sha256_of_ds_results_files(tmp_path: Path) -> None:
+    from trading_research.data.study_fetch import file_sha256
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    for path in shr.D_RESULTS_FILES:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text(f"# {path.name}\n", encoding="utf-8")
+    lines = freeze.results_file_lines(SimpleNamespace(repo=tmp_path))  # type: ignore[arg-type]
+    assert lines == [
+        f"- {shr.results_file_line(p, file_sha256(tmp_path / p))}" for p in shr.D_RESULTS_FILES
+    ]
+    document = "# x\n\n## Amendments\n\n" + "\n".join(lines) + "\n"
+    assert set(shr.recorded_results_files(document)) == {p.as_posix() for p in shr.D_RESULTS_FILES}

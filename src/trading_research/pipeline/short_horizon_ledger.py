@@ -142,8 +142,10 @@ def _porcelain_paths(text: str) -> list[str]:
 
 
 def _diff_allowed_after_a_read(path: str) -> bool:
-    """What may change between a read and the next open: results, docs outside
-    the registration, and the README."""
+    """What may change between a read and the next open: results (never D's results
+    files), docs outside the registration, and the README."""
+    if path in {p.as_posix() for p in shr.D_RESULTS_FILES}:
+        return False
     if path == "README.md" or path.startswith("experiments/results/"):
         return True
     return path.startswith("docs/") and not path.startswith("docs/preregistration/")
@@ -370,6 +372,28 @@ class Ledger:
                 f"({manifest['sha256']}, {manifest['rows']})"
             )
 
+    def verify_d_results(self, block: str) -> None:
+        """D's results files (the leaderboard, marginals and nulls) at the sha256 the
+        amendments record, committed, at every open; the pages too at H's open (each
+        read writes them again)."""
+        document = (self.repo / self.document).read_text(encoding="utf-8")
+        recorded = shr.recorded_results_files(document)
+        missing = [p.as_posix() for p in shr.D_RESULTS_FILES if p.as_posix() not in recorded]
+        if missing:
+            raise HeldOutLocked(f"no amendment records the sha256 of D's results files {missing}")
+        for relative, digest in sorted(recorded.items()):
+            if relative == shr.PAGES_PATH.as_posix() and block != "H":
+                continue
+            path = self.repo / relative
+            if not path.is_file():
+                raise HeldOutLocked(f"D's results file {relative} is missing")
+            self._tracked(Path(relative))
+            actual = file_sha256(path)
+            if actual != digest:
+                raise HeldOutLocked(
+                    f"{relative} has sha256 {actual}, the amendment records {digest}"
+                )
+
     def verify_reader_test(self, registration: shr.Registration) -> None:
         """The ``ob200`` replay proven before H: the amendment records the reader
         test, and every reader-test day passed as a block day or failed on its gap
@@ -480,6 +504,7 @@ class Ledger:
         else:
             self._after_read(sa.HELD_OUT[sa.HELD_OUT.index(block) - 1], committed)
         self.verify_trials(registration)
+        self.verify_d_results(block)
         if block == "P" and not qualifying:
             raise HeldOutLocked("P is opened only for a slot that qualifies on F")
         self.verify_frozen_files(registration)

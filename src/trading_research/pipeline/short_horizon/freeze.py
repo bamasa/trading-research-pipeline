@@ -489,9 +489,20 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
         *overfitting_lines(values[("search", "result_admission")]),
         lacking_a_class_line(values[("models", "fits_lacking_a_class")]),
         second_detector_line(values[("detector", "second_detector_D")]),
+        *results_file_lines(study),
         "",
     ]
     return "\n".join(lines)
+
+
+def results_file_lines(study: Study) -> list[str]:
+    """The sha256 of D's results files (the leaderboard after its header names
+    N_trials, the marginals, the nulls), which every open of a block checks."""
+    from trading_research.data.study_fetch import file_sha256
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    return [f"- {shr.results_file_line(p, file_sha256(study.repo / p))}"
+            for p in shr.D_RESULTS_FILES if (study.repo / p).is_file()]  # fmt: skip
 
 
 def _number(value: Any) -> str:

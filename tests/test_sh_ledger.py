@@ -142,11 +142,20 @@ def repo(tmp_path: Path) -> Path:
     write(repo, shr.TRIALS_MANIFEST_PATH, json.dumps(manifest()).encode())
     frozen = shr.freeze_text(TEXT, frozen_values())
     write(repo, shr.CONFIG_PATH, frozen.encode())
-    amendment = DOCUMENT.replace("None yet.", shr.frozen_hash_line(frozen))
+    for path in (*shr.D_RESULTS_FILES, shr.PAGES_PATH):
+        write(repo, path, f"# {path.name}\n".encode())
+    amendment = DOCUMENT.replace("None yet.", amendment_lines(frozen))
     write(repo, shr.DOCUMENT_PATH, amendment.encode())
     write(repo, "src/study.py", b"x = 1\n")
     commit(repo, "registered and frozen")
     return repo
+
+
+def amendment_lines(frozen: str) -> str:
+    """The frozen hash line and the sha256 of D's results files and the pages."""
+    recorded = [shr.results_file_line(p, sha(f"# {p.name}\n".encode()))
+                for p in (*shr.D_RESULTS_FILES, shr.PAGES_PATH)]  # fmt: skip
+    return "\n".join([shr.frozen_hash_line(frozen), *recorded])
 
 
 def manifest(rows: int = 10, digest: str | None = None) -> dict[str, Any]:
@@ -202,7 +211,7 @@ def refreeze(repo: Path, values: dict[tuple[str, ...], Any]) -> None:
     write(
         repo,
         shr.DOCUMENT_PATH,
-        DOCUMENT.replace("None yet.", shr.frozen_hash_line(frozen)).encode(),
+        DOCUMENT.replace("None yet.", amendment_lines(frozen)).encode(),
     )
     commit(repo, "frozen again")
 
@@ -510,3 +519,20 @@ def test_an_open_entry_erased_by_a_later_commit_is_not_opened_again_as_a_first_r
         open_h(repo)
     again = ledger(repo).open("H", catalogue_sha256=shr.REGISTERED_CATALOGUE_SHA256, force=True)
     assert again["read"] == "second read"
+
+
+def test_every_open_checks_ds_results_files_and_h_the_pages(repo: Path) -> None:
+    """D's leaderboard, marginals and nulls at the amendment's sha256 at every open, and
+    never changed after a read; the pages at H's open (each read writes them again)."""
+    board = shr.D_RESULTS_FILES[0]
+    write(repo, board, b"# edited\n")
+    commit(repo, "the leaderboard edited")
+    with pytest.raises(HeldOutLocked, match=r"leaderboard\.csv has sha256"):
+        open_h(repo)
+    write(repo, board, f"# {board.name}\n".encode())
+    write(repo, shr.PAGES_PATH, b"# pages edited\n")
+    commit(repo, "the pages edited")
+    with pytest.raises(HeldOutLocked, match=r"pages\.md has sha256"):
+        open_h(repo)
+    assert not shl._diff_allowed_after_a_read(board.as_posix())
+    assert shl._diff_allowed_after_a_read(shr.PAGES_PATH.as_posix())
