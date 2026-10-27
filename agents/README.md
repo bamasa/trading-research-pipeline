@@ -84,9 +84,14 @@ and user settings are not loaded, so nothing on the machine widens it.
 ```bash
 ruff format --check agents tests
 ruff check agents tests
-MYPYPATH=src mypy --explicit-package-bases agents/workflows tests/test_agents_policy.py tests/test_agents_loop.py
+MYPYPATH=src mypy --explicit-package-bases agents/workflows tests/test_agents_policy.py tests/test_agents_loop.py tests/test_agents_prompts.py tests/test_agents_demo.py
 PYTHONPATH=src python -m pytest tests/test_agents_policy.py tests/test_agents_loop.py tests/test_agents_prompts.py tests/test_agents_demo.py
 ```
+
+The tests run from the repository's root (`python -m pytest` puts it on the
+path, as the entry points' tests need). Before any model is called, a run also
+checks that every command its documents name exists, with its options, and
+stops if one does not.
 
 No test reaches a model or the network: the loop's tests answer each role with
 a fake client, and the verdict's test reads the spot study's committed results,

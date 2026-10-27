@@ -3,18 +3,22 @@ command a role prompt, the protocol or CLAUDE.md names exists, with its options.
 
 from __future__ import annotations
 
-import importlib
 import re
 from pathlib import Path
 
 import pytest
-import typer.main
 import yaml
 
 from agents.workflows.policy import Command, named_commands, parse_command
-from agents.workflows.prompts import STATUSES, system_prompt
+from agents.workflows.prompts import (
+    HARNESS_COMMANDS,
+    STATUSES,
+    cli_options,
+    command_problem,
+    prompt_problems,
+    system_prompt,
+)
 from agents.workflows.research_loop import parser as harness_parser
-from trading_research.cli import app
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE_FILES = sorted((REPO / "agents/roles").glob("*.md"))
@@ -24,44 +28,11 @@ DOCUMENTS = [
     REPO / "agents/README.md",
     *ROLE_FILES,
 ]
-
-
-def cli_options() -> dict[str, set[str]]:
-    group = typer.main.get_command(app)
-    commands = getattr(group, "commands", {})
-    return {
-        name: {o for p in cmd.params for o in (*p.opts, *p.secondary_opts) if o.startswith("-")}
-        for name, cmd in commands.items()
-    }
-
-
 CLI = cli_options()
-HARNESS_COMMANDS = {"run", "calendar", "null-hash", "check"}
 
 
 def problem(command: Command) -> str | None:
-    """Why ``command`` does not exist as written, or ``None``."""
-    if command.kind == "cli":
-        if not command.name:
-            return None
-        if command.name not in CLI:
-            return f"trading-research has no {command.name}"
-        unknown = [a.split("=")[0] for a in command.args if a.startswith("-")]
-        unknown = [a for a in unknown if a not in CLI[command.name]]
-        return f"{command.name} has no {unknown}" if unknown else None
-    if command.kind == "entry":
-        if not (REPO / "experiments" / f"{command.name}.py").exists():
-            return f"experiments/{command.name}.py does not exist"
-        module = importlib.import_module(f"experiments.{command.name}")
-        try:
-            module.parser().parse_args(list(command.args))
-        except SystemExit:
-            return f"experiments.{command.name} does not accept {command.args}"
-        return None
-    if command.kind == "harness":
-        ok = command.name in HARNESS_COMMANDS or not command.name
-        return None if ok else f"the harness has no {command.name}"
-    return None
+    return command_problem(REPO, command)
 
 
 def test_the_cli_is_read_from_the_application_itself() -> None:
@@ -77,6 +48,10 @@ def test_every_command_a_document_names_exists(path: Path) -> None:
         command = parse_command(text)
         assert command is not None, f"{path.name}: {text!r} is not one command"
         assert problem(command) is None, f"{path.name}: {text!r}: {problem(command)}"
+
+
+def test_the_loop_checks_its_own_prompts_before_any_model_is_called() -> None:
+    assert prompt_problems(REPO) == []
 
 
 def test_the_checker_catches_a_command_that_does_not_exist() -> None:

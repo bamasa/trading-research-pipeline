@@ -46,6 +46,7 @@ from agents.workflows.prompts import (
     HandbackError,
     StepContext,
     blocking,
+    prompt_problems,
     read_handback,
     step_prompt,
     system_prompt,
@@ -225,6 +226,9 @@ class ResearchLoop:
             self.calendar = protected_calendar(self.repo)
 
     async def run(self) -> dict[str, Any]:
+        problems = prompt_problems(self.repo)
+        if problems:
+            return self.stop("start", f"the prompts name commands that do not exist: {problems}")
         done = self.log.handbacks()
         for number, (step, role) in enumerate(STEPS, start=1):
             if step in done:

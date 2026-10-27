@@ -10,13 +10,17 @@ counts only through its last fenced block tagged ``handback``.
 
 from __future__ import annotations
 
+import importlib
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from agents.workflows.policy import Command, named_commands, parse_command
 
 #: The loop's steps and the role of each; the verdict belongs to the code.
 STEPS: tuple[tuple[str, str], ...] = (
@@ -138,3 +142,58 @@ def read_handback(role: str, step: str, reply: str) -> dict[str, Any]:
 
 def blocking(findings: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     return [f for f in findings if f.get("severity") == "blocking"]
+
+
+#: The documents an agent is given, whose commands must all exist.
+DOCUMENTS = ("CLAUDE.md", "agents/protocol.md", "agents/README.md")
+HARNESS_COMMANDS = frozenset({"run", "calendar", "null-hash", "check"})
+
+
+@lru_cache(maxsize=1)
+def cli_options() -> dict[str, frozenset[str]]:
+    """Each CLI subcommand and its option names, read from the application."""
+    import typer.main
+
+    from trading_research.cli import app
+
+    commands = getattr(typer.main.get_command(app), "commands", {})
+    return {
+        name: frozenset(o for p in cmd.params for o in (*p.opts, *p.secondary_opts) if o[0] == "-")
+        for name, cmd in commands.items()
+    }
+
+
+def command_problem(repo: Path, command: Command) -> str | None:
+    """Why ``command`` does not exist as written (its program, subcommand or an
+    option), or ``None``."""
+    if command.kind == "cli" and command.name:
+        known = cli_options()
+        if command.name not in known:
+            return f"trading-research has no {command.name}"
+        given = [a.split("=")[0] for a in command.args if a.startswith("-")]
+        unknown = [a for a in given if a not in known[command.name]]
+        return f"{command.name} has no {unknown}" if unknown else None
+    if command.kind == "entry":
+        if not (repo / "experiments" / f"{command.name}.py").exists():
+            return f"experiments/{command.name}.py does not exist"
+        module = importlib.import_module(f"experiments.{command.name}")
+        try:
+            module.parser().parse_args(list(command.args))
+        except SystemExit:
+            return f"experiments.{command.name} does not accept {list(command.args)}"
+    if command.kind == "harness" and command.name and command.name not in HARNESS_COMMANDS:
+        return f"the harness has no {command.name}"
+    return None
+
+
+def prompt_problems(repo: Path) -> list[str]:
+    """Every command the agent's documents name that is not one command that exists."""
+    paths = [repo / d for d in DOCUMENTS] + sorted((repo / "agents" / "roles").glob("*.md"))
+    found: list[str] = []
+    for path in paths:
+        for text in named_commands(path.read_text()):
+            command = parse_command(text)
+            why = "not one command" if command is None else command_problem(repo, command)
+            if why is not None:
+                found.append(f"{path.relative_to(repo)}: {text!r}: {why}")
+    return found
