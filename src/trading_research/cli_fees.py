@@ -58,7 +58,7 @@ def fees(
 
 app = single(
     "fees",
-    "The fee tables every cost here is read from: venue, tier, period, maker, taker, source.",
+    "Every fee table the repository holds: venue, tier, period, maker, taker, source.",
     fees,
     RUN_PANEL,
 )

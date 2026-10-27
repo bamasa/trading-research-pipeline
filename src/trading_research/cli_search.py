@@ -33,9 +33,7 @@ err_console = Console(stderr=True)
 
 app = typer.Typer(
     name="search",
-    help="5 Search: the pipeline chooses the instrument, the frequency, rule or model, the model "
-    "and the execution (taker | passive | maker) on the search block, then reads the held-out "
-    "block once through a ledger.",
+    help="5 Search: the pipeline chooses instrument, hold, method, model, execution; reads once.",
     no_args_is_help=True,
 )
 app.info.rich_help_panel = STEPS_PANEL

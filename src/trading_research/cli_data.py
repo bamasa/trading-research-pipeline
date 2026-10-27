@@ -10,10 +10,7 @@ import typer
 
 from trading_research.cli_common import group
 
-HELP = (
-    "1 Data: fetch public archives (Binance, Bybit's book), generate a synthetic market, "
-    "validate a dataset against its contract."
-)
+HELP = "1 Data: fetch public archives, generate a synthetic market, check a dataset's contract."
 COMMANDS = ("download", "download-book", "generate-demo-data", "validate-data", "describe-schema")
 
 

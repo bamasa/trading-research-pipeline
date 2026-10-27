@@ -9,10 +9,7 @@ import typer
 
 from trading_research.cli_common import group
 
-HELP = (
-    "2 Regimes: the structural-break detector on a price series (whitened "
-    "Shiryaev-Roberts per family), flags a guard can act on."
-)
+HELP = "2 Regimes: where a price series stopped behaving as before (structural breaks)."
 COMMANDS = ("breaks",)
 
 

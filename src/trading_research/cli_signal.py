@@ -11,10 +11,7 @@ import typer
 
 from trading_research.cli_common import group
 
-HELP = (
-    "4 Signal: features one file per day, features chosen on a training window, "
-    "a model (rule or learned) fitted on it, its predictions over a period."
-)
+HELP = "4 Signal: features, their selection on a window, a rule or model fitted, predictions."
 COMMANDS = ("prepare", "select", "train", "predict")
 
 

@@ -59,8 +59,7 @@ VISIBLE: dict[str, tuple[str, str]] = {
     ),
     "reproduce": (
         RUN_PANEL,
-        "The finding of §27 end to end on the perpetuals' panel: fetch, audit, search, "
-        "the held-out block read once.",
+        "The finding of §27 end to end on the perpetuals' panel; the held-out block read once.",
     ),
 }
 

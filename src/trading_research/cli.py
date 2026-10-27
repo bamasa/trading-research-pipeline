@@ -1748,9 +1748,11 @@ def _print_mm_decomposition(summary: dict[str, float]) -> None:
 # (cli_common.as_map), which lists the steps in the order the pipeline runs.
 
 from trading_research import (  # noqa: E402
+    cli_agent,
     cli_backtest,
     cli_common,
     cli_data,
+    cli_demo,
     cli_fees,
     cli_instruments,
     cli_regimes,
@@ -1766,5 +1768,7 @@ app.add_typer(cli_signal.build(app))
 app.add_typer(cli_search.app)
 app.add_typer(cli_backtest.build(app))
 app.add_typer(cli_study.app)
+app.add_typer(cli_agent.app)
+app.add_typer(cli_demo.app)
 app.add_typer(cli_fees.app)
 cli_common.as_map(app)

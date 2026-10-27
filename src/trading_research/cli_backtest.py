@@ -12,11 +12,7 @@ import typer
 
 from trading_research.cli_common import group
 
-HELP = (
-    "6 Execution (taker | passive | maker): predictions to trades under one cost model, "
-    "the market maker in event time, the exit and the refit cadence searched on validation. "
-    "Without a subcommand it is the taker backtest of predictions, with its options, as before."
-)
+HELP = "6 Execution: taker | passive | maker under one cost model; alone, the taker backtest."
 COMMANDS = ("backtest", "mm-backtest", "exit-search", "retrain-search")
 
 

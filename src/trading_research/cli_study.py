@@ -22,8 +22,7 @@ err_console = Console(stderr=True)
 
 app = typer.Typer(
     name="study",
-    help="8 Study: the registered studies' stages through their entry points, their status and "
-    "pages, and a new study's registration skeleton.",
+    help="8 Study: a registered study's stages through its entry point, or a new registration.",
     no_args_is_help=True,
 )
 app.info.rich_help_panel = STUDIES_PANEL

@@ -10,10 +10,7 @@ import typer
 
 from trading_research.cli_common import group
 
-HELP = (
-    "3 Instruments: list the venue's contracts by volume, then rank what is on disk "
-    "by edge over cost, before anything is fitted."
-)
+HELP = "3 Instruments: list the venue's contracts, rank what is on disk by edge over cost."
 COMMANDS = ("discover", "screen")
 
 
