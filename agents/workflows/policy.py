@@ -20,6 +20,7 @@ owner's grant for the run, ``<config stem>:<block>``, lifts a block.
 from __future__ import annotations
 
 import calendar as _calendar
+import re
 import shlex
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -105,7 +106,7 @@ def protected_calendar(repo: Path) -> tuple[Protected, ...]:
     """Every range a registration protects, in file and block order."""
     found: list[Protected] = []
     for path in sorted((repo / "configs").glob("*.yaml")):
-        loaded = yaml.safe_load(path.read_text())
+        loaded = yaml.load(path.read_text(), Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
         blocks = loaded.get("blocks") if isinstance(loaded, dict) else None
         if not isinstance(blocks, dict):
             continue
@@ -467,3 +468,23 @@ class ToolPolicy:
         if self.role != "registrar" or host not in self.web_hosts:
             return deny(f"{host or url} is not a source the owner listed for the registrar")
         return allow(f"the registrar reads {host} for its fees")
+
+
+CODE = re.compile(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", re.DOTALL)
+NAMES_A_COMMAND = re.compile(
+    r"(PYTHONPATH=\S+ )?(uv run (--no-sync )?)?(\.venv/bin/)?"
+    r"(trading-research(\s|$)|python3? -m (experiments\.|agents\.|pytest(\s|$))|pytest(\s|$))"
+)
+
+
+def named_commands(markdown: str) -> list[str]:
+    """Every command a text names in code (fenced lines, joined at a trailing
+    backslash, and inline spans), each placeholder ``<...>`` read as ``X``."""
+    found: list[str] = []
+    for block, span in CODE.findall(markdown):
+        text = block.replace("\\\n", " ") if block else span
+        for line in text.splitlines():
+            line = re.sub(r"<[^<>\s]+>", "X", line.strip().removeprefix("$ ").strip())
+            if NAMES_A_COMMAND.match(line):
+                found.append(line)
+    return found

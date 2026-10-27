@@ -164,4 +164,4 @@ Each run writes `agents/runs/<UTC time>-<study>/` (ignored by git, so a ledger's
 clean-tree check never sees it): `run.json` (the study, the brief, the grants,
 the model's name, the commit), and per step the prompt, the reply, the
 handback, and `events.jsonl` with every tool call and the policy's decision;
-then `verdict.json`, and `stop.json` when a gate stopped the loop.
+then `verdict.json`, and a line in `stops.jsonl` each time a gate stopped the loop.
