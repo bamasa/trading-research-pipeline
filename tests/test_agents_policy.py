@@ -7,8 +7,10 @@ tests read is the one the studies registered.
 from __future__ import annotations
 
 import ast
+import json
 import re
-from datetime import date
+import subprocess
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -17,8 +19,10 @@ from agents.workflows.policy import (
     CLI_COMMANDS,
     DATA_HOSTS,
     ROLES,
+    Protected,
     ToolPolicy,
     protected_calendar,
+    whole_months,
 )
 
 REPO = Path(__file__).resolve().parent.parent
@@ -208,6 +212,9 @@ def test_each_role_runs_only_its_own_commands() -> None:
 NEVER_WRITTEN = [
     "src/trading_research/cli.py",
     "src/trading_research/spot/new_module.py",
+    "src/trading_research/spot/ledger.py",
+    "src/trading_research/pipeline/short_horizon/statuses.py",
+    "src/trading_research/pipeline/short_horizon/new_module.py",
     "experiments/spot_2026.py",
     "experiments/new_script.py",
     "configs/spot_2026.yaml",
@@ -233,6 +240,97 @@ def test_no_role_writes_study_code_results_data_or_the_harness(role: str, path: 
     p = policy(role)
     assert not p.decide("Write", {"file_path": path, "content": "x"}).allowed
     assert not p.decide("Edit", {"file_path": path, "old_string": "a", "new_string": "b"}).allowed
+    assert not p.decide("MultiEdit", {"file_path": path, "edits": []}).allowed
+    assert not p.decide("NotebookEdit", {"notebook_path": path, "new_source": "x"}).allowed
+    assert not p.decide("Write", {"file_path": str(REPO / path), "content": "x"}).allowed
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cp README.md src/trading_research/spot/x.py",
+        "sed -i '' s/a/b/ src/trading_research/pipeline/short_horizon/statuses.py",
+        "tee src/trading_research/spot/ledger.py",
+        'python -c \'open("src/trading_research/spot/x.py", "w")\'',
+        "git apply patch.diff",
+        "git checkout -- src/trading_research/spot/ledger.py",
+        "git stash",
+        "git restore src/trading_research/pipeline/short_horizon/statuses.py",
+    ],
+)
+@pytest.mark.parametrize("role", ROLES)
+def test_no_command_writes_study_code_either(role: str, command: str) -> None:
+    assert not bash(policy(role, "spot_2026"), command)
+
+
+def _days(p: Protected) -> list[date]:
+    middle = p.first + timedelta(days=(p.last - p.first).days // 2)
+    return sorted({p.first, middle, p.last})
+
+
+@pytest.mark.parametrize("protected", CALENDAR, ids=lambda p: p.key)
+def test_a_fetch_of_any_day_of_any_registered_block_is_refused_even_under_a_grant(
+    protected: Protected,
+) -> None:
+    out = "--symbol BTCUSDT --output data/funding_carry_2026/raw"
+    for granted in (frozenset(), frozenset({protected.key})):
+        ex = policy("executor", grants=granted)
+        for day in _days(protected):
+            for name in ("download", "download-book"):
+                command = f"trading-research {name} --start {day} --end {day} {out}"
+                decision = ex.decide("Bash", {"command": command})
+                assert not decision.allowed, command
+                assert protected.key in decision.reason, decision.reason
+        # A month archive holds every day of its month, so a free day of a
+        # protected block's month is refused too.
+        edges = (protected.first.replace(day=1), whole_months(protected.last, protected.last)[1])
+        for day in [d for d in edges if not protected.first <= d <= protected.last]:
+            month = f"--start {day} --end {day} --kind fundingRate {out}"
+            assert not bash(ex, f"trading-research download {month}"), month
+
+
+def _repo_with_ledger(tmp_path: Path, entries: dict[str, list[dict[str, str | None]]]) -> Path:
+    def git(*args: str) -> None:
+        identity = ["-c", "user.name=owner", "-c", "user.email=owner", "-c", "commit.gpgsign=false"]
+        subprocess.run(["git", *identity, *args], cwd=tmp_path, check=True, capture_output=True)
+
+    (tmp_path / "experiments" / "results").mkdir(parents=True)
+    (tmp_path / "experiments" / "toy_2031.py").write_text("")
+    git("init", "-q")
+    git("add", "experiments")
+    git("commit", "-q", "-m", "toy study")
+    ledger = tmp_path / "experiments" / "results" / "toy_2031_ledger.json"
+    if entries:
+        ledger.write_text(json.dumps(entries))
+        git("add", str(ledger))
+        git("commit", "-q", "-m", "open entry")
+    return tmp_path
+
+
+def test_reading_a_held_out_block_needs_its_open_entry_committed(tmp_path: Path) -> None:
+    granted = frozenset({"spot_2026:H", "funding_carry_2026:H"})
+    spent = policy("executor", "spot_2026", grants=granted).bash(
+        "python -m experiments.spot_2026 read H"
+    )
+    assert not spent.allowed and "has been read" in spent.reason
+    carry = policy("executor", "funding_carry_2026", grants=granted)
+    assert "open entry" in str(carry.open_entry_problem("funding_carry_2026", "H"))
+
+    def toy(entries: dict[str, list[dict[str, str | None]]], grants: frozenset[str]) -> ToolPolicy:
+        repo = _repo_with_ledger(tmp_path / str(len(list(tmp_path.iterdir()))), entries)
+        return ToolPolicy(repo, "executor", "toy_2031", grants=grants, calendar=())
+
+    read = "python -m experiments.toy_2031 read H"
+    grant = frozenset({"toy_2031:H"})
+    opened = {"H": [{"block": "H", "results_sha256": None}]}
+    assert toy(opened, grant).bash(read).allowed
+    assert not toy(opened, frozenset()).bash(read).allowed
+    assert "open entry" in toy({}, grant).bash(read).reason
+    assert "open entry" in toy({"P": opened["H"]}, grant).bash(read).reason
+    assert "has been read" in toy({"H": [{"results_sha256": "a" * 64}]}, grant).bash(read).reason
+    unread = toy({}, grant)
+    (unread.repo / "experiments/results/toy_2031_ledger.json").write_text(json.dumps(opened))
+    assert not unread.bash(read).allowed, "an open entry on disk but not committed"
 
 
 def test_the_registrar_writes_its_own_registration_until_the_freeze_then_only_appends() -> None:

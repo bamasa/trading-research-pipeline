@@ -69,9 +69,12 @@ and user settings are not loaded, so nothing on the machine widens it.
 - **Never**: `git push`, `git remote`, any git that writes; `--second-read`;
   starting a loop from inside one; a command in the background.
 - **Protected days**: a command whose dates touch a range of the calendar is
-  refused, an archive published by the month counting as its whole month;
-  `open`, `read` and `--allow-heldout` need the owner's grant for that block;
-  another study's entry point runs only `status`.
+  refused, an archive published by the month counting as its whole month; a
+  plain `download` or `download-book` fetches free days only, whatever was
+  granted; `open`, `read` and `--allow-heldout` need the owner's grant for that
+  block, and `read` also needs the block's open entry committed in
+  `experiments/results/<study>_ledger.json` with its read unfinished; another
+  study's entry point runs only `status`.
 - **Files**: nothing under `data/`, `models/` or `.git/` is read by hand;
   nothing outside the repository either. The registrar writes its own study's
   registration until the code freeze, then only appends; the scribe writes the

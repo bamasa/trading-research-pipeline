@@ -14,14 +14,19 @@ warm-up, a descriptive window inside development, or ``reads: free``), each
 ``*_embargo`` pair and each ``never_in_a_block`` day. An archive published by
 the month (``fundingRate``, and ``klines``, fetched a month at a time) counts
 as its whole month, since the month's file holds every day of it. Only the
-owner's grant for the run, ``<config stem>:<block>``, lifts a block.
+owner's grant for the run, ``<config stem>:<block>``, lifts a block, and only
+for the study's own entry point and the market-making ``--allow-heldout``: a
+plain download fetches free days only, and an entry point's ``read`` also needs
+the block's open entry committed in its ledger and its read unfinished.
 """
 
 from __future__ import annotations
 
 import calendar as _calendar
+import json
 import re
 import shlex
+import subprocess
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -36,6 +41,11 @@ ENTRY_POINTS: tuple[str, ...] = ("short_horizon_2025", "spot_2026")
 FREE_ROLES = frozenset({"development", "warm_up", "descriptive_window_inside_D"})
 #: CLI commands that fetch the days their ``--start`` and ``--end`` name.
 FETCHES = frozenset({"download", "download-book", "breaks", "mm-backtest"})
+#: Plain downloads, which fetch free days only: a protected day is reached
+#: through its study's entry point and ledger, never by a grant alone.
+FREE_DAYS_ONLY = frozenset({"download", "download-book"})
+#: Where a study's entry point keeps its ledger, ``{"<block>": [entries]}``.
+LEDGER = "experiments/results/{study}_ledger.json"
 #: Where a command writes under ``data/`` when no ``--output`` is given.
 DATA_OUTPUTS = {
     "download": "data/raw",
@@ -342,10 +352,30 @@ class ToolPolicy:
         if "--keep" in options:
             return deny("--keep writes the dry run's files outside the run")
         if action in {"open", "read"}:
-            key = f"{command.name}:{positionals[1] if len(positionals) > 1 else ''}"
+            block = positionals[1] if len(positionals) > 1 else ""
+            key = f"{command.name}:{block}"
             if key not in self.grants:
                 return deny(f"{action} needs the owner's grant {key} for this run")
+            problem = self.open_entry_problem(command.name, block) if action == "read" else None
+            if problem is not None:
+                return deny(problem)
         return allow(f"experiments.{command.name} {action}")
+
+    def open_entry_problem(self, study: str, block: str) -> str | None:
+        """Why ``read <block>`` may not run: its open entry is not in HEAD's
+        ledger, or the read it opened has finished (a read is never re-run)."""
+        path = LEDGER.format(study=study)
+        done = subprocess.run(["git", "show", f"HEAD:{path}"], cwd=self.repo,
+                              capture_output=True, text=True, check=False)  # fmt: skip
+        try:
+            entries = json.loads(done.stdout).get(block) if done.returncode == 0 else None
+        except (ValueError, AttributeError):
+            entries = None
+        if not isinstance(entries, list) or not entries:
+            return f"read {block} needs its open entry committed in {path}; the owner commits it"
+        if isinstance(entries[-1], dict) and entries[-1].get("results_sha256"):
+            return f"{study}:{block} has been read (its results_sha256 is in {path}); never again"
+        return None
 
     def cli_command(self, command: Command) -> Decision:
         name, args = command.name, command.args
@@ -376,7 +406,8 @@ class ToolPolicy:
         first, last = parsed[0], parsed[-1]
         if option(args, "--kind", "-k") in MONTHLY_KINDS:
             first, last = whole_months(first, last)
-        return self.days(first, last, f"trading-research {name}")
+        grants = frozenset() if name in FREE_DAYS_ONLY else self.grants
+        return self.days(first, last, f"trading-research {name}", grants)
 
     def path_problem(self, name: str, args: Sequence[str]) -> str | None:
         """Paths stay inside the repository, and a write under ``data/`` stays
@@ -394,9 +425,11 @@ class ToolPolicy:
             return None
         return f"{name} writes {rel}; under data/ this run writes only data/{self.study}/"
 
-    def days(self, first: date, last: date, what: str) -> Decision:
+    def days(
+        self, first: date, last: date, what: str, grants: frozenset[str] | None = None
+    ) -> Decision:
         hits = [p for p in self.calendar or () if p.first <= last and first <= p.last]
-        closed = sorted({p.key for p in hits} - self.grants)
+        closed = sorted({p.key for p in hits} - (self.grants if grants is None else grants))
         if closed:
             return deny(f"{what} reads {first} to {last}, which touches {', '.join(closed)}")
         return allow(f"{what} reads {first} to {last}, outside every protected range")
