@@ -658,7 +658,7 @@ def rehearsal_read(block: Any, statuses: Any, preset: Any = ()) -> dict[str, Any
         return {"unreadable": True, "excluded": block.validated["reasons"], "found": None}
     series, info = compute_block(block, preset=preset)
     gaps = (
-        compute_block(block.put_back(), days=block.gap_days, kills=False)[0]
+        compute_block(block.put_back(), days=block.gap_days, kills=False, preset=preset)[0]
         if block.gap_days
         else {}
     )

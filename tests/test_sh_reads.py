@@ -203,3 +203,32 @@ def test_a_logged_hand_run_sets_every_searched_slot_on_c_or_r_not_admitted(tmp_p
     preset = reads.preset_on_d(study, registration)  # type: ignore[arg-type]
     assert preset == {"S-C": reads.HAND_RUN, "S-R": reads.HAND_RUN, "S-P": reads.HAND_RUN,
                       "S-M": "not admitted on D (i, ii)"}  # fmt: skip
+
+
+def test_the_gap_days_put_back_run_a_preset_slot_as_the_read_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The put-back view of the gap days runs a slot preset on D as a measurement too,
+    so the two sets of days merge into one series of the same shape."""
+    from trading_research.pipeline.short_horizon import heldout
+
+    monkeypatch.setattr(
+        heldout.Block, "validated", property(lambda _: _validated(H_DAYS[1:], H_DAYS[:1]))
+    )
+    monkeypatch.setattr(heldout.Block, "registration", None)
+    monkeypatch.setattr(reads, "preset_on_d", lambda *_: {"S-C": "not admitted on D (hand run)"})
+    seen: list[Any] = []
+
+    def compute(_block: Any, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        seen.append((kwargs.get("kills", True), kwargs.get("preset")))
+        if len(seen) == 2:
+            raise StopIteration  # the put-back view's call: nothing after it is wanted here
+        return {}, {"unreadable": False, "stale_days": []}
+
+    monkeypatch.setattr(heldout, "compute_block", compute)
+    study = SimpleNamespace(scale=SimpleNamespace(days=lambda _: H_DAYS, name="registered"))
+    session = SimpleNamespace(access=None, key=("H", 1), stamp="now")
+    with pytest.raises(StopIteration):
+        reads.compute_results(study, "H", session)  # type: ignore[arg-type]
+    preset = {"S-C": "not admitted on D (hand run)"}
+    assert seen == [(True, preset), (False, preset)]
