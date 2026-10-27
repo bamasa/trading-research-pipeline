@@ -340,8 +340,9 @@ def mutate_after(frame: pd.DataFrame, row: int, *, seed: int = 0) -> pd.DataFram
     Prices (the level prices and the peers' mids) are moved by the repository's
     mutation, :func:`trading_research.validation.fold_leakage.mutate_after_cutoff`:
     one random walk starting ten per cent away, bids pushed down and asks up.
-    Every other numeric input after the row is reversed in time, which keeps
-    its values and its sign and breaks its alignment. ``mid``, ``log_mid`` and
+    Every other numeric input after the row is reversed in time and scaled by
+    1.5, which keeps its sign and breaks both its alignment and its
+    distribution (a quantile of the whole frame moves). ``mid``, ``log_mid`` and
     ``spread_bp`` are then recomputed from the mutated touch.
     """
     from trading_research.validation.fold_leakage import mutate_after_cutoff
@@ -357,6 +358,6 @@ def mutate_after(frame: pd.DataFrame, row: int, *, seed: int = 0) -> pd.DataFram
         if column in prices or not pd.api.types.is_numeric_dtype(out[column]):
             continue
         values = out[column].to_numpy().copy()
-        values[after] = values[after][::-1]
+        values[after] = values[after][::-1] * 1.5
         out[column] = values
     return derive(out)

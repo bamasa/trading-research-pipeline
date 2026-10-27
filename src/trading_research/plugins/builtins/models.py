@@ -65,8 +65,7 @@ class BuiltinModel:
         self.model = stages.build_model(name, **params)
         self.inputs = inputs
         self.target = target
-        window = getattr(self.model, "window", None)
-        self.lookback = int(window) - 1 if window else 0
+        self.lookback = max(_windows(self.model), default=1) - 1
 
     def fit(self, x: pd.DataFrame, y: pd.Series) -> BuiltinModel:
         self.model.fit(x, y)
@@ -78,6 +77,24 @@ class BuiltinModel:
     def describe(self) -> dict[str, Any]:
         out: dict[str, Any] = self.model.describe()
         return out
+
+
+def _windows(model: Any, seen: set[int] | None = None) -> list[int]:
+    """The input windows of a model and of every model inside it (an ensemble's
+    members, a meta model's two stages, a bound's regressors)."""
+    from trading_research.models.base import Model
+
+    seen = set() if seen is None else seen
+    if id(model) in seen:
+        return []
+    seen.add(id(model))
+    found = [int(model.window)] if getattr(model, "window", None) else []
+    for value in vars(model).values():
+        parts = value if isinstance(value, list | tuple) else [value]
+        for part in parts:
+            if isinstance(part, Model):
+                found += _windows(part, seen)
+    return found
 
 
 def _class_of(name: str) -> Any:

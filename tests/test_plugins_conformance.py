@@ -149,7 +149,8 @@ class _BatchScaled:
 
     def predict_proba(self, x: pd.DataFrame) -> np.ndarray:
         value = x["queue_imbalance"].to_numpy()
-        z = np.tanh((value - value.mean()) / value.std())
+        with np.errstate(invalid="ignore"):
+            z = np.tanh((value - value.mean()) / value.std())
         out = np.zeros((len(x), 3))
         out[:, 2] = (1 + z) / 3
         out[:, 0] = (1 - z) / 3
@@ -310,5 +311,5 @@ def test_the_page_records_every_check_and_the_execution_table(
         assert f"| {check} |" in text
     assert "| taker | base |" in text and "| passive | base |" in text
     assert "sha256 of that file" in text and str(Path.home()) not in text
-    index = pages.write_index([result], tmp_path).read_text()
+    index = pages.write_index([pages.summary_row(result)], tmp_path).read_text()
     assert "[book_imbalance](book_imbalance/page.md)" in index

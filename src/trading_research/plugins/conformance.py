@@ -485,7 +485,12 @@ def model_protocol(build: Callable[[], Any], setup: Setup) -> CheckResult:
         ):
             problems.append("predict_proba rows are not probabilities summing to one")
         again = np.asarray(instance.predict_proba(train_x), dtype="float64")
-        if not np.array_equal(np.nan_to_num(proba, nan=-1), np.nan_to_num(again, nan=-1)):
+        # Equal up to the order of a sum: a threaded forest adds its trees in
+        # whatever order its threads finish.
+        same = np.allclose(
+            np.nan_to_num(proba, nan=-1), np.nan_to_num(again, nan=-1), rtol=1e-9, atol=1e-12
+        )
+        if not same:
             problems.append("predict_proba gave different answers on the same rows")
     numbers = {
         "inputs": ", ".join(instance.inputs) or "every column given",
@@ -528,9 +533,26 @@ def model_fold_test(build: Callable[[], Any], setup: Setup) -> CheckResult:
     ]
     cutoff = setup.frame["timestamp"].iloc[setup.train_end - 1]
     result = check_fold(fit, setup.frame, cutoff, price_columns=prices, fold="training")
-    numbers = {"cutoff": str(result.cutoff), "artefacts": len(result.digests)}
+    numbers: dict[str, Any] = {"cutoff": str(result.cutoff), "artefacts": len(result.digests)}
     if result.leaks:
-        return CheckResult("b. no look-ahead: fit", FAIL, str(result), numbers)
+        # Say which failure it is: the fold test counts a fit that cannot be
+        # recorded by sha256 as failing, whether or not anything leaked.
+        from trading_research.validation.fold_leakage import digest, mutate_after_cutoff
+
+        first, second = fit(setup.frame), fit(setup.frame)
+        name = "predictions_on_training_rows"
+        reproducible = digest(first[name]) == digest(second[name])
+        changed = fit(mutate_after_cutoff(setup.frame, cutoff, price_columns=prices))[name]
+        moved = float(np.nanmax(np.abs(first[name] - changed)))
+        numbers.update(reproducible_to_the_bit=reproducible, largest_change=moved)
+        why = (
+            "the fit moved when only data after its cutoff changed"
+            if reproducible
+            else "the fit is not reproducible to the bit on the same rows, so its artefacts "
+            f"cannot be recorded by sha256 (largest change after the mutation {moved:.1e}, "
+            "the same order as between two fits of the same rows)"
+        )
+        return CheckResult("b. no look-ahead: fit", FAIL, f"{result}: {why}", numbers)
     return CheckResult(
         "b. no look-ahead: fit",
         PASS,
@@ -584,9 +606,8 @@ def model_lookback(build: Callable[[], Any], setup: Setup) -> CheckResult:
 
 
 def model_prediction_test(build: Callable[[], Any], setup: Setup) -> CheckResult:
-    """Predictions at a row ignore every input row after it."""
+    """Predictions at a row ignore every input row after it (reversed and tripled)."""
     from trading_research.plugins.common import predict_rows
-    from trading_research.validation.fold_leakage import digest
 
     model, x_all, full = _fitted_model(build, setup)
     rows = setup.cutoff_rows(setup.train_end, len(x_all) - 2, CUTOFFS // 2)
@@ -594,14 +615,13 @@ def model_prediction_test(build: Callable[[], Any], setup: Setup) -> CheckResult
     for row in rows:
         mutated = x_all.copy()
         after = slice(row + 1, len(mutated))
-        mutated.iloc[after] = mutated.iloc[after].to_numpy()[::-1]
+        mutated.iloc[after] = mutated.iloc[after].to_numpy()[::-1] * 3.0
         part = predict_rows(model, mutated)
-        if digest(np.nan_to_num(full[: row + 1], nan=-9)) != digest(
-            np.nan_to_num(part[: row + 1], nan=-9)
-        ):
-            moved = np.flatnonzero(
-                ~np.isclose(full[: row + 1], part[: row + 1], equal_nan=True).all(axis=1)
-            )
+        # Compared as values, not bits: a threaded forest sums its trees in
+        # whatever order its threads finish, and that is not look-ahead.
+        same = np.isclose(full[: row + 1], part[: row + 1], rtol=1e-9, atol=1e-12, equal_nan=True)
+        moved = np.flatnonzero(~same.all(axis=1))
+        if len(moved):
             leaks.append(f"cutoff row {row}: {len(moved)} prediction(s) moved")
     numbers = {"cutoffs": len(rows), "cutoffs_moved": len(leaks)}
     if leaks:
