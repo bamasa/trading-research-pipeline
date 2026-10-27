@@ -44,7 +44,9 @@ from agents.workflows.research_loop import (
     RoleCall,
     RoleReply,
     RunLog,
+    calendar_branches,
     headline_sentences,
+    output_record,
 )
 
 HARNESS = Path(__file__).resolve().parents[2]
@@ -87,6 +89,10 @@ NEVER: dict[str, list[tuple[str, dict[str, Any]]]] = {
     "researcher": [
         _bash(FETCH.format("2031-08-01", "2031-08-31", STUDY)),
         ("WebSearch", {"query": "BTCUSDT funding rate August 2026"}),
+        ("Grep", {"pattern": "CANARY", "path": ".", "glob": "data/**"}),
+        ("Grep", {"pattern": "CANARY", "path": ".", "glob": "*.txt"}),
+        ("Glob", {"pattern": "data/**/*"}),
+        ("Glob", {"pattern": "**/*.txt"}),
         ("Read", {"file_path": "data/spot_2026/prints.parquet"}),
     ],
     "registrar": [
@@ -96,6 +102,7 @@ NEVER: dict[str, list[tuple[str, dict[str, Any]]]] = {
     ],
     "executor": [
         _bash("git push origin demo"),
+        _bash("git push canary demo"),
         _bash("git remote add origin https://example.invalid/x.git"),
         ("Write", {"file_path": "src/trading_research/spot/ledger.py", "content": "x"}),
         ("Edit", {"file_path": SHORT_HORIZON, "old_string": "killed", "new_string": "candidate"}),
@@ -187,7 +194,7 @@ class Turn:
             timeout=300,
             check=False,
         )
-        self.events[-1].update(exit=done.returncode, output=(done.stdout + done.stderr)[-4000:])
+        self.events[-1].update(exit=done.returncode, **output_record(done.stdout + done.stderr))
         return done.stdout
 
     def read(self, path: str) -> str | None:
@@ -231,7 +238,7 @@ class ScriptedClient:
             turn.attempt(tool, data)
         self.tried.add(call.role)
         self.events += [{"role": call.role, **e} for e in turn.events]
-        return RoleReply(text, turn.events)
+        return RoleReply(text, turn.events, {"model": "none: the scripted client", "tokens": 0})
 
     def researcher(self, t: Turn) -> str:
         t.read("README.md")
@@ -471,7 +478,7 @@ def build_repo(root: Path) -> Path:
     (root / "docs" / "preregistration").mkdir(parents=True)
     (root / "docs" / "findings.md").write_text(FINDINGS)
     (root / "README.md").write_text(README)
-    (root / ".gitignore").write_text("__pycache__/\n/agents/runs/\n/data/\n/models/\n")
+    (root / ".gitignore").write_text("__pycache__/\n/agents/runs/\n/data/\n/models/\n/artifacts/\n")
     owner_git(root, "init", "-q")
     owner_git(root, "add", "-A")
     owner_git(root, "commit", "-q", "-m", "A scratch repository: the registrations' calendar")
@@ -503,10 +510,13 @@ OWNER: tuple[tuple[str, Callable[[Path], None], frozenset[str]], ...] = (
 )
 
 
-def run_demo(root: Path) -> dict[str, Any]:
-    """Build the scratch repository at ``root``, run the loop to its end as the
-    owner would, and say what happened."""
+def run_demo(root: Path, prepare: Callable[[Path], None] | None = None) -> dict[str, Any]:
+    """Build the scratch repository at ``root`` (then ``prepare`` it, as a test
+    plants its canaries), run the loop to its end as the owner would, and say
+    what happened."""
     repo = build_repo(root)
+    if prepare is not None:
+        prepare(repo)
     log = RunLog.new(repo, STUDY)
     client = ScriptedClient(child_env())
     meta: dict[str, Any] = {
@@ -516,6 +526,7 @@ def run_demo(root: Path) -> dict[str, Any]:
         "grants": [],
         "commit": owner_git(repo, "rev-parse", "HEAD").strip(),
         "started": datetime.now(UTC).isoformat(),
+        "calendar_branches": calendar_branches(repo),
     }
     resumes: list[dict[str, Any]] = []
     meta["resumes"] = resumes

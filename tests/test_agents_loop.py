@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from agents.workflows import demo
+from agents.workflows import audit, demo
 from agents.workflows.prompts import STEPS, HandbackError, read_handback
 from agents.workflows.research_loop import (
     ResearchLoop,
@@ -447,3 +447,57 @@ def test_the_prompts_are_checked_by_the_studys_interpreter_from_a_thin_loop() ->
     assert study_check(sys.executable)(REPO) == []
     assert study_check(sys.executable)(REPO / "no-such-tree")
     assert "could not check" in study_check("no-such-python")(REPO)[0]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "the key is sk-ant-api03-abcdefghijklmnopqrstuv",
+        "ANTHROPIC_API_KEY=abcdefghijkl",
+        'api_key: "abcd1234efgh"',
+        "access_token = abcdefghijklmnop1234",
+        "secret: hunter2hunter2",
+        "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+        "password=correct-horse",
+        "blob 0123456789abcdef0123456789abcdef01",
+        "aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gd29ybGQ1",
+    ],
+)
+def test_the_audit_finds_each_shape_of_a_secret(line: str) -> None:
+    assert audit.scan_text(line), line
+
+
+def test_the_audit_passes_the_runs_own_records_and_the_prompts() -> None:
+    records = f"results_sha256: {'ab' * 32}\ncommit: {'c' * 40}\ninput_tokens: 1234\n"
+    assert audit.scan_text(records) == []
+    for role in ("researcher", "registrar", "executor", "skeptic", "scribe"):
+        from agents.workflows.prompts import system_prompt
+
+        assert audit.scan_text(system_prompt(REPO, role)) == [], role
+
+
+def test_a_secret_in_a_reply_stops_the_loop_and_is_named_not_shown(repo: Path) -> None:
+    leaked = HANDBACKS["researcher"] + "note: 'ANTHROPIC_API_KEY=abcdefghijklmnop'\n"
+    result = asyncio.run(make_loop(repo, FakeClient(researcher=leaked)).run())
+    assert result["step"] == "propose" and "looks like a secret" in result["reason"]
+    assert "01-propose.reply.md" in result["reason"] and "abcdefghijklmnop" not in result["reason"]
+    assert "abcdefghijklmnop" not in (run_dir(repo) / "stops.jsonl").read_text()
+
+
+def test_the_run_directory_names_no_machine_and_logs_usage_and_calendar(repo: Path) -> None:
+    def absolute(call: RoleCall) -> None:
+        call.policy.decide("Read", {"file_path": str(repo / "README.md")})
+
+    client = FakeClient({"researcher": absolute})
+    result = asyncio.run(make_loop(repo, client).run())
+    assert result["status"] == "complete" and result["run"] == "agents/runs/test"
+    run = run_dir(repo)
+    for path in [p for p in run.rglob("*") if p.is_file()]:
+        text = path.read_text()
+        assert str(repo) not in text and str(repo.resolve()) not in text, path
+        assert str(Path.home()) not in text, path
+    for stem in ("01-propose", "03-run", "06-record"):
+        assert (run / f"{stem}.usage.json").exists()
+        calendar = json.loads((run / f"{stem}.calendar.json").read_text())
+        assert any(r.endswith("synth_carry:H") for r in calendar["ranges"])
+    assert audit.scan(run) == []

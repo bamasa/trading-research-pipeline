@@ -41,7 +41,8 @@ from typing import Any
 
 import yaml
 
-from agents.workflows.policy import ROLES, Protected, ToolPolicy, protected_calendar
+from agents.workflows import audit
+from agents.workflows.policy import ROLES, Protected, ToolPolicy, branch_configs, protected_calendar
 from agents.workflows.prompts import (
     STEPS,
     HandbackError,
@@ -73,6 +74,7 @@ class RoleCall:
 class RoleReply:
     text: str
     events: list[dict[str, Any]] = field(default_factory=list)
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 #: Anything that answers a role's turn: the SDK in a run, a fake in the tests.
@@ -80,11 +82,25 @@ Runner = Callable[[RoleCall], Awaitable[RoleReply]]
 
 
 class RunLog:
-    """The run's directory: one file per artefact, nothing outside it."""
+    """The run's directory: one file per artefact, nothing outside it.
 
-    def __init__(self, path: Path) -> None:
+    Every file is written with the repository's absolute root replaced by a
+    path relative to it, and the home directory by ``~``, so that a run
+    directory names no machine.
+    """
+
+    def __init__(self, path: Path, root: Path | None = None) -> None:
         self.path = path
         self.path.mkdir(parents=True, exist_ok=True)
+        inside = path.parent.name == "runs" and path.parent.parent.name == "agents"
+        self.root = root or (path.parents[2] if inside else None)
+
+    def scrub(self, text: str) -> str:
+        roots = {str(self.root), str(self.root.resolve())} if self.root else set()
+        for root in sorted(roots, key=len, reverse=True):
+            text = text.replace(root + "/", "").replace(root, ".")
+        home = str(Path.home())
+        return text.replace(home + "/", "~/").replace(home, "~")
 
     @classmethod
     def new(cls, repo: Path, study: str, now: datetime | None = None) -> RunLog:
@@ -93,8 +109,18 @@ class RunLog:
 
     def write(self, name: str, text: str) -> Path:
         target = self.path / name
-        target.write_text(text)
+        target.write_text(self.scrub(text))
         return target
+
+    def append(self, name: str, line: str) -> None:
+        with (self.path / name).open("a") as found:
+            found.write(self.scrub(line) + "\n")
+
+    def relative(self) -> str:
+        """The run directory as the repository names it."""
+        if self.root is not None and self.root.resolve() in self.path.resolve().parents:
+            return self.path.resolve().relative_to(self.root.resolve()).as_posix()
+        return self.path.name
 
     def write_json(self, name: str, value: Any) -> Path:
         return self.write(name, json.dumps(value, indent=2, sort_keys=True, default=str) + "\n")
@@ -156,6 +182,19 @@ def executor_may_change(path: str, config: str, document: str) -> bool:
     if path.startswith(("configs/", "docs/preregistration/")):
         return False
     return path.startswith(("experiments/results/", "docs/"))
+
+
+def calendar_branches(repo: Path) -> list[str]:
+    """The local branches whose registrations the calendar reads."""
+    return sorted(b for b, rows in branch_configs(repo).items() if rows)
+
+
+def calendar_record(repo: Path, policy: ToolPolicy) -> dict[str, Any]:
+    """What a turn's policy protected, and the local branches whose
+    registrations it read."""
+    branches = {b: [stem for stem, _ in rows] for b, rows in branch_configs(repo).items() if rows}
+    ranges = [f"{p.first} {p.last} {p.key}" for p in policy.calendar or ()]
+    return {"branches": branches, "ranges": ranges}
 
 
 def null_sha256(config_text: str) -> str:
@@ -277,6 +316,7 @@ class ResearchLoop:
         self.config = self.config or f"configs/{self.study}.yaml"
         self.document = self.document or f"docs/preregistration/{self.study}.md"
         self.rules = self.rules or self.repo
+        self.log.root = self.log.root or self.repo
 
     async def run(self) -> dict[str, Any]:
         assert self.rules is not None
@@ -310,7 +350,10 @@ class ResearchLoop:
             reason = stop_reason(step, handback, done)
             if reason is not None:
                 return self.stop(step, reason)
-        return {"status": "complete", "run": str(self.log.path)}
+        problem = self.secrets_problem()
+        if problem is not None:
+            return self.stop("end", problem)
+        return {"status": "complete", "run": self.log.relative()}
 
     def policy(self, role: str) -> ToolPolicy:
         """The role's policy, its calendar read afresh unless one was given, so
@@ -356,7 +399,9 @@ class ResearchLoop:
         events = "".join(json.dumps(e, sort_keys=True, default=str) + "\n" for e in reply.events)
         self.log.write(f"{stem}.events.jsonl", events)
         self.log.write_json(f"{stem}.changed.json", moved)
-        problem = self.changes_problem(role, policy, moved)
+        self.log.write_json(f"{stem}.usage.json", reply.usage)
+        self.log.write_json(f"{stem}.calendar.json", calendar_record(self.repo, policy))
+        problem = self.changes_problem(role, policy, moved) or self.secrets_problem()
         if problem is not None:
             return problem
         try:
@@ -370,6 +415,11 @@ class ResearchLoop:
             if unwritten:
                 return f"sentences the scribe handed back but did not write: {unwritten}"
         return handback
+
+    def secrets_problem(self) -> str | None:
+        """What in the run directory looks like a secret, by file, line and pattern."""
+        found = audit.scan(self.log.path)
+        return f"the run directory holds what looks like a secret: {found}" if found else None
 
     def changes_problem(self, role: str, policy: ToolPolicy, moved: list[str]) -> str | None:
         """Why what a turn changed in the tree is more than its role may change."""
@@ -404,11 +454,10 @@ class ResearchLoop:
         return last[-1] if last else "the earlier attempt left no handback"
 
     def stop(self, step: str, reason: str) -> dict[str, Any]:
-        record = {"status": "stopped", "step": step, "reason": reason, "run": str(self.log.path)}
+        record = {"status": "stopped", "step": step, "reason": reason, "run": self.log.relative()}
         line = json.dumps({**record, "utc": datetime.now(UTC).isoformat()}, sort_keys=True)
-        with (self.log.path / "stops.jsonl").open("a") as stops:
-            stops.write(line + "\n")
-        return record
+        self.log.append("stops.jsonl", line)
+        return {**record, "reason": self.log.scrub(reason)}
 
 
 #: The SDK's built-in tools each role is given at all; the policy still decides
@@ -466,6 +515,13 @@ class SdkRunner:
                       "permissionDecisionReason": decision.reason}  # fmt: skip
             return {"hookSpecificOutput": output}
 
+        async def after(
+            data: dict[str, Any], tool_use_id: str | None, _context: Any
+        ) -> dict[str, Any]:
+            events.append({"tool": str(data.get("tool_name")), "id": tool_use_id,
+                           **output_record(data.get("tool_response"))})  # fmt: skip
+            return {}
+
         async def can_use(tool: str, given: dict[str, Any], _context: Any) -> Any:
             decision = call.policy.decide(tool, given)
             if decision.allowed:
@@ -484,7 +540,10 @@ class SdkRunner:
             disallowed_tools=list(DISALLOWED),
             permission_mode="default",
             can_use_tool=can_use,
-            hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[hook])]},
+            hooks={
+                "PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[hook])],
+                "PostToolUse": [sdk.HookMatcher(matcher=None, hooks=[after])],
+            },
             env={"PYTHONPATH": str(self.repo / "src")},
         )
 
@@ -494,15 +553,35 @@ class SdkRunner:
         sdk = importlib.import_module("claude_agent_sdk")
         events: list[dict[str, Any]] = []
         texts: list[str] = []
+        usage: dict[str, Any] = {}
         async with sdk.ClaudeSDKClient(options=self.options(call, events, sdk)) as client:
             await client.query(call.prompt)
             async for message in client.receive_response():
                 if isinstance(message, sdk.AssistantMessage):
                     texts += [b.text for b in message.content if isinstance(b, sdk.TextBlock)]
                 elif isinstance(message, sdk.ResultMessage):
-                    events.append({"result": message.subtype, "turns": message.num_turns,
-                                   "cost_usd": message.total_cost_usd})  # fmt: skip
-        return RoleReply("\n".join(texts), events)
+                    usage = result_usage(message)
+                    events.append({"result": message.subtype, "turns": message.num_turns})
+        return RoleReply("\n".join(texts), events, usage)
+
+
+def output_record(output: Any) -> dict[str, Any]:
+    """A tool's output as the run directory keeps it: its sha256 and size, never
+    its text, which may hold what no run directory should."""
+    text = output if isinstance(output, str) else json.dumps(output, sort_keys=True, default=str)
+    data = text.encode()
+    return {"output_sha256": hashlib.sha256(data).hexdigest(), "output_bytes": len(data)}
+
+
+def result_usage(message: Any) -> dict[str, Any]:
+    """A turn's token usage and cost, from the SDK's result message."""
+    return {
+        "usage": getattr(message, "usage", None),
+        "model_usage": getattr(message, "model_usage", None),
+        "cost_usd": getattr(message, "total_cost_usd", None),
+        "turns": getattr(message, "num_turns", None),
+        "duration_ms": getattr(message, "duration_ms", None),
+    }
 
 
 def ready_to_run() -> str | None:
@@ -534,6 +613,8 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--document", default="", help="the document, when not by the study name")
     sub.add_parser("calendar", help="every range a registration protects")
     sub.add_parser("prompts", help="every command the agent's documents name that does not exist")
+    audited = sub.add_parser("audit", help="what in a run directory looks like a secret")
+    audited.add_argument("run", type=Path)
     null_hash = sub.add_parser("null-hash", help="a YAML's null-placeholder sha256")
     null_hash.add_argument("config", type=Path)
     check = sub.add_parser("check", help="would the policy allow this command for this role")
@@ -572,12 +653,18 @@ def here() -> Path:
     return root
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, prepare: Callable[[Path], None] | None = None) -> int:
+    """The command line; ``prepare`` lets a test plant canaries in the demo's
+    scratch repository before its loop runs."""
     args = parser().parse_args(argv)
     if args.command == "calendar":
         for p in protected_calendar(here()):
             print(f"{p.first} {p.last} {p.key}")
         return 0
+    if args.command == "audit":
+        found = audit.scan(args.run)
+        print("\n".join(found) or "nothing in the run directory looks like a secret")
+        return 1 if found else 0
     if args.command == "prompts":
         problems = prompt_problems(REPO)
         print("\n".join(problems) or "every command the documents name exists")
@@ -594,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
         from agents.workflows.demo import run_demo
 
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        summary = run_demo(args.into or REPO / RUNS / f"demo-{stamp}")
+        summary = run_demo(args.into or REPO / RUNS / f"demo-{stamp}", prepare)
         print(json.dumps(summary, indent=2, default=str))
         return 0 if summary["status"] == "complete" else 3
     missing = ready_to_run()
@@ -607,7 +694,8 @@ def main(argv: list[str] | None = None) -> int:
         meta["grants"] = sorted({*meta.get("grants", []), *args.grant})
         resumed = {"utc": datetime.now(UTC).isoformat(), "grants": sorted(args.grant),
                    "model": os.environ.get("TRP_AGENT_MODEL"),
-                   "commit": git(REPO, "rev-parse", "HEAD").strip()}  # fmt: skip
+                   "commit": git(REPO, "rev-parse", "HEAD").strip(),
+                   "calendar_branches": calendar_branches(REPO)}  # fmt: skip
         meta.setdefault("resumes", []).append(resumed)
     else:
         brief = args.brief_file.read_text() if args.brief_file else args.brief
@@ -618,7 +706,8 @@ def main(argv: list[str] | None = None) -> int:
                 "web_hosts": sorted(set(args.web_host)), "config": args.config,
                 "document": args.document, "model": os.environ.get("TRP_AGENT_MODEL"),
                 "commit": git(REPO, "rev-parse", "HEAD").strip(),
-                "started": datetime.now(UTC).isoformat()}  # fmt: skip
+                "started": datetime.now(UTC).isoformat(),
+                "calendar_branches": calendar_branches(REPO)}  # fmt: skip
     log.write_json("run.json", meta)
     python = os.environ.get("TRP_AGENT_PYTHON", "python")
     cli = os.environ.get("TRP_AGENT_CLI", "trading-research")

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -74,3 +74,29 @@ def test_the_result_message_carries_what_the_runner_logs() -> None:
     fields = {f.name for f in dataclasses.fields(sdk.ResultMessage)}
     assert {"subtype", "num_turns", "total_cost_usd"} <= fields
     assert {"text"} <= {f.name for f in dataclasses.fields(sdk.TextBlock)}
+
+
+def test_the_runner_logs_each_outputs_hash_and_size_and_the_turns_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+
+    from agents.workflows.research_loop import result_usage
+
+    options, events = turn("executor", monkeypatch)
+    after = options.hooks["PostToolUse"][0].hooks[0]
+    data = {"tool_name": "Bash", "tool_input": {"command": "git status"}, "tool_response": "clean"}
+    assert asyncio.run(after(data, "id", None)) == {}
+    assert events[-1]["output_sha256"] == hashlib.sha256(b"clean").hexdigest()
+    assert events[-1]["output_bytes"] == 5 and "clean" not in str(events[-1])
+    fields = {f.name for f in __import__("dataclasses").fields(sdk.ResultMessage)}
+    assert {"usage", "model_usage", "total_cost_usd", "num_turns", "duration_ms"} <= fields
+
+    class Message:
+        usage: ClassVar[dict[str, int]] = {"input_tokens": 10, "output_tokens": 2}
+        model_usage = None
+        total_cost_usd = 0.01
+        num_turns = 3
+        duration_ms = 5
+
+    assert result_usage(Message())["usage"] == {"input_tokens": 10, "output_tokens": 2}

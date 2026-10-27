@@ -178,7 +178,7 @@ def blocking(findings: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
 
 #: The documents an agent is given, whose commands must all exist.
 DOCUMENTS = ("CLAUDE.md", "agents/protocol.md", "agents/README.md")
-HARNESS_COMMANDS = frozenset({"run", "calendar", "null-hash", "check", "demo", "prompts"})
+HARNESS_COMMANDS = frozenset({"run", "calendar", "null-hash", "check", "demo", "prompts", "audit"})
 
 
 @lru_cache(maxsize=1)
