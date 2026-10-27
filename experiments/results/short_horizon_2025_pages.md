@@ -4,7 +4,7 @@ Written by the entry point from the stages' records and the blocks' results; blo
 
 ## Headline sentences
 
-- Searched 2,400 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs).
+- Searched 2,435 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs).
 - No configuration paid the 5.5 bp taker fee on development data.
 - Passive entry and the market maker on C*: S-P and S-M not admitted on D (i, ii); the market maker's making part on D was -0.43 bp per fill.
 
@@ -127,7 +127,7 @@ Drawn once H is read.
 
 ## The README summary
 
-Searched 2,400 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs). No configuration paid the 5.5 bp taker fee on development data. Passive entry and the market maker on C*: S-P and S-M not admitted on D (i, ii); the market maker's making part on D was -0.43 bp per fill.
+Searched 2,435 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs). No configuration paid the 5.5 bp taker fee on development data. Passive entry and the market maker on C*: S-P and S-M not admitted on D (i, ii); the market maker's making part on D was -0.43 bp per fill.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/short_horizon_2025_placebo_search_dark.png">
