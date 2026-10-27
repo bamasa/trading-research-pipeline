@@ -249,7 +249,7 @@ def payoff_note(board: pd.DataFrame | None) -> str | None:
     if (net[admissible] > 0).any():
         return None
     positive = board[net > 0]
-    text = "no admissible cell had a positive net"
+    text = "No admissible cell had a positive net"
     if len(admissible) and admissible.any():
         text += f" (the highest admissible net was {net[admissible].max():.2f} bp per trade)"
     if positive.empty:
@@ -727,7 +727,7 @@ def readme_summary(written: Written, figures: dict[str, str]) -> str:
     ]
     text = " ".join(sentences) or "No sentence written yet."
     if notes:
-        text += " (" + " ".join(notes) + ")"
+        text += " Notes beside them: " + " ".join(notes)
     return "\n\n".join([text, *pictures])
 
 

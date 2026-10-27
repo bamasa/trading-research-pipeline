@@ -448,7 +448,7 @@ def test_the_notes_beside_the_payoff_and_passive_sentences() -> None:
         "trades_per_day": [0.02, 0.02, 7.4],
     })  # fmt: skip
     note = pages.payoff_note(board)
-    assert note is not None and note.startswith("no admissible cell had a positive net")
+    assert note is not None and note.startswith("No admissible cell had a positive net")
     assert "2 at +73.6 to +83.2 bp on 3 trades" in note and "stratum R" in note
     board.loc[2, "net"] = 1.0
     assert pages.payoff_note(board) is None
@@ -461,5 +461,8 @@ def test_the_notes_beside_the_payoff_and_passive_sentences() -> None:
     assert pages.making_note({"making_bp_per_fill": 0.1, "S": 0.0005}) is None
     out = pages.Written()
     out.sentences["payoff_on_D"] = [{"about": "D", "sentence": "x."}]
-    out.note("payoff_on_D", "no admissible cell had a positive net.")
-    assert pages.readme_summary(out, {}) == "x. (no admissible cell had a positive net.)"
+    out.note("payoff_on_D", "No admissible cell had a positive net.")
+    assert (
+        pages.readme_summary(out, {})
+        == "x. Notes beside them: No admissible cell had a positive net."
+    )
