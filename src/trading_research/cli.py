@@ -1755,6 +1755,7 @@ from trading_research import (  # noqa: E402
     cli_instruments,
     cli_regimes,
     cli_signal,
+    cli_study,
 )
 
 app.add_typer(cli_data.build(app))
@@ -1762,5 +1763,6 @@ app.add_typer(cli_regimes.build(app))
 app.add_typer(cli_instruments.build(app))
 app.add_typer(cli_signal.build(app))
 app.add_typer(cli_backtest.build(app))
+app.add_typer(cli_study.app)
 app.add_typer(cli_fees.app)
 cli_common.as_map(app)
