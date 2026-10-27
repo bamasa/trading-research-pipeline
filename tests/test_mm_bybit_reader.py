@@ -15,6 +15,7 @@ from trading_research.mm_bybit import access as acc
 from trading_research.mm_bybit import archive, config, days, funding, synthetic
 
 HEADER = "timestamp,symbol,side,size,price,tickDirection,trdMatchID\n"
+GAP = float(config.load()["settings"]["print_gap_exclusion_s"])
 
 
 def csv(rows: list[str]) -> bytes:
@@ -94,27 +95,33 @@ def test_a_404_is_the_only_missing_file_and_an_unfetched_day_is_an_error(tmp_pat
     cfg = config.load()
     settlements = synthetic.funding(DAY)
     fees = config.fee_on(cfg, DAY)
-    assert days.load(DAY, tmp_path, acc.development_access(), settlements, fees) == "no_prints_file"
+    assert (
+        days.load(DAY, tmp_path, acc.development_access(), settlements, fees, print_gap_s=GAP)
+        == "no_prints_file"
+    )
     other = date(2021, 1, 5)
     with pytest.raises(FileNotFoundError):
-        days.load(other, tmp_path, acc.development_access(), settlements, fees)
+        days.load(other, tmp_path, acc.development_access(), settlements, fees, print_gap_s=GAP)
 
 
 def test_a_day_is_excluded_for_a_print_gap_or_missing_funding(tmp_path) -> None:
     cfg, access = config.load(), acc.development_access()
     prints = synthetic.random_day(DAY, seed=4, n_prints=20_000)
     keep = (prints["timestamp"] < pd.Timestamp(f"{DAY} 12:00", tz="UTC")) | (
-        prints["timestamp"] > pd.Timestamp(f"{DAY} 12:03", tz="UTC")
+        prints["timestamp"] > pd.Timestamp(f"{DAY} 12:11", tz="UTC")
     )
     target = archive.prints_path(tmp_path, DAY)
     target.parent.mkdir(parents=True)
     prints[keep].reset_index(drop=True).to_parquet(target)
     settlements = synthetic.funding(DAY)
     fees = config.fee_on(cfg, DAY)
-    assert days.load(DAY, tmp_path, access, settlements, fees) == "print_gap"
+    assert days.load(DAY, tmp_path, access, settlements, fees, print_gap_s=GAP) == "print_gap"
     prints.to_parquet(target)
-    assert not isinstance(days.load(DAY, tmp_path, access, settlements, fees), str)
-    assert days.load(DAY, tmp_path, access, settlements.iloc[:2], fees) == "no_funding"
+    assert not isinstance(days.load(DAY, tmp_path, access, settlements, fees, print_gap_s=GAP), str)
+    assert (
+        days.load(DAY, tmp_path, access, settlements.iloc[:2], fees, print_gap_s=GAP)
+        == "no_funding"
+    )
 
 
 def test_the_development_access_refuses_e_h_and_every_day_outside_w_and_d(tmp_path) -> None:
@@ -164,7 +171,9 @@ def test_the_block_funding_is_fetched_from_the_history_and_written(tmp_path) -> 
 
 def test_the_configuration_hashes_to_the_registered_null_placeholder_sha256() -> None:
     document = config.DOCUMENT_PATH.read_text()
-    assert config.null_placeholder_sha256(document).startswith("0ece0d7d")
+    # The registration's hash, superseded by the stage-0 amendment's.
+    assert "Null-placeholder sha256: `0ece0d7d" in document
+    assert config.null_placeholder_sha256(document).startswith("17fca5f8")
     config.check_registered(config.CONFIG_PATH.read_text(), document)
     changed = config.CONFIG_PATH.read_text().replace("clip_btc: 0.010", "clip_btc: 0.020")
     with pytest.raises(config.RegistrationError):
@@ -203,3 +212,25 @@ def test_the_fee_comes_from_the_sourced_table_only() -> None:
 def test_the_synthetic_files_are_gzip_csv_in_the_venues_columns() -> None:
     raw = gzip.decompress(synthetic.csv_gz(synthetic.random_day(DAY, n_prints=10)))
     assert raw.decode().splitlines()[0].startswith("timestamp,symbol,side,size,price")
+
+
+def test_the_codes_constants_are_the_registered_values() -> None:
+    from trading_research.mm_bybit import development, engine, metrics, selection, statuses
+
+    cfg = config.load()
+    s, h = cfg["settings"], cfg["heldout"]
+    assert GAP == 600.0
+    assert tuple(s["markout_horizons_s"]) == metrics.HORIZONS_S
+    assert s["making_horizon_s"] == metrics.MAKING_HORIZON_S
+    assert s["warmup_s"] == metrics.QUOTE_FROM_S
+    defaults = engine.RunSettings(-2.5, 7.5)
+    assert defaults.clip == s["clip_btc"] and defaults.soft_limit_clips == s["soft_limit_clips"]
+    assert defaults.latency_ns == s["latency_ms"] * 1_000_000 and defaults.pause_s == s["pause_s"]
+    assert days.VARIANTS["latency150"].latency_ms == s["latency_kill_ms"]
+    assert days.VARIANTS["latency10"].latency_ms == s["latency_measured_ms"]
+    assert cfg["selection"]["min_fills_per_day"] == selection.MIN_FILLS_PER_DAY
+    assert h["placebo_draws"] == statuses.PLACEBO_DRAWS
+    assert h["mde_z"] == development.MDE_Z and len(acc.block_days("H")) == development.H_DAYS
+    assert cfg["fees"]["repricing"] == {"ex_rebate_maker_bp": metrics.REPRICED_BP["ex_rebate_y"],
+        "negative_control_maker_bp": metrics.REPRICED_BP["negative_control_y"],
+        "positive_control_maker_bp": metrics.REPRICED_BP["positive_control_y"]}  # fmt: skip

@@ -2,7 +2,8 @@
 
 :func:`load` returns a :class:`~trading_research.mm_bybit.tape.DayTape` or the
 registered reason the day is excluded: ``no_prints_file``, ``no_print``,
-``print_gap`` (two prints stamped between 00:10 and 23:59 more than 120 s apart),
+``print_gap`` (two prints stamped between 00:10 and 23:59 further apart than the
+configuration's ``print_gap_exclusion_s``, 600 s since the stage-0 amendment),
 ``no_funding`` or ``fee not sourced``. :func:`run_jobs` runs every requested
 (cell, variant) on one loaded day, so the day is read once for all of them.
 """
@@ -23,8 +24,6 @@ from trading_research.mm_bybit import quoters as q
 from trading_research.mm_bybit.access import Access
 from trading_research.mm_bybit.config import FeeNotSourced, Fees, fee_on
 from trading_research.mm_bybit.tape import DayTape, build
-
-PRINT_GAP_S = 120.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +54,8 @@ def load(
     access: Access,
     settlements: pd.DataFrame,
     fees: Fees | FeeNotSourced,
+    *,
+    print_gap_s: float,
 ) -> DayTape | str:
     """The day's tape, or the reason it is excluded."""
     access.require(day)
@@ -76,7 +77,7 @@ def load(
         tape = build(day, prints, found[0], found[1])
     except (OffGridPrice, ValueError):
         return "unreadable"
-    if tape.max_gap_s() > PRINT_GAP_S:
+    if tape.max_gap_s() > print_gap_s:
         return "print_gap"
     return tape
 

@@ -61,7 +61,8 @@ def load_day(
         fees: Any = fee_on(cfg, day)
     except FeeNotSourced as exc:
         fees = exc
-    return days.load(day, root, access, funding.load_block(root, block), fees)
+    gap = float(cfg["settings"]["print_gap_exclusion_s"])
+    return days.load(day, root, access, funding.load_block(root, block), fees, print_gap_s=gap)
 
 
 def w_inputs(root: Path | str, access: Access, cfg: dict[str, Any]) -> dict[str, Any]:
