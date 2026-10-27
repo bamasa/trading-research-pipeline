@@ -49,7 +49,7 @@ import re
 import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -128,7 +128,6 @@ class BookState:
     bids: dict[float, float] = field(default_factory=dict)
     asks: dict[float, float] = field(default_factory=dict)
     last_update: int | None = None
-    gaps: int = 0
 
     def apply(self, side: str, rows: list[list[str]]) -> None:
         book = self.bids if side == "b" else self.asks
@@ -175,6 +174,26 @@ def _messages(path: Path) -> Iterator[dict[str, Any]]:
                 yield _loads(line)
 
 
+_ARCHIVE_DAY = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+
+def _day_end_ms(path: Path, first_stamp: int) -> int:
+    """The next UTC midnight after the archive's day, in milliseconds: the day its
+    file name carries (when its first message is not stamped after that day),
+    else the UTC day of its first message. A sequence gap is counted for the day
+    only on a message stamped before it (an archive's tail in the next day's
+    first second is cut from the day's book, and its gaps with it)."""
+
+    def end_of(day: date) -> int:
+        end = datetime(day.year, day.month, day.day, tzinfo=UTC) + timedelta(days=1)
+        return int(end.timestamp() * 1000)
+
+    found = _ARCHIVE_DAY.search(path.name)
+    if found is not None and first_stamp < end_of(date.fromisoformat(found.group(1))):
+        return end_of(date.fromisoformat(found.group(1)))
+    return end_of(datetime.fromtimestamp(first_stamp / 1000, tz=UTC).date())
+
+
 def reconstruct(
     path: Path | str,
     *,
@@ -201,16 +220,25 @@ def reconstruct(
     The stamp is the message's ``ts``, the time the venue generated it; prints
     carry their match time. The two differ by a few milliseconds (see
     ``market_making.analysis.clock_offset_profile``).
+
+    The sequence gaps (``attrs["sequence_gaps"]``) are counted over the whole
+    replay, a later snapshot healing the book but not the count, and only on
+    messages stamped before the next UTC midnight of the archive's day, as
+    :func:`archive_message_stats` counts them.
     """
     state = BookState()
     rows: list[dict[str, Any]] = []
     bucket: int | None = None
+    gaps = 0  # outside the book's state: a snapshot resets the book, not the count
+    day_end: int | None = None
 
     for message in _messages(Path(path)):
         kind = message.get("type")
         data = message.get("data", {})
         stamp = int(message["ts"])
         update = data.get("u")
+        if day_end is None:
+            day_end = _day_end_ms(Path(path), stamp)
 
         if kind == "snapshot":
             state = BookState()
@@ -226,7 +254,8 @@ def reconstruct(
                 # The book is wrong from here until the next snapshot. Counted
                 # and carried on the result rather than raised: one gap in a day
                 # is a data-quality fact, not a reason to lose the day.
-                state.gaps += 1
+                if stamp < day_end:
+                    gaps += 1
             state.apply("b", data.get("b", []))
             state.apply("a", data.get("a", []))
             state.last_update = update
@@ -262,7 +291,7 @@ def reconstruct(
     frame = pd.DataFrame(rows)
     frame["symbol"] = frame["symbol"].astype("string")
     frame["source"] = frame["source"].astype("string")
-    frame.attrs["sequence_gaps"] = state.gaps
+    frame.attrs["sequence_gaps"] = gaps
     return frame.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
@@ -413,7 +442,9 @@ class MessageStats:
     deltas: int
     #: Median time between consecutive messages, in milliseconds.
     median_interval_ms: float | None
-    #: Counted exactly as :func:`reconstruct` counts them.
+    #: Counted exactly as :func:`reconstruct` counts them: over the whole stream, a
+    #: snapshot healing the book but not the count, on messages stamped before the
+    #: next UTC midnight of the archive's day.
     sequence_gaps: int
 
 
@@ -457,15 +488,19 @@ def archive_message_stats(path: Path | str) -> MessageStats:
     stamps: list[int] = []
     snapshots = deltas = gaps = 0
     last: int | None = None
+    day_end: int | None = None
     for raw in _raw_lines(Path(path)):
         kind, stamp, update = _scan(raw)
+        if day_end is None and stamp is not None:
+            day_end = _day_end_ms(Path(path), stamp)
         if kind == "snapshot":
             snapshots += 1
             last = update
         elif kind == "delta":
             deltas += 1
             if last is not None and update is not None and update != last + 1:
-                gaps += 1
+                if day_end is None or stamp is None or stamp < day_end:
+                    gaps += 1
             last = update
         else:
             continue
