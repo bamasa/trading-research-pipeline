@@ -275,7 +275,8 @@ class Block:
             frame = ft.day_frame(self.book(day), self.prints(day), calibration, history)
             return to_stored(frame, StoreLayout.from_dict(self.fitted["store_layout"]))
 
-        for needed in (day, *([] if self.previous(day) is None else [self.previous(day)])):
+        previous = self.previous(day)
+        for needed in (day,) if previous is None else (day, previous):
             self.require_day(needed)
         return ft.read_or_build(self.cache / "features" / f"{day}.parquet", build)
 
