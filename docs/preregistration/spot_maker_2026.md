@@ -990,3 +990,22 @@ period is Bybit spot BTCUSDT on D's days, which the spot study holds.
   hash is recomputed; `aa367b64…` is superseded.
 
 Null-placeholder sha256: `147aea710dbef9c390b5efff27816ab72d93d39fa636ab44c2b22160b33298e7`
+
+### 2026-10-27: the D amendment
+
+Written by the entry point (`experiments/spot_maker_2026.py amend`) and reviewed before it is committed. Every frozen value is in the configuration's placeholders.
+
+Frozen configuration sha256: `8dbd3181a474ae378ca6a9211bf17f487d963585de5c3056eb3198d33597a53b`
+
+- Complete D run D1; the run log's manifest `experiments/results/spot_maker_2026_trials.json`: {'sha256': '2f8ef9d2d4d1225910d691bcf68d1841ccccf7b16dcc551175b21c609fdf9523', 'rows': 3}.
+- The code-freeze commit stage 1, D and this amendment ran under: `bf044ea3c2eb76710b33fe6e9528cb4faac2eccc`.
+- Days excluded on W and D: none.
+- The reader-test days pass: True.
+- Stage 0's timings a day: load 0.09672 s, features 0.9939 s, signal 0.04868 s, runs 21.84 s, checks 1.843 s; free disk 0 27.13 GB, 1 28.65 GB, D 28.55 GB.
+- sigma_D and the MDE (development, bp per fill): MK-S 1.237 and 0.5484; MK-Q 0.3808 and 0.1689; MK-SQ 0.3586 and 0.159.
+- D's means (development, in-sample for the signal; never a result): MK-S -2.288; MK-Q -2.839; MK-SQ -2.776.
+- The fill rule's calibration on the book days: MK-S: fills ordered on 1 and the prints rule's making part inside the book's bracket on 0.2247 of 89 days; MK-Q: fills ordered on 1 and the prints rule's making part inside the book's bracket on 0.6413 of 92 days; MK-SQ: fills ordered on 1 and the prints rule's making part inside the book's bracket on 0.5761 of 92 days; it does not pass; every verdict labelled "uncalibrated fill rule".
+- The rehearsal on July (H's rules with these values; discarded): MK-S killed; MK-Q killed; MK-SQ killed.
+- Reviewed before it was committed, on 2026-10-28 (Moscow time). Dates here
+  are UTC; the correction above is dated by Moscow time and was made on
+  2026-10-27 at about 21:15 UTC, before stage 1.
