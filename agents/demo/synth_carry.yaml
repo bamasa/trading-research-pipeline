@@ -1,0 +1,36 @@
+# The synthetic carry study: the registration the harness's demonstration
+# writes, through its registrar, into a scratch repository.
+#
+# Synthetic: every daily series is drawn from the seeded generator below by
+# experiments/synth_carry.py. No market's data is read, and nothing the study
+# prints is evidence about a market.
+study: synth_carry
+venue: synthetic
+document: docs/preregistration/synth_carry.md
+blocks:
+  D: {start: 2031-01-01, end: 2031-06-30, role: development}
+  E: {start: 2031-07-01, end: 2031-07-31, role: embargo}
+  H: {start: 2031-08-01, end: 2031-10-31, role: held_out}
+generator:
+  seed_D: 11
+  seed_H: 12
+  drift_bp: -1.0
+  sd_bp: 4.0
+fees:
+  taker_bp_per_side: 2.0
+slots:
+  C1: {rule: always on, clip: 1}
+family: [C1]
+holm_m: 1
+kills:
+  order: [K1, K-days]
+  K1_reference_bp: 0.0
+  K_days_share: 0.5
+statuses:
+  candidate_t: 3.0
+frozen:
+  sigma_d_bp: null  # frozen by the D amendment
+access:
+  ledger: experiments/results/synth_carry_ledger.json
+  results: experiments/results/synth_carry_H.json
+  page: experiments/results/synth_carry_page.md
