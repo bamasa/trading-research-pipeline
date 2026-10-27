@@ -161,7 +161,36 @@ that run loses before any fee (-1.09 USDT). Per day and per fee:
 
 ## Part 2: the frozen test on 2026-08-08 .. 2026-08-21
 
-Running: see `docs/replication_eth_plan.md` for what it does.
+Run as the plan fixed it (`docs/replication_eth_plan.md`, committed before any
+2026 day was fetched): the code at `c69fe91`, one fit on 2026-07-31 .. 08-06
+with 2026-08-07 to validate, nothing tuned on 2026 data, the results committed
+in `bbcba80`.
+
+The frozen recipe did not transfer. Its label threshold, plus or minus 5e-4
+over 5 s, was fixed in part 1 from the original's printed class mix of
+February 2025 (24 / 51 / 24% down / flat / up). On the 2026 days ETH moved less
+over 5 s, and the same threshold leaves 92.5% of the scored test rows flat
+(down 3.6%, up 3.9%). With the inverse-frequency class weights the network
+then predicts up or down on 98% of rows (predicted mix 27.5 / 1.6 / 70.9%):
+validation accuracy 3 to 5% at every epoch against 61 to 67% in part 1, and
+accuracy on the test days 8.2% where always-flat scores 92.5%
+(`replication_eth_2025_part2_training.csv`, `logs/predict_part2.log`). The gate
+fires on that noise: 4,255 signals over the fourteen days.
+
+| run | holding | signals | fills/day | gross | net 2.2 bp | net 5.5 bp | gross bp of turnover | days net > 0 at 0 / 2.2 / 5.5 bp |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| ref48 | signal_to_signal | 4,255 | 181 | 1.72 | -10.55 | -28.94 | 0.31 | 6 / 0 / 0 |
+| ref48 | close_by_time_100s | 4,255 | 296 | 1.83 | -17.45 | -46.36 | 0.21 | 5 / 0 / 0 |
+
+At 2.2 bp a side, the fee the original's +0.9 USDT was reported after, the
+frozen recipe loses on every one of the fourteen days (-10.55 USDT pooled over
+the primary holding); at 5.5 bp likewise. Gross is +1.72 USDT, 0.31 bp of
+turnover, below any fee, as in part 1. The frozen test fails, and the reason
+is identifiable: a label threshold fixed in absolute relative units rather than
+in units of the period's volatility. A volatility-scaled threshold would be a
+different recipe from the original's; it is not run here, and if it were it
+would be exploratory and labelled as such. Per day and per fee:
+`replication_eth_2025_part2_days.csv`.
 
 ## Files
 
