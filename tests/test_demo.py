@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,14 +19,24 @@ from trading_research.walkthrough.demo import DemoConfig, fee_line
 from trading_research.walkthrough.record import sha256_file
 
 runner = CliRunner()
+REPO = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(scope="module")
 def demo(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    """``trp demo`` in a fresh interpreter: it fits boosted trees, which is not safe in a
+    process that has imported torch, as this test process may have."""
     out = tmp_path_factory.mktemp("demo") / "out"
-    result = runner.invoke(app, ["demo", "--execution", "all", "--small", "--out", str(out)])
-    assert result.exit_code == 0, result.output
-    return {"out": out, "output": result.output}
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([str(REPO / "src"), os.environ.get("PYTHONPATH", "")]),
+    }
+    command = [sys.executable, "-m", "trading_research", "demo", "--execution", "all", "--small",
+               "--out", str(out)]  # fmt: skip
+    done = subprocess.run(command, cwd=REPO, capture_output=True, text=True, env=env, check=False,
+                          timeout=600)  # fmt: skip
+    assert done.returncode == 0, done.stdout[-3000:] + done.stderr[-3000:]
+    return {"out": out, "output": done.stdout}
 
 
 def test_the_page_and_the_manifest_are_written(demo: dict[str, Any]) -> None:

@@ -227,7 +227,8 @@ class Pipeline:
     """data → regimes → instruments → signal → execution → verdict, on one dataset.
 
     Each method is one step and can be called alone once the steps before it
-    have run; :meth:`run` calls them in order. Everything is written under
+    have run; :meth:`run` calls them in order. The signal steps fit boosted trees,
+    which the repository runs only in a process that has not imported torch. Everything is written under
     ``config.out``: ``validation.txt``, ``regimes/<symbol>/``, and the search's
     directory ``search/`` with one folder per step, its registration and its
     ledger.
