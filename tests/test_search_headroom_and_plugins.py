@@ -64,7 +64,9 @@ def test_the_headroom_restates_the_same_attempts() -> None:
     assert found["gross_per_attempt_bp"] == pytest.approx(1.0)
     assert found["cost_cut_to_break_even_bp"] == pytest.approx(2.0)
     direction = found["direction"]
-    assert direction["hit_rate"] == pytest.approx(0.5) and direction["mean_loss_bp"] == pytest.approx(2.0)
+    assert direction["hit_rate"] == pytest.approx(0.5) and direction[
+        "mean_loss_bp"
+    ] == pytest.approx(2.0)
     # A further share d right turns a 2 bp loss into a 2 bp gain: +4d a trade.
     assert direction["hit_gain_to_break_even"] == pytest.approx(0.5)
     assert [r["net_per_attempt_bp"] for r in direction["rungs"]] == pytest.approx(
