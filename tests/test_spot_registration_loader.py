@@ -19,10 +19,16 @@ from trading_research.market_making.prereg import (
 )
 from trading_research.spot import access as sa
 from trading_research.spot import registration as sr
+from trading_research.spot.dry_run import registered_text
 
 ROOT = Path(__file__).resolve().parents[1]
-TEXT = (ROOT / sr.CONFIG_PATH).read_text(encoding="utf-8")
-DOCUMENT = (ROOT / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+#: The configuration as committed: unfrozen until the D amendment, frozen after it.
+LIVE = (ROOT / sr.CONFIG_PATH).read_text(encoding="utf-8")
+#: The registered text, every placeholder null, whichever state the file is in.
+TEXT = unfrozen_text(LIVE)
+LIVE_DOCUMENT = (ROOT / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+#: The registered document, cut before the D amendment's section (as at the code freeze).
+DOCUMENT = registered_text(sr.DOCUMENT_PATH, LIVE_DOCUMENT)
 KEYS = tuple(i.key for i in sa.INSTRUMENTS.values())
 CELL = "hold_s=50|trades_per_day=240|label_fee_bp=0"
 #: A P interval as the fee amendment writes it, one line under each instrument.
@@ -86,16 +92,27 @@ def with_p_intervals(text: str) -> str:
 
 
 def test_the_registered_file_loads_at_the_registered_hash() -> None:
+    """Before the D amendment the file is the registered one; after it, the file is
+    frozen, resets to the registered hash, and the document records its hash."""
     registration = sr.Registration.load(repo=ROOT)
+    assert sha(TEXT.encode()) == sr.REGISTERED_SHA256
     assert sr.latest_null_sha256(DOCUMENT) == sr.REGISTERED_SHA256
+    assert sr.latest_null_sha256(LIVE_DOCUMENT) == sr.REGISTERED_SHA256
+    assert LIVE_DOCUMENT.startswith(DOCUMENT.rstrip("\n"))  # amended only by appending
     assert registration.base_sha256 == registration.sha256 and not registration.p_intervals
-    assert tuple(placeholder_lines(TEXT)) == sr.PLACEHOLDERS
-    assert registration.frozen is False
+    assert tuple(placeholder_lines(TEXT)) == tuple(placeholder_lines(LIVE)) == sr.PLACEHOLDERS
     registration.require_consistent()
-    with pytest.raises(PreRegistrationError, match="still null"):
-        registration.require_frozen()
     assert registration.h_blind  # the owner's amendment of 2026-10-25
-    assert registration.max_sequence_gaps is None and registration.weights_sha256 == {}
+    if registration.frozen:
+        registration.require_frozen()
+        assert registration.sha256 == sha(LIVE.encode())
+        assert sr.frozen_hash_line(LIVE) in sr.amendments_text(LIVE_DOCUMENT)
+        assert sr.FROZEN_HASH_PATTERN.findall(DOCUMENT) == []
+    else:
+        assert LIVE == TEXT and LIVE_DOCUMENT == DOCUMENT
+        with pytest.raises(PreRegistrationError, match="still null"):
+            registration.require_frozen()
+        assert registration.max_sequence_gaps is None and registration.weights_sha256 == {}
 
 
 def test_a_change_outside_the_placeholders_is_refused() -> None:

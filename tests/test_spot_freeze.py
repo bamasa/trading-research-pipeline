@@ -41,7 +41,10 @@ def test_the_dry_run_holds_the_registration_as_registered() -> None:
     config = (ROOT / sr.CONFIG_PATH).read_text(encoding="utf-8")
     assert sha256_bytes(registered_text(sr.CONFIG_PATH, config).encode()) == sha256_bytes(
         unfrozen_text(sr.strip_p_intervals(config)[0]).encode())  # fmt: skip
-    document = (ROOT / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+    live = (ROOT / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+    document = registered_text(sr.DOCUMENT_PATH, live)  # the registered text, at any stage
+    assert live.startswith(document.rstrip("\n"))
+    assert registered_text(sr.DOCUMENT_PATH, document) == document
     amended = document + "\n### 2026-11-30: the D amendment\n\nFrozen configuration sha256: `x`\n"
     assert registered_text(sr.DOCUMENT_PATH, amended).rstrip("\n") == document.rstrip("\n")
     assert (

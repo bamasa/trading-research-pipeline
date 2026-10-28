@@ -27,10 +27,13 @@ from trading_research.spot import access as sa
 from trading_research.spot import ledger as sl
 from trading_research.spot import registration as sr
 from trading_research.spot import statuses as st
+from trading_research.spot.dry_run import registered_text
 
 ROOT = Path(__file__).resolve().parents[1]
+#: The registered configuration, every placeholder null, frozen or not on disk.
 TEXT = unfrozen_text((ROOT / sr.CONFIG_PATH).read_text(encoding="utf-8"))
-DOCUMENT = (ROOT / sr.DOCUMENT_PATH).read_text(encoding="utf-8")
+#: The registered document, cut before the D amendment's section (as at the code freeze).
+DOCUMENT = registered_text(sr.DOCUMENT_PATH, (ROOT / sr.DOCUMENT_PATH).read_text(encoding="utf-8"))
 H_DAY = datetime(2026, 11, 21, 9, tzinfo=UTC)
 P_DAY = datetime(2027, 1, 10, 9, tzinfo=UTC)
 

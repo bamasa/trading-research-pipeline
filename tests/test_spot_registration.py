@@ -14,7 +14,10 @@ from trading_research.market_making.prereg import placeholder_lines, sha256_byte
 FALLBACK = "candidate (H inside S25's information set)"
 
 ROOT = Path(__file__).resolve().parents[1]
-TEXT = (ROOT / "configs" / "spot_2026.yaml").read_text(encoding="utf-8")
+#: The configuration as committed: unfrozen until the D amendment, frozen after it.
+LIVE = (ROOT / "configs" / "spot_2026.yaml").read_text(encoding="utf-8")
+#: The registered text, every placeholder null, whichever state the file is in.
+TEXT = unfrozen_text(LIVE)
 CONFIG: dict[str, Any] = yaml.safe_load(TEXT)
 DOCUMENT = (ROOT / "docs" / "preregistration" / "spot_2026.md").read_text(encoding="utf-8")
 
@@ -64,6 +67,7 @@ def test_registered_hash_is_the_documents() -> None:
 def test_every_placeholder_is_null_and_listed() -> None:
     assert tuple(placeholder_lines(TEXT)) == PLACEHOLDERS
     assert unfrozen_text(TEXT) == TEXT
+    assert tuple(placeholder_lines(LIVE)) == PLACEHOLDERS  # frozen, the lines stay in place
 
 
 @pytest.mark.parametrize("name", ["W", "D", "E", "H", "P"])
