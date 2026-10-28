@@ -108,7 +108,7 @@ kind, not only strategies.
 | **b. no look-ahead** | every input after a row changed (prices by `validation/fold_leakage.mutate_after_cutoff`, the rest reversed in time and scaled by 1.5): decisions up to the row, digested, unchanged, at 20 rows | the studies' fold-level test (`check_fold`, sha256 of the fit's predictions) on the fit, and its predictions up to a row unchanged (to 1e-12) when every later input row is reversed and tripled | truncation invariance at five cuts (`validation/leakage.py`'s rule) | rows beyond the horizon changed: labels up to the row unchanged | the market after a cut removed: settled attempts unchanged |
 | **b. declared look-back** | the decision from only `lookback + 1` rows equals the batch decision (not applied to a stateful strategy) | the prediction from only `lookback + 1` input rows equals the batch one | each column from `lookback + 1` rows equals the batch value | | |
 | **c. execution** | fitted on the first 40% of the demo market, its decisions after that through every execution plugin with the fee tier applied: one result row each | the same, as a model strategy | n/a | n/a | a fixed reference stream through it |
-| **d. synthetic** | the planted-edge, null and placebo checks of `trading_research.synthetic` when that package offers `plugin_checks(kind=, name=, build=)`; otherwise "skipped: synthetic checks not on this branch" | as for a strategy | n/a | n/a | n/a |
+| **d. synthetic** | the planted-edge, null and placebo checks of `trading_research.synthetic.plugin_checks(kind=, name=, build=)`: ten book days of half an hour with a 16 bp queue-imbalance edge over 30 s and the same days with nothing planted, the strategy fitted on the training days' frames in its own one-second layout and traded by the taker executor at 5.5 bp a side; found edge (a miss is n/a: only a plugin reading the imbalance is expected to find it), recovered minus planted on the same trades below t 3 on both datasets (a leak picks favourable noise), nothing on the null, and the edge lost when the decisions move to other days; n/a for a strategy reading peers | the same, on the edge check's feature frame restricted to its declared inputs; n/a for a regression or windowed model | n/a | n/a | n/a |
 
 What it cannot catch: a mutation test is black-box, so a strategy that peeks
 one row ahead is caught only where the peeked value flips a decision (twenty
@@ -166,7 +166,7 @@ rows; fitted on the first 5,760):
 | b. no look-ahead | pass | 20 cutoffs, no decision moved |
 | b. declared look-back | pass | 20 rows (10 with a decision) from a 1-row window, no mismatch |
 | c. execution | pass | taker, passive, maker and event_taker, base fee tier |
-| d. synthetic | skipped | synthetic checks not on this branch |
+| d. synthetic | pass | planted edge found (+4.83 bp a trade before costs, t 5.05, 155 trades, net -8.30 bp at 5.5 bp a side); recovered minus planted t 1.12 and -0.49; null t 0.60; placebo pooled t 1.13 |
 
 **Backtested in taker and passive modes.**
 

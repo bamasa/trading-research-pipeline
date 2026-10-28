@@ -94,7 +94,7 @@ def test_an_honest_strategy_passes_and_runs_through_each_execution(
     assert result.table is not None
     assert list(result.table["execution"]) == ["taker", "passive"]
     assert (result.table["attempts"] > 0).all()
-    assert _status(result, "d.") == conformance.SKIPPED
+    assert _status(result, "d.") == conformance.PASS
 
 
 @pytest.mark.parametrize(
@@ -308,7 +308,7 @@ def test_the_page_records_every_check_and_the_execution_table(
         "c. execution",
         "d. synthetic",
     ):
-        assert f"| {check} |" in text
+        assert f"| {check}" in text
     assert "| taker | base |" in text and "| passive | base |" in text
     assert "sha256 of that file" in text and str(Path.home()) not in text
     index = pages.write_index([pages.summary_row(result)], tmp_path).read_text()

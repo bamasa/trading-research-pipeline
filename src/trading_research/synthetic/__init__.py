@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from trading_research.synthetic.book_days import BookDataset, BookDaysSpec
     from trading_research.synthetic.edge import EdgeReport, StrategyLike
 
-__all__ = ["null", "planted_edge", "recover"]
+__all__ = ["null", "planted_edge", "plugin_checks", "recover"]
 
 
 def planted_edge(spec: BookDaysSpec | None = None, **changes: Any) -> BookDataset:
@@ -76,3 +76,17 @@ def recover(strategy: StrategyLike, dataset: BookDataset, **settings: Any) -> Ed
     from trading_research.synthetic.edge import recover as run
 
     return run(strategy, dataset, EdgeSettings(**settings))
+
+
+def plugin_checks(*, kind: str, name: str, build: Any) -> list[dict[str, Any]]:
+    """The planted-edge, null and placebo checks of one plugin, for ``strategies check``.
+
+    The hook the plugin conformance suite looks for (check *d*): ``build``
+    makes a fresh instance of the plugin, and each returned row has ``check``,
+    ``status`` (pass, fail or n/a), ``detail`` and ``numbers``. A thin adapter
+    over :func:`planted_edge`, :func:`null` and :func:`recover`; see
+    :mod:`.plugin_hook` (a module of another name, so that importing it never replaces this function on the package).
+    """
+    from trading_research.synthetic.plugin_hook import plugin_checks as run
+
+    return run(kind=kind, name=name, build=build)
