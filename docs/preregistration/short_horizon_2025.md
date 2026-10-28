@@ -3051,3 +3051,207 @@ number and reads no market data, so no number of D changes and D is not
 re-run; R_D stays 1. Two test modules that read the committed configuration
 were changed in the same way. The stray "None yet." left above the D
 amendment by stage E is removed.
+
+### 2026-10-28: corrections before H is read
+
+Two reviews of the code after the dry-run correction found the defects below.
+Each is corrected here, before H is read, as the amendment protocol requires
+of a change to the frozen study code; the code-freeze note records the commit
+the code is frozen at after them. None of the corrections reads a 2025 file of
+H, F or P (none is on disk), none changes a value of the frozen configuration
+(its sha256 stays `e9cb5e03…`, the D amendment's), and none could change a
+development number: every one acts on a held-out read, a gate or a page, or
+only records beside a D number what it rests on. **D is not re-run, R_D stays
+1, and no D number changes**; the recomputation of every D number from the
+committed results files and the stage records gives the same values before
+and after them. Each is dated 2026-10-28.
+
+**1. The passive slots' one-day shift after a stale day**
+(`pipeline/short_horizon/heldout.py`, `compute_block`). The series of S25-Z,
+S-P and S-M were built from the simulated runs before the one-day shift stepped
+over the days flagged stale, so a shift simulated again from the previous kept
+day never reached the series (the read recorded the new source while the
+number came from the old one), and K-placebo could pass when it should fire.
+The stale days are now found first (the taker slots' and every simulated run
+flagged), the shift steps over them, and every series is built from the runs it
+returns. A regression test: with day 1 stale and day 2 shifted again from day 0
+(+7), the shifted series is (1, 7, 1) and K-placebo fires.
+
+**2. One FILL table** (`pipeline/short_horizon/page_numbers.py`). The pages'
+FILL table pooled every passive day file of the read and dropped only the rows
+their own run flagged, so a day another run flagged stale stayed in the figure
+while the results file's table left it out. The pages now show the results
+file's table (`heldout_measures.fill_rules`) on the days the read kept.
+
+**3. N on the pages** (`pipeline/short_horizon/pages.py`). The search sentence
+quoted N from stage D's record, 2,400, the taker cells alone; the N quoted on
+every page is N_trials, 2,435 with stage C's 35 simulator trials, as the
+manifest and the leaderboard's header already say. It is now read from the
+committed trial manifest, and the pages were written again: the sentence and the
+README summary say 2,435, and nothing else on the pages changed.
+
+**4. The replay's sequence-gap count** (`data/bybit.py`, `reconstruct`). A
+snapshot reset the gap counter with the book, so a gap healed by a later
+snapshot was forgotten by the replay, whose count the loader excludes a day on,
+while the archive scan (`archive_message_stats`) kept it. The counter now lives
+outside the book's state. D is unaffected: the scan found no sequence gap on
+any of D's 181 days, and the scan's count is never below the replay's.
+
+**5. An erased open entry** (`pipeline/short_horizon_ledger.py`, `open`). The
+open read the block's entries from HEAD's ledger only, so an H entry erased by a
+later commit, or a reset, opened again as a first read, against "a crashed read
+cannot be erased and opened again". The open now reads every version of the
+ledger in HEAD's history, and the upstream's when one is set, refuses when any
+holds an entry for the block that HEAD lacks, and stamps a forced re-open
+"second read".
+
+**6. The fee caveat carries 2025's dates** (`backtest/costs.py`,
+`pipeline/short_horizon/beside_verdict.py`, `pages.py`, `reporting/finalists.py`).
+Section 3 of "What was known" promises a caveat parametrised by period on every
+number at a tier other than the base; the code copied the earlier rounds' text,
+"February to April 2024", beside every verdict, and A0's tier table carried
+none. `fee_caveat(period)` now writes it: beside each verdict with the first and
+last day of its status window, on A0's tier table with O's dates (2025-02-04 to
+2025-02-26) and beside the ladder's tier rows on the pages with the days of
+S25's break-even there (2025-07-08 to 2025-07-31). `BYBIT_FEE_CAVEAT` keeps its
+text byte for byte for rounds one and two; the frozen `result_O` is not touched.
+
+**7. The push check** (`short_horizon_ledger.py`, `session`). A local branch
+set as the upstream passed the check that the open entry was pushed. The
+upstream must now be a remote-tracking branch, the remote is asked with
+`git ls-remote` for its tip, and that tip must contain the commit that wrote the
+entry; a remote that cannot be reached refuses the session with that reason.
+
+**8. An access bound to its block** (`data/study_access.py`). An access issued
+for one block's read could be widened to a later block by copying it
+(`dataclasses.replace`). An access beyond development must now name its read
+session and grant nothing beyond that block's opening.
+
+**9. The statuses set on D** (`pipeline/short_horizon/reads.py`,
+`preset_on_d`). A read took the statuses set on D, which enter Holm with p = 1,
+from the run's local stage records, which no gate hashes. It now takes them
+from the frozen configuration's `search.result_admission`, whose sha256 every
+open and every process of a read checks, with the hand-run log (entry 21);
+stage E's rehearsal reads them from the values the amendment freezes and, as
+entry 17 has a read do, runs a slot preset on D as a measurement.
+
+**10. A fault outside the status window** (`heldout.py`, `statuses.py`,
+`reads.py`). A K-units, K-acct or K-cap fault anywhere in H voided S25's and
+S25-Z's status, which is taken on 2025-07-08 to 07-31 only. Each fault is now
+recorded with its day; only a fault inside a slot's status window voids it, and
+S25's and S25-Z's faults after 07-31 are reported beside their numbers inside
+S25's information set.
+
+**11. A day's gap count and the next day's first second** (`data/bybit.py`).
+A day's gap count included the archive's messages stamped after the next
+midnight, which the loader cuts from the day's book. Only gaps on messages
+stamped before the next UTC midnight now count, in the replay and the scan
+alike. D is unaffected (no sequence gap on any D day).
+
+**12. Caches of a read** (`heldout.py`, `heldout_passive.py`,
+`second_detector.py`). A day's cached features, network scores, simulated runs
+and the second detector's grid were returned before the session's access was
+checked, and were not kept apart by session. The access now permits the day
+before a cached output is returned, and a read session's caches are kept under
+its block and commit. Development's caches are where they were.
+
+**13. A ledger test** (`tests/test_sh_ledger.py`). The test of an unlocked
+detector library expected the refusal only where the library is not installed
+from its locked commit; it now reads the library as unlocked wherever it is.
+Tests only.
+
+**14. D's results files hashed.** The leaderboard, marginals and nulls files and
+the pages were hashed by no gate. Every open now checks D's three files against
+the sha256 recorded here, and H's open the pages too (each read writes the pages
+again); D's three files may no longer change after a read
+(`short_horizon_ledger.py`), and stage E's amendment records them
+(`freeze.py`). The leaderboard's sha256 differs from stage D's record
+(`30b97881…`) because stage E rewrote its header, `# N trials: 2400` to
+`# N trials: 2435`, after D; the committed file differs from D's in that line
+alone. The pages are recorded after entries 3, 6, 16, 20 and 21 wrote them
+again.
+
+- Results file sha256: `experiments/results/short_horizon_2025_leaderboard.csv` `895a1ffef669c8744a29a8536aa7dbf2d3e956114a650946bcaa2d75e2d83e4c`
+- Results file sha256: `experiments/results/short_horizon_2025_marginals.csv` `a27fec523bb898cebc1242bb4182cbdc14054d862f1803ec97fcd07fdeb39c07`
+- Results file sha256: `experiments/results/short_horizon_2025_nulls.csv` `1a2468344bd84d9027b470ceacfadcc67645ae8c94727fcf1ac9643a1e091079`
+- Results file sha256: `experiments/results/short_horizon_2025_pages.md` `a14bb60867a0ce130637b31281d9e314da9b9c674f14c202d9c4c043116de6ba`
+
+**15. A clarification of the D amendment** (text only). The D amendment's prose
+names S-C's and S-R's statuses and leaves out two things its values record. S-P
+and S-M were `not admitted on D (i, ii)`, on C*'s signal (stage C;
+`search.result_admission`). The detector raised 16 alarms on D, 1.24 per 14 days
+(`alarm_rate_D` 0.0884 a day), above one per 14 days, so R is declared
+untestable (`r_untestable_declared: true`) and b does not split F: F is
+assessed as one block.
+
+**16. S-M's condition (i)** (`pages.py`). S-M's "(i)" on D is its making part,
+−0.43 bp per fill, while its S was positive, +0.000525 per 100 USDT of clip a
+day, on one round trip in 150 days. The pages and the rows for
+`docs/findings.md` now say so beside the passive sentence, whose registered text
+is not edited: "(i: making part −0.43 bp per fill; S = +0.0005)". No status
+changes.
+
+**17. A slot preset on D is a measurement on H and F** (`heldout.py`,
+`compute_block`). The chosen cell of a non-admitted C* and a non-admitted S-P or
+S-M ran their full placebo, neighbour, bracket and latency sets on the held-out
+blocks, though this document runs them "with no placebo and no status". A slot
+whose status was set on D now runs its true run and its registered
+measurements only (the regime runs, the passive exit, FILL on H), on the usable
+days and on the gap days put back alike. Because a day
+any run flags stale leaves every series, this changes which days the
+status-bearing slots keep; the change is made before H is read and is blind to
+any outcome.
+
+**18. What each deflated Sharpe ratio rests on** (`search.py`, `passive.py`,
+`freeze.py`). Every deflated Sharpe ratio on D is exactly 0, and the variance
+each is deflated against was not recorded, though this document asks for it.
+The stages now record beside each its variance, benchmark SR0, Sharpe ratio and
+days, and the amendment lists them. For D they are recomputed here from the
+trial ledger and stage C's cell-days (D is not re-run; the recomputation gives
+N_eff 13.2271 and every ratio 0, as frozen), at N_trials 2,435:
+
+- S25 and S-C (C*), against the variance of the daily Sharpe ratios of every
+  taker cell's daily G on D's usable test days, 0.5647, so SR0 = 2.630 a day:
+  S25 G Sharpe ratio 0.955 and net −11.05 a day on 150 days; C* G 0.297 and net
+  −0.605 on its 81 days with a trade. S-R has none (no admissible cell).
+- S-P and S-M, against the variance of the daily Sharpe ratios of every S-P and
+  S-M cell simulated on D, 0.05548, so SR0 = 0.824 a day: S-P −0.447 and S-M
+  0.082 on 150 days.
+
+Each ratio's statistic z lies 10.5 to 29.1 below 0 (S25 G −13.44, net −10.49;
+C* G −29.09, net −13.32; S-P −26.04; S-M −17.95), where the normal distribution
+function, computed as (1 + erf(z/√2))/2, is exactly 0 in double precision below
+about −8.5; the zeros are that, not a fault.
+
+**19. The passive MDEs on kept days** (`freeze.py`, `slot_mdes`). σ_D of S-P,
+S-M and S25-Z was taken row by row, leaving in a day another cell's run flagged.
+It is now taken on the days no simulated run flagged, as stage C's admission
+reads them. No cell-day was excluded on D (4,742 simulator rows = 31 cells × 150
+days + 4 runs × 23 days of O, none flagged), so the frozen σ_D and MDEs are
+unchanged.
+
+**20. A note beside the payoff sentence** (`pages.py`). Beside "No
+configuration paid the 5.5 bp taker fee on development data" the pages now say
+that no admissible cell had a positive net: the 24 cells with one are R cells,
+none admissible (3 to 7 trades in 150 days), 16 of them at +73.6 to +83.2 bp on
+3 trades.
+
+**21. Hand runs.** The definition under [Selection on D](#selection-on-d-admission-and-the-finalists)
+names no instrument: "a computation on a February to June test day outside the
+entry point ... any statistic of a label, a return, a prediction or a P&L on
+those days". On 2026-10-26 and 27 two exploratory replications of the author's
+2025 results, run on separate local branches outside the entry point, computed
+return statistics on days of D's test months on other instruments and venues:
+per-day P&L, edge and rank IC on Binance BTC/FDUSD spot prints (2025-02-04 to
+02-26 and 2025-06-08 to 06-30), and the label's and return's shares by day and
+the per-day P&L of 29 gate configurations on Bybit ETHUSDT linear-perpetual
+books (2025-02-01 to 02-06). Whether a day of another instrument is "a test
+day" is not settled by the text; the conservative reading is taken, and both
+are counted as hand runs. They are logged in the trial ledger's manifest
+(`experiments/results/short_horizon_2025_trials.json`, its `hand_runs`, with
+their dates, what they computed and the days they read; the trial ledger's sha256
+and row count it records are unchanged), and they set every searched slot on C\* or R\*, S-C, S-R, and S-P
+and S-M (whose signal is C\*), to `not admitted on D (hand run)`. Each was
+already at p = 1 on every block, so Holm is unaffected; the catalogue and its
+hash are unchanged. Every read applies the label (`reads.preset_on_d`), and the
+pages show it in the passive sentence.

@@ -142,11 +142,20 @@ def repo(tmp_path: Path) -> Path:
     write(repo, shr.TRIALS_MANIFEST_PATH, json.dumps(manifest()).encode())
     frozen = shr.freeze_text(TEXT, frozen_values())
     write(repo, shr.CONFIG_PATH, frozen.encode())
-    amendment = DOCUMENT.replace("None yet.", shr.frozen_hash_line(frozen))
+    for path in (*shr.D_RESULTS_FILES, shr.PAGES_PATH):
+        write(repo, path, f"# {path.name}\n".encode())
+    amendment = DOCUMENT.replace("None yet.", amendment_lines(frozen))
     write(repo, shr.DOCUMENT_PATH, amendment.encode())
     write(repo, "src/study.py", b"x = 1\n")
     commit(repo, "registered and frozen")
     return repo
+
+
+def amendment_lines(frozen: str) -> str:
+    """The frozen hash line and the sha256 of D's results files and the pages."""
+    recorded = [shr.results_file_line(p, sha(f"# {p.name}\n".encode()))
+                for p in (*shr.D_RESULTS_FILES, shr.PAGES_PATH)]  # fmt: skip
+    return "\n".join([shr.frozen_hash_line(frozen), *recorded])
 
 
 def manifest(rows: int = 10, digest: str | None = None) -> dict[str, Any]:
@@ -202,7 +211,7 @@ def refreeze(repo: Path, values: dict[tuple[str, ...], Any]) -> None:
     write(
         repo,
         shr.DOCUMENT_PATH,
-        DOCUMENT.replace("None yet.", shr.frozen_hash_line(frozen)).encode(),
+        DOCUMENT.replace("None yet.", amendment_lines(frozen)).encode(),
     )
     commit(repo, "frozen again")
 
@@ -267,9 +276,11 @@ def test_h_refuses_a_misrecorded_part_and_a_missing_manifest(repo: Path) -> None
         open_h(repo)
 
 
-def test_h_refuses_another_catalogue_and_an_unlocked_library(repo: Path) -> None:
+def test_h_refuses_another_catalogue_and_an_unlocked_library(repo: Path, monkeypatch: Any) -> None:
     with pytest.raises(HeldOutLocked, match="catalogue"):
         ledger(repo).open("H", catalogue_sha256="0" * 64)
+    # wherever the detector library is installed, the test reads it as not at its locked commit
+    monkeypatch.setattr(shl, "library_commit", lambda *_: None)
     with pytest.raises(HeldOutLocked, match="locked commit"):
         open_h(repo, require_locked_library=True)
 
@@ -329,17 +340,51 @@ def test_a_resumption_at_another_commit_or_environment_is_refused(repo: Path) ->
         ledger(repo).session("H")
 
 
-def test_the_entry_must_have_reached_the_upstream(repo: Path) -> None:
-    before = git(repo, "rev-parse", "HEAD").strip()
+def with_remote(repo: Path, tmp_path: Path) -> Path:
+    """A bare repository beside the test's, as its remote ``origin`` (no network)."""
+    bare = tmp_path / "origin.git"
+    git(repo, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    return bare
+
+
+def test_the_entry_must_have_reached_the_upstream(repo: Path, tmp_path: Path) -> None:
+    with_remote(repo, tmp_path)
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
     opened_h(repo)
     upstream = "refs/remotes/origin/main"
-    git(repo, "update-ref", upstream, before)
     with pytest.raises(HeldOutLocked, match="has not reached"):
         ledger(repo, upstream=upstream).session("H")
     with pytest.raises(HeldOutLocked, match="has not reached"):
         ledger(repo, upstream="@{upstream}").session("H")
-    git(repo, "update-ref", upstream, "HEAD")
+    git(repo, "update-ref", upstream, "HEAD")  # the tracking ref moved by hand, nothing pushed
+    with pytest.raises(HeldOutLocked, match="does not contain"):
+        ledger(repo, upstream=upstream).session("H")
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
     assert ledger(repo, upstream=upstream).session("H").stamp == "first read"
+    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    git(repo, "branch", "-q", f"--set-upstream-to={upstream}", branch)
+    assert ledger(repo, upstream="@{upstream}").session("H").stamp == "first read"
+
+
+def test_a_local_branch_as_upstream_or_an_unreachable_remote_refuses(
+    repo: Path, tmp_path: Path
+) -> None:
+    opened_h(repo)
+    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    git(repo, "branch", "-q", "mirror", "HEAD")  # a local branch, no remote anywhere
+    git(repo, "branch", "-q", "--set-upstream-to=mirror", branch)
+    with pytest.raises(HeldOutLocked, match="not a remote-tracking branch"):
+        ledger(repo, upstream="@{upstream}").session("H")
+    bare = with_remote(repo, tmp_path)
+    git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(repo, "fetch", "-q", "origin")
+    git(repo, "branch", "-q", "--set-upstream-to=origin/main", branch)
+    git(repo, "remote", "set-url", "origin", str(bare.with_name("gone.git")))
+    with pytest.raises(HeldOutLocked, match="cannot be reached"):
+        ledger(repo, upstream="@{upstream}").session("H")
 
 
 def test_a_read_that_fails_twice_alike_or_resumes_too_often_must_close(repo: Path) -> None:
@@ -457,3 +502,37 @@ def test_a_process_refuses_frozen_files_that_moved_after_the_open(repo: Path) ->
     write(repo, shl.FINALISTS_DIR / "S25.json", b'{"theta": 0.7}')
     with pytest.raises(HeldOutLocked, match=r"S25\.json has sha256"):
         ledger(repo).session("H")
+
+
+def test_an_open_entry_erased_by_a_later_commit_is_not_opened_again_as_a_first_read(
+    repo: Path,
+) -> None:
+    """The open reads every version of the ledger in HEAD's history: an entry a later
+    commit erased refuses a new open, and a forced one is a second read."""
+    open_h(repo)
+    commit(repo, "H opened")
+    assert ledger(repo).session("H").access.stamp == "first read"  # a process starts (and crashes)
+    git(repo, "checkout", "-q", "--", shr.LEDGER_PATH.as_posix())
+    (repo / shr.LEDGER_PATH).write_text(json.dumps({}) + "\n", encoding="utf-8")
+    commit(repo, "ledger tidied")
+    with pytest.raises(HeldOutLocked, match="cannot be erased and opened again"):
+        open_h(repo)
+    again = ledger(repo).open("H", catalogue_sha256=shr.REGISTERED_CATALOGUE_SHA256, force=True)
+    assert again["read"] == "second read"
+
+
+def test_every_open_checks_ds_results_files_and_h_the_pages(repo: Path) -> None:
+    """D's leaderboard, marginals and nulls at the amendment's sha256 at every open, and
+    never changed after a read; the pages at H's open (each read writes them again)."""
+    board = shr.D_RESULTS_FILES[0]
+    write(repo, board, b"# edited\n")
+    commit(repo, "the leaderboard edited")
+    with pytest.raises(HeldOutLocked, match=r"leaderboard\.csv has sha256"):
+        open_h(repo)
+    write(repo, board, f"# {board.name}\n".encode())
+    write(repo, shr.PAGES_PATH, b"# pages edited\n")
+    commit(repo, "the pages edited")
+    with pytest.raises(HeldOutLocked, match=r"pages\.md has sha256"):
+        open_h(repo)
+    assert not shl._diff_allowed_after_a_read(board.as_posix())
+    assert shl._diff_allowed_after_a_read(shr.PAGES_PATH.as_posix())

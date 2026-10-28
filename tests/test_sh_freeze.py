@@ -8,6 +8,7 @@ from typing import Any
 from unittest import mock
 
 import pandas as pd
+import pytest
 
 from trading_research.pipeline.short_horizon import flags, freeze, reads
 from trading_research.pipeline.short_horizon.context import Study
@@ -76,7 +77,7 @@ def _values(
     with_fix_records: bool, dsr: dict[str, float]
 ) -> tuple[Any, dict[tuple[str, ...], Any]]:
     records = _records(with_fix_records)
-    study = SimpleNamespace(record=lambda name: records[name])
+    study = SimpleNamespace(record=lambda name: records[name], repo=Path("no-repository"))
     parts = {"slots": {"S25": {"neighbourhood": []}, "S-P": {"key": "p"}}, "fits": {
         "weights_sha256": {}, "checkpoint_epoch": {}, "thresholds": {}, "gate_levels": {}},
         "mdes": {}, "trials": {"N_trials": 3, "ledger_sha256": "a" * 64, "ledger_rows": 0,
@@ -140,3 +141,43 @@ def test_the_amendment_is_written_when_the_stages_records_lack_the_fixed_keys() 
     assert "- Power of the t >= 3 bar: not computed." in text
     assert "- Fits that lacked a class: none." in text
     assert "0 alarms over 0 days read (not run by stage C at this commit)." in text
+
+
+def test_the_amendment_records_the_sha256_of_ds_results_files(tmp_path: Path) -> None:
+    from trading_research.data.study_fetch import file_sha256
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    for path in shr.D_RESULTS_FILES:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text(f"# {path.name}\n", encoding="utf-8")
+    lines = freeze.results_file_lines(SimpleNamespace(repo=tmp_path))  # type: ignore[arg-type]
+    assert lines == [
+        f"- {shr.results_file_line(p, file_sha256(tmp_path / p))}" for p in shr.D_RESULTS_FILES
+    ]
+    document = "# x\n\n## Amendments\n\n" + "\n".join(lines) + "\n"
+    assert set(shr.recorded_results_files(document)) == {p.as_posix() for p in shr.D_RESULTS_FILES}
+
+
+def test_the_passive_mdes_leave_out_every_day_any_run_flagged(tmp_path: Path) -> None:
+    """sigma_D of S-P, S-M and S25-Z is taken on the days no simulated run flagged
+    (stage C's kept rows), not row by row: a day another cell's run flagged is out."""
+    import numpy as np
+
+    from trading_research.reporting.search_keys import S25_KEY
+
+    days = [f"2025-02-{d:02d}" for d in range(1, 6)]
+    rows = []
+    for i, day in enumerate(days):
+        for slot, key, label in (("S-P", "kp", "S-P|kp|entry"), ("S-M", "km", "S-M|km|lean=1|policy=none"),
+                                 ("S25-Z", S25_KEY, "S25-Z|z")):  # fmt: skip
+            rows.append({"slot": slot, "key": key, "label": label, "day": day, "excluded": False,
+                         "net_per_100": float(i), "gross_bp_trade": float(i)})  # fmt: skip
+    rows.append({"slot": "S-P", "key": "other", "label": "S-P|other|entry", "day": days[4],
+                 "excluded": True, "net_per_100": 0.0, "gross_bp_trade": 0.0})  # fmt: skip
+    (tmp_path / "C").mkdir()
+    pd.DataFrame(rows).to_parquet(tmp_path / "C" / "cells.parquet", index=False)
+    study = SimpleNamespace(work=tmp_path)
+    slots = {"S-P": {"key": "kp"}, "S-M": {"key": "km", "guard": "none"}, "S25-Z": {"key": S25_KEY}}
+    found = freeze.slot_mdes(study, {"usable_test_days": days}, slots)  # type: ignore[arg-type]
+    assert found["S-P"][0] == pytest.approx(float(np.std([0.0, 1.0, 2.0, 3.0], ddof=1)))
+    assert found["S25-Z"][0] == found["S-M"][0] == found["S-P"][0]

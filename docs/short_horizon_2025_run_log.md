@@ -95,3 +95,54 @@ when, so that the gaps between stages can be read later without guessing.
   pushed before the fetch, and the owner keeps intermediate work off the public
   repository, so the way the open entry is recorded is waiting on the owner's
   decision. No 2025 file of H, F or P is on disk.
+
+## 2026-10-22 to 2026-10-24
+
+- A private repository was created to hold H's open entry with a server-side
+  timestamp; adding it as a remote and pushing is waiting on the owner, so H is
+  not opened yet. No 2025 file of H, F or P is on disk.
+- A spot study was registered as a draft on the separate local branch
+  `spot/prereg` (Binance BTC/FDUSD prints and Bybit spot BTCUSDT book, blind
+  blocks in 2026); it touches none of this study's frozen code and fetches
+  nothing before this study's last read.
+
+## 2026-10-25
+
+- Nothing run; H still waits on the private remote for its open entry.
+
+## 2026-10-26
+
+- Nothing of this study was run. The owner chose to run the 2026 spot study
+  first, on its own local branch and environment; it read only 2026 days and
+  wrote nothing of this study. H still waits on the owner's decision on how
+  its open entry is recorded. No 2025 file of H, F or P is on disk.
+
+## 2026-10-27
+
+- Nothing of this study was run. Two exploratory replications of the author's
+  2025 results run on separate local branches (Binance BTC/FDUSD prints;
+  Bybit ETHUSDT books); neither touches this study. H still waits on the
+  owner's decision on how its open entry is recorded.
+
+## 2026-10-28
+
+- Nothing of this study was run on 2025 data; no file of H, F or P is on disk.
+- Two reviews of the code after the dry-run correction found 21 defects; each
+  is corrected and dated in the registration's amendments (2026-10-28), with a
+  regression test where a scratch test had shown the fault. D is not re-run and
+  no D number changes: the recomputation of every D number from the committed
+  results files and stage records gives the same output before and after. The
+  frozen configuration is unchanged (`e9cb5e03…`).
+- The two exploratory replications of 2026-10-26 and 27 computed return
+  statistics on days of D's test months on other instruments; read
+  conservatively, they are hand runs, logged in the trial ledger's manifest,
+  and S-C, S-R, S-P and S-M are `not admitted on D (hand run)` (each was at
+  p = 1 already).
+- The pages were written again: N 2,435 in the search sentence, the passive
+  sentence with the hand-run status, notes beside the payoff and passive
+  sentences, and the fee caveat beside the ladder's tier rows; no figure
+  changed.
+- The study's test modules pass (188), and the dry run passes (18 of 18) after
+  two of its runs found that stage E's rehearsal and the gap days put back did
+  not yet carry the statuses set on D; both corrected. The code is frozen again
+  at `98e85b9` (the code-freeze note).

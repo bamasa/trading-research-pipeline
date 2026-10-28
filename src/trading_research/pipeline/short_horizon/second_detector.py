@@ -64,7 +64,10 @@ def cached_grid(study: Any, day: date, access: sa.StudyAccess) -> pd.DataFrame |
     is missing or excluded for anything but sequence gaps."""
     from trading_research.data import study_loader as sl
 
-    path = study.dir("detector2", "grid") / f"{day.isoformat()}.parquet"
+    access.require(study.symbol, [day], sa.BOOK, what="return the cached grid of")
+    key = sa.cache_key(access)  # a read session's grids apart from development's
+    folder = study.dir("detector2", "grid", key) if key else study.dir("detector2", "grid")
+    path = folder / f"{day.isoformat()}.parquet"
     if path.exists():
         return pd.read_parquet(path)
     found = sl.load_book_day(

@@ -22,7 +22,9 @@ E_DAY = date(2025, 7, 3)
 
 
 def opened(block: str) -> sa.StudyAccess:
-    return sa.StudyAccess(sa.grants_for(sa.opened_pairs(block)), "first read", issuer=sa._ISSUER)
+    session = (block, "commit", "config", "env")
+    return sa.StudyAccess(sa.grants_for(sa.opened_pairs(block)), "first read", session=session,
+                          issuer=sa._ISSUER)  # fmt: skip
 
 
 def garbage(path: Path) -> Path:

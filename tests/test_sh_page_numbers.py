@@ -28,7 +28,7 @@ def test_only_the_slots_taken_to_f_are_numbered_on_f_minus(monkeypatch: pytest.M
     """A split at the 25th day: S-C, taken to F, is numbered on its 24 days before b;
     S25, never taken to F, on all of F."""
     monkeypatch.setattr(pn, "save_close", lambda _: None)
-    monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
+    monkeypatch.setattr(pn, "fill_rule_summary", lambda *_: {})
     monkeypatch.setattr(sd, "beside_r", lambda _: {"second_detector": None, "mean_channel": []})
     block = SimpleNamespace(name="F", detector={"alarms": []})
     found = {"split": {"b": F_DAYS[24].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"}}
@@ -43,7 +43,7 @@ def test_the_numbers_read_the_status_window_the_read_recorded(
     """A read records every slot's status window (``status_windows``): the numbers are
     on its days, before the split as a fallback; on H a slot on S25's signal to 07-31."""
     monkeypatch.setattr(pn, "save_close", lambda _: None)
-    monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
+    monkeypatch.setattr(pn, "fill_rule_summary", lambda *_: {})
     monkeypatch.setattr(sd, "beside_r", lambda _: {"second_detector": None, "mean_channel": []})
     block = SimpleNamespace(name="F", detector={"alarms": []})
     found = {"split": {"b": F_DAYS[24].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"},
@@ -80,7 +80,7 @@ def test_delta_b_is_reported_with_its_percentile_among_the_admissible_days() -> 
 
 def test_f_numbers_carry_delta_b_for_a_slot_tested_for_r(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pn, "save_close", lambda _: None)
-    monkeypatch.setattr(pn, "fill_rule_summary", lambda _: {})
+    monkeypatch.setattr(pn, "fill_rule_summary", lambda *_: {})
     monkeypatch.setattr(sd, "beside_r", lambda _: {"second_detector": None, "mean_channel": []})
     block = SimpleNamespace(name="F", detector={"alarms": []})
     found = {"split": {"b": F_DAYS[25].isoformat(), "on_all_of_F": False}, "after_F": {"S-C": "x"},

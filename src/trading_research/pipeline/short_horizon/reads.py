@@ -227,13 +227,50 @@ def beside(block: str, series: dict[str, Any], info: dict[str, Any], gaps: dict[
     return out
 
 
-def preset_on_d(study: Study) -> dict[str, str]:
-    """Statuses set on D, each entering Holm with p = 1 on every block."""
-    preset = {s: v for s, v in study.record("D")["statuses_on_D"].items() if v != "admitted"}
-    for slot, found in study.record("C")["admission"].items():
-        if found["status_on_D"] != "admitted":
-            preset[slot] = found["status_on_D"]
+#: The searched slots, whose statuses D may set.
+SEARCHED_SLOTS = ("S-C", "S-R", "S-P", "S-M")
+
+
+def preset_on_d(study: Study, registration: Any = None) -> dict[str, str]:
+    """Statuses set on D, each entering Holm with p = 1 on every block: as the D
+    amendment froze them (``search.result_admission`` of the frozen configuration,
+    whose sha256 the ledger checks), never the run's local stage records."""
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    if registration is None:
+        registration = shr.Registration.load(repo=study.repo).require_frozen()
+    admission = registration.value(("search", "result_admission")) or {}
+    preset = {}
+    for slot in SEARCHED_SLOTS:
+        status = (admission.get(slot) or {}).get("status_on_D")
+        if status is None:
+            raise ValueError(f"the frozen configuration records no status on D for {slot}")
+        if status != "admitted":
+            preset[slot] = str(status)
+    if hand_runs(study, registration):  # every searched slot on C* or R*: not admitted (hand run)
+        for slot in SEARCHED_SLOTS:
+            signal = (admission.get(slot) or {}).get("signal")
+            if slot in ("S-C", "S-R") or signal in ("C*", "R*"):
+                preset[slot] = HAND_RUN
     return preset
+
+
+#: The status a hand run sets for every searched slot (S-P and S-M on C* or R*).
+HAND_RUN = "not admitted on D (hand run)"
+
+
+def hand_runs(study: Study, registration: Any) -> list[dict[str, Any]]:
+    """The hand-run log: the trial ledger's committed manifest's (where a hand run is
+    logged), and the D amendment's frozen copy (``search.result_trials``)."""
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    found = list((registration.value(("search", "result_trials")) or {}).get("hand_runs") or [])
+    repo = getattr(study, "repo", None)
+    manifest = None if repo is None else Path(repo) / shr.TRIALS_MANIFEST_PATH
+    if manifest is not None and manifest.is_file():
+        logged = json.loads(manifest.read_text(encoding="utf-8")).get("hand_runs") or []
+        found += [entry for entry in logged if entry not in found]
+    return found
 
 
 def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None = None,
@@ -243,19 +280,26 @@ def statuses_h(study: Study, series: dict[str, Any], info: dict[str, Any] | None
     what is taken to F, and every slot's numbers on all of H as measurements."""
     from trading_research.pipeline.short_horizon import statuses as st
 
-    preset = preset_on_d(study)
-    masks, windows = {}, {}
+    preset = preset_on_d(study, registration)
+    masks, windows, assessed, faults_after = {}, {}, {}, {}
     for slot, s in series.items():
         first, last = sa.BLOCKS["H"]
         windows[slot] = (first, st.S25_WINDOW_END if s.on_s25_signal else last)
         masks[slot] = s.mask(within(s.days, windows[slot]))
-    found = st.family(series, masks, "H", preset)
+        # only a void condition inside the status window voids it (F10)
+        assessed[slot], faults_after[slot] = st.in_window(s, windows[slot])
+    found = st.family(assessed, masks, "H", preset)
     out = {slot: a.record() for slot, a in found.items()}
     if "S25-Z" in series:
-        out["S25-Z"] = st.s25_z(series["S25-Z"], masks["S25-Z"]).record()
+        out["S25-Z"] = st.s25_z(assessed["S25-Z"], masks["S25-Z"]).record()
     taken = [slot for slot, a in found.items()
              if slot not in preset and slot in series and st.taken_to_f(a, series[slot].on_s25_signal)]  # fmt: skip
     measurements = beside("H", series, info or NO_INFO, gaps or {}, flags_ns, windows)
+    for slot, outside in faults_after.items():
+        if outside and "inside_s25_information_set" in measurements[slot]:
+            measurements[slot]["inside_s25_information_set"]["void_conditions"] = outside
+        elif outside:
+            measurements[slot]["void_conditions_outside_status_window"] = outside
     for slot, s in series.items():
         if not s.on_s25_signal:
             measurements[slot]["H_before_2025_08_01"] = measured(
@@ -481,11 +525,16 @@ def compute_results(study: Study, block: str, session: Any) -> dict[str, Any]:
     if blk.validated["unreadable"]:
         return head | {"unreadable": True, "excluded": blk.validated["reasons"]} | unreadable_results(
             study, block, "unreadable")  # fmt: skip
-    series, info = compute_block(blk)
+    preset = preset_on_d(study, blk.registration)
+    series, info = compute_block(blk, preset=preset)
     if info["unreadable"]:  # the days flagged stale in the read's runs counted too
         return head | {"unreadable": True, "excluded": blk.validated["reasons"],
                        "stale_days": info["stale_days"]} | unreadable_results(study, block, "unreadable")  # fmt: skip
-    gaps = compute_block(blk.put_back(), days=blk.gap_days, kills=False)[0] if blk.gap_days else {}
+    gaps = (
+        compute_block(blk.put_back(), days=blk.gap_days, kills=False, preset=preset)[0]
+        if blk.gap_days
+        else {}
+    )
     mdes = blk.value(("metrics", "mde", "value")) or {}
     for slot, s in series.items():
         s.mde = mdes.get(slot)

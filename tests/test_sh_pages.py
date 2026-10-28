@@ -185,6 +185,27 @@ def test_the_development_sentences_follow_stages_d_and_c() -> None:
     assert nothing.plain()["payoff_on_D"] == [hl.alternatives("payoff_on_D")[0] + "."]
 
 
+def test_the_search_sentence_quotes_n_trials_from_the_committed_manifest(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
+    """N on the pages is the trial ledger's N_trials, the simulator trials counted
+    (2,435 on D), not stage D's taker count (2,400)."""
+    from trading_research.search_engine import ledger as tl
+
+    manifest = tmp_path / tl.MANIFEST_PATH
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text('{"n_trials": 2435}', encoding="utf-8")
+    monkeypatch.setattr(tl.TrialLedger, "record", lambda _self: {"n_trials": 2435})
+    c = pages.Computed(
+        SimpleNamespace(keys=(C_KEY, S25_KEY), repo=tmp_path, catalogue=lambda: None)
+    )  # type: ignore[arg-type]
+    for name in ("c", "e", "board"):
+        c.__dict__[name] = None
+    c.__dict__["d"], c.__dict__["read"] = record_d(), {}
+    (search,) = written(c).plain()["search_on_D"]
+    assert search.startswith("Searched 2,435 configurations")
+
+
 def test_the_sentences_after_h() -> None:
     h = read_h(h_series(), PRESET)
     out = written(computed(d=record_d(), c=record_c(), read={"H": h}))
@@ -351,14 +372,46 @@ def test_fill_on_the_block_pools_the_passive_day_files(tmp_path: Any) -> None:
                          "gross_usdt": 1.0, "fees_usdt": -0.5, "net_usdt": 0.5})  # fmt: skip
     (tmp_path / "passive").mkdir()
     pd.DataFrame(rows).to_parquet(tmp_path / "passive" / "days.parquet", index=False)
-    found = pn.fill_rule_summary(SimpleNamespace(work=tmp_path))
+    kept = [date(2025, 7, 8), date(2025, 7, 9)]
+    found = pn.fill_rule_summary(SimpleNamespace(work=tmp_path), kept)
     assert list(found) == ["S-P"]  # S25-Z ran no day
     by = {row["rule"]: row for row in found["S-P"]}
     assert list(by) == ["touch", "trade_through", "queue"]
     assert by["queue"]["days"] == 2 and by["queue"]["orders_posted"] == 20.0
     assert by["queue"]["fill_ratio"] == pytest.approx(0.6) and by["touch"]["fill_ratio"] == 0.9
-    assert by["trade_through"]["net"] == 1.0 and by["touch"]["bias"] == "optimistic bound"
-    assert pn.fill_rule_summary(SimpleNamespace(work=tmp_path / "none")) == {}
+    assert by["trade_through"]["net_usdt"] == 1.0 and by["touch"]["bias"] == "optimistic bound"
+    assert pn.fill_rule_summary(SimpleNamespace(work=tmp_path / "none"), kept) == {}
+
+
+def test_the_pages_fill_table_is_the_results_files_on_the_kept_days(tmp_path: Any) -> None:
+    """A day another run of the read flagged stale is out of the pages' FILL table,
+    as it is out of the results file's (``heldout_measures.fill_rules``)."""
+    from trading_research.pipeline.short_horizon import heldout_measures as hm
+
+    columns = ("orders_posted", "orders_filled", "volume_posted", "volume_filled",
+               "notional_filled", "gross_usdt", "fees_usdt", "net_usdt")  # fmt: skip
+
+    def row(day: str, variant: str, filled: float, excluded: bool = False) -> dict[str, Any]:
+        return {"run_slot": "S25-Z", "variant": variant, "day": day, "excluded": excluded,
+                "fill_paths": "{}", **dict.fromkeys(columns, 1.0), "orders_posted": 10.0,
+                "orders_filled": filled}  # fmt: skip
+
+    folder = tmp_path / "passive"
+    folder.mkdir()
+    variants = ("true", "fill/touch", "fill/trade_through")
+    good = [row("2025-07-10", v, 2.0) for v in variants]
+    # 07-11: the flipped placebo walked a stale snapshot, so the day is out of every series
+    stale = [row("2025-07-11", v, 9.0) for v in variants] + [
+        row("2025-07-11", "flipped", 0.0, excluded=True)
+    ]
+    pd.DataFrame(good).to_parquet(folder / "2025-07-10.parquet", index=False)
+    pd.DataFrame(stale).to_parquet(folder / "2025-07-11.parquet", index=False)
+    kept = [date(2025, 7, 10)]  # compute_block's kept days
+    results = hm.fill_rules(pd.DataFrame(good + stale), "S25-Z", kept)["summary"]
+    pages = pn.fill_rule_summary(SimpleNamespace(work=tmp_path), kept)["S25-Z"]
+    queue = next(r for r in pages if r["rule"] == "queue")
+    assert queue["days"] == 1 and queue["fill_ratio"] == 0.2
+    assert pages == results
 
 
 def test_the_rows_for_the_register_and_the_readme_summary() -> None:
@@ -383,3 +436,33 @@ def test_the_rows_for_the_register_and_the_readme_summary() -> None:
     assert FROM_PAGES not in summary
     text = pages.markdown(c, out, None, None, figures)
     assert "## Rows for docs/findings.md" in text and "## The README summary" in text
+
+
+def test_the_notes_beside_the_payoff_and_passive_sentences() -> None:
+    """Beside "No configuration paid ...": no admissible cell had a positive net, and
+    the cells that had one; beside the passive sentence, S-M's (i) when it failed on
+    the making part alone while S was positive. The registered text is unchanged."""
+    board = pd.DataFrame({
+        "key": ["BTCUSDT|R|tcn|a", "BTCUSDT|R|tcn|b", "BTCUSDT|C|gbm|c"],
+        "net": [83.2, 73.6, -5.1], "admissible": [False, False, True],
+        "trades_per_day": [0.02, 0.02, 7.4],
+    })  # fmt: skip
+    note = pages.payoff_note(board)
+    assert note is not None and note.startswith("No admissible cell had a positive net")
+    assert "2 at +73.6 to +83.2 bp on 3 trades" in note and "stratum R" in note
+    board.loc[2, "net"] = 1.0
+    assert pages.payoff_note(board) is None
+    making = pages.making_note(
+        {"making_bp_per_fill": -0.4299, "S": 0.000525, "status_on_D": "not admitted on D (i, ii)"}
+    )
+    assert making is not None
+    assert "(i: making part \u22120.43 bp per fill; S = +0.0005)" in making
+    assert making.startswith("S-M, not admitted on D (i, ii) on D's own conditions")
+    assert pages.making_note({"making_bp_per_fill": 0.1, "S": 0.0005}) is None
+    out = pages.Written()
+    out.sentences["payoff_on_D"] = [{"about": "D", "sentence": "x."}]
+    out.note("payoff_on_D", "No admissible cell had a positive net.")
+    assert (
+        pages.readme_summary(out, {})
+        == "x. Notes beside them: No admissible cell had a positive net."
+    )

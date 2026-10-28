@@ -75,6 +75,9 @@ class SlotDays:
     #: (placebos, neighbours, re-run, brackets) beside the gross ones above.
     net_claim: SlotDays | None = None
     void: tuple[str, ...] = ()
+    #: The days each of the slot's own void conditions occurred on (a condition
+    #: without recorded days applies to every window).
+    void_days: dict[str, tuple[date, ...]] = field(default_factory=dict)
     on_s25_signal: bool = False
     window_h: int = 0
     mde: float | None = None
@@ -223,6 +226,24 @@ def fee_check(s: SlotDays, mask: np.ndarray) -> KillCheck:
 
 def trade_count(s: SlotDays, mask: np.ndarray) -> int:
     return int(np.nansum(s.trades[mask]))
+
+
+def in_window(s: SlotDays, window: tuple[date, date]) -> tuple[SlotDays, dict[str, list[str]]]:
+    """The slot with only the void conditions that occurred inside ``window`` (first
+    and last calendar day of its status window, or that carry no day), and the
+    others by day: a fault outside a slot's status window does not void the status
+    taken there (for a slot on S25's signal, a fault on H after 07-31 is reported
+    as a measurement inside S25's information set)."""
+    first, last = window
+    outside: dict[str, list[str]] = {}
+    kept = []
+    for name in s.void:
+        days = s.void_days.get(name)
+        if days is None or any(first <= d <= last for d in days):
+            kept.append(name)
+        else:
+            outside[name] = [d.isoformat() for d in days]
+    return replace(s, void=tuple(kept)), outside
 
 
 def void_reasons(s: SlotDays, study_voids: Sequence[str]) -> list[str]:
@@ -528,6 +549,8 @@ def merge(a: SlotDays, b: SlotDays) -> SlotDays:
         brackets={k: cat(a.brackets.get(k), b.brackets.get(k)) for k in sorted(names)},
         making=cat(a.making, b.making), passive_notional=cat(a.passive_notional, b.passive_notional),
         second=cat(a.second, b.second), void=tuple(sorted({*a.void, *b.void})),
+        void_days={k: tuple(sorted({*a.void_days.get(k, ()), *b.void_days.get(k, ())}))
+                   for k in sorted({*a.void_days, *b.void_days})},
         extra={k: cat(a.extra.get(k), b.extra.get(k)) for k in sorted(keys)},
         net_claim=None if a.net_claim is None or b.net_claim is None else merge(a.net_claim, b.net_claim),
     )  # fmt: skip

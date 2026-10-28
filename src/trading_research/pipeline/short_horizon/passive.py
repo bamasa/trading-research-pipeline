@@ -662,11 +662,13 @@ def record_trials(study: Any, frame: pd.DataFrame) -> dict[str, Any]:
 
 
 def passive_dsr(rows: pd.DataFrame, cells: list[SimCell], days: list[date], n_trials: int,
-                admission: dict[str, Any]) -> dict[str, float]:  # fmt: skip
+                admission: dict[str, Any]) -> dict[str, Any]:  # fmt: skip
     """The deflated Sharpe ratio of S-P's and S-M's daily ``net_per_100_clip_day`` on
     D (their cells, the days no run flagged, 0 without a fill), against N_trials and
-    the variance of the Sharpe ratios of every S-P and S-M cell simulated."""
+    the variance of the Sharpe ratios of every S-P and S-M cell simulated; beside each
+    (``inputs/<slot>/net``) the variance, the benchmark SR0 and the days it rests on."""
     from trading_research.evaluation.overfitting import deflated_sharpe_ratio, sharpe_variance
+    from trading_research.pipeline.short_horizon.search import dsr_inputs
 
     kept = kept_rows(rows)
     wanted = [d.isoformat() for d in days if d.isoformat() not in flagged_days(rows)]
@@ -675,13 +677,13 @@ def passive_dsr(rows: pd.DataFrame, cells: list[SimCell], days: list[date], n_tr
     panel = mine.pivot_table(index="day", columns="label", values="net_per_100", aggfunc="sum")
     panel = panel.reindex(index=wanted, columns=labels).fillna(0.0)
     variance = sharpe_variance(panel)
-    out: dict[str, float] = {}
+    out: dict[str, Any] = {}
     for slot in ("S-P", "S-M"):
         label = admission[slot]["cell"]
         if label in panel and len(panel) >= 3:
-            out[f"{slot}/net"] = deflated_sharpe_ratio(
-                panel[label].to_numpy(), n_trials, variance
-            ).dsr
+            found = deflated_sharpe_ratio(panel[label].to_numpy(), n_trials, variance)
+            out[f"{slot}/net"] = found.dsr
+            out[f"inputs/{slot}/net"] = dsr_inputs(found, variance)
     return out
 
 

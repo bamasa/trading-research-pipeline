@@ -64,6 +64,17 @@ REGISTERED_CATALOGUE_SHA256 = "dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2
 LOCKED_LIBRARY = "structural-break"
 LOCKED_COMMIT = "0636813fdd4ccc9f25490d97f62d6fccecb01881"
 
+#: D's results files: written by stage D (the leaderboard's header by stage E), never
+#: changed after; their sha256 is recorded by an amendment and checked at every open.
+D_RESULTS_FILES: tuple[Path, ...] = tuple(
+    Path(f"experiments/results/short_horizon_2025_{name}")
+    for name in ("leaderboard.csv", "marginals.csv", "nulls.csv")
+)
+#: The pages as the development period left them, checked at H's open (each read
+#: writes them again, so F's and P's opens do not check them).
+PAGES_PATH = Path("experiments/results/short_horizon_2025_pages.md")
+RESULTS_FILE_PATTERN = re.compile(r"Results file sha256: `([^`\s]+)` `([0-9a-f]{64})`")
+
 #: Lines an amendment writes, and the one the D amendment writes.
 NULL_HASH_PATTERN = re.compile(r"Null-placeholder sha256: `([0-9a-f]{64})`")
 CATALOGUE_HASH_PATTERN = re.compile(r"Catalogue sha256: `([0-9a-f]{64})`")
@@ -131,6 +142,16 @@ def amendments_text(document: str) -> str:
 def _latest(pattern: re.Pattern[str], document: str, registered: str) -> str:
     found = pattern.findall(amendments_text(document))
     return str(found[-1]) if found else registered
+
+
+def results_file_line(path: Path | str, digest: str) -> str:
+    """The line an amendment records a results file's sha256 on."""
+    return f"Results file sha256: `{Path(path).as_posix()}` `{digest}`"
+
+
+def recorded_results_files(document: str) -> dict[str, str]:
+    """Each results file's sha256 as the amendments record it, the latest per file."""
+    return dict(RESULTS_FILE_PATTERN.findall(amendments_text(document)))
 
 
 def latest_null_sha256(document: str) -> str:

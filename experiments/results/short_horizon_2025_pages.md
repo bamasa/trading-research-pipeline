@@ -4,9 +4,14 @@ Written by the entry point from the stages' records and the blocks' results; blo
 
 ## Headline sentences
 
-- Searched 2,400 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs).
+- Searched 2,435 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs).
 - No configuration paid the 5.5 bp taker fee on development data.
-- Passive entry and the market maker on C*: S-P and S-M not admitted on D (i, ii); the market maker's making part on D was -0.43 bp per fill.
+- Passive entry and the market maker on C*: S-P and S-M not admitted on D (hand run); the market maker's making part on D was -0.43 bp per fill.
+
+Notes beside the sentences (their registered text is not edited):
+
+- No admissible cell had a positive net (the highest admissible net was -5.09 bp per trade); the 24 cells with a positive net, all in stratum R and none admissible (fewer than 5 trades a day), had 16 at +73.6 to +83.2 bp on 3 trades, 2 at +42.2 bp on 6 trades, 6 at +11.0 bp on 7 trades over the 150 days (on development data, selected).
+- S-M, not admitted on D (i, ii) on D's own conditions (i: making part −0.43 bp per fill; S = +0.0005): its S, net per 100 USDT of clip a day, was positive on D and its making part was not (on development data, selected).
 
 ### Pending
 
@@ -72,6 +77,8 @@ S25 ranks 1136 of 2400 on the D leaderboard (on development data, selected, bias
 | 5 | fill ratio, trade-through | O | 0.60 | share of posted orders |  | beside |
 | 5 | fill ratio, queue | O | 0.62 | share of posted orders |  | beside |
 
+Step 4, every tier other than the base: Bybit's linear-perpetual schedule as published in 2026 (page last updated 2026-09-02, transcribed 2026-10-02), applied to data from 2025-07-08 to 2025-07-31, when the schedule may have differed. Volumes are 30-day derivatives volume in USDT; Pro levels require more than 20% of volume through the API.
+
 The leaderboard regions, measurements with no slot (on development data):
 
 | region | cells | key | S | A | admissible | rank_in_stratum | rank_overall |
@@ -125,9 +132,14 @@ Drawn once H is read.
 
 - none yet
 
+On development data, beside the statuses set there:
+
+- No admissible cell had a positive net (the highest admissible net was -5.09 bp per trade); the 24 cells with a positive net, all in stratum R and none admissible (fewer than 5 trades a day), had 16 at +73.6 to +83.2 bp on 3 trades, 2 at +42.2 bp on 6 trades, 6 at +11.0 bp on 7 trades over the 150 days (on development data, selected).
+- S-M, not admitted on D (i, ii) on D's own conditions (i: making part −0.43 bp per fill; S = +0.0005): its S, net per 100 USDT of clip a day, was positive on D and its making part was not (on development data, selected).
+
 ## The README summary
 
-Searched 2,400 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs). No configuration paid the 5.5 bp taker fee on development data. Passive entry and the market maker on C*: S-P and S-M not admitted on D (i, ii); the market maker's making part on D was -0.43 bp per fill.
+Searched 2,435 configurations (stratum, model, inputs, label fee, hold, decision threshold, market gate, regime policy) on 150 development days of BTCUSDT; on development data, selected, the best direction edge was distinguishable from search noise (p_search = 0.00725; Null A p = 0.001, Null B p = 0.00725; 1 D runs). No configuration paid the 5.5 bp taker fee on development data. Passive entry and the market maker on C*: S-P and S-M not admitted on D (hand run); the market maker's making part on D was -0.43 bp per fill. Notes beside them: No admissible cell had a positive net (the highest admissible net was -5.09 bp per trade); the 24 cells with a positive net, all in stratum R and none admissible (fewer than 5 trades a day), had 16 at +73.6 to +83.2 bp on 3 trades, 2 at +42.2 bp on 6 trades, 6 at +11.0 bp on 7 trades over the 150 days (on development data, selected). S-M, not admitted on D (i, ii) on D's own conditions (i: making part −0.43 bp per fill; S = +0.0005): its S, net per 100 USDT of clip a day, was positive on D and its making part was not (on development data, selected).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/short_horizon_2025_placebo_search_dark.png">

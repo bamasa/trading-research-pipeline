@@ -162,13 +162,20 @@ BYBIT_FEE_SOURCE = "https://www.bybit.com/en/help-center/article/Trading-Fee-Str
 #: When the rows below were transcribed from the source.
 BYBIT_FEE_RETRIEVED: str = "2026-10-02"
 
-#: The caveat every number using a tier other than the base must carry.
-BYBIT_FEE_CAVEAT = (
-    "Bybit's linear-perpetual schedule as published in 2026 (page last updated "
-    "2026-09-02, transcribed 2026-10-02), applied to data from February to April "
-    "2024, when the schedule may have differed. Volumes are 30-day derivatives "
-    "volume in USDT; Pro levels require more than 20% of volume through the API."
-)
+
+def fee_caveat(period: str) -> str:
+    """The caveat every number using a tier other than the base must carry, naming
+    the ``period`` of the data the 2026 schedule is applied to."""
+    return (
+        "Bybit's linear-perpetual schedule as published in 2026 (page last updated "
+        f"2026-09-02, transcribed 2026-10-02), applied to data from {period}, when the "
+        "schedule may have differed. Volumes are 30-day derivatives volume in USDT; Pro "
+        "levels require more than 20% of volume through the API."
+    )
+
+
+#: The caveat as the market-making rounds carry it (their data, February to April 2024).
+BYBIT_FEE_CAVEAT = fee_caveat("February to April 2024")
 
 #: The published linear-perpetual tiers, in the order the venue lists them:
 #: VIP levels first (one row for every instrument), then the Pro levels, whose

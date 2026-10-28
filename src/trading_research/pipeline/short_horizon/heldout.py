@@ -37,6 +37,7 @@ The results are :class:`~trading_research.pipeline.short_horizon.statuses.SlotDa
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import cached_property, partial
@@ -140,6 +141,19 @@ class Block:
     @property
     def work(self) -> Path:
         return self.study.dir("reads", self.label or self.name)
+
+    @property
+    def cache(self) -> Path:
+        """Where the read's caches are kept: keyed by the session (its block and
+        commit), so no cache of another session is returned."""
+        return cache_dir(self)
+
+    def require_day(self, day: date, planes: tuple[str, ...] = (sa.BOOK, sa.PRINTS)) -> None:
+        """The session's access permits the day in ``planes``: checked before a cached
+        output of the day is returned, as the readers check it before reading."""
+        access = sa.resolve(self.access)
+        for plane in planes:
+            access.require(self.study.symbol, [day], plane, what="return a cached output of")
 
     @cached_property
     def validated(self) -> dict[str, Any]:
@@ -261,10 +275,19 @@ class Block:
             frame = ft.day_frame(self.book(day), self.prints(day), calibration, history)
             return to_stored(frame, StoreLayout.from_dict(self.fitted["store_layout"]))
 
-        return ft.read_or_build(self.work / "features" / f"{day}.parquet", build)
+        previous = self.previous(day)
+        for needed in (day,) if previous is None else (day, previous):
+            self.require_day(needed)
+        return ft.read_or_build(self.cache / "features" / f"{day}.parquet", build)
 
     def scored_from(self, day: date) -> int:
         return ft.scored_from_ns(day, self.cold(day))
+
+
+def cache_dir(block: Any) -> Path:
+    """A read's cache folder: the block's work folder, under the session's key."""
+    key = sa.cache_key(getattr(block, "access", None))
+    return Path(block.work) / key if key else Path(block.work)
 
 
 def slot_keys(block: Block, slot: str) -> list[str]:
@@ -325,12 +348,13 @@ def network_scores(block: Block, configs: list[Configuration], days: list[date])
     for cfg in configs:
         path = block.study.repo / WEIGHTS_DIR / fit_key(cfg)
         control_path = block.study.repo / WEIGHTS_DIR / fit_key(cfg, control=True)
-        out = block.work / "network" / cfg.folder
+        out = cache_dir(block) / "network" / cfg.folder
         out.mkdir(parents=True, exist_ok=True)
         model = load(path, kind="tcn") if path.exists() else None
         control = load(control_path, kind="tcn") if model and control_path.exists() else None
         for day in days:
             target = out / f"{day}.npz"
+            block.require_day(day)
             if target.exists():
                 continue
             rows = len(block.features(day))
@@ -419,7 +443,7 @@ def day_context(block: Block, day: date, configs: list[Configuration], models: d
             scores[cfg.name] = proba[:, 2] - proba[:, 0]
             continue
         if cfg.model == "tcn":
-            with np.load(block.work / "network" / cfg.folder / f"{day}.npz") as saved:
+            with np.load(cache_dir(block) / "network" / cfg.folder / f"{day}.npz") as saved:
                 mu, sigma = saved["mu"].astype(np.float64), np.exp(0.5 * saved["log_variance"])
                 if "control_mu" in saved:
                     guess = np.where(unscored, np.nan, saved["control_mu"].astype(np.float64))
@@ -535,6 +559,9 @@ class TakerSlot:
     flag_sets: list[np.ndarray] = field(default_factory=list)
     #: On H for a slot on S25's signal, the last day the first day's shift may read (07-31).
     wrap_end: date | None = None
+    #: A slot whose status was set on D: run once as a labelled measurement, its true
+    #: run and its registered measurements only (no placebo, neighbour or re-run).
+    preset: bool = False
 
     def __post_init__(self) -> None:
         n = len(self.days)
@@ -548,6 +575,9 @@ class TakerSlot:
         self.cells = np.full((len(self.neighbours), n), np.nan)
         self.rngs = [np.random.default_rng(k) for k in range(self.draws)]
         self.void: set[str] = set()
+        #: Each void condition's days (K-units, K-acct, K-cap): a slot on S25's signal
+        #: takes its status on H's days to 07-31, and only a fault inside them voids it.
+        self.void_days: dict[str, set[date]] = {}
         self.stale: set[int] = set()
         #: Each day's signal tape, and the day whose tape each day's one-day shift read.
         self.signals: dict[int, SignalTape] = {}
@@ -604,7 +634,7 @@ class TakerSlot:
         try:
             true = scored(self.key)
         except UnitsError:
-            self.void.add("K-units")
+            self.fault("K-units", i)
             return
         if true is None:
             return
@@ -612,7 +642,7 @@ class TakerSlot:
         try:
             day = execute_day(ctx.book, ctx.stamps[rows], side, hold, TakerSettings())
         except IdentityError:
-            self.void.add("K-acct")
+            self.fault("K-acct", i)
             return
         trades = day.trades
         if day.excluded:
@@ -623,11 +653,30 @@ class TakerSlot:
                 < trades["exit_snapshot_ns"].to_numpy()[:-1]
             )
         ):
-            self.void.add("K-cap")
+            self.fault("K-cap", i)
         self.value[i], self.trades[i] = day.day_bp("net"), len(trades)
         for name, total in taker_day_sums(day).items():
             self.sums.setdefault(name, np.full(len(self.days), np.nan))[i] = total
         self.gross[i], self.turnover[i] = float(trades["gross"].sum()), float(day.turnover)
+        self.ic[i] = rank_ic(ctx.scores[cell.configuration], ctx.forward[cell.hold_s])
+        if not self.preset:
+            self.status_runs(i, ctx, table, rows, side, scored, rule_of)
+        if self.window_h > 0:  # the attribution's three terms, all from the walk tables
+            self.guarded[i], self.twin[i] = _bp(true), _bp(scored(twin_key(self.key)))
+            for k, flags in enumerate(self.flag_sets):
+                tape = reguarded(ctx.tapes[cell.configuration], flags, self.window_h)
+                found = score_cell(tape, table, cell, rule_of(cell))
+                self.flag(i, found)
+                self.flagsets[k, i] = _bp(found)
+        if cell.configuration in ctx.control:
+            self.has_control = True
+            self.control_label[i], self.control_move[i] = ctx.control[cell.configuration]
+
+    def status_runs(self, i: int, ctx: DayContext, table: Any, rows: np.ndarray, side: np.ndarray,
+                    scored: Any, rule_of: Any) -> None:  # fmt: skip
+        """The runs the slot's kills read on day ``i``: its placebos, the 110 ms re-run,
+        its neighbour cells and the one-day shift (none for a slot preset on D)."""
+        cell = parse_key(self.key)
         self.flipped[i], self.skips["flipped"][i] = _lookup(table, rows, -side)
         self.long_only[i], self.skips["long_only"][i] = _lookup(table, rows, np.ones_like(side))
         self.short_only[i], self.skips["short_only"][i] = _lookup(table, rows, -np.ones_like(side))
@@ -641,22 +690,16 @@ class TakerSlot:
         for j, key in enumerate(self.neighbours):
             found = scored(key)
             self.cells[j, i] = np.nan if found is None else _bp(found)
-        self.ic[i] = rank_ic(ctx.scores[cell.configuration], ctx.forward[cell.hold_s])
         self.signals[i] = signal_tape(ctx.tapes[cell.configuration], table, cell, rule_of(cell))
         if i == 0:
             self.first = table
         else:
             self.shift(i, table, i - 1)
-        if self.window_h > 0:  # the attribution's three terms, all from the walk tables
-            self.guarded[i], self.twin[i] = _bp(true), _bp(scored(twin_key(self.key)))
-            for k, flags in enumerate(self.flag_sets):
-                tape = reguarded(ctx.tapes[cell.configuration], flags, self.window_h)
-                found = score_cell(tape, table, cell, rule_of(cell))
-                self.flag(i, found)
-                self.flagsets[k, i] = _bp(found)
-        if cell.configuration in ctx.control:
-            self.has_control = True
-            self.control_label[i], self.control_move[i] = ctx.control[cell.configuration]
+
+    def fault(self, name: str, i: int) -> None:
+        """A void condition on day ``i``, recorded with its day."""
+        self.void.add(name)
+        self.void_days.setdefault(name, set()).add(self.days[i])
 
     def flag(self, i: int, found: Any) -> None:
         """A run of the slot on day ``i`` that walked a stale snapshot makes the day stale."""
@@ -676,7 +719,7 @@ class TakerSlot:
     def finish(self) -> None:
         """The first day's one-day shift: the last usable day's signal tape, circularly
         (:func:`shift_sources`: at or before ``wrap_end`` when the slot has one)."""
-        if self.first is not None:
+        if self.first is not None and not self.preset:
             source = shift_sources(self.days, list(range(len(self.days))), self.wrap_end).get(0)
             if source is not None:
                 self.shift(0, self.first, source)
@@ -716,6 +759,8 @@ class PassiveSlot:
     ic: list[float] = field(default_factory=list)
     #: On H for a slot on S25's signal, the last day the first day's shift may read (07-31).
     wrap_end: date | None = None
+    #: A slot whose status was set on D: its true run and its registered measurements only.
+    preset: bool = False
 
     @property
     def cells(self) -> list[SimCellType]:
@@ -799,14 +844,22 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
             len(sets), len(days)
         )
     void = []  # K-acct: an accounting fault in any run of the slot; K-cap: its true run's position
-    if (
-        "accounting_failed" in mine
-        and mine["accounting_failed"].fillna("").astype(str).ne("").any()
-    ):
-        void.append("K-acct")
+    void_days: dict[str, tuple[date, ...]] = {}  # each with the days it occurred on
+    if "accounting_failed" in mine:
+        failed = mine["accounting_failed"].fillna("").astype(str).ne("")
+        if failed.any():
+            void.append("K-acct")
+            void_days["K-acct"] = tuple(
+                sorted({date.fromisoformat(str(d)) for d in mine.loc[failed, "day"]})
+            )
     true = mine[mine["variant"] == "true"]
-    if "cap_exceeded" in true and true["cap_exceeded"].fillna(False).astype(bool).any():
-        void.append("K-cap")
+    if "cap_exceeded" in true:
+        capped = true["cap_exceeded"].fillna(False).astype(bool)
+        if capped.any():
+            void.append("K-cap")
+            void_days["K-cap"] = tuple(
+                sorted({date.fromisoformat(str(d)) for d in true.loc[capped, "day"]})
+            )
 
     def claim(column: str) -> SlotDays:
         """The slot's series and every variant's under one claim's column."""
@@ -822,7 +875,7 @@ def passive_series(p: PassiveSlot, rows: pd.DataFrame, days: list[date], draws: 
             brackets={name: series(f"bracket/{name}", column) for name in ("pessimistic", "none", "all_ahead")},
             making=series("true", "making_usdt") if p.slot == "S-M" else None,
             passive_notional=series("true", "passive_notional"),
-            on_s25_signal=on_s25, window_h=window_h, void=tuple(void),
+            on_s25_signal=on_s25, window_h=window_h, void=tuple(void), void_days=dict(void_days),
         )  # fmt: skip
 
     found = claim(primary)
@@ -862,21 +915,23 @@ def run_passive(block: Block, slots: list[PassiveSlot], days: list[date],
 
     draws = block.study.scale.random_direction_draws
     rngs = {p.slot: [np.random.default_rng(k) for k in range(draws)] for p in slots}
-    out = block.work / ("passive" if kills else "passive_gap_days")
+    out = cache_dir(block) / ("passive" if kills else "passive_gap_days")
     sources = {p.slot: shift_sources(days, list(range(len(days))), p.wrap_end) for p in slots}
     jobs = []
     for i, day in enumerate(days):
         runs = []
         for p in slots:
             own = p.decisions[p.cell.key][i]
-            if not kills:
+            if not kills or p.preset:
                 runs.append(Run(p.slot, "true", p.cell, own))
+            if not kills:
                 continue
             j = sources[p.slot].get(i)  # the one-day shift's source before stale days are known
             near = [(c, p.decisions[c.key][i]) for c in p.neighbours]
-            runs += variants(p.slot, p.cell, own, None if j is None else p.decisions[p.cell.key][j],
-                             midnight_ns(day), 0 if j is None else midnight_ns(days[j]), near, draws,
-                             rngs[p.slot])  # fmt: skip
+            if not p.preset:  # a slot preset on D runs no placebo, neighbour, bracket or re-run
+                runs += variants(p.slot, p.cell, own, None if j is None else p.decisions[p.cell.key][j],
+                                 midnight_ns(day), 0 if j is None else midnight_ns(days[j]), near,
+                                 draws, rngs[p.slot])  # fmt: skip
             measured = [(name, c, p.decisions[c.key][i]) for name, c in p.measured]
             sets = (
                 [(flags, p.flagged[k][i]) for k, flags in enumerate(flag_sets)]
@@ -922,7 +977,7 @@ def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[Passive
         kept = [i for i, d in enumerate(days) if d not in stale]
         tables: dict[tuple[int, int], Any] = {}
         changed = False
-        for t in takers:
+        for t in (t for t in takers if not t.preset):  # a slot preset on D has no shift
             hold = round(parse_key(t.key).hold_s * 1e9)
             for i, j in shift_sources(days, kept, t.wrap_end).items():
                 if t.shifted_from.get(i, j) != j:
@@ -932,7 +987,7 @@ def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[Passive
                     changed = True
         stale |= {days[i] for t in takers for i in t.stale}
         redo: dict[int, list[tuple[PassiveSlot, int]]] = {}  # each day's slots to shift again
-        for p in passive:
+        for p in (p for p in passive if not p.preset):
             for i, j in shift_sources(days, kept, p.wrap_end).items():
                 if passive_from[p.slot].get(i) != j:
                     redo.setdefault(i, []).append((p, j))
@@ -942,7 +997,7 @@ def step_over_stale(block: Block, takers: list[TakerSlot], passive: list[Passive
                                tuple(shifted_run(p.slot, p.cell, p.decisions[p.cell.key][j],
                                                  midnight_ns(days[i]), midnight_ns(days[j])) for p, j in pairs),
                                block.flags_ns, block.threshold, float(block.fitted["sigma_ref"]),
-                               block.work / "passive_shifted" / f"round_{rounds}")
+                               cache_dir(block) / "passive_shifted" / f"round_{rounds}")
                     for i, pairs in sorted(redo.items())]  # fmt: skip
             new = pd.concat([pd.read_parquet(path) for path in simulate_jobs(block, jobs)])
             redone = {(p.slot, days[i].isoformat()) for i, pairs in redo.items() for p, _ in pairs}
@@ -986,13 +1041,17 @@ def flag_sets(block: Block, days: list[date]) -> tuple[int, list[np.ndarray]]:
     return count, random_flag_sets(days, count, sets=block.study.scale.taker_flag_sets)
 
 
-def compute_block(block: Block, *, days: list[date] | None = None,
-                  kills: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:  # fmt: skip
+def compute_block(block: Block, *, days: list[date] | None = None, kills: bool = True,
+                  preset: Collection[str] = ()) -> tuple[dict[str, Any], dict[str, Any]]:  # fmt: skip
     """Every slot's per-day values on the block's usable days (or on ``days``), a
     day flagged stale in any run left out of every series (the one-day shift
     stepping over it: :func:`step_over_stale`); and what the read
     records beside them. Without ``kills``, the true runs only (the gap days put
-    back: the simulator's placebos, measurements and brackets are not run)."""
+    back: the simulator's placebos, measurements and brackets are not run). A slot
+    in ``preset`` (its status set on D) is run once as a labelled measurement: its
+    true run and its registered measurements (the regime runs, the passive exit,
+    FILL on H), no placebo, neighbour, bracket, re-run or shift, so that its runs
+    flag no day the status-bearing slots would then leave out."""
     from trading_research.pipeline.short_horizon.fits import rank_ic
     from trading_research.pipeline.short_horizon.heldout_measures import fill_rules
     from trading_research.pipeline.short_horizon.models import in_fresh_process
@@ -1004,9 +1063,13 @@ def compute_block(block: Block, *, days: list[date] | None = None,
     n_flags, sets = flag_sets(block, usable) if kills else (0, [])
     sim_sets = sets[: block.study.scale.simulator_flag_sets]
     wrap = S25_WINDOW_END if block.name == "H" else None  # a slot on S25's signal shifts within it
-    takers = [TakerSlot(slot, keys[0], keys[1:], days, draws, sets, wrap_end=wrap if slot == "S25" else None)
+    takers = [TakerSlot(slot, keys[0], [] if slot in preset else keys[1:], days, draws, sets,
+                        wrap_end=wrap if slot == "S25" else None, preset=slot in preset)
               for slot in ("S25", "S-C", "S-R") if (keys := slot_keys(block, slot))]  # fmt: skip
     passive = passive_slots(block)
+    for p in passive:
+        if p.slot in preset:
+            p.preset, p.neighbours = True, []
     signal_is_s25 = any(p.slot == "S-P" and p.cell.key == S25_KEY for p in passive)
     for p in passive:
         p.wrap_end = wrap if p.slot == "S25-Z" or signal_is_s25 else None
@@ -1040,22 +1103,23 @@ def compute_block(block: Block, *, days: list[date] | None = None,
         if passive and days
         else pd.DataFrame()
     )
+    stale = {days[i] for t in takers for i in t.stale}
+    if len(rows):
+        stale |= {date.fromisoformat(d) for d in rows.loc[rows["excluded"].astype(bool), "day"]}
+    if kills and days:  # the one-day shift stepping over stale days, before any series is built
+        stale, rows = step_over_stale(block, takers, passive, days, stale, rows)
     series: dict[str, Any] = {}
     for t in takers:
         series[t.slot] = SlotDays(t.slot, "taker", days, t.value, t.trades, t.gross, t.turnover, t.ic,
                                   t.random, t.flipped, t.shifted, t.long_only, t.short_only, t.cells,
                                   t.latency, void=tuple(sorted(t.void)), on_s25_signal=t.slot == "S25",
-                                  window_h=t.window_h, extra=t.extra())  # fmt: skip
-    for p in passive:
+                                  window_h=t.window_h, extra=t.extra(),
+                                  void_days={k: tuple(sorted(v)) for k, v in t.void_days.items()})  # fmt: skip
+    for p in passive:  # from the rows step_over_stale returns: the re-simulated shifts among them
         on_s25 = p.slot == "S25-Z" or signal_is_s25
         series[p.slot] = passive_series(
             p, rows, days, draws, parse_key(p.cell.key).regime_h, on_s25
         )
-    stale = {days[i] for t in takers for i in t.stale}
-    if len(rows):
-        stale |= {date.fromisoformat(d) for d in rows.loc[rows["excluded"].astype(bool), "day"]}
-    if kills and days:
-        stale, rows = step_over_stale(block, takers, passive, days, stale, rows)
     keep = np.array([d not in stale for d in days], dtype=bool)
     series = {slot: subset(s, keep) for slot, s in series.items()}
     in_block = [a for a in block.detector["alarms"]
@@ -1065,14 +1129,15 @@ def compute_block(block: Block, *, days: list[date] | None = None,
     slots: list[TakerSlot | PassiveSlot] = [*takers, *passive]
     shift = {s.slot: {days[i].isoformat(): days[j].isoformat()
                       for i, j in shift_sources(days, kept_i, s.wrap_end).items()}
-             for s in slots}  # fmt: skip
+             for s in slots if not s.preset}  # fmt: skip
     info = {"usable_days": [d.isoformat() for d in days], "stale_days": sorted(d.isoformat() for d in stale),
             "one_day_shift_from": shift if kills else {},
             "excluded": block.validated["reasons"], "unreadable": unreadable(block, stale),
             "gap_days": [d.isoformat() for d in block.validated["gap_days"]],
             "alarms_in_block": in_block, "passive_runs": len(rows), "accounting_failures": failures(rows),
             "flag_days": [d.isoformat() for d in usable], "flags_in_block": n_flags,
-            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}, "notes": list(block.notes)}  # fmt: skip
+            "flag_sets": {"taker": len(sets), "simulator": len(sim_sets)}, "notes": list(block.notes),
+            "measured_only": sorted(s for s in preset if s in {x.slot for x in slots})}  # fmt: skip
     if kills and block.name == "H" and len(rows):
         info["fill_rules"] = {p.slot: fill_rules(rows, p.slot, kept) for p in passive
                               if p.cell.kind == "entry"}  # fmt: skip

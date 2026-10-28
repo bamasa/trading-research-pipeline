@@ -27,3 +27,28 @@ established:
   a full day;
 - the catalogue hashes to the registered value and the configuration to the
   registered null-placeholder sha256.
+
+## Corrections before H is read
+
+The commit above is the original freeze, at which stage 0 ran and stages 1, A,
+B, D, C and E computed every development number. Every later change to the
+study code is a correction under the amendment protocol, dated in the
+registration's amendments:
+
+- 2026-10-19: the dry run copies the registration as registered
+  (`7a80191`, `dry_run.py` and two tests).
+- 2026-10-28: the corrections the two reviews of the code after the dry-run
+  correction found (`7ca6b90` to `98e85b9`): the passive shift after a stale
+  day, one FILL table, N on the pages, the replay's gap count and its day cut,
+  the ledger's history and push checks, an access bound to its block, the
+  statuses set on D from the frozen configuration, faults by day, the read
+  caches, D's results files hashed, a slot preset on D read as a measurement,
+  the fee caveat by period, the deflated Sharpe ratios' inputs, the passive MDEs
+  on kept days, the pages' notes and the hand-run log. D is not re-run and no
+  development number changes; the frozen configuration is unchanged
+  (`e9cb5e03…`).
+
+The study code is frozen again after them, before H is read; the open checks
+the code at this commit through the session's commit and clean tree:
+
+Code-freeze commit: `98e85b92fd0b1a159a8b907983b57f64ace13ae9`

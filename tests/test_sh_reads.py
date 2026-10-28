@@ -34,6 +34,8 @@ def test_a_block_unreadable_once_its_stale_days_are_counted_assesses_nothing(
     from trading_research.pipeline.short_horizon import heldout
 
     monkeypatch.setattr(heldout.Block, "validated", property(lambda _: _validated(H_DAYS)))
+    monkeypatch.setattr(heldout.Block, "registration", None)
+    monkeypatch.setattr(reads, "preset_on_d", lambda *_: {})
     stale = [d.isoformat() for d in H_DAYS[:12]]
     monkeypatch.setattr(
         heldout, "compute_block", lambda *_, **__: ({}, {"unreadable": True, "stale_days": stale})
@@ -151,3 +153,82 @@ def test_the_gap_days_put_back_are_those_inside_the_status_window() -> None:
     )
     assert whole["S25"]["gap_days_included"]["gap_days"] == 2
     assert whole["S25"]["gap_days_included"]["days"] == 44
+
+
+def test_the_statuses_set_on_d_are_the_frozen_configurations() -> None:
+    """H's presets come from the frozen ``search.result_admission``, not from the
+    run's local stage records, which a rerun or an edit could change."""
+    frozen = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null"},
+              "S25-Z": {"status_on_D": "fixed before D; outside the family"},
+              "S-C": {"status_on_D": "not admitted on D (i, ii)"},
+              "S-R": {"status_on_D": "not run (no admissible cell on D)"},
+              "S-P": {"status_on_D": "not admitted on D (i, ii)"},
+              "S-M": {"status_on_D": "not admitted on D (i, ii)"}}  # fmt: skip
+    registration = SimpleNamespace(
+        value=lambda path: frozen if path == ("search", "result_admission") else None
+    )
+    records = {"D": {"statuses_on_D": {"S-C": "admitted", "S-R": "admitted"}},
+               "C": {"admission": {"S-P": {"status_on_D": "admitted"}, "S-M": {"status_on_D": "admitted"}}}}  # fmt: skip
+    study = SimpleNamespace(record=lambda stage: records[stage], repo=None)
+    preset = reads.preset_on_d(study, registration)  # type: ignore[arg-type]
+    assert preset == {s: frozen[s]["status_on_D"] for s in ("S-C", "S-R", "S-P", "S-M")}
+    del frozen["S-P"]
+    with pytest.raises(ValueError, match="no status on D for S-P"):
+        reads.preset_on_d(study, registration)  # type: ignore[arg-type]
+
+
+def test_a_logged_hand_run_sets_every_searched_slot_on_c_or_r_not_admitted(tmp_path: Any) -> None:
+    """A hand run logged in the trial ledger's manifest sets S-C, S-R, and S-P and S-M
+    when their signal is C* or R*, to "not admitted on D (hand run)" (p = 1)."""
+    import json
+
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    admission = {"S-C": {"status_on_D": "not admitted on D (i, ii)"},
+                 "S-R": {"status_on_D": "not run (no admissible cell on D)"},
+                 "S-P": {"status_on_D": "not admitted on D (i, ii)", "signal": "C*"},
+                 "S-M": {"status_on_D": "not admitted on D (i, ii)", "signal": "S25"}}  # fmt: skip
+    values = {
+        ("search", "result_admission"): admission,
+        ("search", "result_trials"): {"hand_runs": []},
+    }
+    registration = SimpleNamespace(value=lambda path: values[path])
+    study = SimpleNamespace(repo=tmp_path)
+    manifest = tmp_path / shr.TRIALS_MANIFEST_PATH
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"hand_runs": []}), encoding="utf-8")
+    assert reads.preset_on_d(study, registration)["S-C"] == "not admitted on D (i, ii)"  # type: ignore[arg-type]
+    entry = {"date": "2026-10-26", "computed": "returns", "days": ["2025-02-05"]}
+    manifest.write_text(json.dumps({"hand_runs": [entry]}), encoding="utf-8")
+    preset = reads.preset_on_d(study, registration)  # type: ignore[arg-type]
+    assert preset == {"S-C": reads.HAND_RUN, "S-R": reads.HAND_RUN, "S-P": reads.HAND_RUN,
+                      "S-M": "not admitted on D (i, ii)"}  # fmt: skip
+
+
+def test_the_gap_days_put_back_run_a_preset_slot_as_the_read_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The put-back view of the gap days runs a slot preset on D as a measurement too,
+    so the two sets of days merge into one series of the same shape."""
+    from trading_research.pipeline.short_horizon import heldout
+
+    monkeypatch.setattr(
+        heldout.Block, "validated", property(lambda _: _validated(H_DAYS[1:], H_DAYS[:1]))
+    )
+    monkeypatch.setattr(heldout.Block, "registration", None)
+    monkeypatch.setattr(reads, "preset_on_d", lambda *_: {"S-C": "not admitted on D (hand run)"})
+    seen: list[Any] = []
+
+    def compute(_block: Any, **kwargs: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        seen.append((kwargs.get("kills", True), kwargs.get("preset")))
+        if len(seen) == 2:
+            raise StopIteration  # the put-back view's call: nothing after it is wanted here
+        return {}, {"unreadable": False, "stale_days": []}
+
+    monkeypatch.setattr(heldout, "compute_block", compute)
+    study = SimpleNamespace(scale=SimpleNamespace(days=lambda _: H_DAYS, name="registered"))
+    session = SimpleNamespace(access=None, key=("H", 1), stamp="now")
+    with pytest.raises(StopIteration):
+        reads.compute_results(study, "H", session)  # type: ignore[arg-type]
+    preset = {"S-C": "not admitted on D (hand run)"}
+    assert seen == [(True, preset), (False, preset)]

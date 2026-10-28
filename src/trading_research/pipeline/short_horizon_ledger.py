@@ -32,6 +32,7 @@ read's commit.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
@@ -141,8 +142,10 @@ def _porcelain_paths(text: str) -> list[str]:
 
 
 def _diff_allowed_after_a_read(path: str) -> bool:
-    """What may change between a read and the next open: results, docs outside
-    the registration, and the README."""
+    """What may change between a read and the next open: results (never D's results
+    files), docs outside the registration, and the README."""
+    if path in {p.as_posix() for p in shr.D_RESULTS_FILES}:
+        return False
     if path == "README.md" or path.startswith("experiments/results/"):
         return True
     return path.startswith("docs/") and not path.startswith("docs/preregistration/")
@@ -192,6 +195,46 @@ class Ledger:
             return {}
         loaded: dict[str, list[dict[str, Any]]] = json.loads(text)
         return loaded
+
+    def ledger_versions(
+        self, ref: str = "HEAD"
+    ) -> list[tuple[str, dict[str, list[dict[str, Any]]]]]:
+        """Every version of the ledger in ``ref``'s history, newest first, each with
+        the commit that wrote it (a commit that deleted the file is skipped)."""
+        ledger = self.ledger.as_posix()
+        try:
+            commits = _git(self.repo, "log", "--format=%H", ref, "--", ledger).split()
+        except HeldOutLocked:
+            return []
+        out = []
+        for found in commits:
+            try:
+                text = _git(self.repo, "show", f"{found}:{ledger}")
+            except HeldOutLocked:
+                continue
+            try:
+                out.append((found, json.loads(text)))
+            except json.JSONDecodeError:
+                continue
+        return out
+
+    def erased_entries(self, block: str, kept: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """``block``'s entries some version of the ledger held (in HEAD's history, and
+        in the upstream's when one is set) that ``kept`` (HEAD's) lacks: an open entry
+        erased by a later commit or a reset."""
+        refs = ["HEAD"]
+        if self.upstream is not None:
+            with contextlib.suppress(HeldOutLocked):
+                refs.append(_git(self.repo, "rev-parse", "--verify", "-q", self.upstream).strip())
+        have = {(e.get("utc"), e.get("commit")) for e in kept}
+        erased: dict[tuple[Any, Any], dict[str, Any]] = {}
+        for ref in refs:
+            for _, entries in self.ledger_versions(ref):
+                for entry in entries.get(block, []):
+                    key = (entry.get("utc"), entry.get("commit"))
+                    if key not in have:
+                        erased.setdefault(key, dict(entry))
+        return list(erased.values())
 
     def _write(self, entries: Mapping[str, Any]) -> None:
         path = self.repo / self.ledger
@@ -329,6 +372,28 @@ class Ledger:
                 f"({manifest['sha256']}, {manifest['rows']})"
             )
 
+    def verify_d_results(self, block: str) -> None:
+        """D's results files (the leaderboard, marginals and nulls) at the sha256 the
+        amendments record, committed, at every open; the pages too at H's open (each
+        read writes them again)."""
+        document = (self.repo / self.document).read_text(encoding="utf-8")
+        recorded = shr.recorded_results_files(document)
+        missing = [p.as_posix() for p in shr.D_RESULTS_FILES if p.as_posix() not in recorded]
+        if missing:
+            raise HeldOutLocked(f"no amendment records the sha256 of D's results files {missing}")
+        for relative, digest in sorted(recorded.items()):
+            if relative == shr.PAGES_PATH.as_posix() and block != "H":
+                continue
+            path = self.repo / relative
+            if not path.is_file():
+                raise HeldOutLocked(f"D's results file {relative} is missing")
+            self._tracked(Path(relative))
+            actual = file_sha256(path)
+            if actual != digest:
+                raise HeldOutLocked(
+                    f"{relative} has sha256 {actual}, the amendment records {digest}"
+                )
+
     def verify_reader_test(self, registration: shr.Registration) -> None:
         """The ``ob200`` replay proven before H: the amendment records the reader
         test, and every reader-test day passed as a block day or failed on its gap
@@ -439,6 +504,7 @@ class Ledger:
         else:
             self._after_read(sa.HELD_OUT[sa.HELD_OUT.index(block) - 1], committed)
         self.verify_trials(registration)
+        self.verify_d_results(block)
         if block == "P" and not qualifying:
             raise HeldOutLocked("P is opened only for a slot that qualifies on F")
         self.verify_frozen_files(registration)
@@ -454,9 +520,17 @@ class Ledger:
                 f"{block} was opened on {first['utc']} at commit {first['commit'][:7]}; "
                 "a second read needs force=True and is stamped 'second read'"
             )
+        erased = self.erased_entries(block, previous)
+        if erased and not force:
+            first = erased[-1]
+            raise HeldOutLocked(
+                f"{block}'s open entry of {first.get('utc')} at commit {str(first.get('commit'))[:7]} "
+                "is in the ledger's history but not in HEAD's: a read cannot be erased and opened "
+                "again; a second read needs force=True and is stamped 'second read'"
+            )
         entry: dict[str, Any] = {
             "block": block,
-            "read": SECOND_READ if previous else FIRST_READ,
+            "read": SECOND_READ if previous or erased else FIRST_READ,
             "commit": self._head(),
             "config_sha256": registration.sha256,
             "environment": environment,
@@ -469,6 +543,53 @@ class Ledger:
         }
         self._write({**committed, block: [*previous, entry]})
         return entry
+
+    # -- the open entry on the remote ---------------------------------------------
+
+    def entry_commit(self, block: str, entry: Mapping[str, Any]) -> str:
+        """The commit that first wrote ``entry`` into the ledger (HEAD when none did)."""
+        for found, entries in reversed(self.ledger_versions("HEAD")):
+            if any((e.get("utc"), e.get("commit")) == (entry["utc"], entry["commit"])
+                   for e in entries.get(block, [])):  # fmt: skip
+                return found
+        return self._head()
+
+    def require_pushed(self, block: str, entry: Mapping[str, Any]) -> None:
+        """The open entry has reached the upstream: a remote-tracking branch (never a
+        local branch set as upstream) whose ledger holds it, and the remote itself,
+        asked with ``git ls-remote``, at a tip that contains the commit that wrote
+        it. A remote that cannot be reached refuses: the push cannot be confirmed."""
+        if self.upstream is None:
+            return
+        where = f"{block}'s open entry has not reached {self.upstream}"
+        try:
+            name = _git(self.repo, "rev-parse", "--symbolic-full-name", self.upstream).strip()
+        except HeldOutLocked as exc:
+            raise HeldOutLocked(f"{where}: no upstream is set") from exc
+        if not name.startswith("refs/remotes/"):
+            raise HeldOutLocked(
+                f"{where}: the upstream {name or self.upstream} is not a remote-tracking branch"
+            )
+        pushed = self.committed_entries(name).get(block, [])
+        if not any(e["utc"] == entry["utc"] and e["commit"] == entry["commit"] for e in pushed):
+            raise HeldOutLocked(where)
+        remote, _, branch = name.removeprefix("refs/remotes/").partition("/")
+        try:
+            listed = _git(self.repo, "ls-remote", "--exit-code", remote, f"refs/heads/{branch}")
+        except HeldOutLocked as exc:
+            raise HeldOutLocked(
+                f"{where}: the remote {remote!r} cannot be reached (or has no branch "
+                f"{branch!r}) to confirm the push; a session starts only once it can"
+            ) from exc
+        tip = listed.split()[0]
+        written = self.entry_commit(block, entry)
+        try:
+            _git(self.repo, "merge-base", "--is-ancestor", written, tip)
+        except HeldOutLocked as exc:
+            raise HeldOutLocked(
+                f"{where}: the remote's tip {tip[:7]} does not contain {written[:7]}, the "
+                "commit that wrote it (push it, then fetch)"
+            ) from exc
 
     # -- a process of a read session ---------------------------------------------
 
@@ -484,10 +605,7 @@ class Ledger:
         if not committed.get(block):
             raise HeldOutLocked(f"{block}'s open entry is not in HEAD's ledger: commit it first")
         entry = committed[block][-1]
-        if self.upstream is not None:
-            pushed = self.committed_entries(self.upstream).get(block, [])
-            if not any(e["utc"] == entry["utc"] and e["commit"] == entry["commit"] for e in pushed):
-                raise HeldOutLocked(f"{block}'s open entry has not reached {self.upstream}")
+        self.require_pushed(block, entry)
         if entry.get("results_sha256"):
             raise HeldOutLocked(f"{block}'s read session is closed: its results file is written")
         self.verify_tree(since=entry["commit"])

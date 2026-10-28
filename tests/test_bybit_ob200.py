@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 import zipfile
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -173,3 +174,56 @@ def test_message_stats_read_an_unusual_layout_in_full(tmp_path: Path) -> None:
     plain.write_text("\n".join(lines) + "\n", encoding="utf-8")
     stats = archive_message_stats(plain)
     assert (stats.messages, stats.deltas) == (31, 30)
+
+
+def _levels_at(mid: int, n: int = 10) -> tuple[list[list[str]], list[list[str]]]:
+    bids = [[f"{mid - 1 - k}.0", "1.0"] for k in range(n)]
+    asks = [[f"{mid + 1 + k}.0", "1.0"] for k in range(n)]
+    return bids, asks
+
+
+def _stamp_ms(day: date, seconds: float) -> int:
+    midnight = datetime(day.year, day.month, day.day, tzinfo=UTC)
+    return int(midnight.timestamp() * 1000 + seconds * 1000)
+
+
+def _jsonl(path: Path, messages: list[dict[str, Any]]) -> Path:
+    path.write_text("\n".join(json.dumps(m) for m in messages) + "\n", encoding="utf-8")
+    return path
+
+
+def test_a_gap_healed_by_a_later_snapshot_is_counted_by_the_replay_and_the_scan(
+    tmp_path: Path,
+) -> None:
+    """A snapshot resets the book, not the gap count: the replay counts the gap
+    before it, as the archive scan does."""
+    day = date(2025, 7, 10)
+    bids, asks = _levels_at(100_000)
+    messages = [
+        {"type": "snapshot", "ts": _stamp_ms(day, 1), "data": {"b": bids, "a": asks, "u": 1}},
+        {"type": "delta", "ts": _stamp_ms(day, 2), "data": {"b": [["99999.0", "2.0"]], "a": [], "u": 2}},
+        {"type": "delta", "ts": _stamp_ms(day, 3), "data": {"b": [["99998.0", "2.0"]], "a": [], "u": 7}},
+        {"type": "snapshot", "ts": _stamp_ms(day, 4), "data": {"b": bids, "a": asks, "u": 20}},
+        {"type": "delta", "ts": _stamp_ms(day, 5), "data": {"b": [["99997.0", "3.0"]], "a": [], "u": 21}},
+    ]  # fmt: skip
+    path = _jsonl(tmp_path / "BTCUSDT-2025-07-10-ob500.jsonl", messages)
+    replayed = reconstruct(path, symbol="BTCUSDT")
+    assert replayed.attrs["sequence_gaps"] == archive_message_stats(path).sequence_gaps == 1
+
+
+def test_a_gap_in_the_next_days_first_second_is_not_the_days(tmp_path: Path) -> None:
+    """The archive's tail stamped after the next midnight is cut from the day's book;
+    a gap there is not counted for the day, by the replay or by the scan."""
+    day, after = date(2025, 8, 20), date(2025, 8, 21)
+    bids, asks = _levels_at(100_000)
+    messages = [
+        {"type": "snapshot", "ts": _stamp_ms(day, 1), "data": {"b": bids, "a": asks, "u": 1}},
+        {"type": "delta", "ts": _stamp_ms(day, 2), "data": {"b": [["99999.0", "2.0"]], "a": [], "u": 2}},
+        {"type": "delta", "ts": _stamp_ms(after, 0.5), "data": {"b": [["99998.0", "2.0"]], "a": [], "u": 9}},
+    ]  # fmt: skip
+    path = _jsonl(tmp_path / "BTCUSDT-2025-08-20-ob500.jsonl", messages)
+    assert reconstruct(path, symbol="BTCUSDT").attrs["sequence_gaps"] == 0
+    assert archive_message_stats(path).sequence_gaps == 0
+    late = _jsonl(tmp_path / "BTCUSDT-2025-08-20-late-ob500.jsonl",
+                    [*messages[:2], {**messages[2], "ts": _stamp_ms(day, 86_399.5)}])  # fmt: skip
+    assert reconstruct(late, symbol="BTCUSDT").attrs["sequence_gaps"] == 1

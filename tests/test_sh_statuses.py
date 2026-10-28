@@ -215,3 +215,34 @@ def test_a_void_result_on_f_is_void_since_killed_on_f_names_a_kill_that_fired() 
         slot_on_block("S-C", "F", "killed on F", void.kills)
     k1 = KillCheck("S-C", "K1", "mean <= 0", -1.0, 0.0, True)
     assert "K1" in slot_on_block("S-C", "F", "killed on F", [k1])
+
+
+def test_a_fault_after_07_31_does_not_void_a_status_taken_before_august() -> None:
+    """S25's status on H is taken on 07-08 to 07-31: a K-units, K-acct or K-cap fault
+    on a later day of H is a measurement inside S25's information set, not a void."""
+    from types import SimpleNamespace
+
+    from trading_research.pipeline.short_horizon import reads
+
+    late, early = date(2025, 8, 5), date(2025, 7, 20)
+    s = slot_days("S25", on_s25_signal=True, void=("K-units",), void_days={"K-units": (late,)})
+    assessed, outside = st.in_window(s, (H_DAYS[0], st.S25_WINDOW_END))
+    assert assessed.void == () and outside == {"K-units": ["2025-08-05"]}
+    window = s.mask([d for d in s.days if d <= st.S25_WINDOW_END])
+    assert st.family({"S25": assessed}, {"S25": window}, "H", {})["S25"].status != "void"
+    inside = slot_days("S25", on_s25_signal=True, void=("K-cap",), void_days={"K-cap": (early,)})
+    assert st.in_window(inside, (H_DAYS[0], st.S25_WINDOW_END))[0].void == ("K-cap",)
+    undated = slot_days("S25", on_s25_signal=True, void=("K-acct",))
+    assert st.in_window(undated, (H_DAYS[0], st.S25_WINDOW_END))[0].void == ("K-acct",)
+    admission = {
+        slot: {"status_on_D": "not admitted on D (i, ii)"} for slot in ("S-C", "S-R", "S-P", "S-M")
+    }
+    registration = SimpleNamespace(
+        value=lambda path: admission if path == ("search", "result_admission") else []
+    )
+    found = reads.statuses_h(SimpleNamespace(repo=None), {"S25": s}, registration=registration)  # type: ignore[arg-type]
+    assert found["statuses"]["S25"] != "void"
+    beside = found["measurements"]["S25"]["inside_s25_information_set"]
+    assert beside["void_conditions"] == {"K-units": ["2025-08-05"]}
+    found = reads.statuses_h(SimpleNamespace(repo=None), {"S25": inside}, registration=registration)  # type: ignore[arg-type]
+    assert found["statuses"]["S25"] == "void"

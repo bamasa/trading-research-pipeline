@@ -179,7 +179,10 @@ def test_s_p_and_s_m_have_their_deflated_sharpe_ratio_from_stage_c() -> None:
     found = passive_dsr(rows, cells, days, 30, admission)
     panel = rows.pivot_table(index="day", columns="label", values="net_per_100")
     expected = deflated_sharpe_ratio(panel[cells[0].label].to_numpy(), 30, sharpe_variance(panel))
-    assert set(found) == {"S-P/net", "S-M/net"} and found["S-P/net"] == pytest.approx(expected.dsr)
+    assert {"S-P/net", "S-M/net"} <= set(found) and found["S-P/net"] == pytest.approx(expected.dsr)
+    inputs = found["inputs/S-P/net"]  # beside each, what it rests on
+    assert inputs["variance"] == pytest.approx(sharpe_variance(panel)) and inputs["days"] == 10
+    assert inputs["benchmark_sr0"] == pytest.approx(expected.benchmark)
 
 
 def test_a_cell_day_records_every_day_sum_the_measurements_beside_the_verdict_read() -> None:

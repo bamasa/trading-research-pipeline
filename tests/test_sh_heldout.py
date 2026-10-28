@@ -14,8 +14,10 @@ import pytest
 
 from trading_research.pipeline.regime import NS_PER_HOUR, usable_hours
 from trading_research.pipeline.short_horizon import heldout as ho
+from trading_research.pipeline.short_horizon import heldout_measures as hm
 from trading_research.pipeline.short_horizon import statuses as st
-from trading_research.pipeline.short_horizon.passive import SimCell
+from trading_research.pipeline.short_horizon.passive import Decisions, SimCell
+from trading_research.reporting.search_keys import S25_KEY
 from trading_research.search_engine.tapes import GUARD_WINDOWS_H, CandidateTape
 
 DAYS = [date(2025, 8, 21) + timedelta(days=i) for i in range(4)]
@@ -271,3 +273,137 @@ def test_ps_first_day_reads_fs_last_day_when_it_is_usable(monkeypatch: pytest.Mo
     assert block("P", p_days).cold(p_days[0])
     f = block("F", (date(2025, 8, 21), date(2025, 8, 22)))
     assert f.history == [] and f.cold(date(2025, 8, 21)) and not f.cold(date(2025, 8, 22))
+
+
+def test_a_passive_shift_re_simulated_over_a_stale_day_reaches_the_series(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    days = [date(2025, 7, 8) + timedelta(days=i) for i in range(4)]  # all inside 07-08..07-31
+    stale_day = 1
+    cell = SimCell("S25-Z", S25_KEY, "entry", 50.0, fees="zero")
+    slot = ho.PassiveSlot("S25-Z", cell, [])
+    monkeypatch.setattr(ho, "slot_keys", lambda _block, _slot: [])  # no taker slot
+    monkeypatch.setattr(ho, "passive_slots", lambda _block: [slot])
+    monkeypatch.setattr(ho, "flag_sets", lambda _block, _days: (0, []))
+    monkeypatch.setattr(ho, "frozen_rules", lambda _block: {})
+    monkeypatch.setattr(ho, "frozen_gate_levels", lambda _block: {})
+    config = "BTCUSDT|C|gbm|micro|hold_s=50|label_fee_bp=0"
+    monkeypatch.setattr(
+        ho, "day_context",
+        lambda _b, day, *_: SimpleNamespace(day=day, scores={config: np.arange(5.0)},
+                                            forward={50.0: np.arange(5.0)}),
+    )  # fmt: skip
+    monkeypatch.setattr(
+        ho, "passive_decisions",
+        lambda *_a, **_k: Decisions(np.array([1], np.int64), np.array([1]), np.array([1.0])),
+    )  # fmt: skip
+    # The read's first pass: day 1 is flagged stale by the true run; every day's shifted
+    # run read the previous day's decisions (day 2's read day 1's, the stale day's: -5).
+    shifted_first = {0: 1.0, 1: 1.0, 2: -5.0, 3: 1.0}
+    rows = pd.DataFrame(
+        [{"run_slot": "S25-Z", "variant": "true", "day": d.isoformat(), "excluded": i == stale_day,
+          "gross_bp_trade": 2.0, "net_bp_trade": 2.0, "trades": 1.0} for i, d in enumerate(days)]
+        + [{"run_slot": "S25-Z", "variant": "shifted", "day": d.isoformat(), "excluded": False,
+            "gross_bp_trade": shifted_first[i], "net_bp_trade": shifted_first[i], "trades": 1.0}
+           for i, d in enumerate(days)]
+    )  # fmt: skip
+    monkeypatch.setattr(ho, "run_passive", lambda *_a, **_k: rows)
+    # step_over_stale re-simulates day 2's shift from day 0, the previous kept day: +7
+    resimulated: list[Any] = []
+
+    def simulate(_block: Any, jobs: list[Any]) -> list[Any]:
+        resimulated.extend(jobs)
+        return list(jobs)
+
+    def read(job: Any) -> pd.DataFrame:
+        return pd.DataFrame([{"run_slot": "S25-Z", "variant": "shifted", "day": job.day.isoformat(),
+                              "excluded": False, "gross_bp_trade": 7.0, "net_bp_trade": 7.0,
+                              "trades": 1.0}])  # fmt: skip
+
+    monkeypatch.setattr(ho, "simulate_jobs", simulate)
+    monkeypatch.setattr(pd, "read_parquet", read)
+    monkeypatch.setattr(hm, "fill_rules", lambda *_a, **_k: {})
+    block = SimpleNamespace(
+        usable=days, days_planned=days, name="H", notes=[], access=None, threshold=0,
+        study=SimpleNamespace(scale=SimpleNamespace(random_direction_draws=0, simulator_flag_sets=0),
+                              catalogue=lambda: SimpleNamespace(keys=[]), repo=tmp_path,
+                              symbol="BTCUSDT", workers=1),
+        fitted={"sigma_ref": 1.0}, flags_ns=np.zeros(0, np.int64), work=tmp_path,
+        detector={"alarms": []}, validated={"usable": days, "reasons": {}, "gap_days": []},
+    )  # fmt: skip
+    series, info = ho.compute_block(block)  # type: ignore[arg-type]
+    s = series["S25-Z"]
+    # the stale day is out of every series, and day 2's shift was simulated again from day 0
+    assert s.days == [days[0], days[2], days[3]]
+    assert [job.day for job in resimulated] == [days[2]]
+    assert info["one_day_shift_from"]["S25-Z"][days[2].isoformat()] == days[0].isoformat()
+    # the series carries the re-simulated shift (day 2's from day 0: +7), not the stale day's
+    assert s.shifted.tolist() == [1.0, 7.0, 1.0]
+    # with the shift re-sourced (1, 7, 1: mean 3) K-placebo fires on a true mean of 2
+    k_placebo = next(k for k in st.kills(s, np.ones(3, bool)) if k.name == "K-placebo")
+    assert k_placebo.fired
+
+
+def test_a_cached_output_is_returned_only_under_an_access_that_permits_its_day(
+    tmp_path: Path,
+) -> None:
+    """The simulator's day file and the second detector's grid are refused, cached
+    or not, to an access that does not permit the day; a session's caches are kept
+    under its block and commit."""
+    from trading_research.data import study_access as sa
+    from trading_research.market_making.prereg import HeldOutLocked
+    from trading_research.pipeline.short_horizon import heldout_passive as hp
+    from trading_research.pipeline.short_horizon import second_detector as sd
+
+    day = date(2025, 7, 8)
+    (tmp_path / f"{day}.parquet").write_bytes(b"cached")
+    job = hp.VariantJob(tmp_path, "BTCUSDT", day, sa.development_access(), (),
+                        np.zeros(0, np.int64), 0, 1.0, tmp_path)  # fmt: skip
+    with pytest.raises(HeldOutLocked, match="cached output"):
+        hp.run_variants(job)
+    study = SimpleNamespace(symbol="BTCUSDT", dir=lambda *parts: tmp_path.joinpath(*parts))
+    grid = tmp_path / "detector2" / "grid"
+    grid.mkdir(parents=True)
+    pd.DataFrame({"mid": [1.0]}).to_parquet(grid / f"{day}.parquet")
+    with pytest.raises(HeldOutLocked, match="cached grid"):
+        sd.cached_grid(study, day, sa.development_access())
+    session = sa.StudyAccess(sa.grants_for(sa.opened_pairs("H")), "first read",
+                             session=("H", "0123456789abcdef", "c", "e"), issuer=sa._ISSUER)  # fmt: skip
+    assert sa.cache_key(session) == "H-0123456789ab" and sa.cache_key(sa.development_access()) == ""
+    block = SimpleNamespace(work=tmp_path, access=session)
+    assert ho.cache_dir(block) == tmp_path / "H-0123456789ab"
+
+
+def test_a_passive_slot_preset_on_d_runs_its_true_run_and_measurements_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slot whose status was set on D is a labelled measurement on H and F: no
+    placebo, neighbour, bracket, re-run or shift is simulated for it."""
+    from trading_research.pipeline.short_horizon import heldout_passive as hp
+
+    seen: list[hp.VariantJob] = []
+    monkeypatch.setattr(hp, "run_variants", lambda job: seen.append(job))
+    monkeypatch.setattr(pd, "read_parquet", lambda _: pd.DataFrame({"variant": ["true"]}))
+    block = SimpleNamespace(study=SimpleNamespace(scale=SimpleNamespace(random_direction_draws=2), workers=1,
+                                                  repo="repo", symbol="BTCUSDT"), work=Path("work"),
+                            access=None, flags_ns=np.zeros(0, dtype=np.int64), threshold=9, name="H",
+                            fitted={"sigma_ref": 1.0})  # fmt: skip
+    own = SimpleNamespace(stamps_ns=np.zeros(0, dtype=np.int64), side=np.zeros(0, dtype=np.int64),
+                          strength_bp=np.zeros(0), event=None)  # fmt: skip
+    p = ho.PassiveSlot("S-P", SimCell("S-P", C_KEY, "entry", 50.0, policy="pull_4h"), [],
+                       [("regime/none", SimCell("S-P", S25, "entry", 50.0))],
+                       decisions={C_KEY: [own, own], S25: [own, own]}, flagged=[[own, own]], preset=True)  # fmt: skip
+    ho.run_passive(block, [p], DAYS[:2], [np.zeros(0, dtype=np.int64)], kills=True)  # type: ignore[arg-type]
+    names = [r.variant for r in seen[0].runs]
+    assert names[0] == "true" and {"regime/none", "exit/passive", "fill/touch", "flagset/0"} <= set(
+        names
+    )
+    assert not {"flipped", "long_only", "short_only", "stale", "shifted", "latency"} & set(names)
+    assert not [n for n in names if n.startswith(("random/", "bracket/", "neighbour/"))]
+
+
+def test_a_taker_slot_preset_on_d_runs_no_placebo_and_no_shift() -> None:
+    preset = ho.TakerSlot("S-C", C_KEY, [], DAYS, 2, preset=True)
+    preset.first = object()
+    preset.finish()
+    assert preset.shifted_from == {} and np.isnan(preset.flipped).all()

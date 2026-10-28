@@ -165,6 +165,9 @@ def run_variants(job: VariantJob) -> Path:
     from trading_research.data.fetch_stage import StudyRoots
 
     target = job.out / f"{job.day}.parquet"
+    access = sa.resolve(job.access)
+    for plane in (sa.BOOK, sa.PRINTS, sa.FUNDING):  # before a cached day is returned too
+        access.require(job.symbol, [job.day], plane, what="return a cached output of")
     if target.exists():
         return target
     roots = StudyRoots.under(job.repo / "data")

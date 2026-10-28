@@ -275,9 +275,13 @@ def mde(series: pd.Series | np.ndarray, n: int, usable_days: int) -> tuple[float
 def slot_mdes(
     study: Study, record_d: dict[str, Any], slots: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
-    """sigma_D and the MDE of each slot's daily series on D (24 for a slot on S25's signal)."""
+    """sigma_D and the MDE of each slot's daily series on D (24 for a slot on S25's signal),
+    the passive slots' on the days no simulated run flagged (``passive.kept_rows``), as
+    stage C's admission reads them."""
+    from trading_research.pipeline.short_horizon.passive import kept_rows
+
     days = [date.fromisoformat(d) for d in record_d["usable_test_days"]]
-    rows = pd.read_parquet(study.work / "C" / "cells.parquet")
+    rows = kept_rows(pd.read_parquet(study.work / "C" / "cells.parquet"))
     on_s25 = slots["S-P"]["key"] == S25_KEY
     out: dict[str, Any] = {}
     for slot in ("S25", "S-C", "S-R"):
@@ -387,6 +391,12 @@ def slot_dsr(found: dict[str, Any], name: str, series: tuple[str, ...], against:
     return {s: found.get(f"{name}/{s}") for s in series} | {"deflated_against": against}
 
 
+def slot_dsr_inputs(inputs: dict[str, Any], name: str, series: tuple[str, ...]) -> dict[str, Any]:
+    """Beside each deflated Sharpe ratio: the variance it is deflated against, the
+    benchmark SR0, the series' Sharpe ratio and its days (None where not recorded)."""
+    return {s: inputs.get(f"{name}/{s}") for s in series}
+
+
 def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, ...], Any]:
     """Every placeholder the D amendment fills, from the stages' records."""
     record1, record_b = study.record("1"), study.record("B")
@@ -396,10 +406,12 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
     excluded += [[date.fromisoformat(d), "flatten_stale"] for d in record_b["stale_days"]]
     slots, fits, mdes, trials = parts["slots"], parts["fits"], parts["mdes"], parts["trials"]
     dsr = trials["overfitting"].get("dsr", {})  # at N_trials with the simulator trials counted
+    inputs = trials["overfitting"].get("dsr_inputs", {})
     power = record_d.get("power_at_bar", {})
     admission = {"S25": {"status_on_D": "fixed before D; no admission and no search-level null",
                          "against_its_own_nulls": record_d["S25"],
-                         "dsr": slot_dsr(dsr, "S25", ("G", "net"), TAKER_DSR_VARIANCE)},
+                         "dsr": slot_dsr(dsr, "S25", ("G", "net"), TAKER_DSR_VARIANCE),
+                         "dsr_inputs": slot_dsr_inputs(inputs, "S25", ("G", "net"))},
                  "S25-Z": {"status_on_D": "fixed before D; outside the family"}}  # fmt: skip
     for stratum, slot in (("C", "S-C"), ("R", "S-R")):
         admission[slot] = {
@@ -410,12 +422,14 @@ def placeholder_values(study: Study, parts: dict[str, Any]) -> dict[tuple[str, .
             "pbo": record_d["overfitting"]["pbo"].get(stratum),
             "selection_premium": record_d["selection_premium"][stratum],
             "dsr": slot_dsr(dsr, f"{stratum}*", ("G", "net"), TAKER_DSR_VARIANCE),
+            "dsr_inputs": slot_dsr_inputs(inputs, f"{stratum}*", ("G", "net")),
             "power_at_bar": power.get(slot),
         }
     passive_dsr = record_c.get("overfitting", {}).get("dsr", {})
     for slot in ("S-P", "S-M"):
         admission[slot] = dict(record_c["admission"][slot]) | {
-            "dsr": slot_dsr(passive_dsr, slot, ("net",), PASSIVE_DSR_VARIANCE)
+            "dsr": slot_dsr(passive_dsr, slot, ("net",), PASSIVE_DSR_VARIANCE),
+            "dsr_inputs": slot_dsr_inputs(passive_dsr, f"inputs/{slot}", ("net",)),
         }
     detector = parts["detector"]
     s25_cells = [k for k in slots["S25"]["neighbourhood"] if parse_key(k).stratum == "C"]
@@ -489,9 +503,20 @@ def amendment_text(study: Study, frozen: str, values: dict[tuple[str, ...], Any]
         *overfitting_lines(values[("search", "result_admission")]),
         lacking_a_class_line(values[("models", "fits_lacking_a_class")]),
         second_detector_line(values[("detector", "second_detector_D")]),
+        *results_file_lines(study),
         "",
     ]
     return "\n".join(lines)
+
+
+def results_file_lines(study: Study) -> list[str]:
+    """The sha256 of D's results files (the leaderboard after its header names
+    N_trials, the marginals, the nulls), which every open of a block checks."""
+    from trading_research.data.study_fetch import file_sha256
+    from trading_research.pipeline import short_horizon_registration as shr
+
+    return [f"- {shr.results_file_line(p, file_sha256(study.repo / p))}"
+            for p in shr.D_RESULTS_FILES if (study.repo / p).is_file()]  # fmt: skip
 
 
 def _number(value: Any) -> str:
@@ -522,6 +547,15 @@ def overfitting_lines(admission: dict[str, Any]) -> list[str]:
     lines.append(
         "- Power of the t >= 3 bar: " + ("; ".join(power) if power else "not computed") + "."
     )
+    inputs = []
+    for slot in ("S25", "S-C", "S-R", "S-P", "S-M"):
+        for series, found in (admission.get(slot, {}).get("dsr_inputs") or {}).items():
+            if found:
+                inputs.append(f"{slot} {series}: variance {_number(found.get('variance'))}, "
+                              f"SR0 {_number(found.get('benchmark_sr0'))}, Sharpe ratio "
+                              f"{_number(found.get('sharpe'))}, {found.get('days')} days")  # fmt: skip
+    if inputs:
+        lines.append("- Beside each deflated Sharpe ratio: " + "; ".join(inputs) + ".")
     return lines
 
 
@@ -612,7 +646,7 @@ class FrozenValues:
         return self.values[path]
 
 
-def rehearsal_read(block: Any, statuses: Any) -> dict[str, Any]:
+def rehearsal_read(block: Any, statuses: Any, preset: Any = ()) -> dict[str, Any]:
     """One stand-in block's read as ``reads.compute_results`` computes it: the
     usable days under the frozen threshold (or the block unreadable), every
     slot's series with its kills and placebos, the gap days put back, the MDEs,
@@ -622,9 +656,9 @@ def rehearsal_read(block: Any, statuses: Any) -> dict[str, Any]:
 
     if block.validated["unreadable"]:
         return {"unreadable": True, "excluded": block.validated["reasons"], "found": None}
-    series, info = compute_block(block)
+    series, info = compute_block(block, preset=preset)
     gaps = (
-        compute_block(block.put_back(), days=block.gap_days, kills=False)[0]
+        compute_block(block.put_back(), days=block.gap_days, kills=False, preset=preset)[0]
         if block.gap_days
         else {}
     )
@@ -665,16 +699,20 @@ def rehearse(study: Study, inputs: Any, values: dict[tuple[str, ...], Any]) -> d
         )
 
     h_block, f_block, p_block = block("H", days), block("F", reader), block("P", reader)
-    h = rehearsal_read(h_block, lambda s, i, g: reads.statuses_h(study, s, i, g, h_block.flags_ns))
+    preset = reads.preset_on_d(
+        study, frozen
+    )  # the statuses set on D, as the amendment freezes them
+    h = rehearsal_read(h_block, lambda s, i, g: reads.statuses_h(
+        study, s, i, g, h_block.flags_ns, h_block.detector["alarms"], frozen), preset)  # fmt: skip
     skipped: dict[str, Any] = {"unreadable": None, "found": None,
                                "skipped": "the stand-in before it was unreadable"}  # fmt: skip
     f, p = skipped, skipped
     if h["found"] is not None:
         f = rehearsal_read(f_block, lambda s, i, g: reads.statuses_f(
-            study, s, f_block.detector["alarms"], frozen, i, g, f_block.flags_ns, h=h["found"]))  # fmt: skip
+            study, s, f_block.detector["alarms"], frozen, i, g, f_block.flags_ns, h=h["found"]), preset)  # fmt: skip
     if f["found"] is not None:
         p = rehearsal_read(p_block, lambda s, i, g: reads.statuses_p(
-            study, s, i, g, p_block.flags_ns, f=f["found"]))  # fmt: skip
+            study, s, i, g, p_block.flags_ns, f=f["found"]), preset)  # fmt: skip
     outputs = {"stand_in_H": h, "stand_in_F": f, "stand_in_P": p}
     save_json(study.dir("E", "rehearsal") / "discarded_outputs.json", outputs)
     return {"ran": True, "parity_repeated_ok": True, "stand_in_H_days": len(days),

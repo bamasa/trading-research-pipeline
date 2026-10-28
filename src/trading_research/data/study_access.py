@@ -166,6 +166,18 @@ class StudyAccess:
                 "access beyond W, D, the reader-test and the timing days is issued only by "
                 "the study's ledger, which checks the frozen configuration and records the read"
             )
+        if beyond:  # bound to its session's block: a copy cannot widen to a later one
+            block = self.session[0] if self.session else None
+            if block not in OPENS:
+                raise HeldOutLocked(
+                    "an access beyond development names the read session it was issued for"
+                )
+            wider = set(self.grants) - grants_for(opened_pairs(block))
+            if wider:
+                raise HeldOutLocked(
+                    f"an access issued for {block}'s read session grants no later block: "
+                    f"{sorted(wider)[:3]}"
+                )
 
     @property
     def open_through(self) -> date:
@@ -202,6 +214,16 @@ class StudyAccess:
                 f"monthly kline archives past {self.open_through} are on disk "
                 f"({[p.name for p in beyond]}): they hold days no opened block permits"
             )
+
+
+def cache_key(access: StudyAccess | None) -> str:
+    """The folder a read's caches are kept in: none for development (W, D and the
+    test days, cached as before), and for a read session its block and commit, so
+    a cache written in one session is never returned in another."""
+    if access is None or not access.session:
+        return ""
+    block, commit = access.session[0], access.session[1] if len(access.session) > 1 else ""
+    return f"{block}-{str(commit)[:12]}"
 
 
 def grants_for(pairs: Iterable[tuple[str, str]]) -> frozenset[tuple[str, str, str]]:
