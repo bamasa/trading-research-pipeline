@@ -222,8 +222,8 @@ trade for the index rule.
 ```python
 from trading_research import synthetic
 
-data = synthetic.planted_edge(feature="flow", size_bp=12.0)   # truth in data.truth
-report = synthetic.recover("lightgbm", data)                    # or a model object, or a callable
+data = synthetic.planted_edge(feature="flow", size_bp=12.0)  # truth in data.truth
+report = synthetic.recover("lightgbm", data)  # or a model object, or a callable
 report.summary["recovered_bp"], report.summary["planted_bp"], report.summary["residual_t"]
 synthetic.recover("lightgbm", synthetic.null(feature="flow")).summary["recovered_t"]
 ```

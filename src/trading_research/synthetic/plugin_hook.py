@@ -64,7 +64,10 @@ KINDS = ("strategy", "model")
 
 
 def plugin_checks(
-    *, kind: str, name: str, build: Callable[[], Any]  # noqa: ARG001 - the hook's signature
+    *,
+    kind: str,
+    name: str,  # noqa: ARG001 - the hook's signature; the rows do not repeat it
+    build: Callable[[], Any],
 ) -> list[dict[str, Any]]:
     """Rows of ``check``, ``status``, ``detail`` and ``numbers`` for one plugin."""
     if kind not in KINDS:
@@ -186,7 +189,10 @@ def _judge(kind: str, build: Callable[[], Any]) -> list[dict[str, Any]]:
                 f"decisions moved to other days: {_bp(shifted)} a trade, pooled t {_t(pt)}, "
                 f"max shift t {_t(worst)}; required pooled t < {T_BAR:g}, absolute mean at most 10% of "
                 "the real one, the real t above every shift's",
-                {k: p.get(k, math.nan) for k in ("trades", "recovered_bp", "recovered_t", "max_shift_t")},
+                {
+                    k: p.get(k, math.nan)
+                    for k in ("trades", "recovered_bp", "recovered_t", "max_shift_t")
+                },
             )
         )
     return rows

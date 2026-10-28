@@ -157,7 +157,12 @@ def run(config: DemoConfig, report: Callable[[str], None] = print) -> DemoResult
     page = out / "page.md"
     text = render(config, pipeline, seconds, second, agent)
     if checks:
-        text = text.rstrip("\n") + "\n\n" + verify_section(checks, out / "verify", config.seed_verify) + "\n"
+        text = (
+            text.rstrip("\n")
+            + "\n\n"
+            + verify_section(checks, out / "verify", config.seed_verify)
+            + "\n"
+        )
     page.write_text(text)
     manifest_body = manifest_of(config, pipeline, generated, seconds, page)
     if checks:

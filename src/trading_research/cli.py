@@ -32,8 +32,8 @@ from rich.console import Console
 from rich.table import Table
 
 from trading_research import __version__
-from trading_research.cli_synthetic import synthetic_app, verify_app
 from trading_research.cli_paper import paper_app
+from trading_research.cli_synthetic import synthetic_app, verify_app
 from trading_research.data import store, synthetic
 from trading_research.data.schema import BARS_SCHEMA, BOOK_SCHEMA, TRADE_SCHEMA
 from trading_research.data.validate import (
