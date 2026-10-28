@@ -1760,6 +1760,7 @@ from trading_research import (  # noqa: E402
     cli_demo,
     cli_fees,
     cli_instruments,
+    cli_pairs,
     cli_regimes,
     cli_search,
     cli_signal,
@@ -1773,6 +1774,7 @@ app.add_typer(cli_instruments.build(app))
 app.add_typer(cli_signal.build(app))
 app.add_typer(cli_search.app)
 app.add_typer(cli_backtest.build(app))
+app.add_typer(cli_pairs.app)
 app.add_typer(cli_study.app)
 app.add_typer(cli_agent.app)
 app.add_typer(cli_demo.app)
