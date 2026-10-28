@@ -104,9 +104,15 @@ def register(
     placebo_draws: int = 40,
     maker_placebo_draws: int = 3,
     seed: int = 20260101,
+    rules: Sequence[str] | None = None,
+    models: Sequence[str] | None = None,
     report: Report = _quiet,
 ) -> str:
     """Write the search's registration from file names alone, before any day is read.
+
+    ``rules`` and ``models`` are the method step's candidates, the built-ins by
+    default; a model plugin is named like a built-in, and its file's sha256 is
+    written into the registration so no later step runs a changed version.
 
     The blocks come from the dataset's file names and ``search_share``; days a
     registration of this repository protects are refused here.
@@ -126,6 +132,7 @@ def register(
             "never computes on them (python -m agents.workflows.research_loop calendar)"
         )
     costs = ex.Costs.named(fee, slippage_bp)
+    rule_names, model_names, plugins = method_candidates(rules, models)
     digest = run.register(
         {
             "written_before": "any day of the dataset is read: the blocks come from file names",
@@ -136,8 +143,9 @@ def register(
             "screen_horizon_s": horizon_s,
             "fee": costs.describe(),
             "frequency_grid": {"holds_s": list(holds_s), "label_threshold_share_of_round_trip": list(thresholds)},
-            "methods": {"rules": list(sg.RULES), "models": list(sg.MODELS)},
-            "parameters": {k: list(v) for k, v in sg.PARAMETERS.items()},
+            "methods": {"rules": rule_names, "models": model_names},
+            "parameters": {name: list(sg.PARAMETERS.get(name, ({},))) for name in model_names},
+            "plugins": plugins,
             "selection": "frequency by reproduce's neighbourhood rule, then the best net per trade on validation, at least minimum_trades",
             "minimum_trades": minimum_trades,
             "family": list(family),
@@ -152,6 +160,66 @@ def register(
     )  # fmt: skip
     report(f"registered before reading data: {run.registration_path} ({digest[:12]})")
     return digest
+
+
+def method_candidates(
+    rules: Sequence[str] | None, models: Sequence[str] | None
+) -> tuple[list[str], list[str], dict[str, dict[str, str]]]:
+    """The method step's rules and models, checked before anything is registered,
+    and each model plugin's origin and file sha256.
+
+    A rule is one of :data:`signal.RULES`. A model is a name
+    :func:`~trading_research.pipeline.stages.build_model` knows: a built-in, or a
+    model plugin (``strategies new NAME --kind model``), which is built once here
+    so a name that cannot be built is refused before the registration exists.
+    """
+    from trading_research.pipeline import stages
+
+    rule_names = list(sg.RULES if rules is None else rules)
+    model_names = list(sg.MODELS if models is None else models)
+    unknown = sorted(set(rule_names) - set(sg.RULES))
+    if unknown:
+        raise SearchError(f"rules must be among {sg.RULES}, not {unknown}")
+    if not rule_names and not model_names:
+        raise SearchError("the method step needs at least one rule or model")
+    plugins: dict[str, dict[str, str]] = {}
+    for name in model_names:
+        try:
+            stages.build_model(name)
+        except Exception as exc:  # any failure to build refuses the name
+            raise SearchError(f"model {name!r} cannot be built: {exc}") from exc
+        found = _plugin_spec(name)
+        if found is not None:
+            plugins[name] = {"origin": found.origin, "module": found.module,
+                             "sha256": found.fingerprint()}  # fmt: skip
+    return rule_names, model_names, plugins
+
+
+def _plugin_spec(name: str) -> Any:
+    """The model plugin ``name`` when it is not one of the repository's built-ins."""
+    from trading_research.pipeline import stages
+    from trading_research.plugins import registry
+
+    builtin = {*stages.MODELS, *stages.ENSEMBLES, *stages.COMPOSITES, *stages.META,
+               *stages.UNCERTAIN}  # fmt: skip
+    if name in builtin:
+        return None
+    try:
+        return registry.get(name, "model")
+    except registry.PluginError:
+        return None
+
+
+def check_plugins(registration: dict[str, Any]) -> None:
+    """Refuse to go on when a registered model plugin's file changed after registration."""
+    for name, recorded in registration.get("plugins", {}).items():
+        found = _plugin_spec(name)
+        now = found.fingerprint() if found is not None else ""
+        if now != recorded["sha256"]:
+            raise SearchError(
+                f"model plugin {name!r} changed after the search was registered "
+                f"({recorded['sha256'][:12]} registered, {now[:12] or 'absent'} now)"
+            )
 
 
 def instruments(
@@ -352,6 +420,7 @@ def method(run: SearchRun, *, report: Report = _quiet) -> Path:
     """Every rule against every learned model at the chosen frequency."""
     before = run.previous("method")
     registration, _ = run.registration()
+    check_plugins(registration)
     hold, threshold = int(before["hold_rows"]), float(before["threshold_bp"])
     names = [*registration["methods"]["rules"], *registration["methods"]["models"]]
     table = _score(before, run, [sg.Candidate(hold, threshold, name) for name in names], report)
@@ -385,6 +454,7 @@ def model(run: SearchRun, *, report: Report = _quiet) -> Path:
     """The chosen family's candidates: the rules as they are, or a model's parameters."""
     before = run.previous("model")
     registration, _ = run.registration()
+    check_plugins(registration)
     hold, threshold = int(before["hold_rows"]), float(before["threshold_bp"])
     if before["method"] == "rule":
         candidates = [
@@ -487,6 +557,7 @@ def execution(run: SearchRun, *, report: Report = _quiet) -> Path:
 
     before = run.previous("execution")
     registration, _ = run.registration()
+    check_plugins(registration)
     dataset, symbol = Dataset.from_dict(before["dataset"]), before["symbol"]
     days = _days(before["search_days"])
     costs = ex.Costs.named(registration["fee"]["tier"], registration["fee"]["slippage_bp"])
@@ -554,6 +625,7 @@ def read(run: SearchRun, *, second_read: bool = False, report: Report = _quiet) 
 
     before = run.previous("read")
     registration, _ = run.registration()
+    check_plugins(registration)
     frozen_path = Path(before["frozen"])
     if sha256_file(frozen_path) != before["frozen_sha256"]:
         raise ReadRefused(f"{frozen_path} changed after the execution step froze it")
@@ -612,6 +684,7 @@ def read(run: SearchRun, *, second_read: bool = False, report: Report = _quiet) 
              "net_per_attempt_bp": ex.at_fee(result, mode, costs, fee_tier(r.tier))}
             for r in ladder_rows
         ]  # fmt: skip
+        assessed[mode]["headroom"] = vd.headroom(result.attempts, mode)
     decided = vd.decide(assessed, alpha=float(registration["holm"]["alpha"]))
     # The taker's file stage on the same predictions, as a reader would run it.
     cross_check = taker_backtest(out / "predictions", out / "backtest",
@@ -630,6 +703,7 @@ def read(run: SearchRun, *, second_read: bool = False, report: Report = _quiet) 
     for mode, row in decided.items():
         report(f"  {mode}: {row['net_per_attempt_bp']:+.2f} bp per attempt over {row['attempts']} attempt(s), "
                f"day t {row['day_t']:+.2f}: {row['status']} {row['decided_by']}")  # fmt: skip
+        report(f"    {headroom_line(row['headroom'])}")
     return run.finish(
         "read",
         {**before, "results": str(results_path), "statuses": {m: r["status"] for m, r in decided.items()}},
@@ -637,6 +711,29 @@ def read(run: SearchRun, *, second_read: bool = False, report: Report = _quiet) 
         params={"train": [str(d) for d in train], "entry_threshold": confidence},
         outputs={"results": "results.json", "statuses": {m: r["status"] for m, r in decided.items()}},
     )  # fmt: skip
+
+
+def headroom_line(found: dict[str, Any]) -> str:
+    """One sentence on what the mode is short of, from :func:`verdict.headroom`."""
+    net = found.get("net_per_attempt_bp", math.nan)
+    if not math.isfinite(net):
+        return "headroom: no attempts"
+    if net >= 0:
+        return "headroom: positive as it stands"
+    parts = []
+    cut = found.get("cost_cut_to_break_even_bp", math.nan)
+    parts.append(f"costs {cut:.2f} bp an attempt lower" if math.isfinite(cut)
+                 else "no fee cut is enough: the gross is not positive")  # fmt: skip
+    direction = found.get("direction")
+    if direction:
+        need = direction["hit_gain_to_break_even"]
+        parts.append(
+            f"or the direction right on {100 * need:.1f} pp more of the filled trades "
+            f"(hit rate {100 * direction['hit_rate']:.1f}% now)"
+            if math.isfinite(need)
+            else "no achievable hit rate alone"
+        )
+    return "headroom, to reach zero: " + "; ".join(parts)
 
 
 STEP_FUNCTIONS: dict[str, Callable[..., Path]] = {

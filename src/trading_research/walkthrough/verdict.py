@@ -181,3 +181,77 @@ def decide(modes: Mapping[str, dict[str, Any]], alpha: float = 0.05) -> dict[str
             "checks": checks,
         }
     return out
+
+
+#: The direction-accuracy rungs :func:`headroom` re-prices: the share of filled
+#: trades whose direction a better forecast would have had right.
+HIT_RUNGS: tuple[float, ...] = (0.01, 0.02, 0.05, 0.10)
+
+
+def headroom(attempts: pd.DataFrame, mode: str) -> dict[str, Any]:
+    """What the result is short of, read from the same attempts: no re-run, no new data.
+
+    Two levers, each an arithmetic restatement of the attempts, not a result:
+
+    * **cost**: the gross per attempt is the most any fee and slippage could leave;
+      ``cost_to_break_even_bp`` is the cost per attempt at which the net is zero,
+      and is absent when the gross is not positive, because then no cost does;
+    * **direction** (taker and passive only, whose trades are directional calls):
+      if a better forecast had the direction right on a further share ``d`` of
+      the filled trades, each such trade turns a loss of ``g`` into a gain of
+      ``g``. Taking the trades it fixes to be average losers, the net per attempt
+      rises by ``fill_rate * 2 * d * mean_loss``. ``hit_gain_to_break_even`` is
+      the ``d`` that brings the net to zero. The assumption is stated on the
+      page: a better model would also change which trades it takes, so this
+      says how far the result is from zero in units a forecaster can act on,
+      and does not forecast what any model would earn.
+
+    The market maker's fills are not directional calls, so it gets the cost
+    lever alone; its fee ladder is the finer statement of the same thing.
+    """
+    out: dict[str, Any] = {"mode": mode}
+    if attempts.empty:
+        return {**out, "note": "no attempts"}
+    net = float(attempts["net_bp"].mean())
+    gross = float(attempts["gross_bp"].mean())
+    cost = float(attempts["cost_bp"].mean())
+    out.update(
+        net_per_attempt_bp=net,
+        gross_per_attempt_bp=gross,
+        cost_per_attempt_bp=cost,
+        cost_to_break_even_bp=gross if gross > 0 else math.nan,
+        cost_cut_to_break_even_bp=(cost - gross) if gross > 0 and net < 0 else math.nan,
+    )
+    if mode == "maker":
+        return {**out, "direction": None,
+                "note": "the market maker's fills are not directional calls: the cost lever only"}  # fmt: skip
+    filled_mask = attempts["filled"].astype(bool).to_numpy()
+    filled = attempts.loc[filled_mask]
+    if filled.empty:
+        return {**out, "direction": None, "note": "no filled trade"}
+    fill_rate = float(filled_mask.mean())
+    hit = float((filled["gross_bp"] > 0).mean())
+    losers = filled.loc[filled["gross_bp"] < 0, "gross_bp"]
+    mean_loss = float(-losers.mean()) if len(losers) else 0.0
+    per_point = fill_rate * 2.0 * mean_loss
+    rungs = [
+        {"hit_gain": d, "hit_rate": hit + d, "net_per_attempt_bp": net + per_point * d}
+        for d in HIT_RUNGS
+        if hit + d <= 1.0
+    ]
+    if net >= 0:
+        needed = 0.0
+    elif per_point > 0 and -net / per_point <= 1.0 - hit:
+        needed = -net / per_point
+    else:
+        needed = math.nan
+    out["direction"] = {
+        "filled_trades": len(filled),
+        "fill_rate": fill_rate,
+        "hit_rate": hit,
+        "mean_loss_bp": mean_loss,
+        "hit_gain_to_break_even": needed,
+        "rungs": rungs,
+        "assumption": "the trades a better forecast fixes are average losers; it would also change which trades are taken",
+    }
+    return out

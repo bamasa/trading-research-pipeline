@@ -90,6 +90,20 @@ def instruments_cmd(
     ] = 2,
     placebos: Annotated[int, typer.Option("--placebos", help="Placebo draws per grid mode.")] = 40,
     seed: Annotated[int, typer.Option("--seed")] = 20260101,
+    rules: Annotated[
+        str | None,
+        typer.Option(
+            "--rules", help="Rules the method step tries, comma-separated; default all five."
+        ),
+    ] = None,
+    models: Annotated[
+        str | None,
+        typer.Option(
+            "--models",
+            help="Models the method step tries, comma-separated: built-ins or your model plugins "
+            "(strategies new NAME --kind model); default logistic,lightgbm,xgboost.",
+        ),
+    ] = None,
     discover: Annotated[
         bool, typer.Option("--discover", help="Also list what the venue trades today (network).")
     ] = False,
@@ -108,8 +122,16 @@ def instruments_cmd(
             search_share=search_share, fee=fee, slippage_bp=slippage_bp, family=family,
             holds_s=tuple(int(h) for h in holds.split(",")), minimum_trades=minimum_trades,
             min_days=min_days, placebo_draws=placebos, seed=seed, discover=discover, report=_report,
+            rules=_names(rules), models=_names(models),
         ),
     )  # fmt: skip
+
+
+def _names(value: object) -> list[str] | None:
+    """A comma-separated option as a list; ``None`` when it was not given."""
+    if value is None:
+        return None
+    return [part.strip() for part in str(value).split(",") if part.strip()]
 
 
 def register_cmd(**options: object) -> None:
@@ -126,6 +148,7 @@ def register_cmd(**options: object) -> None:
         err_console.print("[red]register needs --data[/red]")
         raise typer.Exit(code=2)
     placebos = options.pop("placebos")
+    rules, models = _names(options.pop("rules")), _names(options.pop("models"))
     family = steps.FAMILY if execution == "all" else tuple(execution.split(","))
 
     def call() -> Path:
@@ -133,7 +156,8 @@ def register_cmd(**options: object) -> None:
             SearchRun(run), Dataset.under(Path(str(data))),
             symbols=str(symbols).split(",") if symbols else None,
             family=family, holds_s=tuple(int(h) for h in holds.split(",")),
-            placebo_draws=int(str(placebos)), report=_report, **options,  # type: ignore[arg-type]
+            placebo_draws=int(str(placebos)), rules=rules, models=models, report=_report,
+            **options,  # type: ignore[arg-type]
         )  # fmt: skip
         return SearchRun(run).registration_path
 
@@ -196,6 +220,13 @@ def run_cmd(
         str, typer.Option("--execution", help="taker, passive, maker or all.")
     ] = "all",
     fee: Annotated[str, typer.Option("--fee")] = "base",
+    rules: Annotated[
+        str | None, typer.Option("--rules", help="Rules to try, comma-separated; default all five.")
+    ] = None,
+    models: Annotated[
+        str | None,
+        typer.Option("--models", help="Models to try: built-ins or your model plugins."),
+    ] = None,
 ) -> None:
     """Every step in order, the read last."""
     from trading_research.walkthrough import steps
@@ -211,6 +242,8 @@ def run_cmd(
             report=_report,
             family=family,
             fee=fee,
+            rules=_names(rules),
+            models=_names(models),
         ),
     )
 

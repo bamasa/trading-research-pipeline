@@ -327,6 +327,7 @@ def render(
                 f"| {rung['tier']} | {rung['maker_bp']:g} | {rung['taker_bp']:g} | {_bp(rung['net_per_attempt_bp'])} |"
             )
         lines.append("")
+        lines += headroom_section(row.get("headroom"))
     for mode, why in results.get("skipped_modes", {}).items():
         lines += [f"### {MODE_TITLES[mode]}", "", f"Not run: {why}", ""]
     stage = results["taker_backtest_stage"]
@@ -366,6 +367,34 @@ def render(
             "",
         ]
     return "\n".join(lines)
+
+
+def headroom_section(found: dict[str, Any] | None) -> list[str]:
+    """What the mode is short of, as :func:`trading_research.walkthrough.verdict.headroom`
+    restates the same attempts: the cost lever and, for a directional mode, the
+    direction lever with its assumption."""
+    if not found or "net_per_attempt_bp" not in found:
+        return []
+    from trading_research.walkthrough.steps import headroom_line
+
+    lines = ["What it is short of, the same attempts restated (no re-run):", "",
+             f"- {headroom_line(found)}.",
+             f"- Gross {_bp(found['gross_per_attempt_bp'])} bp against a cost of "
+             f"{_bp(found['cost_per_attempt_bp'])} bp an attempt; the gross is the most any "
+             "fee could leave."]  # fmt: skip
+    direction = found.get("direction")
+    if direction and direction.get("rungs"):
+        lines += ["", "| direction right on more of the filled trades | hit rate | net per attempt, bp |",
+                  "|---:|---:|---:|"]  # fmt: skip
+        for rung in direction["rungs"]:
+            lines.append(f"| +{100 * rung['hit_gain']:.0f} pp | {100 * rung['hit_rate']:.1f}% | "
+                         f"{_bp(rung['net_per_attempt_bp'])} |")  # fmt: skip
+        lines += ["", f"Assumption: {direction['assumption']}. A statement of distance from "
+                  "zero, not a forecast of what a better model earns."]  # fmt: skip
+    elif found.get("note"):
+        lines += ["", f"{found['note'][0].upper()}{found['note'][1:]}."]
+    lines.append("")
+    return lines
 
 
 def verify_quick(out: Path, seed: int, report: Callable[[str], None] = print) -> list[Any]:
