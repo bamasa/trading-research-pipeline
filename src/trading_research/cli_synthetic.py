@@ -9,7 +9,7 @@ Two groups, registered on the main application:
 ``trading-research verify <what>``
     Run the repository's own components on planted data and its null and judge
     them against the truth: ``edge``, ``detector``, ``simulator``,
-    ``reversion``, ``all``. Each writes ``artifacts/verify/<what>/page.md`` and
+    ``reversion``, ``pairs``, ``all``. Each writes ``artifacts/verify/<what>/page.md`` and
     exits non-zero when a binding criterion fails.
 
 Nothing here reads market data, and nothing written is evidence about a market.
@@ -338,6 +338,21 @@ def verify_reversion_cmd(
     result = verify_reversion(
         paths=paths, days=days, seed=seed, cost_bp=cost_bp, progress=_progress
     )
+    if not _report(result, out):
+        raise typer.Exit(code=1)
+
+
+@verify_app.command("pairs")
+def verify_pairs_cmd(
+    paths: Annotated[int, typer.Option("--paths", min=1, help="Paths of each pair.")] = 3,
+    days: Annotated[int, typer.Option("--days", min=40, help="Days of hourly bars.")] = 120,
+    seed: Seed = 20200106,
+    out: Annotated[Path, typer.Option("--out", help=OUT_HELP)] = VERIFY_OUT,
+) -> None:
+    """The pairs screen and walk-forward backtest on a planted pair, independent walks and a break."""
+    from trading_research.synthetic.verify import verify_pairs
+
+    result = verify_pairs(paths=paths, days=days, seed=seed, progress=_progress)
     if not _report(result, out):
         raise typer.Exit(code=1)
 

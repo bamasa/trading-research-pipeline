@@ -26,6 +26,7 @@ what its data can and cannot prove.
 | `trading-research synthetic cross-section` | `cross_section` | bars (5 s, a file per instrument-day) | a universe whose log prices carry market and idiosyncratic transients (AR(1), half-life `half_life_bars`): reversal, or momentum with `--variant momentum` | the transients replaced by random walks with the same step variance |
 | `trading-research synthetic order-flow` | `order_flow` | book, trades, the order log | an order-level book (Poisson arrivals, cancels uniform or biased in the queue, market orders through the touch); after a print the book moves against its maker with probability `pi`: an adverse selection of `adverse_bp` | no adverse selection, the same number of moves as noise |
 | `trading-research synthetic funding` | `funding` | funding (a file per day, the venue's layout) | an AR(1) rate per 8 h settlement with persistence `persistence` | the same mean and spread, persistence zero |
+| `trading-research pairs synthetic` | `pairs` | bars (1 h, the klines layout `<dir>/<SYMBOL>/klines-1h/`) | two legs with `log a = alpha + beta log b + s`, `b` a random walk, `s` an AR(1) of half-life `half_life_bars`: a cointegrated pair | `--variant independent`: two unrelated random walks of the same volatility; `--variant break`: cointegrated until halfway, then `s` a random walk |
 
 Book and trades planes are written in the day-partitioned layout
 `trading-research validate-data` discovers, and every generator validates its
@@ -67,7 +68,7 @@ the answer the simulator's estimate is checked against.
 
 ## The checks
 
-`trading-research verify edge|detector|simulator|reversion|all` writes
+`trading-research verify edge|detector|simulator|reversion|pairs|all` writes
 `artifacts/verify/<what>/page.md` and `result.json` (each criterion with the
 planted value, the recovered value, the tolerance and pass or fail, and the
 seeds) and exits 1 when a binding criterion fails. `verify all` adds
@@ -90,6 +91,7 @@ well as a bias check (`test_a_strategy_that_reads_the_future_is_caught_by_the_re
 | `detector` | the market-making study's registered detectors (`market_making.flags`): `changepoint.detect` with its defaults on the right-labelled one-second grid, and `structural_breaks.detect_breaks` (history 250, online 60, scale and dependence at 7.77 and 7.65) on one-minute returns; three planted paths and three nulls | how long each takes to flag a change of known size and time, and how often it flags one where none was planted | how they behave on a market, whose changes are gradual, several at once and of no known time |
 | `simulator` | `market_making.simulator.simulate_day` with the touch quoter S0 (markouts) and `simulator_check.ProbeQuoter`, which posts one lot at each touch and holds it a fixed time whatever happens (fills), under each cancellation bracket; a planted flow, its null, and a queue-stress flow with almost no price moves | that the simulator's post-fill markouts recover a planted adverse selection and find none on the null, and that its fills, estimated from snapshots, match the order-level replay of the same orders, with its brackets on either side | that real queues and informed flow behave like these Poisson flows, or that a quoter would earn anything |
 | `reversion` | `strategies.relative.backtest` (demeaned, basket 3 a side, lookback and hold one half-life) and the frozen `strategies.reversion` configuration (index of the others over 120 bars, threshold for 60 trades a day set on the first 3 days, `execution.thin`); three paths of reversal, momentum and null | that both rules recover a planted reversion, lose what a planted momentum takes, and find nothing on the null, each without bias | that real instruments revert, at what half-life, or that the effect survives costs |
+| `pairs` | `pairs.screen.screen` on the first formation window of a planted and an independent pair together (six pairs, Holm at 5%); `pairs.backtest.backtest` walk-forward (formation 720 bars, trading 168, z bands 2 / 0.5 / 4, no gate, next-bar-open fills, taker fee and slippage on both legs) on the planted pair, the independent walks and a pair that breaks halfway; three paths; the backtest re-run with every price after the middle bar scrambled | that the screen ranks a planted cointegration first and does not pass independent walks after correction, that the hedge ratio and half-life come back, that the backtest earns the planted reversion before costs and nothing significant on the nulls, and that no decision reads a later bar | that any real pair cointegrates, at what half-life, or that a relation found on one window holds on the next |
 
 Adverse selection is measured against the true mid at the fill: the half-spread
 a fill captured against the true mid, less its five-second markout (the
