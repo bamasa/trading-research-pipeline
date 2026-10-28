@@ -43,12 +43,7 @@ from typing import Any
 
 import yaml
 
-from trading_research.backtest.costs import (
-    BINANCE_UM_TAKER_BP,
-    BYBIT_FEE_RETRIEVED,
-    BYBIT_FEE_SOURCE,
-    BYBIT_LINEAR_TIERS,
-)
+from trading_research.backtest.costs import BYBIT_FEE_RETRIEVED, BYBIT_FEE_SOURCE
 
 NS_PER_S = 1_000_000_000
 #: The spot registration's configuration, found from the package so any working directory works.
@@ -134,7 +129,11 @@ def tables(
     if (venue, market, symbol) == ("binance", "spot", "BTCUSDT"):
         return [BINANCE_SPOT_READ_2026_10_27], "regular"
     if (venue, market) == ("bybit", "linear"):
-        tiers = {t.name: (t.maker_bp, t.taker_bp) for t in BYBIT_LINEAR_TIERS}
+        # Through the repository's one fee listing (``trp fees``), which reads
+        # ``backtest/costs.py``: the same rows, so the two never disagree.
+        from trading_research.fees import bybit_linear_rows
+
+        tiers = {r.tier: (r.maker_bp, r.taker_bp) for r in bybit_linear_rows()}
         return [
             Interval(
                 _ns("2026-09-02T00:00:00Z"),
@@ -149,11 +148,18 @@ def tables(
             Interval(
                 None,
                 None,
-                {"standard": (2.0, BINANCE_UM_TAKER_BP)},
+                {"standard": (2.0, _binance_usdm_taker_bp())},
                 "backtest/costs.py BINANCE_UM_TAKER_BP and the 2 bp maker its notes state; undated",
             )
         ], "standard"
     return [], ""
+
+
+def _binance_usdm_taker_bp() -> float:
+    """Binance USD-M's standard taker fee, as ``trp fees`` lists it."""
+    from trading_research.fees import code_rows, tier
+
+    return float(tier("standard", "binance_usdm_futures", code_rows()).taker_bp)
 
 
 @dataclass

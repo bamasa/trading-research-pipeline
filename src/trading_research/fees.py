@@ -16,7 +16,11 @@ uses them, and each stays the authority for its own numbers:
   zero-fee measurement;
 * ``configs/spot_2026.yaml``: the spot study's dated fee intervals per venue
   and tier, and its undated cells;
-* ``configs/demo.yaml``: the synthetic demo configuration's fee.
+* ``configs/demo.yaml``: the synthetic demo configuration's fee;
+* ``live/fees.py``: the one row paper trading adds, Binance spot BTCUSDT as
+  read on 2026-10-27. Paper trading reads Bybit's linear schedule and the
+  Binance USD-M taker fee through this module (:func:`bybit_linear_rows`,
+  :func:`tier`), so the two never disagree.
 
 This module only reads them. It changes nothing anywhere, chooses nothing and
 holds no number of its own: a row is ``(venue, tier, period, maker_bp,
@@ -106,17 +110,25 @@ def _yaml(repo: Path, name: str) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
+def bybit_linear_rows() -> list[FeeRow]:
+    """Bybit's linear-perpetual schedule as ``backtest/costs.py`` holds it, one row a tier."""
+    from trading_research.backtest import costs
+
+    period = f"2026 schedule, read {costs.BYBIT_FEE_RETRIEVED}"
+    source = f"backtest/costs.py BYBIT_LINEAR_TIERS; {costs.BYBIT_FEE_SOURCE}"
+    return [
+        FeeRow(BYBIT_LINEAR, t.name, period, t.maker_bp, t.taker_bp, source, t.group, t.requires)
+        for t in costs.BYBIT_LINEAR_TIERS
+    ]
+
+
 def code_rows() -> list[FeeRow]:
     """The rows held in code: ``backtest/costs.py`` and ``backtest/maker.py``."""
     from trading_research.backtest import costs
     from trading_research.backtest.maker import MakerCosts
 
     period = f"2026 schedule, read {costs.BYBIT_FEE_RETRIEVED}"
-    source = f"backtest/costs.py BYBIT_LINEAR_TIERS; {costs.BYBIT_FEE_SOURCE}"
-    rows = [
-        FeeRow(BYBIT_LINEAR, t.name, period, t.maker_bp, t.taker_bp, source, t.group, t.requires)
-        for t in costs.BYBIT_LINEAR_TIERS
-    ]
+    rows = bybit_linear_rows()
     rows.append(
         FeeRow(
             BYBIT_LINEAR,
@@ -235,9 +247,33 @@ def config_rows(repo: Path | None = None) -> list[FeeRow]:
     return rows
 
 
+def paper_rows() -> list[FeeRow]:
+    """The one row paper trading holds that no other table covers: Binance spot
+    BTCUSDT as read on 2026-10-27, from ``live/fees.py``."""
+    from trading_research.live.fees import BINANCE_SPOT_READ_2026_10_27 as read
+
+    period = f"{_day(_iso(read.start_ns))}..{_day(_iso(read.end_ns))}"
+    return [
+        FeeRow(
+            "binance_spot_BTCUSDT",
+            name,
+            period,
+            maker,
+            taker,
+            f"live/fees.py BINANCE_SPOT_READ_2026_10_27; {read.source}",
+            note="paper trading only",
+        )
+        for name, (maker, taker) in read.tiers.items()
+    ]
+
+
+def _iso(ns: int | None) -> str:
+    return "" if ns is None else pd.Timestamp(ns, tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def rows(repo: Path | None = None) -> list[FeeRow]:
-    """Every row: the code's tables first, then the configurations'."""
-    return [*code_rows(), *config_rows(repo)]
+    """Every row: the code's tables first, then the configurations', then paper trading's."""
+    return [*code_rows(), *config_rows(repo), *paper_rows()]
 
 
 def table(repo: Path | None = None, *, venue: str | None = None) -> pd.DataFrame:

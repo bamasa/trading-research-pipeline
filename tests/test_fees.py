@@ -55,3 +55,20 @@ def test_the_command_prints_the_table_and_writes_it(tmp_path: Path) -> None:
     assert set(written["venue"]) == {fees.BYBIT_LINEAR}
     assert "base" in result.output and "rebate" in result.output
     assert CliRunner().invoke(app, ["fees", "--venue", "nowhere"]).exit_code == 1
+
+
+def test_paper_trading_reads_its_fees_through_the_one_listing() -> None:
+    from trading_research.live.fees import schedule_for
+
+    listed = {r.tier: (r.maker_bp, r.taker_bp) for r in fees.bybit_linear_rows()}
+    bybit = schedule_for("bybit", "linear", "BTCUSDT")
+    assert bybit.intervals[0].tiers == listed
+    for name, (maker, taker) in listed.items():
+        quote = schedule_for("bybit", "linear", "BTCUSDT", name).quote(bybit.intervals[0].start_ns)
+        assert (quote.maker_bp, quote.taker_bp) == (maker, taker)
+    usdm = fees.tier("standard", "binance_usdm_futures", fees.code_rows())
+    quote = schedule_for("binance", "linear", "BTCUSDT").quote(0)
+    assert quote.taker_bp == usdm.taker_bp
+    paper = [r for r in fees.rows() if r.venue == "binance_spot_BTCUSDT"]
+    assert {r.tier: (r.maker_bp, r.taker_bp) for r in paper}["regular"] == (10.0, 10.0)
+    assert all(r.period == "2026-10-27..2026-10-28" for r in paper)
