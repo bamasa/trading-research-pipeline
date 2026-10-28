@@ -127,6 +127,9 @@ class BybitParser:
     last_trade_seq: int | None = None
     #: Set on a sequence gap: the stream resubscribes to get a fresh snapshot.
     needs_resync: bool = False
+    #: Sequence gaps seen, kept outside the book's state as data.bybit.reconstruct
+    #: keeps them: a snapshot resets the book, not the count.
+    gaps: int = 0
 
     def reset(self) -> None:
         """Forget the book after a reconnect; rows resume at the next snapshot."""
@@ -155,9 +158,7 @@ class BybitParser:
         out: list[Event] = []
         state = self.state
         if kind == "snapshot":
-            gaps = state.gaps
             state = self.state = BookState()
-            state.gaps = gaps
             state.apply("b", data.get("b", []))
             state.apply("a", data.get("a", []))
             state.last_update = update
@@ -167,7 +168,7 @@ class BybitParser:
                 and update is not None
                 and update != state.last_update + 1
             ):
-                state.gaps += 1
+                self.gaps += 1
                 self.needs_resync = True
                 out.append(
                     Gap(
