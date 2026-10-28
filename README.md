@@ -1,200 +1,450 @@
 # trading-research-pipeline
 
-**A leakage-aware research pipeline for systematic trading — and what it found
-when pointed at crypto perpetuals.**
-
-*Solo project · 2026 · Python, pandas, NumPy, LightGBM, PyTorch · market microstructure, limit order books, walk-forward validation, event-time market-making simulation, regime detection · MIT licence*
-
-| | |
-|---|---|
-| **Found** | a conditional edge: short-horizon cross-sectional reversion pays on a held-out fortnight (+6.99 bp a trade net, 22 of 26 instruments) in a measurable market state, and loses everywhere once the state is gone |
-| **Killed** | directional prediction from one instrument's book; passive execution of the signal; market making in two pre-registered rounds — nine hypotheses on data no code had read, every one refuted, including an apparent +2.2 a day that a pre-registered check showed was inventory carried through a rising market |
-| **Built** | data contracts and downloaders for two venues, a feature registry with mechanical look-ahead checks, purged walk-forward splits, sixteen models, cost-aware backtests for taker, passive and market-making execution, an event-time simulator that fills only from trade prints, two regime-break detectors (one from [adia-structural-break](https://github.com/bamasa/adia-structural-break)), and a search over instrument × model × execution × regime policy |
-| **How** | every candidate is registered with the condition that would refute it before the test runs; held-out blocks are opened once through a ledger that refuses them unless the frozen configuration is committed |
-
-**The result.** Short-horizon cross-sectional reversion in crypto perpetuals
-pays — under a market state that can be measured but, on the evidence here, not
-forecast. On a held-out fortnight in the state that supports it, a
-three-parameter rule earns **+6.99 bp per trade net of realistic costs on 22 of
-26 instruments**, and a model that predicts how far each trade will run raises
-that to **+18.8 bp over 3,297 trades**. On the six weeks that followed, where the
-state was absent, the identical frozen configuration loses on all 26.
-
-The state is one number: the index's ten-minute autocorrelation, −0.10 where the
-strategy works and −0.0003 where it does not. The mechanism, the boundary, and
-the three attempts to escape the boundary are in
-[§27](docs/results.md#27-cross-sectional-reversion-and-the-market-state-it-requires).
-
-Everything else here is negative and was established the same way. Directional
-prediction from one instrument's own order book does not clear a taker round
-trip: forty-four instruments screened, the three best searched over thirteen
-axes, no winner profitable on a block that chose nothing.
-Market making was tested the same way, in two pre-registered rounds, each read
-once on a held-out fortnight: all nine hypotheses are killed. The spread a
-public-data market maker captures is smaller than the move that follows its
-fills, on BICO and on six wide-tick altcoins alike; the one result that looked
-like profit (+2.2 USDT per 100 of clip a day at the market-maker rebate) was
-inventory carried through a rising market, which a check written down before the
-read caught ([below](#market-making-quoting-both-sides-on-public-bybit-data)).
-[`docs/findings.md`](docs/findings.md) is the register — every candidate, its
-status, and the condition written down before the test that would refute it.
-
-Instruments, features, targets and models are compared under one honest cost
-model, with look-ahead checked mechanically rather than promised.
-
-It covers the whole path from raw events to a trading result: data contracts,
-feature engineering, forward-looking labels, chronological validation with
-purging and embargo, model comparison, and a backtest that charges realistic
-transaction costs.
-
-The emphasis is on the parts that decide whether a result means anything —
-validation and cost accounting — rather than on the model. Most short-horizon
-strategies that look profitable are not: they leak future information into
-features, they tune on the data they report on, or they ignore what it costs to
-cross a spread two hundred times a day. This project is built so that each of
-those failure modes is a test that fails, not a caveat in a footnote.
-
-> **Status: complete end to end: taker, passive entry and market making.** Data contracts, a synthetic
-> market, downloaders for two venues with data that fetches itself when missing,
-> a feature registry with look-ahead checks, purged walk-forward splits, sixteen
-> models from parameter-free rules to dilated convolutions, bagging, stacking on
-> forward-chained out-of-fold predictions, a bias-variance decomposition that
-> says which ensemble is worth using, calibration, cost-aware backtesting, a
-> queue-level maker model, an event-time market-making simulator that fills only
-> from trade prints, two regime-break detectors, an information audit that
-> measures each data source before a model is chosen, successive-halving search
-> over thirteen axes with execution and the regime policy scored at its last
-> rung, and the experiment script behind every published table. 1,130 tests, a
-> repository audit in CI.
-
-## The pipeline map
-
-From raw events to a verdict. Every box is a module or a document, and the
-execution step is a choice a run makes rather than an assumption built into it:
-the same signal can cross the spread, rest at the touch, or be quoted on both
-sides in event time, and each is judged by the same statistic.
-
-```mermaid
-flowchart TD
-    data["<b>1 Data</b><br/>Binance archives · Bybit book, 10 levels / 100 ms<br/>prints with the aggressor · funding<br/>contracts and validation, fetched when missing"]
-    regimes["<b>2 Regimes</b><br/>changepoint: CUSUM over book blocks<br/>whitened Shiryaev-Roberts on returns<br/>reversion state: index autocorrelation"]
-    screen["<b>3 Instruments</b><br/>edge over cost, for a taker<br/>spread of two maker fees or more, for a maker"]
-    signal["<b>4 Signal</b><br/>features with a declared look-back · labels<br/>purged walk-forward · rules and 16 models"]
-    search["<b>5 Search</b><br/>successive halving · neighbourhood choice<br/>held-out block read once"]
-    subgraph execution["6 Execution, a searched axis"]
-        taker["taker"]
-        passive["passive entry"]
-        maker["market maker S0-S3<br/>+ regime guard"]
-    end
-    grid["<b>7 Grid</b><br/>thin + taker costs · queue behind the touch"]
-    event["<b>7 Event time</b><br/>a queue per order · latency<br/>fills only from prints · fees · funding"]
-    verdict["<b>8 Verdict</b><br/>clustered t · kill conditions written first<br/>placebos · ladder · fee break-even · register"]
-    deploy["9 Deploy: not built"]
-
-    data --> regimes --> screen --> signal --> search --> execution
-    regimes -. flags and state .-> maker
-    taker --> grid
-    passive --> grid
-    maker --> event
-    grid --> verdict
-    event --> verdict
-    verdict -.-> deploy
-
-    click data "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/data_contract.md"
-    click regimes "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/validation/structural_breaks.py"
-    click screen "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/data/screen.py"
-    click signal "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/features/registry.py"
-    click search "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/validation/search.py"
-    click taker "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/pipeline/execution.py"
-    click passive "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/backtest/maker.py"
-    click maker "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/pipeline/market_making.py"
-    click grid "https://github.com/bamasa/trading-research-pipeline/blob/main/src/trading_research/backtest/execution.py"
-    click event "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/market_making_simulator.md"
-    click verdict "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/findings.md"
-```
-
-| Step | Where it lives |
-|---|---|
-| 1 Data | [`data/`](src/trading_research/data/) · [`docs/data_contract.md`](docs/data_contract.md) |
-| 2 Regimes | [`validation/changepoint.py`](src/trading_research/validation/changepoint.py) · [`validation/structural_breaks.py`](src/trading_research/validation/structural_breaks.py) · [`market_making/flags.py`](src/trading_research/market_making/flags.py) · [`strategies/reversion.py`](src/trading_research/strategies/reversion.py) |
-| 3 Instruments | [`data/screen.py`](src/trading_research/data/screen.py) · [`market_making/screen.py`](src/trading_research/market_making/screen.py) |
-| 4 Signal | [`features/`](src/trading_research/features/) · [`labels/`](src/trading_research/labels/) · [`validation/splits.py`](src/trading_research/validation/splits.py) · [`models/`](src/trading_research/models/) |
-| 5 Search | [`validation/search.py`](src/trading_research/validation/search.py) · [`pipeline/discovery.py`](src/trading_research/pipeline/discovery.py) · [`experiments/grand_search.py`](experiments/grand_search.py) |
-| 6 Execution | [`pipeline/execution.py`](src/trading_research/pipeline/execution.py) · [`pipeline/market_making.py`](src/trading_research/pipeline/market_making.py) |
-| 7 Simulation and costs | [`backtest/`](src/trading_research/backtest/) · [`market_making/simulator.py`](src/trading_research/market_making/simulator.py) · [`docs/execution_assumptions.md`](docs/execution_assumptions.md) · [`docs/market_making_simulator.md`](docs/market_making_simulator.md) |
-| 8 Verdict | [`evaluation/significance.py`](src/trading_research/evaluation/significance.py) · [`market_making/verdicts.py`](src/trading_research/market_making/verdicts.py) · [`docs/findings.md`](docs/findings.md) · [`docs/results.md`](docs/results.md) |
-
-### Run it
+A pre-registered strategy-search pipeline for crypto markets: data → regimes → instruments →
+signal → search → execution (taker | passive | maker) → verdict → study → agent → paper. A
+candidate is registered with the condition that would kill it before any held-out day is read,
+a held-out block is read once through a ledger, and every result is net of a stated fee.
 
 ```bash
-uv sync --all-extras
-uv run pytest                                          # every test, synthetic data, no network
-uv run trading-research reproduce                      # §27 end to end, taker execution
-uv run trading-research reproduce --execution both     # taker against passive entry, where there are prints
-uv run trading-research mm-backtest --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25 \
-    --strategy s1 --frozen                             # the market maker on the development block
-uv run python -m experiments.grand_search --symbol BTCUSDT --execution-axis
-uv run trp --help                                      # the map: one group per step
-uv run trp demo --execution all                        # the walkthrough on a synthetic market, a page per mode
-uv run trp search register --data <dataset>            # then instruments, frequency, method, model, execution, read
-uv run trp study list                                  # the registered studies, through their entry points
-uv run trp fees                                        # every fee table the costs are read from
+trp demo --execution all --verify   # the whole path on a generated market, then the checks
+trp verify all                      # each component against data with a planted answer
+trp agent demo                      # the research loop through the agent harness, synthetic
 ```
 
-`trp` is `trading-research` under a shorter name; every command above keeps its
-flat name too (`trp backtest`, `trp download`, ...).
+| Study, held-out block read once | Fee a side, bp | Held-out result, net of the fee | Status |
+|---|---|---|---|
+| Cross-sectional reversion, 26 USDT perpetuals, 26 Feb–11 Mar 2024 | taker 5.5 + 0.5 slippage | +6.99 bp a trade (median); by day +6.18 bp, t 1.18, 14 days; −19.94 bp the next six weeks | conditional |
+| Market making round 1, Bybit BICOUSDT, 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | touch quoter −5.00 bp of turnover; 4 of 4 hypotheses killed | killed |
+| Market making round 2, six Bybit altcoins, 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | −0.067 USDT per 100 USDT of clip a day; 5 of 5 killed | killed |
+| Maker, Bybit BTCUSDT perpetual, 8 Apr–30 Jun 2021 | maker −2.5, taker 7.5 | −2.69 bp per fill, 0 of 84 days positive | killed¹ |
+| Spot taker, Binance BTC/FDUSD and Bybit BTCUSDT, 8 Aug–21 Oct 2026 | 0/10 and 10/10 | −17.35, −19.43, −19.28 bp a trade | killed |
+| Spot maker, Binance BTC/FDUSD, 8 Aug–21 Oct 2026 | maker 0, taker 10 | −2.35, −2.88, −2.79 bp per fill | killed¹ |
+| Short-horizon search, Bybit BTCUSDT perpetual, 2025 | maker 2.0, taker 5.5 | held-out blocks not read | development complete |
 
-`reproduce` fetches what it needs. `mm-backtest` reads the book, prints and
-funding the market-making study fetched (`data/book`, `data/trades`,
-`data/funding`) and refuses the held-out fortnight unless `--allow-heldout` is
-given, and then opens it only through the ledger.
+¹ uncalibrated fill rule. Two exploratory replications of the author's 2025 research are negative
+after any fee; every study is in [Registered studies](#registered-studies).
 
 ---
 
-## Why this project
+## Contents
 
-Four things here are deliberately stricter than the norm in public trading
-repositories:
+[Walk the pipeline](#walk-the-pipeline) ·
+[Add a strategy](#add-a-strategy) ·
+[Check it is not a fiction](#check-it-is-not-a-fiction) ·
+[Registered studies](#registered-studies) ·
+[Deploy: paper trading](#deploy-paper-trading) ·
+[Agents](#agents) ·
+[The findings](#the-findings) ·
+[Methodology](#methodology) ·
+[Data](#data) ·
+[Limitations](#limitations) ·
+[Disclaimer](#disclaimer) ·
+[License](#license)
 
-**1. No look-ahead, checked mechanically.** Every feature registers the number
-of observations it looks back. The test suite then mutates the data *after* a
-cutoff and asserts that no feature value *before* the cutoff moved. That catches
-centred rolling windows, backward fills and normalisation statistics fitted over
-the whole sample — the three ways look-ahead usually gets in, none of which
-makes anything visibly fail.
+Install: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
-**2. Purging and embargo, derived rather than guessed.** A label at time *t*
-reads prices up to *t + H*, so the tail of a training block overlaps the head of
-the block after it. The split derives the embargo from the label's declared
-horizon instead of leaving it to be set by hand, because an embargo set by hand
-is usually set too small.
+```bash
+git clone https://github.com/bamasa/trading-research-pipeline
+cd trading-research-pipeline
+uv sync --all-extras
+uv run trp --help          # the map: one group per step, in the order the pipeline runs
+uv run pytest -m "not slow"  # synthetic data and fixtures, no network
+```
 
-**3. Costs applied consistently.** The same cost model is used when labelling,
-when deciding to trade, and when computing profit and loss. Backtests routinely
-overstate results by labelling against a mid-price move that would not have
-survived the spread.
+`trp` and `trading-research` are the same program; every command also keeps its
+flat name (`trp download` is `trp data download`). Nothing under `data/`,
+`artifacts/` or `runs/` is committed. The commands below are written without
+`uv run`.
 
-**4. Findings are recorded with what would kill them, before the test.**
-[`docs/findings.md`](docs/findings.md) lists every candidate this project has
-produced with its status — candidate, confirmed, killed, artefact — and, for the
-open ones, the condition that would refute them, written down in advance. Four
-findings are in the killed column, each with the test that killed it. Two are
-artefacts: an effect that turned out to be a property of the measurement rather
-than the market.
+---
 
-That register exists because the same mistake kept recurring in different
-costumes — a promising number, a plausible mechanism, and no test that could
-have refuted it. Two rounds of adversarial review against this repository's own
-code found nineteen defects, including a market gate that silently let
-everything through while three searches reported a gate axis, and a test whose
-name asserted the opposite of the behaviour it pinned. Both are documented where
-they happened rather than quietly fixed.
+## Walk the pipeline
 
-The synthetic market underpins all of this. It contains a known, deliberately
-weak predictable component, so the test suite can assert both directions: that
-the pipeline finds the signal when there is one, and — with the signal switched
-off — that it finds nothing. A pipeline that reports an edge on data with no
-edge has a leak, and that is a test rather than a hope.
+Ten steps, each a command group. Every step reads files and writes files, so a
+step can be inspected, re-run or replaced without re-running what came before.
+`trp demo` runs steps 1 to 7 on a generated market in a few minutes and writes
+one page per execution mode; the subsections say what each step does on real
+data.
+
+### 1 Data
+
+```bash
+trp data download --symbol BTCUSDT --kind bookTicker --start 2024-02-01 --end 2024-03-09 --grid 100ms
+trp data download-book --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25
+trp data generate-demo-data --output data/demo
+trp data validate-data --input data/demo
+trp data describe-schema book
+```
+
+- **Reads**: Binance's and Bybit's public archives (checksums verified), or
+  nothing for the synthetic market.
+- **Writes**: `data/raw`, `data/book`, `data/demo`, each a directory under a
+  declared contract ([`docs/data_contract.md`](docs/data_contract.md)) with a
+  `manifest.json` of where it came from.
+- **Refuses**: nothing by itself; a gap, a crossed book or a clock problem is a
+  finding of `validate-data`, not a crash. A registered study fetches its
+  protected days only through its own entry point and ledger (step 8).
+
+### 2 Regimes
+
+```bash
+trp regimes breaks --symbol BTCUSDT --interval 1d --start 2024-01-01 --end 2026-09-30 --plot
+```
+
+- **Reads**: daily or hourly bars (`--prices` for a file already on disk).
+- **Writes**: `artifacts/breaks`: each break, its family (scale, dependence,
+  mean) and the odds behind it.
+- **Detectors**: a CUSUM changepoint detector over book blocks
+  ([`validation/changepoint.py`](src/trading_research/validation/changepoint.py))
+  and a whitened Shiryaev-Roberts monitor on returns
+  ([`validation/structural_breaks.py`](src/trading_research/validation/structural_breaks.py),
+  from [adia-structural-break](https://github.com/bamasa/adia-structural-break),
+  installed with `uv sync --extra breaks`). Thresholds are calibrated on a
+  null. On 1,003 BTCUSDT daily returns from January 2024 the monitor flags one
+  break, 13 September 2025, scale, downward; forty shuffled copies of the same
+  returns flag one copy.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/structural_breaks_BTCUSDT_dark.png">
+  <img alt="BTCUSDT daily: breaks flagged on the whitened stream, with the family log-odds" src="docs/images/structural_breaks_BTCUSDT_light.png">
+</picture>
+
+### 3 Instruments
+
+```bash
+trp instruments discover
+trp instruments screen --raw data/raw --horizon-s 120
+```
+
+- **Reads**: the venue's listing (`discover`) and the days of each instrument
+  already under `data/raw` (`screen`; three are enough).
+- **Writes**: `artifacts/screen`: each instrument ranked by edge over cost, both
+  halves of it (how far the price moves against the cost, and whether the book
+  predicts where).
+- **What it found**: the best of forty-four instruments has an average edge
+  about a tenth of its cost, and BTCUSDT a thirtieth; re-run seven weeks apart
+  on eighty instruments, the rank correlation is 0.59, so a basket of five to
+  ten is chosen rather than one best name.
+
+### 4 Signal
+
+```bash
+trp signal prepare --symbol BTCUSDT --horizon 1200 --subsample 50
+trp signal select --train-start 2024-02-01 --train-end 2024-02-14
+trp signal train --train-start 2024-02-01 --train-end 2024-02-14 --model logistic
+trp signal predict --start 2024-02-22 --end 2024-02-28
+```
+
+- **Reads**: `data/raw`; each later command reads the previous one's files
+  under `artifacts/` (`prepared`, `features`, `model`).
+- **Writes**: `artifacts/prepared` (one file per day), `artifacts/features`
+  (the list chosen on the training window), `artifacts/model`,
+  `artifacts/predictions`.
+- **Refuses**: a feature that does not declare its look-back; the test suite
+  changes the data after a cutoff and fails if any value before it moved.
+  `select` and `train` read only the window they are given; the embargo is
+  derived from the label's horizon.
+
+### 5 Search
+
+```bash
+trp search register --data data/walkthrough --run artifacts/search
+trp search instruments --run artifacts/search
+trp search frequency --run artifacts/search
+trp search method --run artifacts/search
+trp search model --run artifacts/search
+trp search execution --run artifacts/search
+trp search read --run artifacts/search
+trp search status --run artifacts/search
+```
+
+- **Reads**: a dataset root (`raw/`, and `book/`, `trades/`, `funding/` for a
+  maker); each step reads the previous step's `chosen.json`.
+- **Writes**: one folder per step under `--run`, the registration first (from
+  the file names, before any day is read) and a ledger.
+- **Refuses**: every step before `read` sees the search block only; the hold
+  and label threshold are chosen by their neighbourhood, with the peak reported
+  beside the choice; `read` opens the held-out block once and a second `read`
+  is refused by the ledger. `trp search run` runs the steps in order.
+
+### 6 Execution: taker, passive or maker
+
+```bash
+trp backtest --min-confidence 0.62 --hold 24 --cooldown 120
+trp backtest exit-search --model logistic --hold 24
+trp backtest retrain-search --model logistic --start 2024-02-15 --train-days 3,7,14,21 --apply-days 1,3,7
+trp backtest mm-backtest --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25 --strategy s1 --frozen
+```
+
+- **Reads**: `artifacts/predictions` (taker), the market-making study's book,
+  prints and funding (`mm-backtest`).
+- **Writes**: `artifacts/backtest`, `artifacts/exits`, `artifacts/retrain`,
+  `artifacts/mm`: every attempt, misses included, with the fee, spread and
+  slippage it paid.
+- **Modes**: a taker crosses the spread on both legs; a passive entry rests at
+  the touch and fills only through the queue; the market maker quotes both
+  sides in event time and fills only from prints
+  ([`docs/market_making_simulator.md`](docs/market_making_simulator.md)). Every
+  mode returns the same table for the same statistic to judge.
+- **Refuses**: `mm-backtest` refuses a held-out or boundary day unless
+  `--allow-heldout` is given, then reads it only with the frozen values and
+  through the ledger; a second read also needs `--second-read` and is stamped
+  as one. Fees come from one place: `trp fees` lists every table the costs are
+  read from, with its source.
+
+### 7 Verdict
+
+```bash
+trp review --trades trades.csv --days 14
+```
+
+- **Reads**: a CSV of trades with a `net_bp` column (the backtest writes
+  `artifacts/backtest/trades.parquet`).
+- **Writes**: `artifacts/review`: result, dispersion, drawdown, and how many
+  trades the edge would need to be established, for a reviewer
+  ([`docs/evaluation/rubric.md`](docs/evaluation/rubric.md)). It grades nothing.
+- **In a study** the verdict is the entry point's: the day-clustered t, the
+  kill conditions written before the read, placebos, Holm across slots, and a
+  fee ladder in which every tier but the verdict tier is a labelled
+  measurement.
+
+### 8 Study
+
+```bash
+trp study list
+trp study stages spot_2026
+trp study status spot_2026
+trp study run spot_2026 --dry-run
+trp study pages spot_2026
+```
+
+- **Reads**: the study's registration (`docs/preregistration/<study>.md`), its
+  YAML (`configs/<study>.yaml`) and its ledger
+  (`experiments/results/<study>_ledger.json`).
+- **Writes**: through the study's own entry point
+  (`experiments/<study>.py`, run unmodified in a fresh interpreter), its stage
+  records and pages under `experiments/results/`.
+- **Refuses**: a stage out of order; `open` and `read` of a held-out block
+  without the frozen configuration committed and the tree clean; a block whose
+  read has finished (its results' sha256 is in the ledger).
+
+### 9 Agent
+
+```bash
+trp agent calendar
+trp agent demo
+trp agent run --help
+```
+
+The research loop (propose, register, run, review, record) run by a model under
+a policy; see [Agents](#agents).
+
+### 10 Paper
+
+```bash
+trp paper replay --day data/demo --model artifacts/model --execution taker --fee-tier base --fee-asof 2026-09-15
+```
+
+The model on a public stream or a replayed day, with no order path; see
+[Deploy: paper trading](#deploy-paper-trading).
+
+---
+
+## Add a strategy
+
+A strategy, model, feature set, label or execution is one file, found by a
+registry ([`docs/extending.md`](docs/extending.md)).
+
+```bash
+trp strategies new my_rule                     # writes strategies/contrib/my_rule.py and its test
+trp strategies list --kind strategy
+trp strategies check my_rule                   # protocol, no look-ahead, executions, synthetic
+trp strategies backtest my_rule --execution taker,passive
+trp study new my_study --template taker        # a registration skeleton naming it
+```
+
+1. **Fork** the repository and work on a branch of your fork.
+2. **`trp strategies new`** writes a working plugin from the template under the
+   kind's `contrib/` folder, and a test for it. A strategy declares `lookback`
+   (rows it reads before the decision), `horizon` (rows it holds) and `inputs`
+   (the columns it reads), and implements `fit(history)` and `decide(frame)`,
+   returning −1, 0 or +1 per row.
+3. **`trp strategies check`** runs the conformance suite and writes a page
+   under `artifacts/plugins/`:
+   (a) the protocol; (b) no look-ahead, by changing every input after a row and
+   requiring the decisions up to it unchanged, and the declared look-back;
+   (c) every execution plugin with a fee-table row; (d) the synthetic checks:
+   on book days with a planted queue-imbalance edge, whether the strategy finds
+   it, whether its trades earned more than the planted drift owed them (only a
+   strategy reading the future can), nothing on the null, and the edge lost
+   when its decisions are moved to other days. A failure names the check.
+4. **`trp strategies backtest`** fits it on the front of the synthetic demo
+   market (or `--input` a dataset) and trades the rest in each execution mode
+   at the fee tier named.
+5. **Into a study**: `trp study new` writes a registration document, its YAML
+   with `null` placeholders and an entry point that refuses to run until both
+   are filled. The registration names the plugin, its parameters and its file's
+   sha256; the hypothesis, the kill conditions and the held-out block are
+   committed before any of its data is read.
+
+---
+
+## Check it is not a fiction
+
+Every component that decides a result is run on generated data whose answer is
+known, and on the same data with nothing planted
+([`docs/synthetic.md`](docs/synthetic.md)).
+
+```bash
+trp synthetic book-days --feature imbalance --size-bp 16
+trp synthetic cross-section
+trp verify edge
+trp verify all
+trp verify all --quick
+```
+
+The generators: book days with an edge planted on queue imbalance or on flow,
+break days with one regime break at a known time, a cross-section with a
+planted reversion or momentum, order-level order flow with a planted adverse
+selection and the queue's truth, a funding series with a planted persistence;
+each with a seed, a `truth.json` and a null. `trp verify all` (about two and a
+half minutes) writes a page per check under `artifacts/verify/` and exits 1 if
+any binding criterion fails; `--quick` runs fewer days and paths, at sizes
+whose verdicts matched the default run's.
+
+Result of `trp verify all` (default sizes, seed 20200106):
+
+| Check | Component | Result | Why |
+|---|---|---|---|
+| edge | `order_flow` rule, `logistic`, `lightgbm` on imbalance; `logistic`, `lightgbm` on flow | pass | find the planted 16 bp, owe it 80–93% per trade, recovered equals planted, nothing on the null, placebos kill it |
+| edge | `spread_capture` rule | **fail** | a look-ahead: its tight-spread test is a quantile of the whole frame it is handed, so a decision reads later rows |
+| edge | the flow-share rule (`order_flow:flow_imbalance_24`) | **fail** | a share of signed volume cannot tell an episode's burst of prints from two prints on one side; its trades sit on episodes 5% of the time |
+| detector | `changepoint.detect` | **fail** | finds the break, but 0.72 false alarms a day against a bound of 0.5: its spread statistic reads the spread in bp of a moving mid |
+| detector | `structural_breaks.detect_breaks` | pass | finds every planted break within an hour, no false alarm |
+| simulator | the market-making simulator | pass | markouts recover the planted adverse selection; fills match an order-level replay within 2 points; the cancellation brackets contain the truth |
+| reversion | the relative and index reversion rules | pass | find the planted reversion, lose on planted momentum, nothing on the null |
+
+`trp strategies check --all` adds two failures of the plugin suite: the
+`random_forest` and `extra_trees` models are not reproducible to the bit when
+refitted (threaded trees, changes of 2e-16), which the fold-level leakage test
+reads as a moved fit; and the generated feature set's exponentially weighted
+means remember every earlier row, so no finite declared look-back is true
+(nothing reads forward). These are
+findings about existing components, reported and not changed: the registered
+studies depend on them as they are.
+
+---
+
+## Registered studies
+
+Each study has a registration committed before its held-out data was fetched
+([`docs/preregistration/`](docs/preregistration/)), a YAML with every value that
+decides a status, an entry point, and a ledger that lets each held-out block be
+read once. The verdict is net of the fee named; a zero-fee number appears only
+beside it, as a reference.
+
+| Study | Venue, instrument | Held-out period | Fee a side, bp (verdict tier) | Slots | Held-out result, net of the fee | Status |
+|---|---|---|---|---|---|---|
+| Cross-sectional reversion ([§27](docs/results.md#27-cross-sectional-reversion-and-the-market-state-it-requires)) | 26 USDT perpetuals | 26 Feb–11 Mar 2024 | taker 5.5 + 0.5 slippage, plus the spread (12–16 a round trip) | one rule, three parameters | +6.99 bp a trade, median over 22 of 26 positive; by day +6.18 bp, t 1.18 over 14 days, 8 positive; 12 Mar–20 Apr: −19.94 bp, 0 of 26 | conditional on the index's 10-minute autocorrelation (−0.10 where it pays, 0.00 where it does not) |
+| Market making, round 1 ([registration](docs/preregistration/market_making.md)) | Bybit BICOUSDT perpetual | 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | H1, H2.1, H2.2, H3 | touch quoter −5.00 bp of turnover; the comparison quoter S1 −7.50; every strategy negative under every cancellation rule and latency | all four killed |
+| Market making, round 2 ([registration](docs/preregistration/market_making_round2.md)) | Bybit ALICE, ALGO, JTO, ZEC, GALA, CAKE perpetuals | 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | B1, B2, B3a, B3b, B4 | B1 −0.067 USDT per 100 USDT of clip a day; the positive nets at the 0 bp and −1 bp maker tiers are inventory (K-dir) | all five killed |
+| Maker at the 2021 fees | Bybit BTCUSDT perpetual | 8 Apr–30 Jun 2021 | maker −2.5, taker 7.5 | S0, F | S0 −2.69 bp per fill (−227.27 USDT per 100 USDT of clip a day), 0 of 84 days positive; F not admitted on D (−2.64) | killed; uncalibrated fill rule |
+| Short-horizon search, 2025 | Bybit BTCUSDT perpetual | H 8 Jul–20 Aug 2025, then F and P | maker 2.0, taker 5.5 | S25, S-C, S-R, S-P, S-M, S25-Z | development complete; the held-out blocks are not read, so no number is a result | waiting for H |
+| Spot taker, 2026 | Binance BTC/FDUSD; Bybit BTCUSDT spot | 8 Aug–21 Oct 2026 | Binance Regular 0 / 10; Bybit non-VIP 10 / 10 | S25-PF, S25-BB, S25-T | S25-PF −17.35, S25-BB −19.43, S25-T −19.28 bp a trade | all killed by K1; P not read |
+| Spot maker, 2026 | Binance BTC/FDUSD | 8 Aug–21 Oct 2026 | maker 0, taker flatten 10 | MK-S, MK-Q, MK-SQ | MK-S −2.35, MK-Q −2.88, MK-SQ −2.79 bp per fill | all killed by K1; uncalibrated fill rule |
+
+Two replications of the author's 2025 research are exploratory, not registered,
+and read days that research had seen:
+
+| Replication | Venue, days | Fee | Result | Reading |
+|---|---|---|---|---|
+| BTC/FDUSD, one recipe at two fees | Binance BTC/FDUSD spot prints; 2025-02-04..26 and 2025-06-08..30, 46 test days | Regular 0 / 10 bp | −20.19 bp a trade, 0% of days positive (zero-fee reference −0.19) | positive at neither fee; a profit of that kind on the pair needed the zero fee |
+| ETH, a TCN and its gate, frozen | Bybit ETHUSDT perpetual; tested frozen on 2026-08-08..21 | taker 2.2 and 5.5 bp | gross edge 0.31 bp of turnover; loses on each of the 14 days at both fees | negative after any fee |
+
+To run a study's steps: `trp study list`, then `trp study stages <study>` and
+`trp study run <study> <stage>`; a block's `open` and `read` are the owner's
+call, and on this repository the read blocks refuse to be read again. The
+market-making rounds run through their experiment scripts
+(`python -m experiments.market_making`, `python -m experiments.market_making_heldout`,
+`python -m experiments.market_making_verdicts`); the reversion end to end is
+`trp reproduce`, which fetches what is missing and reads its held-out block
+once.
+
+---
+
+## Deploy: paper trading
+
+```bash
+trp paper record --venue bybit --market spot --symbol BTCUSDT --minutes 60
+trp paper replay --day 2026-10-27 --venue bybit --market spot --symbol BTCUSDT --model artifacts/model --execution passive
+trp paper run --venue binance --market spot --symbol BTCUSDT --model artifacts/model --execution taker --minutes 120
+trp paper status runs/paper/X
+trp paper parity --day data/demo --output parity.csv
+```
+
+The backtest's features, model, execution rules and fee table, run on a public
+market-data stream (`run`, `record`) or a stored day (`replay`, `parity`)
+([`docs/paper_trading.md`](docs/paper_trading.md)).
+
+- **Public data only, no order path.** The only URLs are Bybit's and Binance's
+  public market-data streams, checked against a fixed list before a run starts;
+  there is no key, no signature and no private endpoint, and a run refuses to
+  start if its configuration names anything shaped like a credential.
+- **Fills** are the backtests' model: a taker gets the next print of its side,
+  a resting order fills when a print trades through it, at the fee the dated
+  table (`trp fees`) gives for that instant.
+- **Parity.** On a replayed day the streaming features equal the batch features
+  at every boundary within relative 1e-7: 27 of 34 registry and timed features
+  and 106 of 211 prepared columns bit for bit; seven rolling-dispersion columns
+  differ by rounding and are listed as such. A live session replayed from its
+  own recording gives identical probabilities.
+- **Kill switch.** Latched by a loss at or beyond `--max-loss`, a position past
+  the limit, a stale book, or a sequence gap or reconnect: nothing new is sent,
+  resting orders are cancelled and the position is closed by a taker order.
+- **Pages.** Each run writes `runs/paper/<run>/page.md` with its money,
+  decisions, fills, latency and gaps, and a manifest with the model's sha256
+  and the fee sources.
+
+A paper result is a measurement under those fill rules, never evidence that a
+strategy would have made money. The agent harness never runs `paper run` or
+`paper record`: inside a registered prospective block, live data is that
+block's held-out data.
+
+---
+
+## Agents
+
+[`CLAUDE.md`](CLAUDE.md) holds the rules any agent follows here, and
+[`agents/`](agents/README.md) a harness that runs a model through the loop the
+registered studies followed by hand: propose, register, run, review, verdict,
+record ([`agents/protocol.md`](agents/protocol.md),
+[`docs/agents.md`](docs/agents.md)).
+
+```bash
+trp agent demo              # the whole loop on a synthetic study, a scripted client in place of a model
+trp agent calendar          # every range a registration protects
+trp agent status            # the runs, their steps, handbacks and stops
+```
+
+- **Roles**: researcher, registrar, executor, skeptic, scribe, each with its
+  own prompt and its own commands.
+- **Policy**: every tool call is decided before it runs: the repository's own
+  commands one at a time, read-only git, no push, no remote, no edit of study
+  code, no write under `data/`, no fetch that touches a day any registration on
+  any local branch protects, `open` and `read` only on the owner's grant, no
+  `paper run` or `paper record` for any role, `paper replay` only on days
+  outside every protected range.
+- **Verdict**: the study code's, checked against its ledger; the loop stops at
+  every gate the owner holds.
+- **Logged**: every decision with its reason, each tool output's sha256 and
+  size, each turn's token usage and the calendar it enforced, every path
+  relative; the run directory is scanned for the shapes of a secret after every
+  turn, and a finding stops the loop.
+
+`trp demo --agent` adds the loop to the demo page. A model is used only when a
+key, a model name and the SDK are present; otherwise the scripted client runs.
+
+---
 
 ## The findings
 
@@ -584,7 +834,7 @@ observation; no own impact; a 2026 fee schedule applied to 2024 data; and a
 fortnight whose reversion signal had been read before by takers, so only the
 execution increment was new information.
 
-**In one paragraph.** Built carefully and tested as registered, market making
+**In one paragraph.** Tested as registered, market making
 on public Bybit data does not pay here at the base fee: the spread a quoter
 captures is smaller than the move that follows its fills, and none of the three
 ideas registered to change that — stepping inside the spread, leaning on or
@@ -644,332 +894,45 @@ are the inventory gains above, not making.
 
 ---
 
-## The pipeline, step by step
+## Methodology
 
-Twelve steps from "which market" to "running in production". Eleven are built;
-the last is marked and is not. The [pipeline map](#the-pipeline-map) draws the
-same path with execution as the branch it now is; the steps below keep the
-numbering they were built in.
+Four rules hold everywhere, each a test that fails rather than a caveat:
 
-**0. Choose the instrument.** `trading-research discover` enumerates what the
-venue lists; `trading-research screen` ranks it on both halves of the edge
-identity — how far the price moves against the cost, *and* whether the book
-predicts where. Three days of data per instrument.
+1. **No look-ahead, checked mechanically.** Every feature declares how many
+   observations it looks back; the tests change the data after a cutoff and
+   fail if any value before it moved. That catches centred windows, backward
+   fills and normalisation fitted on the whole sample.
+2. **Purging and embargo, derived.** A label at *t* reads prices to *t + H*, so
+   the split derives the embargo from the label's declared horizon instead of
+   leaving it to be set by hand.
+3. **One cost model.** The same fees, spread and slippage at labelling, at the
+   decision and in the profit and loss; fees are read from the tables `trp fees`
+   lists, each with its source.
+4. **Kill conditions before the test.** [`docs/findings.md`](docs/findings.md)
+   lists every candidate with its status (candidate, confirmed, killed,
+   artefact) and the condition that would refute it, written in advance; a
+   registered study adds a held-out block read once through a ledger.
 
-Both halves matter and the first version had only one. Ranked on movement alone
-it put XMRUSDT third of forty-four; XMRUSDT moves nine times as far as BTCUSDT
-and its book predicts nothing (correlation 0.0002 against 0.049), and the full
-pipeline run on it did worse than on the instrument it was meant to replace.
-Corrected, the ranking inverts.
+| Document | Contents |
+|---|---|
+| [`data_contract.md`](docs/data_contract.md) | Column semantics, units, time conventions, quality rules |
+| [`methodology.md`](docs/methodology.md) | Features, labels, splits, model comparison protocol |
+| [`execution_assumptions.md`](docs/execution_assumptions.md) | Cost model, fills, what each execution mode (taker, passive entry, market maker) does and does not simulate |
+| [`market_making_simulator.md`](docs/market_making_simulator.md) | The event-time market-making simulator: every rule, the direction of its bias, and the test that pins it |
+| [`synthetic.md`](docs/synthetic.md) | The generators with planted answers, and what each check proves and does not |
+| [`extending.md`](docs/extending.md) | Plugins: the five kinds, the decorator, the conformance checks |
+| [`paper_trading.md`](docs/paper_trading.md) | The paper loop, the parity guarantee, the kill switch |
+| [`agents.md`](docs/agents.md) | The agent harness: roles, policy, logs, each rule with its test |
+| [`limitations.md`](docs/limitations.md) | What this does not establish |
+| [`preregistration/`](docs/preregistration/) | Every registered study, committed before its held-out data was fetched |
+| [`results.md`](docs/results.md) | Every experiment, numbered, with the script that produced it |
 
-The screen has itself been corrected twice, and both corrections are in
-[§20](docs/results.md). It measured the dispersion of the *absolute* move where
-the identity needs the signed one, understating every edge by about forty per
-cent; and "edge is bounded by IC × dispersion" was used as an impossibility
-argument when it bounds the *average* trade rather than a selective one. With
-both fixed: **the best of forty-four instruments has an average edge about a
-tenth of its cost, and BTCUSDT — the instrument most of this project was built
-on — has a thirtieth.** That three-fold gap is larger than anything the
-modelling ever moved, which is why the instrument is chosen before the model
-and not after.
-
-The screen is also the one step here with a stability check. Re-run on Bybit
-across eighty instruments over two windows seven weeks apart, the rank
-correlation of edge-over-cost is 0.59 — so it measures a real property, not
-noise. But half the top ten changes between windows, so it supports taking a
-basket of five to ten rather than trusting a single best instrument.
-
-*Choosing the model class is still a judgement made by hand.*
-
-**1. Get the data, under a contract.** `trading-research download` pulls
-Binance public archives, verifies checksums, and converts to a declared schema.
-Two planes are modelled separately — trades and book — because a full order book
-cannot be reconstructed from a trade tape. `validate-data` checks the contract
-and reports gaps, crossed books and clock problems as findings rather than
-crashes.
-
-**2. Build features.** Every feature is a pure function that declares how far
-back it looks. The test suite mutates data *after* a cutoff and asserts nothing
-before the cutoff moved, which catches centred windows, backward fills and
-whole-sample normalisation — the three ways look-ahead usually gets in.
-
-**3. Label what counts as a move worth trading.** A forward return larger than
-the round-trip cost is a BUY or a SELL; everything else is HOLD. The threshold
-is the cost, so the model is learning to spot moves that could actually pay,
-not moves that merely happen.
-
-**4. Split in time.** Walk-forward over whole days, with the embargo derived
-from the label's horizon rather than guessed. A label at *t* reads prices to
-*t+H*, so the tail of every training block is dropped.
-
-**Regime monitoring.** A model fitted on one stretch of market is expected to
-apply until the market changes, and a fixed retraining cadence is a guess about
-when that is. Two detectors say instead when the data changed. The first
-([`validation/changepoint.py`](src/trading_research/validation/changepoint.py))
-reads book statistics in non-overlapping blocks at tick frequency. The second
-([`validation/structural_breaks.py`](src/trading_research/validation/structural_breaks.py))
-comes from [adia-structural-break](https://github.com/bamasa/adia-structural-break),
-the author's solution to the ADIA Lab Structural Break Challenge, Real-Time
-Edition (CrunchDAO, 2026; 0.6299 TS-AUC at the close of submissions, about rank 160
-of 1,716 registered participants on the public leaderboard),
-installed as a dependency rather than copied: the return series is whitened by
-its own history — an AR(p) fit by BIC, a conditional scale and the empirical
-distribution of the innovations — and every test runs on the whitened stream,
-with Shiryaev-Roberts odds of a change read per family (scale, dependence,
-mean). Thresholds are calibrated against a null, not chosen by eye; the figure
-below is BTCUSDT daily from January 2024, with the breaks the monitor flags, the
-odds behind them, and the window resets that keep the odds from accumulating
-forever. `uv sync --extra breaks`, then
-`trading-research breaks --symbol BTCUSDT --interval 1d --start 2024-01-01 --end 2026-09-30 --plot`.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/structural_breaks_BTCUSDT_dark.png">
-  <img alt="BTCUSDT daily: breaks flagged on the whitened stream, with the family log-odds" src="docs/images/structural_breaks_BTCUSDT_light.png">
-</picture>
-
-On 1,003 daily returns the walk opens six windows and flags one break: **13
-September 2025, scale, downward** — the odds of a fall in variance cleared the
-calibrated threshold (9.36 against 9.09) seventy-five days into the window that
-opened on 30 June, after a near miss on 29 June (8.96). Monitoring then paused
-until the re-anchored history reached a third of a year, which is the shaded
-stretch. The same walk over forty shuffled copies of the returns — the same
-marginal distribution, no regime — flags one copy, so the null reading is one
-flag in forty against one on the real series; the shorter-memory setting
-(history 250, online 60) flags two scale breaks, 6 February 2026 up and 14
-August 2026 down, at six flags in forty on its null, and is reported beside
-it in [`experiments/results/`](experiments/results/structural_breaks_BTCUSDT_breaks.csv)
-rather than preferred. No dependence break is flagged on this series at either
-setting.
-
-What the figure does not claim: that refitting at these breaks would have
-improved any trading result. That comparison belongs to the refit-policy axis of
-`grand_search.py` and is listed under the roadmap.
-
-**5. Fit and choose the model.** Rule-based strategies (momentum, mean
-reversion, order-flow, breakout) run through the identical machinery as the
-learned ones (logistic, gradient boosting, a dilated causal network) and their
-ensembles. A comparison where the baseline is scored differently is not a
-comparison.
-
-**6. Decide when to enter.** One threshold on the model's confidence, swept on
-validation. Raising it trades less and more selectively; the sweep can optimise
-either total profit or profit per trade, and the second is what "trade only the
-best signals" means when the cut is made honestly.
-
-**7. Decide how to leave.** Six rules: a fixed clock, take-profit, stop-loss,
-trailing stop, and two that read the model's ongoing opinion — leave when its
-confidence decays, or when its prediction flips. Plus a market gate that
-declines to trade at all when volatility cannot support the cost.
-
-**8. Charge the costs.** The same cost model at labelling, at the decision, and
-in the profit and loss. Taker on both legs by default: fee, spread, slippage.
-Execution is a mode a run chooses
-([`pipeline/execution.py`](src/trading_research/pipeline/execution.py)): the same
-decisions can instead rest at the touch and fill only through the queue, or be
-quoted on both sides by the event-time market maker, and every mode returns the
-same table of attempts, misses included, for the same statistic to judge.
-
-**9. Search the configuration.** Successive halving over sampled configurations
-rather than a nested product — cheap candidates are killed after a few windows
-and only survivors are measured on the full span. Everything is chosen on
-validation and the test span is scored once. Execution and the regime policy
-are axes as well, scored only at the last rung (`grand_search.py
---execution-axis`): they are never drawn, so the configurations a search samples,
-and every result it produced before, are unchanged.
-
-**10. Review it.** `trading-research review` assembles the arithmetic half of
-[`docs/evaluation/rubric.md`](docs/evaluation/rubric.md) — result, dispersion,
-drawdown, and how many trades the edge would need to be established — into a
-document a reviewer or an agent can read.
-[`docs/evaluation/prompt.md`](docs/evaluation/prompt.md) is the reviewer's
-instructions. The tool scores nothing: something that produced the evidence and
-graded it would be marking its own work.
-
-This project's own scorecard is in
-[`docs/evaluation/btc_best.md`](docs/evaluation/btc_best.md), and it is not
-flattering.
-
-**11. Deploy and run.** ⚠ *Not built.* What is missing is not the model but
-everything around it: a live data feed with gap recovery, the feature pipeline
-running in streaming rather than batch, an order router, position and risk
-limits, a kill switch, and monitoring that compares live fills against what the
-backtest assumed. That last one is the point — a strategy that silently decays
-looks identical to one that is working until it does not.
-
----
-
-## Architecture
-
-```
-        data                features            labels           validation
-   ┌──────────────┐   ┌──────────────────┐  ┌─────────────┐  ┌────────────────┐
-   │ trade events │──▶│ registry of pure │─▶│ forward     │─▶│ chronological  │
-   │ book snaps   │   │ functions, each  │  │ returns,    │  │ splits, purge  │
-   │ + contracts  │   │ declaring its    │  │ declaring   │  │ + embargo from │
-   │ + validation │   │ lookback         │  │ its horizon │  │ label horizon  │
-   └──────────────┘   └──────────────────┘  └─────────────┘  └────────────────┘
-          │                                                          │
-          │                                                          ▼
-          │                             models              ┌────────────────┐
-          │                    ┌──────────────────────┐     │ walk-forward   │
-          └───────────────────▶│ naive · logistic ·   │◀────│ evaluation     │
-                               │ xgboost · sequence   │     └────────────────┘
-                               └──────────────────────┘
-                                          │
-                                          ▼
-                              backtest              reporting
-                        ┌────────────────────┐  ┌──────────────────┐
-                        │ costs in bp,       │─▶│ manifest, plots, │
-                        │ spread crossing,   │  │ cost attribution │
-                        │ slippage, fills    │  │ regime breakdown │
-                        └────────────────────┘  └──────────────────┘
-```
-
-Two data planes are modelled separately, because they have different
-availability:
-
-| Plane | Contents | Real data |
-|---|---|---|
-| **trades** | one row per trade or aggregated trade | public exchange archives |
-| **book** | one row per snapshot, *N* levels per side | requires a dedicated collector |
-
-A full order book cannot be reconstructed from public trade archives — the
-resting size that was never hit leaves no trace in the trade tape. The book
-plane is therefore defined and exercised against synthetic data from the start,
-so that book features and their tests exist before the collector does.
-
----
-
-## Quickstart
-
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
-
-```bash
-git clone https://github.com/bamasa/trading-research-pipeline
-cd trading-research-pipeline
-uv sync --all-extras
-```
-
-Generate a synthetic dataset and check it:
-
-```bash
-uv run trading-research generate-demo-data --output data/demo
-uv run trading-research validate-data --input data/demo
-uv run pytest
-```
-
-Inspect a data contract:
-
-```bash
-uv run trading-research describe-schema book
-```
-
-Nothing here downloads anything or needs credentials.
-
-### Reproducing the finding, one command
-
-```bash
-uv run trading-research reproduce
-```
-
-runs every stage in order on a clean checkout: fetches what is missing, audits
-which family of signal carries anything, searches the configuration on the
-search block — taking the best *neighbourhood* rather than the best cell, with
-the peak it declined reported beside the choice — reads the held-out block once
-with thresholds carried over, and prints the result with both statistics and the
-market state it depends on.
-
-With `--execution both` the run adds one stage after the held-out read: the
-chosen configuration's decisions executed both ways, crossing and resting at the
-touch, on the instruments that have prints on disk, the mode chosen on the search
-block and both reported on the held-out block with the fill rate. `--execution
-maker` takes passive entry instead of choosing it. The default, `taker`, is the
-run described here.
-
-Two honesty properties are worth knowing before reading its output. The held-out
-block is read once; if the numbers disappoint, that is the answer, and the run
-does not go back. And the printed verdict comes from the clustered statistic,
-which counts days rather than trades — on the spans in this repository the two
-differ by a factor of five.
-
-Run on the spans the documents use, the pipeline's own end-to-end choice lands
-one cell away from §27's configuration and loses on the held-out block — which
-is reported here rather than smoothed over, because it is a fair measure of how
-sharp the effect's edge is: one neighbouring cell, and it is gone.
-
-### Reproducing the market-making study
-
-```bash
-uv run python -m experiments.market_making --workers 8          # block D: screen, search, freeze
-uv run python -m experiments.market_making_heldout --dry-run    # every path, on the last days of D
-uv run python -m experiments.market_making_heldout --block H    # the held-out read, through the ledger
-uv run python -m experiments.market_making_verdicts --block H   # verdicts and tables, no market data
-```
-
-The held-out read refuses to start unless the frozen configuration is committed
-and the tree is clean, and the ledger it writes makes a second read refuse too;
-on this repository H has been read, so the third command reproduces it only
-with `--force`, stamped `second read`. The fourth reads only the run's outputs,
-so the verdicts can be recomputed without touching the block. The read took 83
-minutes on eight workers.
-
-One strategy on one span, from the command line:
-
-```bash
-uv run trading-research mm-backtest --symbol BICOUSDT --start 2024-02-01 --end 2024-02-25 \
-    --strategy s2 --frozen --fee-tier base --latency-ms 10 --cancel-model pessimistic \
-    --workers 8 --output artifacts/mm
-```
-
-It prints the day-by-day table and the decomposition (spread, adverse selection,
-inventory, fees, funding) and writes both with a manifest. Parameters come from
-the frozen registration with `--frozen`, or by hand (`--skew-bp`, `--k`,
-`--min-edge-bp`, `--m-ticks`, `--clip-notional`, `--sigma-ref`). A day of the
-held-out or boundary block is refused unless `--allow-heldout` is given; then it
-is read only with the frozen values and only through the ledger, so on this
-repository a second read of H also needs `--second-read` and is recorded as one.
-
-### The pipeline on real data
-
-Five stages, each a command, each writing files and a manifest. Download once,
-then run the rest as often as needed:
-
-```bash
-# once: public archives, checksum-verified, never committed
-uv run trading-research download --symbol BTCUSDT --kind bookTicker \
-    --start 2024-02-01 --end 2024-03-09 --grid 100ms
-uv run trading-research download --symbol BTCUSDT --kind aggTrades \
-    --start 2024-02-01 --end 2024-03-09
-
-# features, one file per day
-uv run trading-research prepare --symbol BTCUSDT --horizon 1200 --subsample 50
-
-# everything below reads only the window it is given
-uv run trading-research select --train-start 2024-02-01 --train-end 2024-02-14
-uv run trading-research train  --train-start 2024-02-01 --train-end 2024-02-14 \
-    --model logistic
-uv run trading-research predict --start 2024-02-22 --end 2024-02-28
-uv run trading-research backtest --min-confidence 0.62 --hold 24 --cooldown 120
-
-# how often to retrain: window length, apply length and step, searched on the
-# first half of the span and applied once to the second
-uv run trading-research retrain-search --model logistic --start 2024-02-15 \
-    --train-days 3,7,14,21 --apply-days 1,3,7
-
-# how to leave a trade: clock, take-profit, stop, trail, or the model's own
-# fading opinion — chosen on validation, applied once to test
-uv run trading-research exit-search --model logistic --hold 24
-```
-
-The model is one flag — `--model logistic | xgboost | tcn` — and so are the
-instrument, the horizon and the feature set, so comparing combinations is the
-normal case rather than a special one.
-
-Run each model in its own invocation rather than looping inside one process:
-XGBoost and PyTorch each bundle an OpenMP runtime and deadlock together on
-macOS. The staged layout avoids this by construction.
-
-`make help` lists the common tasks.
+Reproducibility: one seed per run, recorded in its manifest with the full
+configuration; datasets carry a `manifest.json` of their provenance; every
+assumption that moves a number lives in a configuration file. CI runs lint,
+types, tests, the end-to-end demo and a repository audit
+(`scripts/audit_repo.py`: private paths, credential-shaped strings, notebook
+outputs, oversized binaries).
 
 ---
 
@@ -1037,27 +1000,9 @@ needs the network.
 
 ---
 
-## Methodology
-
-Documented in [`docs/`](docs/) as it lands:
-
-| Document | Contents |
-|---|---|
-| `data_contract.md` | Column semantics, units, time conventions, quality rules |
-| `methodology.md` | Features, labels, splits, model comparison protocol |
-| [`execution_assumptions.md`](docs/execution_assumptions.md) | Cost model, fills, what each execution mode (taker, passive entry, market maker) does and does not simulate |
-| [`market_making_simulator.md`](docs/market_making_simulator.md) | The event-time market-making simulator: every rule, the direction of its bias, and the test that pins it |
-| `limitations.md` | What this does not establish |
-| `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
-| [`preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md) | The second market-making round, on eight wide-spread instruments, registered before any of their data is fetched |
-| [`preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md) | A registered search for 2025 short-horizon strategies on Bybit's public BTCUSDT archives (2,400 taker configurations, passive entry and a market maker, a regime-break policy axis), with a frozen break detector that locates the 2025 break, drives the regime-policy axis and cuts the regime map, and the named configuration S25 tested by name; registered before any 2025 data is fetched; predicted negative at published fees |
-
----
-
 ## Limitations
 
-Stated plainly, because the honest version is more useful than the flattering
-one:
+Stated plainly:
 
 - **No profitability claim is made.** No result in this repository should be
   read as evidence that any strategy is or was profitable.
@@ -1080,334 +1025,6 @@ one:
 
 ---
 
-## Reproducibility
-
-- One seed per run, recorded in the run manifest along with the full
-  configuration and the schema version.
-- Datasets are directories with a `manifest.json` describing provenance — for
-  synthetic data, the generator version and seed that produced it.
-- Every assumption that moves a number lives in the config file, not in a
-  default buried in a function.
-- CI runs lint, types, tests, the end-to-end demo, and a repository audit that
-  scans for private paths, credential-shaped strings, notebook outputs and
-  oversized binaries.
-
----
-
-## Roadmap
-
-Done:
-
-- [x] Package skeleton, tooling, CI, repository audit
-- [x] Data contracts for both planes, with quality validation
-- [x] Synthetic market with regimes and a known injected signal
-- [x] Binance public-data downloader with checksums and manifests
-- [x] Feature registry with declared lookbacks and automated look-ahead tests
-- [x] Directional labels and purged walk-forward splits
-- [x] Naive, logistic and gradient-boosted baselines
-- [x] Taker cost model and execution-aware evaluation
-- [x] Wide generated feature set with train-only selection
-- [x] Horizon diagnostics: predictability against tradeability
-- [x] BTC → XRP transfer experiment
-- [x] Staged pipeline: `prepare`, `select`, `train`, `predict`, `backtest`
-- [x] Sequence model (dilated causal convolutions), compared against the rest
-- [x] Trade thinning with cooldown, take-profit and stop-loss
-- [x] Isotonic and Platt calibration
-- [x] Retraining schedule as a searched parameter, not an assumption
-- [x] Experiment scripts behind every published table
-- [x] Six exit rules, with the policy searched on validation
-- [x] Rule-based strategies — momentum, mean reversion, order flow, breakout —
-      scored through the same machinery as the learned ones
-- [x] Model ensembles, and a market gate that declines to trade in conditions
-      that cannot support the cost
-- [x] Successive halving over sampled configurations, in place of a grid
-- [x] Rolling normalisation of features against a trailing window
-- [x] Pooling instruments into one training set — **tried and rejected**: every
-      instrument did worse on the pool than on itself (§22), and the scope is
-      deliberately one instrument at a time from here
-- [x] Instrument screening by headroom, before anything is fitted — **and the
-      correction that followed**: the screen measured the dispersion of the
-      *absolute* move where the identity needs the signed one, understating
-      every edge by about forty per cent (§20)
-- [x] A review rubric and an evidence pack for it, applied to this project's
-      own result
-- [x] **Step 0 automated.** A screen over eighty instruments on the venue that
-      is actually traded, measured on two windows seven weeks apart. Rank
-      correlation 0.59, so it measures a real property — but half the top ten
-      changes between windows, so it supports a basket of five to ten rather
-      than a single best instrument
-- [x] Multi-level order books reconstructed from Bybit's incremental stream,
-      ten levels a side, with sequence-gap detection
-- [x] Trade prints with the aggressor's side — what a book cannot say, and what
-      a maker model needs
-- [x] **A queue-level maker model**: an order joins behind the size resting at
-      its price and fills only once that much opposing volume has traded
-      through. Measures adverse selection rather than assuming a figure for it
-- [x] Regime-break detection: a CUSUM over four block statistics of the book at
-      tick frequency, with its threshold calibrated against forty synthetic
-      nulls rather than by eye
-- [x] Regime monitoring on the whitened stream, from the ADIA structural-break
-      solution, as a dependency: scale, dependence and mean breaks on any
-      return series, thresholds calibrated against Gaussian nulls, the history
-      re-anchored at each break
-- [x] Randomised tree ensembles, a second booster, bagging over stretches of
-      history, voting with a diversity figure, and stacking on forward-chained
-      out-of-fold predictions
-- [x] **A bias-variance decomposition** that says which ensemble is worth using,
-      resampling contiguous history rather than random rows — on this data it
-      says none of them are, because the variance to average away is not there
-- [x] **An information audit**: each data source measured before a model is
-      chosen, for what it reaches alone and what it adds on top of the sources
-      already accepted. This is what found the cross-sectional signal
-- [x] Cross-instrument features — leader and index returns, catch-up, beta,
-      dispersion, rank — the omission that had no good excuse
-- [x] Order-flow features from trade prints, alongside the queue features
-- [x] Position sizing rules: volatility targeting, a confidence ramp, fractional
-      Kelly — documented with the identity that sizing is multiplicative in the
-      edge and cannot turn a losing one positive
-- [x] Pairs trading: hedge ratio, Ornstein-Uhlenbeck residual, half-life
-- [x] Data that fetches itself when it is missing, so a clean checkout runs
-- [x] A findings register with each candidate's status and the conditions that
-      would kill it, written before the test rather than after
-- [x] **Execution as a searched axis**: taker, passive entry and the event-time
-      market maker behind one interface
-      ([`pipeline/execution.py`](src/trading_research/pipeline/execution.py)),
-      in the grand search at its last rung, in `reproduce --execution`, and in
-      `trading-research mm-backtest`
-
-Next, and in this order, because the first one decides whether the rest matters:
-
-- [ ] **The decisive test.** The frozen reversion configuration on days neither
-      block has seen. Four earlier findings in this project looked at least as
-      good and did not survive it. The span could not be fetched because the
-      venue began rate-limiting sustained downloads; this is a matter of waiting,
-      not of code.
-- [ ] **A mechanism for the reversion.** Correlation without a cause is what
-      falls over. Liquidation cascades, funding settlement and session
-      boundaries are each testable, and an effect that concentrates in explicable
-      windows is worth more than one spread evenly.
-- [x] **The maker case for this signal specifically — tested, and killed.**
-      Pre-registered as H2.2 and read once: resting on the fading side lost
-      4.92 bp per attempt where crossing for the same triggers earned +6.38
-      ([market making](#market-making-quoting-both-sides-on-public-bybit-data)).
-- [ ] A volume-weighted index rather than an equal-weighted one, and the same
-      question asked of order flow rather than price
-- [ ] Refitting at the breaks the whitened monitor flags, against the fixed
-      cadences of §10, on the refit-policy axis `grand_search.py` already has
-- [ ] Unified report: calibration, equity, drawdown, cost attribution, regimes
-
-**Longer horizons, in the same pipeline.** Everything above trades in seconds to
-minutes, where costs and queue position decide the result. The same validation,
-costs and search apply at hours and days, where a move is many times the cost of
-a trade:
-
-- [ ] Horizon as a searched axis, next to execution, with a first screen of the
-      typical move over the horizon against the round-trip cost, per instrument
-- [ ] **Funding-rate carry**: long spot and short the perpetual in equal size,
-      so the price cancels and the position collects the funding that leveraged
-      longs pay; on Binance and Bybit history from 2019, pre-registered, with
-      held-out years
-- [ ] Trend and cross-sectional momentum on daily and four-hour bars across a
-      basket, with a portfolio backtest that rebalances on a schedule
-
-**Market making, registered before it is built.** The maker case above is one
-of three hypotheses in a market-making study: a two-sided quoter with inventory
-limits, simulated in event time with a queue per order and fills only from
-Bybit's trade prints. The blocks, the instrument admission rule, the hypotheses
-with their kill conditions and placebos, the advantage ladder, the fee
-break-even and the amendment protocol are in
-[`docs/preregistration/market_making.md`](docs/preregistration/market_making.md),
-with the values the code will read in
-[`configs/mm_prereg.yaml`](configs/mm_prereg.yaml). Both were committed before
-any simulator code existed and before any market-making number was computed on
-any block.
-
-- [x] **The event-time simulator**: fills only from prints, a queue per order
-      with bracketed cancellation rules, latency, post-only, inventory limits,
-      fees, funding and an accounting identity checked at every change, tested
-      on known-answer markets ([rules](docs/market_making_simulator.md))
-- [x] The quoters, the regime flags and the development-period search, with
-      the amendment that froze every searched value
-- [x] **The held-out fortnight, read once: all four hypotheses killed**, the
-      advantage ladder and the fee break-even measured
-      ([results](docs/preregistration/market_making.md#results-on-block-h-read-once-4-october-2026))
-- [ ] The boundary block, read once: H2.3 and H2's boundary predictions
-- [x] **A second round on wide-spread instruments, read once: all five
-      hypotheses killed**; the touch quoter would have needed a 1.7 to 3.1 bp
-      rebate ([results](docs/preregistration/market_making_round2.md#results-of-the-first-held-out-read-read-once-4-october-2026))
-- [ ] Capacity: what a quoter could trade before its own size moves the book it
-      is quoting into, which the simulator does not model
-
-**The 2025 short-horizon strategy search, registered before any of its data
-is read.** A search on BTCUSDT, over the whole of 2025, over features,
-labels, models (boosted trees, logistic, a Gaussian-head network, a bound
-regressor), entry gates, holds from 5 to 120 s, decision thresholds, a
-regime-break policy driven by the frozen break detector, and three execution
-paths (taker, passive entry, market maker). The detector, on hourly BTCUSDT
-returns, has three roles: it locates the 2025 break that the break test R
-tests, its alarms drive the regime-policy axis, and they cut the regime map.
-Its 2,400 taker configurations are enumerated and hashed, every one is scored
-on the same 150 development days, and a searched finalist must beat the whole
-search re-run on placebo
-targets. Five finalists go to the held-out blocks under Holm with m = 5: the
-named configuration S25 (boosted trees on BTCUSDT, a hold-first rule, a 50 s
-hold), the best classifier and regressor cells, passive entry and a market
-maker. A regime map shows every finalist's daily net between detector alarms,
-as a measurement. The search, its selection rule, the placebo search, the
-kill conditions and the expected outcome are in
-[`docs/preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md),
-with [`configs/short_horizon_2025.yaml`](configs/short_horizon_2025.yaml). The
-prediction is negative: in 2024 a directional signal's gross edge was a few
-basis points against an 11 bp taker round trip at the base tier.
-
-- [x] Pre-registration, with an archive check that moved the held-out block's
-      end to 2025-08-20, where Bybit's book archive changes from 500 to 200
-      levels
-- [x] Reviewed for peeking, multiplicity and feasibility before any data is
-      read, and tightened: no file of a later block on disk before the ledger
-      opens it, statuses computed by code and hashed, no code change between
-      the held-out reads, metrics fixed at the day level, Holm's family fixed
-      on every block, a break test whose placebo goes through the
-      same selection, and fill and timing rules pinned in the configuration;
-      then checked against the code it names: the EV gate trades one clip
-      (Kelly sizing cannot size it), a failed download is retried rather than
-      excluded, and the replay and feature store fit the machine's memory and
-      disk; then checked once more for consistency: every horizon measured on
-      row stamps, a status for an unreadable block and a void break test, and
-      late snapshots counted rather than skipped; then reviewed for decisions
-      left until after a read: the gates check a clean tree and the
-      installed environment, and a failed read, a defect found after a read
-      and a corrupt archive each have a registered outcome that cannot raise
-      a status; prints are aligned backward, and the 2025 daily-bar alarm
-      already in this README is listed among what was known
-- [x] Recast, before any data is read, from fixed hypotheses into a
-      registered search: four models in two strata, label
-      fee, hold (5 to 120 s), decision threshold, market gate and a
-      regime-break policy from the frozen detector, causal fold by fold
-      (2,400 taker configurations on BTCUSDT, hashed); no configuration culled on an
-      outcome; a choice by neighbourhood and two admission levels; a placebo
-      search (hour-block sign flips and day re-pairing over the whole search)
-      a searched finalist must beat; five finalists, S25 by name, Holm with
-      m = 5; passive entry and a market maker that always run; a regime map as
-      a measurement; a 6-day compute ceiling with a reduction order fixed
-      before any fetch; headline sentences fixed for every outcome
-- [x] The search reviewed for search multiplicity, protocol and
-      executability, before any data is read: admission by a count p-value
-      at α over the number of development runs; no configuration added after
-      stage 0, and a hand run on a test day disqualifies every searched slot;
-      study code frozen before the first fetch; the walk-table parity proven
-      on 2024 days before any 2025 fetch; the slots on S25's signal assessed
-      only on the held-out days before 2025-08-01; the market maker's
-      position limit, reference volatility and making part pinned; the null
-      replications in the compute budget
-- [x] Narrowed to BTCUSDT alone over the whole registered span, before any
-      data is read, to bound the data and the compute: 2,400 taker
-      configurations and 200 walk-forward fits, about 140 GB of archives
-      through the network, a disk peak of 46 to 53 GB and about 2 to 3.6 days
-      for the development period; a synthetic admission bar of about t = 2.6
-- [x] The code: candidate tapes and walk tables with executor parity, the
-      trial ledger; ten-level tensor, walked-book label, Gaussian head with a
-      lazy window dataset, hold-first thresholds and the EV gate; fold-wise
-      detector flags and the flag-causality test; the two nulls, the refit
-      replication, PBO and DSR; an event-time taker executor, a signal-entry
-      quoter and S1 with the lean on a fixed clip, fill-rule comparison,
-      streaming parity; the study's fetch and its float16 feature stores; the
-      ledger that opens H, F and P; the leaderboard, regime map and figures
-- [x] The single entry point,
-      [`experiments/short_horizon_2025.py`](experiments/short_horizon_2025.py):
-      stages 0, 1, A, B, D, C and E as subcommands that refuse to run out of
-      order, return a finished stage's record and resume a stopped one, then
-      each block opened and read in one session with every status and kill
-      and, beside them, the registered measurements: the regime attribution
-      against random flag sets, S-P's and S-M's regime variants, the passive
-      exit, FILL on H, the control network's IC, and each verdict with the
-      gap-excluded days put back; the simulator's runs on D are trials of
-      the ledger, so N_trials counts them; the pages written after stage E
-      and after each read (every registered headline sentence from computed
-      results, the finalists page, the S25 page with the edge ladder, the
-      regime map's file and the figures in both themes) and again on demand
-      with `pages`; `--dry-run` runs all of it on a synthetic venue (trend
-      episodes, detector bursts, a day with sequence gaps) in a temporary
-      repository, with no request reaching the network, and is a test that
-      checks every artefact is written
-- [x] Three reviews of the study code, each applied before any data is read:
-      the data path (each book day cut to its own UTC day, the fold-level
-      leakage test on the study's own fits over the real artefacts and a
-      mutated copy, stage 0 projecting them at the registered worker counts,
-      the reader test gating H, the dry run reading F and P end to end), the
-      statuses (K-nbhd over the whole neighbourhood, a void break test left
-      untested, the minimum detectable effect per block, S25-Z's kills on both
-      claims, K-acct and K-cap for the simulator slots, the one-day shift from
-      the signal tape stepping over stale days and wrapping within 07-31 on H,
-      P's first day reading F's last, the simulator's workers held to 24 GB)
-      and the execution (S25-Z's maker break-even with the taker exit at 5.5
-      and 1.5 bp, the making part per passive fill, an event entering at its
-      first free row, fills floored to the lot, an exit honoured before the
-      flatten, the measurements beside every verdict, the second detector
-      beside R, gross through the leaderboard); with the registration's
-      clarifications and the amendment's records these called for, and the
-      null-placeholder sha256 recomputed
-- [x] Stage 0 on the two 2024 days (parity at every hold, 75.7 h projected
-      against the 144 h ceiling, no cut) and the code-freeze note at `9784ef7`
-- [ ] The 200-level book reader proven on three 2026 days outside the study
-- [ ] Development period: the search, the placebo search and the amendment
-      that freezes the finalists
-- [ ] The held-out read, then the boundary block and the break
-- [ ] **Spot.** S25 on Binance BTC/FDUSD, prints only since the venue publishes
-      no book, and on Bybit's spot BTCUSDT book, at the fee charged on each day
-      to an account without volume, registered on 2026 blocks before any spot
-      file is fetched ([`docs/preregistration/spot_2026.md`](docs/preregistration/spot_2026.md),
-      [`configs/spot_2026.yaml`](configs/spot_2026.yaml)); its code, development
-      block and held-out read follow the 2025 study's last read
-
-**Step 10: deployment.** Nothing here runs live, and the gap is not the model:
-
-- [ ] Live feed with sequence-gap recovery and a reconnect that does not silently
-      skip data
-- [ ] Features computed in streaming rather than batch, producing bit-identical
-      values to the research path — a discrepancy here is the classic way a
-      backtest and a live system quietly diverge
-- [ ] Order router, position limits, risk limits, kill switch
-- [ ] Monitoring that compares live fills against what the backtest assumed:
-      realised spread, slippage, fill rate. A strategy that is decaying looks
-      exactly like one that is working until it does not
-
-Maker execution — built, and it does not pay
---------------------------------------------
-An early section estimated what posting would be worth by assuming a figure for
-adverse selection. That estimate was replaced by a measurement, and the
-measurement disagreed with it.
-
-[`backtest/maker.py`](src/trading_research/backtest/maker.py) simulates the
-mechanism: an order joins the queue behind the size resting at its price and
-fills only once that much opposing volume has traded through, using Bybit's
-trade prints for the flow. Costs fall exactly as the arithmetic promised, from
-14–16 bp to 5.9–7.1 with a passive exit. **The gross edge inverts**: the same
-signal at the same moments is worth +3 to +8 bp crossing and −0.5 to −4.2 bp
-resting. Adverse selection is 5–11 bp — the same size as the fee saving. Zero of
-48 configurations positive on net or on gross.
-
-The mechanism shows in the detail: joining the touch is *worse* than posting
-behind it, because filling faster means filling when the market is moving
-against you, while the favourable moves leave the order unfilled.
-
-Three optimisms remain, stated in the module rather than buried: the queue ahead
-never grows, cancellations ahead are ignored, and the order's own size is
-treated as negligible. All three flatter the passive strategy, and it loses
-anyway.
-
-What is left to do here:
-
-- [x] The conditional version of the same measurement for the reversion signal,
-      where being filled against the move might have been an advantage rather
-      than the usual tax. Done in the market-making study, with a queue per
-      order, fills only from prints and a taker exit: it loses too (H2.2,
-      [market making](#market-making-quoting-both-sides-on-public-bybit-data)).
-- [ ] Capacity. A fill rate in the teens turns a strategy that took 3,297 trades
-      into one that takes a few hundred, which establishes much less.
-
----
-
 ## Disclaimer
 
 This is research and engineering code published as a portfolio and a teaching
@@ -1420,26 +1037,3 @@ would be profitable in future.
 ## License
 
 [MIT](LICENSE).
-
-## Running the research loop with an agent
-
-[`CLAUDE.md`](CLAUDE.md) holds the rules any agent follows in this repository,
-and [`agents/`](agents/README.md) a harness that runs an LLM agent through the
-loop the registered studies followed by hand: propose, register, run, review,
-verdict, record ([`agents/protocol.md`](agents/protocol.md)). Five roles, a
-researcher, a registrar, an executor, a skeptic and a scribe, each with its own
-prompt; every tool call passes a policy that allows only the repository's own
-commands, one at a time, refuses any fetch that touches a day a registration
-protects, and never pushes. The verdict is the study code's, checked against
-its ledger; the loop stops at every gate the owner holds. How it would run the
-roadmap's funding-rate carry study is in
-[`docs/agents_demo_funding_carry.md`](docs/agents_demo_funding_carry.md).
-
-How to run it, each rule with the test that holds it, and what is logged and
-published are in [`docs/agents.md`](docs/agents.md). A reviewer re-runs the
-whole loop on a synthetic study in seconds, with a scripted client in place of
-the model, and reads the run directory it leaves:
-
-```bash
-PYTHONPATH=src python -m agents.workflows.research_loop demo
-```

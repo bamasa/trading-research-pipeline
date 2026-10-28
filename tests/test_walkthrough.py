@@ -63,7 +63,9 @@ def test_a_view_holds_only_the_days_it_is_given(data: Path, tmp_path: Path) -> N
 
 
 def test_a_registered_range_is_refused_before_anything_is_read(tmp_path: Path) -> None:
-    assert protected_overlap([date(2026, 8, 10)]) == ["spot_2026:H"]
+    # The calendar is every registration on every local branch, so another study
+    # registered on these days (the spot maker's H, on its own branch) may join it.
+    assert "spot_2026:H" in protected_overlap([date(2026, 8, 10)])
     assert protected_overlap([FIRST]) == []
     root = tmp_path / "data"
     write_synthetic(root, [SyntheticInstrument("SYNAUSDT", 1, 0.3)], first_day=date(2026, 8, 9),

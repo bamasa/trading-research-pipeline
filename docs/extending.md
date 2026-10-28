@@ -257,6 +257,6 @@ every check. The four that do not are reported, not changed:
 | features `generated` | b. declared look-back | its exponentially weighted means (`*_ewm200`, `*_ewm1000`) remember every earlier row, so no finite look-back is true; truncation invariance holds, so nothing reads forward |
 
 Every other strategy, model, feature set, label and execution passes (a),
-(b) and, where it applies, (c); (d) is skipped on this branch. The existing stage commands
+(b) and, where it applies, (c); (d) runs for the strategies and models it applies to. The existing stage commands
 (`train`, `backtest`, `reproduce`, `mm-backtest`) keep their own names and are
 unchanged; the registry is how new code reaches the parts.
