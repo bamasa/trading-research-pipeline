@@ -243,7 +243,7 @@ def parse_command(text: str, python: Iterable[str] = (), cli: Iterable[str] = ()
         return None
     head, rest = found[0], found[1:]
     pythons = {"python", "python3", ".venv/bin/python", *python}
-    if head in {"trading-research", ".venv/bin/trading-research", *cli}:
+    if head in {"trading-research", ".venv/bin/trading-research", "trp", ".venv/bin/trp", *cli}:
         return Command("cli", rest[0] if rest else "", tuple(rest[1:]), tuple(env))
     if head in {"pytest", ".venv/bin/pytest"}:
         return Command("pytest", "pytest", tuple(rest), tuple(env))
@@ -313,6 +313,14 @@ CLI_COMMANDS = frozenset(
         "discover", "download-book", "describe-schema", "reproduce", "mm-backtest",
     }
 )  # fmt: skip
+
+
+#: ``paper`` subcommands that read the live stream, refused to every role.
+PAPER_LIVE = frozenset({"run", "record"})
+#: ``paper`` subcommands that read a stored day, allowed only outside protected days.
+PAPER_STORED = frozenset({"replay", "parity"})
+#: ``paper`` options whose value is a path.
+PAPER_PATHS = ("--day", "--root", "--prints", "--run-dir", "--model", "--output", "-o")
 
 
 @dataclass
@@ -428,6 +436,8 @@ class ToolPolicy:
 
     def cli_command(self, command: Command) -> Decision:
         name, args = command.name, command.args
+        if name == "paper":
+            return self.paper(args)
         if name not in CLI_COMMANDS:
             return deny(f"trading-research has no command {name!r}")
         allowed = CLI_BY_ROLE[self.role]
@@ -457,6 +467,51 @@ class ToolPolicy:
             first, last = whole_months(first, last)
         grants = frozenset() if name in FREE_DAYS_ONLY else self.grants
         return self.days(first, last, f"trading-research {name}", grants)
+
+    def paper(self, args: Sequence[str]) -> Decision:
+        """``trading-research paper``: never live, and a stored day only outside
+        every protected range.
+
+        ``run`` and ``record`` read the venue's live public stream: today, which
+        inside a registered prospective block is that block's held-out data, so
+        no role runs them and no grant lifts it. ``replay`` and ``parity`` read a
+        stored day, which must name its date (``--day`` a date, or a file whose
+        name carries it) and lie outside every protected range of every
+        registration, grants included: a protected day is read only through its
+        study's entry point and ledger. ``status`` reads a run directory.
+        """
+        sub = args[0] if args else ""
+        rest = args[1:]
+        if sub in PAPER_LIVE:
+            return deny(
+                f"paper {sub} reads the live stream, which inside a registered prospective "
+                "block is that block's held-out data; no role runs it"
+            )
+        if sub not in PAPER_STORED and sub != "status":
+            return deny(f"trading-research paper has no subcommand {sub!r} a role runs")
+        allowed = CLI_BY_ROLE[self.role]
+        if allowed is not None and "paper" not in allowed:
+            return deny(f"the {self.role} does not run trading-research paper")
+        for flag in PAPER_PATHS:
+            value = option(rest, flag)
+            if value is not None and not self.inside(value):
+                return deny(f"{flag} {value} is outside the repository")
+        if sub == "status":
+            target = next((a for a in rest if not a.startswith("-")), None)
+            if target is not None and not self.inside(target):
+                return deny(f"{target} is outside the repository")
+            return allow("paper status reads a run directory")
+        day = option(rest, "--day")
+        found = re.findall(r"(?<!\d)(\d{4}-\d{2}-\d{2})(?!\d)", day or "")
+        if not found:
+            return deny(
+                f"paper {sub} names its day: --day a date, or a file whose name carries the date"
+            )
+        try:
+            days = sorted(date.fromisoformat(d) for d in found)
+        except ValueError:
+            return deny(f"dates are YYYY-MM-DD: {found}")
+        return self.days(days[0], days[-1], f"trading-research paper {sub}", frozenset())
 
     def path_problem(self, name: str, args: Sequence[str]) -> str | None:
         """Paths stay inside the repository, and a write under ``data/`` stays
