@@ -50,6 +50,7 @@ ORDER: tuple[str, ...] = (
     "demo",
     "reproduce",
     "fees",
+    "catalog",
 )
 
 #: The map, as one line under the help.

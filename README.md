@@ -166,6 +166,17 @@ trp search status --run artifacts/search
   and label threshold are chosen by their neighbourhood, with the peak reported
   beside the choice; `read` opens the held-out block once and a second `read`
   is refused by the ledger. `trp search run` runs the steps in order.
+- **Your model in it**: `--rules` and `--models` name the method step's
+  candidates; a model plugin is named like a built-in
+  (`trp search register --data data/walkthrough --run artifacts/search --models logistic,my_model`),
+  and its file's sha256 goes into the registration, so a changed file stops
+  every later step.
+- **What it is short of**: `read` restates each mode's own trades as two
+  distances from zero: the cost per trade at which the net would be zero, and,
+  for a directional mode, how many more of the filled trades a forecast would
+  need right (with the net at +1, +2, +5 and +10 points of hit rate). It says
+  which lever is closer, under a stated assumption; it does not forecast what a
+  better model would earn.
 
 ### 6 Execution: taker, passive or maker
 
@@ -281,7 +292,10 @@ trp study new my_study --template taker        # a registration skeleton naming 
 4. **`trp strategies backtest`** fits it on the front of the synthetic demo
    market (or `--input` a dataset) and trades the rest in each execution mode
    at the fee tier named.
-5. **Into a study**: `trp study new` writes a registration document, its YAML
+5. **Into the search**: a model plugin enters the automatic search by name,
+   `trp search register --data data/walkthrough --run artifacts/search --models logistic,xgboost,my_model`,
+   and is compared with the built-ins on the same days and the same costs.
+6. **Into a study**: `trp study new` writes a registration document, its YAML
    with `null` placeholders and an entry point that refuses to run until both
    are filled. The registration names the plugin, its parameters and its file's
    sha256; the hypothesis, the kill conditions and the held-out block are
@@ -1022,6 +1036,33 @@ Stated plainly:
 - **Short horizons are the hardest regime for this.** Costs dominate, edges are
   thin, and results are unstable across periods. Where that shows up, it is
   reported rather than tuned away.
+
+---
+
+## Catalogue
+
+Everything the repository can run, by kind, is in
+[`docs/catalog.md`](docs/catalog.md): data sources with the command that
+fetches each, synthetic markets, strategies, models by family, feature sets and
+single features with their look-back, feature filters, labels, executions and
+backtests, evaluation measures, regime detectors, fee tables, studies and the
+test cases by area. `trp catalog --write docs/catalog.md` writes it from the
+registries and the command tree, and a test fails when it is stale, so a part
+added as a plugin is listed the next time the page is written.
+
+| Section | Entries | Add one |
+|---|---:|---|
+| Data sources | 8 | a fetcher under `data/` |
+| Synthetic markets | 5 | a generator under `synthetic/` |
+| Strategies | 6 | `trp strategies new NAME` |
+| Models | 29 | `trp strategies new NAME --kind model` |
+| Feature sets | 6 | `trp strategies new NAME --kind features` |
+| Feature filters and checks | 7 | a step in `features/selection.py` |
+| Labels | 11 | `trp strategies new NAME --kind label` |
+| Executions | 4 | `trp strategies new NAME --kind execution` |
+| Evaluation measures | 14 | a function under `evaluation/` |
+| Regime detectors | 2 | a detector under `validation/` |
+| Registered studies | 2 | `trp study new NAME` |
 
 ---
 

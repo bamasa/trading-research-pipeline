@@ -1755,6 +1755,7 @@ def _print_mm_decomposition(summary: dict[str, float]) -> None:
 from trading_research import (  # noqa: E402
     cli_agent,
     cli_backtest,
+    cli_catalog,
     cli_common,
     cli_data,
     cli_demo,
@@ -1777,5 +1778,6 @@ app.add_typer(cli_study.app)
 app.add_typer(cli_agent.app)
 app.add_typer(cli_demo.app)
 app.add_typer(cli_fees.app)
+app.add_typer(cli_catalog.app)
 app.add_typer(plugins_app, name="strategies")
 cli_common.as_map(app)

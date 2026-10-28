@@ -125,6 +125,7 @@ EVERY_GROUP = {
     "demo": "End to end",
     "reproduce": "End to end",
     "fees": "End to end",
+    "catalog": "End to end",
 }
 
 
