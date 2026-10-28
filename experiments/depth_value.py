@@ -7,7 +7,7 @@ the touch alone, because Binance publishes nothing else, and the standing
 explanation for a weak forecast was that the data was thin. Bybit publishes ten
 levels and more, so the explanation can be tested rather than assumed.
 
-The second is a like-for-like comparison. A closed-source model on this data
+The second is a like-for-like comparison. A reference model on this data
 correlates with its target at 0.80, twenty times anything here — but that target
 is smoothed, and §21 measured smoothing nearly doubling a coefficient on its
 own. Measuring against the same shape of target is the only way to know how much

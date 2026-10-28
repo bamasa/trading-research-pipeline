@@ -58,7 +58,7 @@ jobs:
           uv run --no-sync trading-research validate-data --input data/demo
 
   audit:
-    name: disclosure audit
+    name: repository audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -65,7 +65,7 @@ those failure modes is a test that fails, not a caveat in a footnote.
 > measures each data source before a model is chosen, successive-halving search
 > over thirteen axes with execution and the regime policy scored at its last
 > rung, and the experiment script behind every published table. 1,130 tests, a
-> disclosure audit in CI.
+> repository audit in CI.
 
 ## The pipeline map
 
@@ -1048,7 +1048,6 @@ Documented in [`docs/`](docs/) as it lands:
 | [`execution_assumptions.md`](docs/execution_assumptions.md) | Cost model, fills, what each execution mode (taker, passive entry, market maker) does and does not simulate |
 | [`market_making_simulator.md`](docs/market_making_simulator.md) | The event-time market-making simulator: every rule, the direction of its bias, and the test that pins it |
 | `limitations.md` | What this does not establish |
-| `disclosure_policy.md` | What is public here and why, and what is not |
 | `preregistration/market_making.md` | The market-making study, registered before any code or number: blocks, hypotheses, kill conditions, placebos, amendment protocol |
 | [`preregistration/market_making_round2.md`](docs/preregistration/market_making_round2.md) | The second market-making round, on eight wide-spread instruments, registered before any of their data is fetched |
 | [`preregistration/short_horizon_2025.md`](docs/preregistration/short_horizon_2025.md) | A registered search for 2025 short-horizon strategies on Bybit's public BTCUSDT archives (2,400 taker configurations, passive entry and a market maker, a regime-break policy axis), with a frozen break detector that locates the 2025 break, drives the regime-policy axis and cuts the regime map, and the named configuration S25 tested by name; registered before any 2025 data is fetched; predicted negative at published fees |
@@ -1089,7 +1088,7 @@ one:
   synthetic data, the generator version and seed that produced it.
 - Every assumption that moves a number lives in the config file, not in a
   default buried in a function.
-- CI runs lint, types, tests, the end-to-end demo, and a disclosure audit that
+- CI runs lint, types, tests, the end-to-end demo, and a repository audit that
   scans for private paths, credential-shaped strings, notebook outputs and
   oversized binaries.
 
@@ -1099,7 +1098,7 @@ one:
 
 Done:
 
-- [x] Package skeleton, tooling, CI, disclosure audit
+- [x] Package skeleton, tooling, CI, repository audit
 - [x] Data contracts for both planes, with quality validation
 - [x] Synthetic market with regimes and a known injected signal
 - [x] Binance public-data downloader with checksums and manifests
@@ -1406,17 +1405,6 @@ What is left to do here:
       [market making](#market-making-quoting-both-sides-on-public-bybit-data)).
 - [ ] Capacity. A fill rate in the teens turns a strategy that took 3,297 trades
       into one that takes a few hundred, which establishes much less.
-
-## Relationship to prior closed-source work
-
-The author has worked on short-horizon prediction for order-book data in a
-commercial setting. This repository shares none of that code, data,
-configuration or results. It is an independent implementation, written from
-scratch, using public and generated data only, and it deliberately diverges
-where the public version can be stricter — the purging, embargo and automated
-look-ahead checks described above are additions, not reproductions.
-
-See [`docs/disclosure_policy.md`](docs/disclosure_policy.md).
 
 ---
 

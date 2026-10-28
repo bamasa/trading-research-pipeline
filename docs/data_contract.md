@@ -169,4 +169,4 @@ round-trips most things faithfully but not all: string columns can return as
 `object`, and a timezone can be dropped by an intermediate tool. A frame is
 therefore either contract-compliant or raises, never silently degraded.
 
-Datasets are never committed. See [`disclosure_policy.md`](disclosure_policy.md).
+Datasets are never committed; `scripts/audit_repo.py` refuses them.

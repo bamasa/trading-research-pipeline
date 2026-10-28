@@ -21,13 +21,12 @@ few hundred candidates, some will look predictive on the test period by chance,
 and choosing them *because* of that is choosing them for their test
 performance.
 
-This is also where an inherited mistake gets corrected. The closed-source
-pipeline this project draws its ideas from ran its selection over a **random**
-train/test split — `train_test_split(..., stratify=y)` — on time-series data.
-For the selection step that does not leak the future into the past directly,
-but it does let neighbouring, near-identical observations sit on both sides of
-the split, which makes every candidate look more informative than it is. Here
-the selection sees a contiguous block of training data and nothing else.
+A common mistake is to run the selection over a **random** train/test split —
+`train_test_split(..., stratify=y)` — on time-series data. For the selection
+step that does not leak the future into the past directly, but it does let
+neighbouring, near-identical observations sit on both sides of the split, which
+makes every candidate look more informative than it is. Here the selection
+sees a contiguous block of training data and nothing else.
 """
 
 from __future__ import annotations

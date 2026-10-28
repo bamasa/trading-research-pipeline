@@ -1269,7 +1269,7 @@ anything, and the answer is that they are noise with a small mean.
 
 ### What a working version looks like
 
-The construction comes from a closed-source model on the same instrument whose
+The construction comes from a reference model on the same instrument whose
 predictions correlate with its target at 0.80. That implies a prediction
 dispersion near 1.6 bp against a residual near 1.2 — a ratio of about 1.3,
 twenty times ours. At that ratio the bound clears a 1 bp cost comfortably and an
@@ -1312,7 +1312,7 @@ removed the gain at the same time.
 
 ### The label that grades itself
 
-The other explanation for the twenty-fold gap with the closed-source model was
+The other explanation for the twenty-fold gap with the reference model was
 that its target is smoothed, FI-2010 style: the mean of the next *k* mids
 against the mean of the last *k*. Measured against that label our model jumps
 from 0.042 to **0.424** — the same order as the 0.80 that started the question.

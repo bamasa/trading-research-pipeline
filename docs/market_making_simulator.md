@@ -600,8 +600,8 @@ seconds apart:
 ## Speed
 
 Pure Python over per-day arrays; numba is not installed and is not added. On
-one development day already listed as read in the pre-registration's
-disclosure (BICOUSDT, 2024-02-15: 249,105 snapshots and 15,506 prints), with the
+one development day already listed as read in the pre-registration
+(BICOUSDT, 2024-02-15: 249,105 snapshots and 15,506 prints), with the
 touch quoter, the event loop ran at about 217,000 events a second (1.2 s for the
 day) with a peak resident set of about 600 MB, most of it the Parquet read.
 After the review fixes (re-checking kept orders against the limits at every
