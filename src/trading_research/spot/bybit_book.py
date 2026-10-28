@@ -80,6 +80,7 @@ def replay_walk(archive: Path | str, *, depth: int, grid_ms: int = GRID_MS) -> p
     rows: list[list[Any]] = []
     bucket: int | None = None
     short = 0
+    gaps = 0  # outside the book's state, as reconstruct keeps it: a snapshot resets the book, not the count
     for message in bybit._messages(Path(archive)):
         kind, data, stamp = message.get("type"), message.get("data", {}), int(message["ts"])
         update = data.get("u")
@@ -94,7 +95,7 @@ def replay_walk(archive: Path | str, *, depth: int, grid_ms: int = GRID_MS) -> p
                 and update is not None
                 and update != state.last_update + 1
             ):
-                state.gaps += 1
+                gaps += 1
             state.apply("b", data.get("b", []))
             state.apply("a", data.get("a", []))
             state.last_update = update
@@ -126,7 +127,7 @@ def replay_walk(archive: Path | str, *, depth: int, grid_ms: int = GRID_MS) -> p
     frame.insert(0, "timestamp", stamps)
     frame.insert(1, "symbol", pd.Series(BYBIT_SPOT, index=frame.index, dtype="string"))
     frame.insert(2, "source", pd.Series(SOURCE, index=frame.index, dtype="string"))
-    frame.attrs["sequence_gaps"] = state.gaps
+    frame.attrs["sequence_gaps"] = gaps
     frame.attrs["deep_levels_missing_rows"] = short
     return frame.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
