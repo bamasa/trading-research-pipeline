@@ -115,6 +115,7 @@ EVERY_GROUP = {
     "signal": "The pipeline, step by step",
     "search": "The pipeline, step by step",
     "backtest": "The pipeline, step by step",
+    "pairs": "The pipeline, step by step",
     "review": "The pipeline, step by step",
     "strategies": "Extend",
     "synthetic": "Check",

@@ -515,3 +515,17 @@ def test_no_search_reaches_the_data_by_its_glob(tool: str, data: dict[str, str])
 def test_a_scoped_search_is_allowed(tool: str, data: dict[str, str]) -> None:
     decision = policy("skeptic").decide(tool, data)
     assert decision.allowed, decision.reason
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "trading-research pairs screen -s ETHUSDT -s BTCUSDT --start 2024-01-01 --end 2024-01-31",
+        "trp pairs backtest -s ETHUSDT -s BTCUSDT",
+        "trading-research catalog --write docs/catalog.md",
+    ],
+)
+def test_pairs_and_catalog_are_refused_to_every_role(role: str, command: str) -> None:
+    # CLAUDE.md lists them as run by the owner only; the policy has no rule for them.
+    assert not bash(policy(role), command)

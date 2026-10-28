@@ -40,6 +40,7 @@ ORDER: tuple[str, ...] = (
     "signal",
     "search",
     "backtest",
+    "pairs",
     "review",
     "strategies",
     "synthetic",

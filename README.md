@@ -259,6 +259,33 @@ trp paper replay --day data/demo --model artifacts/model --execution taker --fee
 The model on a public stream or a replayed day, with no order path; see
 [Deploy: paper trading](#deploy-paper-trading).
 
+### Beside the steps: pairs trading
+
+```bash
+trp data download --market futures-um --kind klines --interval 1h --symbol ETHUSDT --start 2024-01-01 --end 2024-03-31
+trp pairs screen -s ETHUSDT -s BTCUSDT -s SOLUSDT --start 2024-01-01 --end 2024-01-31
+trp pairs backtest -s ETHUSDT -s BTCUSDT --formation 720 --trading 168 --entry 2 --exit 0.5
+trp pairs synthetic --variant planted
+trp verify pairs
+```
+
+- **Screen**: every pair among the symbols on one formation window: return
+  correlation, the hedge ratio (the same fit as the `spread` strategy), an
+  Engle-Granger test whose p-value comes from a null simulated at the same
+  length, the residual's half-life, and its spread against the round trip of
+  both legs; Holm's correction across all pairs.
+- **Backtest**: walk-forward; the hedge, mean and sd are fitted on a formation
+  window and used unchanged on the next. Z-score entry, exit, stop and a
+  maximum hold; a decision on a bar's close fills at the next bar's open.
+- **Costs**: each of the four fills pays the taker fee from the fee tables and
+  a slippage on its own leg; the page gives per-trade and per-day net, the
+  day-clustered t, the share of positive days and the cost at which the net is
+  zero. Borrow and funding are not charged
+  ([`docs/pairs.md`](docs/pairs.md)).
+- **Checked**: `trp verify pairs` (part of `trp verify all`) requires the
+  screen and the backtest to find a planted cointegration and nothing on
+  independent random walks or after a planted break.
+
 ---
 
 ## Add a strategy

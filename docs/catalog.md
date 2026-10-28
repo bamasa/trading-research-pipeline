@@ -71,6 +71,14 @@ Planted answers to test a strategy on before any real day: each has a null with 
 | `reversion` | built-in | Trade against the peers' index move, the frozen ten-minute reversion rule. |
 | `spread` | built-in | The pair against its first peer: a hedge and a mean-reverting residual fitted on history. |
 
+Pairs trading:
+
+| command | what it does |
+|---|---|
+| `trp pairs screen` | Every pair among the symbols on one formation window: cointegration, half-life, cost; Holm-corrected. |
+| `trp pairs backtest` | One pair walk-forward: fit on formation, trade the next window, both legs charged per fill. |
+| `trp pairs synthetic` | A synthetic pair of hourly bars with a planted cointegration, or a null, and its truth.json. |
+
 Add one: `trp strategies new NAME`, then `trp strategies check NAME`.
 
 ## Models
@@ -247,6 +255,7 @@ Run: `trp regimes breaks`.
 | `trp verify detector` | The regime detectors on a planted break and on the same days without it. |
 | `trp verify simulator` | The market-making simulator's markouts and fills against the planted truth. |
 | `trp verify reversion` | The cross-sectional and index reversion rules on a planted cross-section. |
+| `trp verify pairs` | The pairs screen and walk-forward backtest on a planted pair, independent walks and a break. |
 | `trp verify all` | Every check with its defaults; one summary page beside each check's own. |
 
 ## Fee tables
@@ -283,12 +292,12 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2286 test functions in 233 files, by area (the first word of the file name):
+2321 test functions in 236 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
 | agent | 1 | 4 |
-| agents | 7 | 84 |
+| agents | 7 | 85 |
 | allocator | 1 | 26 |
 | api | 1 | 6 |
 | binance | 2 | 40 |
@@ -327,6 +336,7 @@ Start one: `trp study new NAME`.
 | newey | 1 | 11 |
 | normalise | 1 | 15 |
 | overfitting | 1 | 12 |
+| pairs | 3 | 34 |
 | paper | 5 | 30 |
 | placebo | 1 | 24 |
 | plugins | 3 | 33 |
