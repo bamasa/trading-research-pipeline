@@ -810,6 +810,18 @@ CHECKS: dict[str, Callable[..., CheckResult]] = {
     "reversion": verify_reversion,
 }
 
+#: ``verify all --quick``: the smallest sizes tried at which every check's verdict,
+#: and the components that fail, matched the default run's on the default seed
+#: (28 October 2026: edge at 10 and 12 days and the reversion at one or two paths
+#: changed a verdict, so they keep 14 days and their defaults). The same checks and
+#: tolerances; fewer days and paths, so wider intervals.
+QUICK: dict[str, dict[str, Any]] = {
+    "edge": {"days": 14},
+    "detector": {"paths": 2},
+    "simulator": {"days": 2},
+    "reversion": {},
+}
+
 
 def summary_page(results: Sequence[CheckResult]) -> str:
     """The table of every check's criteria, for ``verify all``."""

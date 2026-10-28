@@ -37,6 +37,14 @@ def demo(
     small: Annotated[
         bool, typer.Option("--small", help="Two instruments, six days, two holds: the tests' set.")
     ] = False,
+    verify: Annotated[
+        bool,
+        typer.Option(
+            "--verify",
+            help="Also run verify all --quick (planted answers and their nulls) and put its "
+            "table on the page.",
+        ),
+    ] = False,
 ) -> None:
     """data → regimes → instruments → signal → execution → verdict on generated data, and the page."""
     from trading_research.walkthrough.demo import DemoConfig, run
@@ -44,7 +52,7 @@ def demo(
     if execution not in ("taker", "passive", "maker", "all"):
         err_console.print("[red]--execution must be taker, passive, maker or all[/red]")
         raise typer.Exit(code=2)
-    changes = {"out": out, "execution": execution, "seed": seed, "agent": agent}
+    changes = {"out": out, "execution": execution, "seed": seed, "agent": agent, "verify": verify}
     config = DemoConfig.small(**changes) if small else DemoConfig(**changes)  # type: ignore[arg-type]
     try:
         result = run(config, report=lambda line: console.print(line, highlight=False))

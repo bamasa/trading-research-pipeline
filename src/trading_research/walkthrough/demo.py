@@ -63,6 +63,11 @@ class DemoConfig:
     slippage_bp: float = 0.5
     placebos: int = 40
     agent: bool = False
+    #: Also run ``verify all --quick`` and put its table on the page.
+    verify: bool = False
+
+    #: The seed ``verify all`` uses by default, so the quick run matches its pages.
+    seed_verify: int = 20200106
 
     @classmethod
     def small(cls, **changes: Any) -> DemoConfig:
@@ -141,13 +146,25 @@ def run(config: DemoConfig, report: Callable[[str], None] = print) -> DemoResult
         tick = time.perf_counter()
         agent = agent_demo(out / "agent")
         seconds["agent"] = time.perf_counter() - tick
+    checks: list[Any] = []
+    if config.verify:
+        report("== verify: the components on planted answers (verify all --quick)")
+        tick = time.perf_counter()
+        checks = verify_quick(out / "verify", config.seed_verify, report)
+        seconds["verify"] = time.perf_counter() - tick
     seconds["total"] = time.perf_counter() - started
 
     page = out / "page.md"
-    page.write_text(render(config, pipeline, seconds, second, agent))
-    manifest = write_json(
-        out / "manifest.json", manifest_of(config, pipeline, generated, seconds, page)
-    )
+    text = render(config, pipeline, seconds, second, agent)
+    if checks:
+        text = text.rstrip("\n") + "\n\n" + verify_section(checks, out / "verify", config.seed_verify) + "\n"
+    page.write_text(text)
+    manifest_body = manifest_of(config, pipeline, generated, seconds, page)
+    if checks:
+        summary = out / "verify" / "all" / "page.md"
+        manifest_body["files_sha256"][str(summary.relative_to(out))] = sha256_file(summary)
+        manifest_body["verify"] = {c.what: "pass" if c.passed else "FAIL" for c in checks}
+    manifest = write_json(out / "manifest.json", manifest_body)
     write_json(out / MARKER, {"status": "complete", "page": str(page), "manifest": str(manifest)})
     statuses = {m: r["status"] for m, r in result.verdict["modes"].items()}
     report(f"page -> {page}  ({seconds['total']:.0f} s)")
@@ -343,6 +360,50 @@ def render(
             f"{verdict.get('ledger_match')}. Run directory: `{Path(agent['run']).relative_to(config.out) if str(agent['run']).startswith(str(config.out)) else agent['run']}`.",
             "",
         ]
+    return "\n".join(lines)
+
+
+def verify_quick(out: Path, seed: int, report: Callable[[str], None] = print) -> list[Any]:
+    """``verify all --quick``: every check at its smallest sizes, pages under ``out``."""
+    from trading_research.synthetic.verify import CHECKS, QUICK, write_all
+
+    results = []
+    for what, check in CHECKS.items():
+        report(f"verify {what} (quick)")
+        result = check(seed=seed, **QUICK.get(what, {}))
+        result.write(out)
+        results.append(result)
+    write_all(results, out)
+    return results
+
+
+def verify_section(checks: list[Any], where: Path, seed: int) -> str:
+    """The page's table of the quick verify run: one row per check."""
+    lines = [
+        "## Verify: the components on planted answers",
+        "",
+        f"`verify all --quick` on generated data with a known answer (seed {seed}): "
+        "the same checks and tolerances as `trp verify all` on fewer days and paths "
+        "(`synthetic.verify.QUICK`), so wider intervals. A failure "
+        "is a finding about a component and does not stop the demo; the reference verdicts "
+        "are those of `trp verify all` at its default sizes (docs/synthetic.md).",
+        "",
+        "| check | result | criteria passed | failing criteria | seconds |",
+        "|---|---|---|---|---|",
+    ]
+    for c in checks:
+        binding = [x for x in c.criteria if x.binding]
+        failed = [x.check for x in binding if not x.passed]
+        lines.append(
+            f"| {c.what} | {'pass' if c.passed else 'FAIL'} | "
+            f"{len(binding) - len(failed)} of {len(binding)} | "
+            f"{'; '.join(failed) if failed else 'none'} | {c.seconds:.0f} |"
+        )
+    lines += [
+        "",
+        f"Every criterion with planted, recovered and tolerance: `{where.name}/all/page.md`; "
+        f"each check's own page: `{where.name}/<check>/page.md`.",
+    ]
     return "\n".join(lines)
 
 

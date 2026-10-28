@@ -346,14 +346,23 @@ def verify_reversion_cmd(
 def verify_all_cmd(
     seed: Seed = 20200106,
     out: Annotated[Path, typer.Option("--out", help=OUT_HELP)] = VERIFY_OUT,
+    quick: Annotated[
+        bool,
+        typer.Option(
+            "--quick",
+            help="Smaller sizes whose verdicts matched the default run's: same checks, "
+            "same tolerances, fewer days and paths.",
+        ),
+    ] = False,
 ) -> None:
     """Every check with its defaults; one summary page beside each check's own."""
-    from trading_research.synthetic.verify import CHECKS, write_all
+    from trading_research.synthetic.verify import CHECKS, QUICK, write_all
 
     results = []
     for what, check in CHECKS.items():
         console.print(f"[bold]verify {what}[/bold]")
-        result = check(seed=seed, progress=_progress)
+        sizes = QUICK.get(what, {}) if quick else {}
+        result = check(seed=seed, progress=_progress, **sizes)
         _report(result, out)
         results.append(result)
     page = write_all(results, out)
