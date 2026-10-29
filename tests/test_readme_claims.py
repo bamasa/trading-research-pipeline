@@ -99,7 +99,7 @@ def test_every_group_the_readme_names_is_in_the_help() -> None:
             assert hidden or f" {name} " in shown, name
 
 
-def test_the_first_screen_fits_and_states_a_fee_in_every_row() -> None:
+def test_the_first_screen_fits_and_every_result_row_states_a_fee() -> None:
     lines = README.splitlines()
     first = lines[: lines.index("---")]
     while first and not first[-1].strip():
@@ -108,10 +108,14 @@ def test_the_first_screen_fits_and_states_a_fee_in_every_row() -> None:
     screen = "\n".join(first)
     for command in ("trp demo --execution all --verify", "trp verify all", "trp agent demo"):
         assert command in screen
-    rows = [r for r in first if r.startswith("| ") and not r.startswith("| Study")]
-    assert len(rows) >= 6
+    section = README.split("\n## Where it made money\n", 1)[1].split("\n## ", 1)[0]
+    rows = [
+        r for r in section.splitlines()
+        if r.startswith("| ") and not r.startswith(("| Study", "| Direction"))
+    ]  # fmt: skip
+    assert len(rows) >= 12
     for row in rows:
-        fee = row.split("|")[2]
+        fee = row.split("|")[3 if row.count("|") == 6 else 2]
         assert re.search(r"\d", fee), row
 
 

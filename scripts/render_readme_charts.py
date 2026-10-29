@@ -91,6 +91,26 @@ def reversion_equity() -> bool:
     return True
 
 
+def showcase() -> bool:
+    """The README's first figure, from the per-trade file and two committed tables."""
+    from trading_research.reporting import showcase as figure
+
+    trades = RESULTS / "reversion_trades.csv"
+    if not trades.exists():
+        return False
+    frame = pd.read_csv(trades, usecols=["symbol", "block", "net_bp"])
+    plots.both_themes(
+        lambda path: figure.overview(
+            frame[frame["block"] == "final"],
+            pd.read_csv(RESULTS / "reversion_boost_ALL.csv"),
+            pd.read_csv(RESULTS / "mm_round2_daily_H.csv"),
+            path,
+        ),
+        IMAGES / "showcase.png",
+    )
+    return True
+
+
 def rules_against_models() -> None:
     """The §14 chart, rebuilt from the committed per-strategy tables."""
     rows = []
@@ -225,6 +245,10 @@ def main() -> None:
             "(32 MB, gitignored) — regenerate with "
             "`uv run python -m experiments.reversion_boost --symbol ALL`"
         )
+    if showcase():
+        print("showcase done")
+    else:
+        print("showcase skipped: experiments/results/reversion_trades.csv is absent")
     rules_against_models()
     print("strategies done")
     gross_against_net()

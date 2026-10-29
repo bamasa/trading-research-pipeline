@@ -1,15 +1,69 @@
 # trading-research-pipeline
 
 A pre-registered strategy-search pipeline for crypto markets: data → regimes → instruments →
-signal → search → execution (taker | passive | maker) → verdict → study → agent → paper. A
-candidate is registered with the condition that would kill it before any held-out day is read,
-a held-out block is read once through a ledger, and every result is net of a stated fee.
+signal → search → execution (taker | passive | maker) → verdict → study → agent → paper. From a
+start date it picks the instrument, the frequency, the method and model, their parameters and
+the execution mode; it registers the condition that would kill the candidate before any held-out
+day is read, reads the held-out block once through a ledger, and states every result net of a
+dated fee. A model or a strategy of your own enters as one file.
 
 ```bash
 trp demo --execution all --verify   # the whole path on a generated market, then the checks
 trp verify all                      # each component against data with a planted answer
 trp agent demo                      # the research loop through the agent harness, synthetic
+trp catalog                         # everything below, listed from the registries
 ```
+
+---
+
+## What is inside
+
+| | | Full list |
+|---|---|---|
+| **Data** | Binance spot, USD-M and COIN-M; Bybit order book, prints, funding and spot book from the free archives; Binance and Bybit websockets recorded forward — each with its download command | [instruments and where to get them](docs/catalog.md#instruments-and-data-where-to-get-them) · [contract](docs/data_contract.md) |
+| **Synthetic markets** | five generators with a planted answer and its null: book days, breaks, a cross-section, order flow, funding | [synthetic](docs/catalog.md#synthetic-and-simulated-markets) · [guide](docs/synthetic.md) |
+| **Strategies** | cross-sectional reversion, relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
+| **Models, 29** | linear (logistic, ridge) · trees (XGBoost, LightGBM, random forest, extra trees) · neural networks (TCN, Gaussian TCN) · ensembles, meta-labelling, confidence bounds, rules | [models](docs/catalog.md#models) |
+| **Features and filters** | six feature sets (book, depth, flow, trade statistics, microstructure) · variance, correlation and mutual-information filters, normalisation, a look-ahead check and an information audit | [features](docs/catalog.md#features) · [filters](docs/catalog.md#feature-filters-and-checks) |
+| **Labels, 11** | direction, magnitude, triple barrier, net P&L, smoothed and walked variants | [labels](docs/catalog.md#labels) |
+| **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
+| **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
+| **Regimes** | CUSUM and structural-break monitors | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
+| **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
+| **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
+
+Adding one of your own — a model, a strategy, a feature set, a label, an execution or an
+instrument — is [one file and one check](#add-a-strategy).
+
+---
+
+## Where it made money
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/showcase_dark.png">
+  <img alt="Futures reversion on its held-out fortnight, by instrument, with tree models, and market making at the professional maker tiers" src="docs/images/showcase_light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/structural_breaks_BTCUSDT_dark.png">
+  <img alt="BTCUSDT daily: structural breaks flagged on the whitened stream" src="docs/images/structural_breaks_BTCUSDT_light.png">
+</picture>
+
+Every number net of the fee in its row; what each does not establish is in the last column.
+
+| Direction | Market, held-out period | Fee a side, bp | Net of the fee | What it does not establish |
+|---|---|---|---|---|
+| Futures, taker: cross-sectional reversion rule | 26 Bybit USDT perpetuals, 26 Feb–11 Mar 2024 | taker 5.5 + 0.5 slippage | **+6.89 bp a trade** over 3,383; 22 of 26 instruments positive, median +6.99 | by day +6.18 bp, *t* 1.18 over 14 days; the six weeks after, −19.94 bp: it pays in a reverting market, and that state was not forecastable a day ahead |
+| Futures, taker: the rule with gradient-boosted trees deciding how long to hold | the same entries | taker 5.5 + 0.5 slippage | **+18.7 bp a trade** (XGBoost), +18.2 (LightGBM); paired *t* against the rule 10.5 | models fitted on the search block only, the arrangements compared on the held-out one; the rule underneath failed the next six weeks |
+| Futures, maker: the touch quoter at the 0 bp professional tier | Bybit ALICE, ALGO, JTO, ZEC, GALA, CAKE, 26 Feb–9 Mar 2024 | maker 0, taker 5.5 | **+0.845 USDT** per 100 USDT of clip a day | quoting itself lost 1.32; the gain is inventory carried through a rising fortnight, killed by its direction condition |
+| Futures, maker: the same quoter at the programme's rebate | the same | maker −1, taker 5.5 | **+2.217 USDT** per 100 USDT of clip a day | quoting itself lost 0.78; inventory again; needs the market-maker programme |
+| Futures, maker: the comparison quoter S1 off the registered instrument | Bybit XRPUSDT and CRVUSDT, 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | **+70.8 and +0.62 USDT a day** | the registered instrument was BICOUSDT, where it lost; the gain is carried inventory |
+| Spot, taker: the 2025 recipe on prints (S25-PF) | Binance BTC/FDUSD, 8 Aug–21 Oct 2026 | 0 | **+2.65 bp a trade** | a measurement at a zero fee; at the account's Regular 10 bp it is −17.35, killed |
+
+Not positive after a fee anywhere: direction from one instrument's own book — rules, logistic,
+XGBoost and the TCN neural network on BTC, XRP and XMR — the spot maker, the 2021 BTCUSDT maker,
+and two replications of the author's 2025 research. The 2025 short-horizon search has its
+held-out blocks still unread. Every registered study:
 
 | Study, held-out block read once | Fee a side, bp | Held-out result, net of the fee | Status |
 |---|---|---|---|
@@ -21,13 +75,14 @@ trp agent demo                      # the research loop through the agent harnes
 | Spot maker, Binance BTC/FDUSD, 8 Aug–21 Oct 2026 | maker 0, taker 10 | −2.35, −2.88, −2.79 bp per fill | killed¹ |
 | Short-horizon search, Bybit BTCUSDT perpetual, 2025 | maker 2.0, taker 5.5 | held-out blocks not read | development complete |
 
-¹ uncalibrated fill rule. Two exploratory replications of the author's 2025 research are negative
-after any fee; every study is in [Registered studies](#registered-studies).
+¹ uncalibrated fill rule. Details in [Registered studies](#registered-studies).
 
 ---
 
 ## Contents
 
+[What is inside](#what-is-inside) ·
+[Where it made money](#where-it-made-money) ·
 [Walk the pipeline](#walk-the-pipeline) ·
 [Add a strategy](#add-a-strategy) ·
 [Check it is not a fiction](#check-it-is-not-a-fiction) ·
@@ -38,6 +93,7 @@ after any fee; every study is in [Registered studies](#registered-studies).
 [Methodology](#methodology) ·
 [Data](#data) ·
 [Limitations](#limitations) ·
+[Catalogue](#catalogue) ·
 [Disclaimer](#disclaimer) ·
 [License](#license)
 
