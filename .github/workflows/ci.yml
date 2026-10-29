@@ -57,6 +57,16 @@ jobs:
           uv run --no-sync trading-research generate-demo-data --output data/demo
           uv run --no-sync trading-research validate-data --input data/demo
 
+  container:
+    name: production image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image and check the example deployment inside it
+        run: |
+          docker build -t trp .
+          docker run --rm trp check deploy/deployment.example.yaml
+
   audit:
     name: repository audit
     runs-on: ubuntu-latest

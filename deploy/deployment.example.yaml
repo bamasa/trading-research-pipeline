@@ -1,0 +1,37 @@
+# A deployment: the strategies a backtest validated, frozen, with the capital and
+# limits they run under. Check it with `trp prod check deploy/deployment.example.yaml`.
+name: example
+capital: 1000                  # quote currency the portfolio may put at risk
+portfolio:
+  max_gross: 0.8               # share of capital deployed across strategies
+  max_weight: 0.6              # share any one strategy may take
+  daily_loss: 40               # quote currency, the whole portfolio, per UTC day
+  max_drawdown: 80             # quote currency, from the peak of portfolio equity
+health:
+  host: 0.0.0.0                # inside a container; 127.0.0.1 on a workstation
+  port: 9108
+monitors:
+  drift: {k: 0.5, h: 5.0, min_trades: 10}
+  regime: {warmup: 600, k: 0.5, h: 12.0, sample_s: 1.0}
+  feed: {stale_after_s: 5.0}
+strategies:
+  # A model by path needs model_sha256: the file the backtest validated. The
+  # placeholder model below needs none; replace it with a model.pkl and its pin.
+  - name: btc-taker
+    venue: bybit
+    market: linear
+    symbol: BTCUSDT
+    model: always_hold
+    execution: taker
+    clip: 0.001
+    hold_s: 120
+    expected: {net_bp: 0.0, sd_bp: 30.0}   # per round trip, from the held-out backtest
+  - name: eth-passive
+    venue: bybit
+    market: linear
+    symbol: ETHUSDT
+    model: always_hold
+    execution: passive
+    clip: 0.01
+    hold_s: 120
+    expected: {net_bp: 0.0, sd_bp: 40.0}
