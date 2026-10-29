@@ -376,7 +376,10 @@ def single_features() -> list[dict[str, Any]]:
             importlib.import_module(f"trading_research.features.{module.name}")
         except ImportError:  # an optional dependency absent: its features are not listed
             continue
-    return REGISTRY.describe().to_dict("records")
+    return [
+        {str(key): value for key, value in row.items()}
+        for row in REGISTRY.describe().to_dict("records")
+    ]
 
 
 def test_files(repo: Path) -> list[tuple[str, int]]:

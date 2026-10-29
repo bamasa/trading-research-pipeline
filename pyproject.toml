@@ -149,6 +149,7 @@ disable_error_code = ["misc", "name-defined", "unused-ignore"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "slow: tests that take more than a couple of seconds",
