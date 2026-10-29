@@ -29,7 +29,8 @@ The clip, the inventory limits, the depth of the visible book and post-only on
 arrival are enforced here, identically for every quoter:
 
 * clip = ``min(clip_notional / mid, clip_touch_share * trailing one-hour median
-  touch)``, rounded down to the lot; below one lot the side is not quoted;
+  touch)``, rounded down to the lot, or the fixed ``clip_btc`` when that is set
+  in place of both; below one lot the side is not quoted;
 * soft limit = ``soft_limit_clips * clip``: a side whose fill would take the
   position past it is not quoted;
 * hard limit = soft + one clip: a new order is sent, and a kept one stays, only
@@ -37,21 +38,31 @@ arrival are enforced here, identically for every quoter:
   included) stays within it under the current clip;
 * a fill that takes the position past the soft limit sends a reduce-only taker
   order back to it, which arrives after the order latency and walks the first
-  snapshot at or after its arrival, with slippage on top;
+  snapshot at or after its arrival with the taker executor's walk
+  (:func:`trading_research.backtest.walk.walk_book`), ``flatten_slippage_bp``
+  on top; a walked snapshot stamped more than a second after the order arrives
+  is counted (``exit_late_snapshot``);
 * a quote beyond the tenth visible level is not placed, and an order at or
   through the opposite touch, or our own opposite order, when it arrives is
-  rejected.
+  rejected;
+* with ``cancel_entries_on_flag``, a resting entry (an order decided while
+  flat or on its own side, so a fill would open or add to the position) is
+  cancelled at the first event after each regime flag of the ``FLAG_SIGNAL``
+  tape at or after its decision: the rule of
+  :func:`trading_research.pipeline.regime.cancel_times`, applied in event time.
 
 The day
 -------
 Every day starts flat, quotes nothing before ``warmup_s`` or from
 ``stop_quoting_at``, and is flattened by a costed taker order sent at
-``flatten_at``. If no snapshot arrives for ``suspend_after_pause_s``, every
+``flatten_at``. Between the two, while a position is held, the quoter is still
+asked at each snapshot and only its taker order (``Quotes.cross``) is honoured,
+so an exit due before the flatten is not held to it. If no snapshot arrives for ``suspend_after_pause_s``, every
 order is pulled and nothing is quoted until the next snapshot. A day the
 stored book reports sequence gaps for, whose flatten found no fresh book, or
 that has no funding plane, is flagged and excluded from verdicts. The
 accounting identity is checked after every change to the account and once more
-at the end. The full set of rules, each with the direction it biases a result and the
+at the end, with each side's turnover against the sum of its fills' notionals. The full set of rules, each with the direction it biases a result and the
 test that pins it, is in ``docs/market_making_simulator.md``.
 """
 
@@ -75,6 +86,8 @@ import numpy as np
 import pandas as pd
 
 from trading_research.backtest.costs import BYBIT_BASE, FeeTier
+from trading_research.backtest.taker import EXIT_LATE, LATE_SNAPSHOT_NS
+from trading_research.backtest.walk import walk_book
 from trading_research.market_making import analysis
 from trading_research.market_making.accounting import Account, IdentityError
 from trading_research.market_making.events import (
@@ -93,6 +106,7 @@ from trading_research.market_making.orders import (
     REJECTED,
     Order,
     OrderState,
+    OwnOrder,
 )
 from trading_research.market_making.queue import (
     CROSSED,
@@ -100,12 +114,13 @@ from trading_research.market_making.queue import (
     ArrivalGrowth,
     CancelAttribution,
     CrossedPolicy,
+    FillRule,
     QueuePriority,
     on_arrival,
-    on_print,
+    on_print_rule,
     on_snapshot,
 )
-from trading_research.market_making.quoters import MarketView, Quote, Quoter
+from trading_research.market_making.quoters import FLAG_SIGNAL, MarketView, Quote, Quoter
 from trading_research.market_making.signals import SignalTape
 
 _EMPTY_SIGNALS: Mapping[str, float] = MappingProxyType({})
@@ -128,7 +143,10 @@ class SimConfig:
 
     #: Notional cap on the clip, quote currency. Fixed per instrument from the
     #: development block; there is no default because there is no neutral value.
-    clip_notional: float
+    clip_notional: float | None = None
+    #: A fixed clip in base units, in place of the notional and touch caps.
+    #: Exactly one of ``clip_notional`` and ``clip_btc`` is set.
+    clip_btc: float | None = None
     fees: FeeTier = BYBIT_BASE
     order_latency_ns: int = 10_000_000
     cancel_latency_ns: int = 10_000_000
@@ -151,10 +169,20 @@ class SimConfig:
     #: A day whose stored book reports more sequence gaps than this is flagged
     #: and excluded from verdicts: the stored book cannot say where they fell.
     max_sequence_gaps: int = 0
+    #: Which prints fill a resting order: the queue rules (R5-R7, the default),
+    #: on touch (an optimistic bound) or trade-through only (R7 alone).
+    fill_rule: FillRule = FillRule.QUEUE
+    #: Cancel every resting entry at the first event after each regime flag
+    #: (the ``FLAG_SIGNAL`` tape) at or after its decision: a passive entry's
+    #: guard. Exits and orders that reduce the position are left alone.
+    cancel_entries_on_flag: bool = False
 
     def __post_init__(self) -> None:
-        if not self.clip_notional > 0:
-            raise ValueError(f"clip_notional must be positive, got {self.clip_notional}")
+        clips = [c for c in (self.clip_notional, self.clip_btc) if c is not None]
+        if len(clips) != 1:
+            raise ValueError("set exactly one of clip_notional and clip_btc")
+        if not clips[0] > 0:
+            raise ValueError(f"the clip must be positive, got {clips[0]}")
         for name in ("order_latency_ns", "cancel_latency_ns", "feed_latency_ns"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} cannot be negative")
@@ -268,6 +296,13 @@ def _per_second(events: DayEvents, config: SimConfig) -> tuple[list[float], list
     return vol.tolist(), median.tolist()
 
 
+def vol_at_rows(events: DayEvents, config: SimConfig) -> np.ndarray:
+    """The ``vol_bp_1m`` a decision at each book row reads (NaN before the first return)."""
+    vol = np.asarray(_per_second(events, config)[0])
+    seconds = (np.asarray(events.book_ts, dtype=np.int64) - events.day_start_ns) // NS_PER_S
+    return vol[np.clip(seconds, 0, len(vol) - 1)]
+
+
 class _Day:
     """The state of one simulated day. Built, run once, then read."""
 
@@ -304,6 +339,13 @@ class _Day:
             name: tape.strictly_before(events.book_ts).tolist()
             for name, tape in (tapes or {}).items()
         }
+        #: Flag times that cancel resting entries, and the next one due.
+        flags = (tapes or {}).get(FLAG_SIGNAL) if config.cancel_entries_on_flag else None
+        self.flag_times: list[int] = (
+            [] if flags is None else np.unique(np.asarray(flags.ts, dtype=np.int64)).tolist()
+        )
+        self.next_flag = 0
+        self.next_flag_ns: float = self.flag_times[0] if self.flag_times else math.inf
 
         self.account = Account()
         self.clock = _Clock()
@@ -335,10 +377,23 @@ class _Day:
         self.flatten_stale = False
         self.clip_over_touch_sum = 0.0
         self.clip_over_touch_n = 0
+        #: When the position last left zero (-1 before the first fill).
+        self.opened_ns = -1
+        #: Since when |position| has exceeded one clip (-1 when it does not),
+        #: and the time spent above it so far.
+        self.above_since = -1
+        self.time_above_ns = 0
+        #: A quoter may define ``observe(own_orders, opened_ns)``: it is told,
+        #: before each decision, which of its orders are not done (a cancel in
+        #: flight included) and when the current position was opened.
+        self.observe: Callable[[tuple[OwnOrder, ...], int], None] | None = getattr(
+            quoter, "observe", None
+        )
 
         stop = self.start + _time_ns(config.stop_quoting_at)
         flatten = self.start + _time_ns(config.flatten_at)
         self.stop_ns = stop
+        self.flatten_ns = flatten
         self._schedule(stop, _STOP, None)
         self._schedule(flatten, _FLATTEN, None)
 
@@ -385,6 +440,8 @@ class _Day:
                 self._suspend()
             while heap and heap[0][0] < t:
                 self._pop()
+            if t > self.next_flag_ns:
+                self._cancel_entries(t)
             if t >= self.next_minute:
                 self._minutes(t)
             kind = kinds[k]
@@ -441,6 +498,8 @@ class _Day:
                     self._fill(order, filled, CROSSED, t)
         if self.quote_start <= t < self.stop_ns and not self.stopped:
             self._decide(row, t)
+        elif self.stopped and t < self.flatten_ns and self.account.position != 0.0:
+            self._decide(row, t, cross_only=True)
 
     def _trade(self, row: int, t: int, side: int) -> None:
         if not self.trade_eligible[row]:
@@ -450,10 +509,15 @@ class _Day:
         available = self.trade_sz[row]
         aggressor = self.trade_aggressor[row]
         growth = self.config.arrival_growth
+        rule = self.config.fill_rule
         for order in list(self.resting[side]):
-            filled, path = on_print(order, price, available, aggressor, ts=t, growth=growth)
+            filled, path = on_print_rule(
+                order, price, available, aggressor, rule=rule, ts=t, growth=growth, lot=self.lot
+            )
             if filled > 0.0:
                 self._fill(order, filled, path, t)
+                if rule is FillRule.TOUCH:
+                    continue  # whatever is queued ahead: the print is not used up
                 available -= filled
                 if available <= 0.0:
                     break
@@ -503,15 +567,19 @@ class _Day:
                 return 0.0
         return 0.0
 
-    def _decide(self, row: int, t: int) -> None:
+    def _decide(self, row: int, t: int, *, cross_only: bool = False) -> None:
+        """Ask the quoter; with ``cross_only`` (after the stop) only its taker order counts."""
         config = self.config
         events = self.events
         mid = self.mids[row]
         second = min(max((t - self.start) // NS_PER_S, 0), len(self.vol) - 1)
         touch = self.touch_median[second]
-        cap = config.clip_notional / mid
-        if touch == touch:
-            cap = min(cap, config.clip_touch_share * touch)
+        if config.clip_notional is None:
+            cap = float(config.clip_btc or 0.0)
+        else:
+            cap = config.clip_notional / mid
+            if touch == touch:
+                cap = min(cap, config.clip_touch_share * touch)
         lot = self.lot
         clip = math.floor(cap / lot + 1e-9) * lot
         if touch > 0:
@@ -542,7 +610,19 @@ class _Day:
             clock.soft,
             signals,
         )
+        if self.observe is not None:
+            own = tuple(
+                OwnOrder(o.side, o.price, o.remaining, o.cancel_ns is not None)
+                for side in (1, -1)
+                for o in self.open[side]
+            )
+            self.observe(own, self.opened_ns)
         wanted = self.quoter.quotes(view, self.account.position)
+        if cross_only:
+            self.counters.add("decisions_after_stop")
+            if wanted.cross:
+                self._cross(wanted.cross, t + config.feed_latency_ns)
+            return
         self.counters.add("decisions")
         bid, ask = wanted.bid, wanted.ask
         if bid.price is not None and ask.price is not None and bid.price >= ask.price:
@@ -656,6 +736,22 @@ class _Day:
             for order in list(self.open[side]):
                 self._send_cancel(order, decided)
 
+    def _cancel_entries(self, t: int) -> None:
+        """At the first event after one or more flags: cancel every resting entry
+        decided at or before the latest of them."""
+        flags = self.flag_times
+        while self.next_flag < len(flags) and flags[self.next_flag] < t:
+            self.next_flag += 1
+        self.next_flag_ns = flags[self.next_flag] if self.next_flag < len(flags) else math.inf
+        latest = flags[self.next_flag - 1]
+        decided = t + self.config.feed_latency_ns
+        for side in (1, -1):
+            for order in list(self.open[side]):
+                entry = side * order.position_at_decision >= 0
+                if entry and order.cancel_ns is None and order.decided_ns <= latest:
+                    self._send_cancel(order, decided)
+                    self.counters.add("entries_cancelled_by_flag")
+
     def _suspend(self) -> None:
         """No snapshot for too long: pull everything until the next one."""
         deadline = int(self.stale_deadline)
@@ -728,6 +824,9 @@ class _Day:
         price = order.price * self.tick
         fee = account.fill(side, price, size, self.config.fees.maker_bp, maker=True)
         account.check_identity(self.mid)
+        if before == 0.0 and account.position != 0.0:
+            self.opened_ns = t
+        self._track_above(t)
         if order.remaining <= self.lot * 1e-6:
             order.remaining = 0.0
             self._finish(order, t, FILLED)
@@ -772,6 +871,8 @@ class _Day:
         while self.takers and self.takers[0].due <= t:
             taker = self.takers.pop(0)
             self.taker_in_flight -= taker.side * taker.size
+            if t - taker.due > LATE_SNAPSHOT_NS:
+                self.counters.add(EXIT_LATE)
             self._reduce_only(taker, row, t)
 
     def _reduce_only(self, taker: _Taker, row: int, t: int) -> None:
@@ -791,23 +892,16 @@ class _Day:
         side, size = taker.side, taker.size
         prices = events.ask_px[row] if side == 1 else events.bid_px[row]
         sizes = events.ask_sz[row] if side == 1 else events.bid_sz[row]
-        left = size
-        cost = 0.0
-        for level in range(self.depth):
-            take = min(left, float(sizes[level]))
-            cost += take * float(prices[level])
-            left -= take
-            if left <= 0.0:
-                break
-        if left > 0.0:
-            cost += left * float(prices[self.depth - 1])
+        walked = walk_book(prices, sizes, size)
+        if walked.beyond[0] > 0.0:
             self.counters.add("flatten_beyond_visible_book")
         slip = self.config.flatten_slippage_bp * 1e-4
-        price = cost / size * self.tick * (1.0 + side * slip)
+        price = float(walked.vwap[0]) * self.tick * (1.0 + side * slip)
         mid = self.mids[row]
         account = self.account
         fee = account.fill(side, price, size, self.config.fees.taker_bp, maker=False)
         account.check_identity(mid)
+        self._track_above(t)
         self.max_abs_position = max(self.max_abs_position, abs(account.position))
         self.fill_rows.append(
             (
@@ -828,6 +922,15 @@ class _Day:
         )
         self.counters.add("flattens")
         self.counters.add(f"flattens_{taker.reason}")
+
+    def _track_above(self, t: int) -> None:
+        """Time with |position| above one clip, for the report beside K-cap."""
+        above = abs(self.account.position) > self.clock.clip * (1.0 + 1e-9)
+        if above and self.above_since < 0:
+            self.above_since = t
+        elif not above and self.above_since >= 0:
+            self.time_above_ns += t - self.above_since
+            self.above_since = -1
 
     # -- bookkeeping ----------------------------------------------------------
 
@@ -942,6 +1045,7 @@ class _Day:
             raise IdentityError(
                 f"decomposition net {decomposition['net']!r} differs from cash {equity!r}"
             )
+        check_turnover(fills, account.maker_turnover, account.taker_turnover)
 
         orders = pd.DataFrame(
             [
@@ -988,6 +1092,10 @@ class _Day:
         counters["sequence_gaps"] = float(events.sequence_gaps)
         counters["has_funding"] = float(events.has_funding)
         counters["max_abs_position"] = self.max_abs_position
+        above = self.time_above_ns
+        if self.above_since >= 0:
+            above += max(0, int(self.now) - self.above_since)
+        counters["time_above_one_clip_s"] = above / NS_PER_S
         counters["maker_turnover"] = account.maker_turnover
         counters["taker_turnover"] = account.taker_turnover
         counters["fills"] = float(len(fills))
@@ -1018,6 +1126,17 @@ class _Day:
             oracle=oracle,
             flags=tuple(flags),
         )
+
+
+def check_turnover(fills: pd.DataFrame, maker_turnover: float, taker_turnover: float) -> None:
+    """Raise :class:`IdentityError` unless each side's turnover is the sum of its
+    fills' notionals (the registration's K-acct: turnover equals the fills)."""
+    for maker, booked in ((True, maker_turnover), (False, taker_turnover)):
+        mine = fills[fills["maker"].to_numpy(dtype=bool) == maker]
+        found = float((mine["price"] * mine["size"]).sum()) if len(mine) else 0.0
+        if not abs(found - booked) <= 1e-9 * max(1.0, booked):
+            side = "maker" if maker else "taker"
+            raise IdentityError(f"{side} turnover {booked!r} is not its fills' notional {found!r}")
 
 
 def _time_ns(moment: time) -> int:
@@ -1143,6 +1262,8 @@ def source_fingerprint() -> str:
         package.parent / "data" / "bybit_trades.py",
         package.parent / "data" / "bybit_funding.py",
         package.parent / "backtest" / "costs.py",
+        package.parent / "backtest" / "taker.py",
+        package.parent / "backtest" / "walk.py",
     ]
     digest = hashlib.sha256()
     for path in files:
@@ -1241,6 +1362,11 @@ EXTRA_COUNTERS = (
     "clip_over_touch",
     "not_quoted_soft_limit",
     "feed_pauses",
+    "fills_touch",
+    "time_above_one_clip_s",
+    EXIT_LATE,
+    "flatten_beyond_visible_book",
+    "entries_cancelled_by_flag",
 )
 
 

@@ -27,8 +27,8 @@ repos:
 
   - repo: local
     hooks:
-      - id: disclosure-audit
-        name: disclosure audit
+      - id: repository-audit
+        name: repository audit
         entry: python scripts/audit_repo.py
         language: system
         pass_filenames: false

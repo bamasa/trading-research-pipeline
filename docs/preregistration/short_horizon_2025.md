@@ -1,0 +1,3257 @@
+# Pre-registration: the 2025 short-horizon strategy search, on public data
+
+This document registers a strategy search before any of its data is read. It
+is committed together with
+[`configs/short_horizon_2025.yaml`](../../configs/short_horizon_2025.yaml),
+which holds the same values in the form the code will read, and the two must
+agree.
+
+| | |
+|---|---|
+| **Committed** | 8 October 2026, against `main` at `af148b5`, before any 2025 book, print, hourly bar or funding file is fetched for it. Revised the same day, before it was merged and before any data was read: after three reviews (peeking, multiplicity, feasibility), a consistency check and a last review for decisions left until after a read, it was recast from a test of fixed hypotheses into a registered search, and the search was then reviewed for search multiplicity, protocol and executability; the choices the reviews and the recast left open are under [Choices and their reasons](#choices-and-their-reasons). Narrowed on 9 October 2026, still before any data was read, to one instrument, BTCUSDT, over the whole registered span, from W's first day, 2024-12-01, to P's last, 2025-12-31, to bound the data and the compute. The values the study code fixed, which the text had left open, were written in on 9 October 2026, still before any data was read ([Choices and their reasons](#choices-and-their-reasons)). Clarified on 12 October 2026, still before any data was read, after three reviews of the study code against this text, where the code had to choose between two readings or the text left a gap ([Choices and their reasons](#choices-and-their-reasons)) |
+| **What it registers** | A search for short-horizon strategies that pay at published fees, on Bybit's public BTCUSDT archives, over features, labels, models, entry gates, execution paths (taker, passive entry, market maker), a regime-break policy and holding horizons: the blocks, the data and its coverage, the [search space](#the-search-space) and its hashed catalogue, how the development block [chooses and admits](#selection-on-d-admission-and-the-finalists) finalists, the [placebo search](#the-placebo-search) a finalist must beat, the confirmation of five finalists on held-out blocks (the named configuration [S25](#s25-the-named-2025-configuration) and one slot per stratum and execution path) with their kill conditions and placebos, the measurements A0, FILL and the regime map, the break test R, the status rules, the fetch plan, the compute budget and the amendment protocol |
+| **The break detector** | One frozen detector on hourly BTCUSDT returns ([The break detector](#the-break-detector)) has three roles: it **locates the 2025 break** `b`, the first alarm in F, that [R](#r-the-break-conditional) tests; its alarms **drive the [regime-policy axis](#the-regime-break-policy-axis)**, the guard after each alarm that the search chooses over; and its alarms **cut the [regime map](#the-regime-map)**. Its settings are fixed now; inside the search on D its hour profile is fitted fold by fold, so that the guard is causal; it is never refitted after a read |
+| **Computed so far** | **Nothing.** No 2025 order book, print, hourly bar or funding rate has been fetched, opened or computed on. The only 2025 data on disk is the daily bars of an earlier, unrelated break-detector run (item 5 below). What was known is listed under [What was known before this was written](#what-was-known-before-this-was-written) |
+| **How it changes** | Only under the [amendment protocol](#amendment-protocol): dated amendments appended at the end. One amendment is planned, after the development-period runs and before the held-out block is read |
+
+The market-making rounds are
+[`market_making.md`](market_making.md) and
+[`market_making_round2.md`](market_making_round2.md); their conventions hold here
+unless this document says otherwise. Names that do not exist on `main` at
+`af148b5` refer to code added by the pull requests that follow this one; they
+are listed under [the code to come](#the-code-to-come).
+
+## Why this study
+
+The repository's earlier directional and market-making studies were all
+killed. This one asks whether a **registered search** over the parts
+of a short-horizon strategy on BTCUSDT finds one that pays at published fees
+and survives held-out data: the features, the label and its fee, the model,
+an entry gate, the holding horizon, the decision threshold, a policy for
+regime breaks, and the execution path (taker, passive entry, market maker).
+The search is fixed in advance. Its catalogue of configurations is enumerated
+and hashed; every configuration is scored on the same 150 development days and
+recorded in a trial ledger; the choice of finalists is a registered rule; a
+searched finalist must beat the same search re-run on placebo targets before
+it is admitted; and five finalists, a number fixed now, are tested on
+held-out blocks under Holm's procedure with m = 5.
+
+One configuration is named in advance: **S25**, a gradient-boosted classifier
+on BTCUSDT with a hold-first rule and a 50 s close-by-time exit (its
+coordinates are under [S25](#s25-the-named-2025-configuration)). It is a point
+of the catalogue that the search can reach, and it is also tested by name,
+whatever the search chooses, so the study always reports how one fixed
+configuration fared, and the passive and market-making paths always have a
+fixed signal to run on.
+
+The study also asks whether a strategy paid for a while in 2025 and then
+stopped. That question is the easiest one to answer by looking for the period
+that flatters it. It is asked only in forms fixed in advance: as a searched
+[regime-break policy](#the-regime-break-policy-axis) (a guard after each alarm
+of a frozen break detector, causal on the development block), as a causal
+stopping policy ([R](#r-the-break-conditional): stop at the first alarm),
+tested only for a finalist that has first passed on the held-out block, and as
+a [regime map](#the-regime-map) that cuts every finalist's daily net at the
+detector's alarms and shows every segment, none selected, as a measurement.
+The three forms share one frozen break detector, run on hourly BTCUSDT
+returns: it locates the 2025 break that R tests, it raises the alarms the
+regime-policy axis guards after, and it cuts the regime map.
+
+**The prior is negative**, for reasons written down [below](#expected-outcome-stated-in-advance).
+The study is built so that a negative answer is informative: every verdict
+carries its fee break-even, so a reader can see how far each configuration
+was from paying.
+
+---
+
+## What was known before this was written
+
+Everything below was available when the design was chosen, and some of it
+shaped the design. None of it is a 2025 number computed by this repository.
+
+1. **General market knowledge**: crypto markets had a widely reported
+   liquidation cascade on 10–11 October 2025, and BTC's broad 2025 path (a
+   rising year, the reversal from October) is public.
+2. **This repository's own results**: directional taker trading from one
+   instrument's book is killed (§25, §26), passive entry of a directional signal
+   is killed (the gross edge inverts when resting: +3 to +8 bp crossing, −0.5 to
+   −4.2 bp resting), and both market-making rounds are killed, the one apparent
+   profit being inventory carried through a rising market
+   ([`docs/findings.md`](../findings.md)). These are the reason for the prior.
+3. **Bybit's fee schedule**, transcribed in 2026 into `backtest/costs.py`
+   (`BYBIT_LINEAR_TIERS`), with its caveat (`BYBIT_FEE_CAVEAT`): it is the
+   schedule published in 2026, applied here to 2025 data, when it may have
+   differed. The constant's text names the earlier rounds' period, February
+   to April 2024; the follow-up pull requests parametrise the caveat by
+   period, and every caveated number here carries it with 2025's dates.
+4. **Archive metadata, read for this registration.** HTTP `HEAD` requests for
+   Bybit's BTCUSDT order-book and trade archives on every day from 2024-12-01
+   to 2025-12-31 returned each file's existence and size and nothing else; no
+   archive was downloaded. The result, which moved two block boundaries, is in
+   [Data](#data). The per-day sizes were seen; they reflect the archives'
+   depth and a day's activity, not prices, spreads or fills, and a file's size
+   is a rough proxy for that day's activity in H, F and P. The per-day table
+   is committed as
+   [`experiments/results/short_horizon_2025_head_check.csv`](../../experiments/results/short_horizon_2025_head_check.csv)
+   (sha256
+   `86a5719fd92845d111bf846c15fded09409ff084f42679a556c23e113cf4d8e0`).
+   **No value in this registration was set from what it showed, except the
+   H/F boundary it moved.** The revisions made after the reviews used only
+   that archive change, and the fetch plan's sizes and disk budget use the
+   per-block sums and the largest and median archive of W and D, which set
+   no searched value. Requests of the same kind for two other perpetuals,
+   made while a wider draft of this search was written, showed the same
+   archive change on the same day; nothing in this registration uses them,
+   and their table is not part of the study. Three further `HEAD` requests on the same day found
+   the `ob200` book archive, and no `ob500` one, for BTCUSDT on 2026-01-05, 06
+   and 07 (225, 205 and 197 MB); these are the reader-test days of
+   [Data](#data), outside every block.
+5. **A break-detector run that already covers 2025.** The repository holds a
+   run of `validation/structural_breaks.py` at its daily setting on Binance
+   BTCUSDT daily bars from 2024-01-01 to 2026-09-30
+   (`experiments/results/structural_breaks_BTCUSDT*.csv` and the README's
+   figure), committed by an earlier run in this repository for another
+   purpose; the daily bars it read are on disk. Its 2025 alarms are public,
+   and they were known when this was written: the README, in the paragraph
+   under that figure, written on 2 October 2026, names the run's one break as
+   **2025-09-13, scale, downward** (odds 9.36 against 9.09, seventy-five days
+   into a window opened on 2025-06-30) and a near miss on **2025-06-29**
+   (8.96). Both were in this repository's README when F's span and the hourly
+   detector's setting were set; the 2025-09-13 alarm falls inside F. Because
+   it is public, that run cannot place the break blind. It is reported beside
+   R and never used to define the break date; the detector that does is a
+   different one, on hourly bars, never run on 2025
+   ([The break detector](#the-break-detector)). The same figure, and the daily
+   bars on disk, show BTC's 2025 daily price path.
+6. **Nothing else.** The repository's Bybit books end on 2024-05-10, and the
+   daily bars above are its only 2025 data. No 2025 book, print, hourly bar or
+   funding rate has been fetched or opened, and no 2025 number has been
+   computed for this study.
+
+**The information set of S25.** S25's coordinates are not claimed to have been
+chosen without knowledge of market conditions after 2025-08-01. Of the scored
+2025 days, only D and H's days before that date (2025-07-08 to 07-31) lie
+outside that information set. Every slot whose signal is S25's (S25, S25-Z,
+and S-P and S-M when they run on S25's signal) therefore takes its status on
+H from those 24 days only, its best status is **candidate (H before
+2025-08-01)**, and its numbers on the rest of H, on F and on P are
+measurements labelled "inside S25's information set"
+([status rules](#status-rules)).
+
+---
+
+## Expected outcome, stated in advance
+
+**No finalist is expected to pay at the base fee.** The arithmetic:
+
+- A taker strategy pays its fee on the notional of each side, and turnover
+  counts both sides, so the fee at which it breaks even, per side, equals its
+  gross profit in basis points of turnover.
+- Bybit's taker fee is 5.5 bp at the base tier and **1.5 bp at the cheapest
+  published tier** (`pro6_g1`, from 5,000 million USDT of 30-day volume). A
+  taker round trip costs 11 bp at the base tier and 3 bp at the cheapest, so a
+  taker configuration pays at the base tier only with a gross edge above
+  5.5 bp of turnover.
+- A passive entry with a taker exit costs 2.0 + 5.5 = 7.5 bp a round trip at
+  the base tier, a break-even of 3.75 bp of turnover; with a 0.0 bp maker
+  entry (published for BTCUSDT only from Supreme VIP or Pro 5) and the
+  cheapest taker exit it costs 1.5 bp, a break-even of 0.75 bp.
+- In 2024 this repository found the same directional signal at the same
+  moments worth +3 to +8 bp crossing and −0.5 to −4.2 bp resting, against
+  costs of 14–16 bp crossing and 5.9–7.1 bp resting; every taker winner of the
+  grand search was negative on both blocks, and both market-making rounds were
+  killed ([`docs/findings.md`](../findings.md)).
+
+Predictions, one per slot, fixed now:
+
+- **S25** killed by K1 on H before 2025-08-01; **S25-Z** killed by its K1
+  there.
+- **S-C and S-R**: whether a searched signal is admitted for its information
+  is not predicted (a crossing gross edge of a few basis points can beat both
+  nulls); its payoff is: the chosen cell's S ≤ 0 at the base fee in both
+  strata, so both are `not admitted on D (i)`.
+- **S-P and S-M** `not admitted on D (i)` on whichever signal they run; if
+  either reaches H, killed by K1 or, for S-M, K-dir.
+- **The regime axis** adds nothing beyond random pauses.
+- **R** not tested, because nothing reaches it; **FILL** as stated under its
+  heading.
+
+---
+
+## Data
+
+| Plane | Source | Code | Blocks |
+|---|---|---|---|
+| Ten-level book on a 100 ms grid | Bybit order-book archive, BTCUSDT linear perpetual, 500 levels (`ob500`) | `data/bybit.py`, `ARCHIVE_URL` | W, D, H |
+| the same | the same archive at 200 levels (`ob200`), same path with `ob200` in the name | `data/bybit.py`, a second name to be added | F, P |
+| Prints with aggressor side | Bybit trade archive, `public.bybit.com/trading/<symbol>/` | `data/bybit_trades.py`, `ARCHIVE` | all but E |
+| Funding | Bybit public REST endpoint, no credentials | `data/bybit_funding.py` | all but E |
+| Hourly bars for the break detector | Binance USDT-M futures BTCUSDT 1h klines, `data.binance.vision`; daily archives only for every day after 2025-06-30 | `data/binance.py`, with a daily-only option to be added | from 2024-12-01, E included (bars only) |
+
+**Coverage, checked by HTTP `HEAD` on 8 October 2026** (existence and size
+only; nothing downloaded). Sizes in MB. The `ob500` and print columns use the
+URL patterns in `data/bybit.py` and `data/bybit_trades.py` as they stand; the
+`ob200` column is the same book URL with `ob500` replaced by `ob200`.
+
+| Day | Book `ob500` | MB | Book `ob200` | MB | Prints | MB |
+|---|---|---:|---|---:|---|---:|
+| 2024-12-01 | 200 | 211 | 404 | — | 200 | 35 |
+| 2025-01-01 | 200 | 218 | 404 | — | 200 | 34 |
+| 2025-01-15 | 200 | 368 | 404 | — | 200 | 75 |
+| 2025-02-01 | 200 | 231 | 404 | — | 200 | 34 |
+| 2025-02-15 | 200 | 194 | 404 | — | 200 | 19 |
+| 2025-03-01 | 200 | 351 | 404 | — | 200 | 51 |
+| 2025-03-15 | 200 | 274 | 404 | — | 200 | 23 |
+| 2025-04-01 | 200 | 376 | 404 | — | 200 | 66 |
+| 2025-04-15 | 200 | 359 | 404 | — | 200 | 65 |
+| 2025-05-01 | 200 | 283 | 404 | — | 200 | 59 |
+| 2025-05-15 | 200 | 347 | 404 | — | 200 | 62 |
+| 2025-06-01 | 200 | 210 | 404 | — | 200 | 32 |
+| 2025-06-15 | 200 | 218 | 404 | — | 200 | 28 |
+| 2025-07-01 | 200 | 224 | 404 | — | 200 | 40 |
+| 2025-07-15 | 200 | 362 | 404 | — | 200 | 94 |
+| 2025-08-01 | 200 | 374 | 404 | — | 200 | 84 |
+| 2025-08-15 | 200 | 304 | 404 | — | 200 | 50 |
+| 2025-09-01 | **404** | — | 200 | 206 | 200 | 58 |
+| 2025-09-15 | **404** | — | 200 | 149 | 200 | 47 |
+| 2025-10-01 | **404** | — | 200 | 169 | 200 | 62 |
+| 2025-10-15 | **404** | — | 200 | 237 | 200 | 89 |
+| 2025-11-01 | **404** | — | 200 | 106 | 200 | 25 |
+| 2025-11-15 | **404** | — | 200 | 196 | 200 | 53 |
+| 2025-12-01 | **404** | — | 200 | 289 | 200 | 129 |
+| 2025-12-15 | **404** | — | 200 | 243 | 200 | 96 |
+
+The same check on **every day** from 2024-12-01 to 2025-12-31 (396 days):
+
+| Archive | Present | Absent |
+|---|---|---|
+| Book `ob500` | 2024-12-01 to 2025-08-20 (263 days) | 2025-08-21 to 2025-12-31 (133 days) |
+| Book `ob200` | 2025-08-21 to 2025-12-31 (133 days) | 2024-12-01 to 2025-08-20 (263 days) |
+| Prints | all 396 days | none |
+
+**The book archive changed on 2025-08-21.** Under the URL pattern the code
+uses, every book day from 2025-08-21 is missing; the venue publishes those
+days at 200 levels instead of 500, and no day has both. Ten levels are inside
+either, but the two archives may differ in ways the existence check cannot
+show (message cadence, snapshot frequency), and no overlap day exists to
+compare them on. Prints are unaffected.
+
+**Sizes over the whole span**, summed from the same check: 88.1 GB of `ob500`
+archives (263 days), 25.7 GB of `ob200` (133 days) and 27.1 GB of prints (396
+days), 140.9 GB in all. E's book and prints (1.6 GB) are never fetched and
+the three `ob200` reader-test days below (0.6 GB) are, so about 140 GB pass
+through the network if P is opened, 126.5 GB if it is not; per block in the
+[fetch plan](#fetch-plan).
+
+**What the archive change moved.** The plan before the check ended H on
+2025-09-21 and began F on 2025-09-22. H would then have mixed the two archives,
+and every held-out verdict would have rested partly on a book source that D
+never saw. Before anything else in this registration was written, the blocks
+were adjusted: **H now ends on 2025-08-20**, the last `ob500` day, and **F
+begins on 2025-08-21**, the first `ob200` day. D and H, where every value is
+chosen and every held-out verdict is taken, share one archive; F and P share
+the other. The archive change falls on the H/F boundary, where it is visible,
+instead of inside a block. Its consequences:
+
+- the data pull request adds the `ob200` name to `data/bybit.py` for days from
+  2025-08-21, with a test on a synthetic `ob200` fixture and on the three
+  **reader-test days, 2026-01-05, 06 and 07** (BTCUSDT), which lie outside
+  every block
+  and are used for nothing else but the entry point's dry run (no successor
+  study may put them in a block). No `ob200` day from 2025-08-21 to 2025-12-31 is fetched before
+  stage 3. The `ob200` replay is proven before H is opened: each reader-test
+  day must pass as the study's loader passes a block day, with no
+  `positive_prices` error in `validate_book`'s report, no price off the tick
+  grid, and no more sequence gaps than D's frozen `max_sequence_gaps`. Their
+  message counts, median interval between messages and sequence-gap counts,
+  and every other finding of their reports by check and severity beside the
+  same counts for D, go in the amendment (the configuration's
+  `data.ob200_reader_test_result`), and the ledger opens H only when no
+  reader-test day failed but on its gap count. A day that fails is first checked
+  as a reader fault, and a fault found is corrected under the amendment
+  protocol before H is opened; the replay itself is unchanged. If, the reader
+  checked, a day fails on its sequence-gap count alone, that is a property of
+  the archive: it is recorded in the amendment and the study continues, F's
+  and P's days being excluded by the frozen threshold and the unreadable-block
+  rule deciding;
+- F and P use D's frozen `max_sequence_gaps` (below), never a value set on
+  `ob200` days. If more than a quarter of a held-out block's days are
+  excluded, that block is reported as **unreadable**, nothing is retuned, and
+  no status changes on it (the
+  [status rules](#status-rules) say what
+  follows for H, F and P);
+- the downloader records each F and P day's message count, median interval
+  and sequence gaps only inside that block's opened access, as it records
+  row counts; they come from a scan of the archive's messages separate from
+  the replay, its gaps counted as `reconstruct` counts them, so the replay
+  stays unchanged;
+- every comparison across the H/F boundary (a strategy's persistence from H
+  into F) is labelled as crossing an archive change;
+- R compares days before and after the break **within F**, on one archive,
+  and the break date comes from Binance bars, which the change cannot move;
+- the order-book CUSUM reported beside R (below) labels any alarm within a day
+  of 2025-08-21 as "at the archive change".
+
+---
+
+## Blocks
+
+| Block | Dates (UTC, inclusive) | Days | Book archive | Use | Read |
+|---|---|---:|---|---|---|
+| **W** warm-up | 2024-12-01 to 2024-12-31 | 31 | `ob500` | the touch size, the tensor's spread floor and size moments, `sigma_ref`, rolling statistics; never scored | freely |
+| **D** development | 2025-01-01 to 2025-06-30 | 181 | `ob500` | features, models, the whole search and its placebo search, the walk-forward results, σ of daily results, the minimum detectable effects, the detector's alarm rate; A0 and FILL on O | freely, through the development access |
+| O (inside D) | 2025-02-04 to 2025-02-26 | 23 | `ob500` | A0 and FILL, descriptive only | as D |
+| **E** embargo | 2025-07-01 to 2025-07-07 | 7 | `ob500` | a gap, so that H tests transfer rather than continuation | book, prints and funding never fetched; its Binance hourly bars only, for the detector, opened with H |
+| **H** held out | 2025-07-08 to 2025-08-20 | 44 | `ob500` | the five finalists and S25-Z | once, after the D amendment is committed |
+| **F** boundary | 2025-08-21 to 2025-11-16 | 88 | `ob200` | the break detector's alarms; every frozen finalist's numbers; persistence of anything that passed on H; R | once, after H's results are committed |
+| **P** after | 2025-11-17 to 2025-12-31 | 45 | `ob200` | the last check of anything that passed (below) | once, after F's results are committed, only if the condition holds |
+
+Why these blocks.
+
+- **W** exists because the touch size, the tensor's floor and moments and
+  `sigma_ref` must be fitted on data before the first scored day, and rolling
+  statistics need history; December 2024 is never scored.
+- **D** covers the first half of 2025, and with it O, a 23-day window on
+  which A0 and FILL are measured. O is development data: the measurements on
+  it are descriptive, and nothing on O is held out.
+- **E** is a week no strategy reads, so that a model frozen on 30 June is
+  first scored a week later. Only its hourly bars are read, by the detector,
+  so that its stream has no hole.
+- **H**, six weeks of July and August, is before the autumn of 2025, and
+  ends at the archive change.
+- **F** contains the autumn, the 10–11 October cascade, and the archive change
+  on its first day. It is where the frozen detector looks for the break.
+- **P**, the last six weeks of 2025, is read only for a finalist that passed
+  before it.
+
+Days are independent: each starts flat, no position is held across midnight,
+and the day is the cluster for every statistic. **A day is the rows stamped
+from its midnight to the next**: a replayed file also holds the next day's
+first second, which the study's loader drops before anything reads the day,
+as `market_making/events.load_day` does, and counts per day; so no label,
+forward move, walk or flatten of a day reads the next day's book, and a
+day-end flatten after a feed gap finds no snapshot and flags the day
+`flatten_stale` (R16). Rolling statistics may read
+the previous days of the same block, and of the block before it where the two
+are adjacent and share an archive (W before D, F before P); a reader never
+reads a later block than its access permits. P's first day, 2025-11-17,
+reads 2025-11-16 when that day is usable under the frozen threshold, which
+P's own read session checks again on the day's files (F's results file
+records statuses, not what a reader may read, and is not consulted for it);
+otherwise it starts cold. **Two days start cold**:
+2025-07-08, because E's book is never fetched, so H's rolling statistics read
+nothing of D (not even 2025-06-30), and 2025-08-21, because the archive
+changes on it, so F's read nothing of H. On each, rolling state is rebuilt
+from the block's own rows, and the first `N` minutes from its midnight are
+not scored, `N` being the longest feature lookback (61 minutes, under
+[Labels, features and models](#labels-features-and-models)), whatever days they span; a day stays usable with fewer decision
+rows. **A day after a hole starts cold the same way**: when the previous
+calendar day has no usable book (missing, unreadable, unfetchable, or excluded
+by the loader), its rolling state and the network's windows read nothing
+before its midnight, so no rolling statistic reads across a day the study does
+not trust. Fitted values (the values fitted on W, the frozen models and
+thresholds) are not rolling state and are used on every block, never
+refitted at a read. Every fitted value that is not a weight (the tensor's
+spread floor and size moments, S1's `sigma_ref`, the raw-size scale and the
+float32 columns of the feature stores, any other fitted constant) is written
+to one file whose sha256 the amendment records, and the H, F and P gates
+check it beside the weights.
+
+Exclusions are per day. Days excluded from every verdict, counted and
+reported per block: more book
+sequence gaps than `max_sequence_gaps`; a non-positive price, found as a
+`positive_prices` error in `validate_book`'s report (the function returns its
+findings and does not raise, so the study's loader excludes the day on that
+finding); a price off the tick grid, which `validate_book` does not check
+(the simulator's day loader, `market_making/events.load_day`, refuses such a
+day under R16, and the study's loader applies the same check to every day,
+taker strategies included, with each day's own tick, derived from its book by
+`events.derive_tick` as `load_day` derives it; the loader also reports every
+day whose tick differs from the specification's or is not a multiple of it,
+which excludes no day); a missing plane (an HTTP 404 only; a failed
+download is retried, and excluded only under the [fetch
+plan](#fetch-plan)'s two terminal rules);
+a missing funding history; or a day flagged `flatten_stale` (R16: a taker
+order, an exit or the day-end close, that no snapshot followed before the
+book ended walked a snapshot more than 5 s older than the order); a day
+`market_making/events.load_day` refuses (`DayUnavailable`, whatever the
+reason: a funding interval other than 8 h, print sizes or aggressor flags
+outside its contract, no print on the day), for every configuration, taker
+included; or an unreadable archive or unfetchable day ([fetch
+plan](#fetch-plan)). Each is counted by reason. **A day flagged
+`flatten_stale` in any run on the block** (on a held-out block, any run of
+its read session: the true strategy, a placebo draw, a neighbour cell, the
+K-latency re-run, a bracket) is excluded from every series of every
+slot on that block, and is counted once toward unreadability.
+**`max_sequence_gaps` is the 95th percentile of D's per-day gap
+counts, rounded up**, computed by that formula and recorded in the
+amendment; the same value is used on every block. The percentile is numpy's
+linear interpolation over the gap counts of every D day whose book replayed (a
+day excluded for another reason still contributes its count), rounded to nine
+decimals before it is rounded up, so that float noise in the interpolation
+cannot add a gap. Each verdict is also reported with the
+gap-excluded days included, as a measurement, so that the exclusion cannot
+quietly favour a result.
+
+---
+
+## Common settings
+
+- **Instrument**: Bybit's BTCUSDT linear perpetual, the only instrument of
+  the search. It is fetched, replayed, validated and excluded day by day under
+  the rules of [Blocks](#blocks); its tick and lot steps come from the venue's
+  instrument specification, recorded in the amendment; the off-grid exclusion
+  uses each day's own tick.
+- **Rows and timing**: the 100 ms rows are `data/bybit.reconstruct`'s, at
+  `grid_ms=100`: at most one row per 100 ms interval, emitted at the
+  interval's first update, stamped with that update's venue time and carrying
+  the book as it stood right after it. Later updates in the interval appear
+  only in the next row, and an interval with no update has no row; nothing is
+  forward-filled. A row's value is therefore known at its stamp, and decisions
+  are made at row stamps. Orders and cancels are live 10 ms after the decision
+  (simulator rule R3). Every quantity in seconds (hold, label horizon, entry
+  wait, lookbacks) is measured on the stamps: "`t + h`" is the first row
+  stamped at or after `t + h`. `data/grid.to_grid` works in whole seconds and
+  is used only for the 1 s grid of the book CUSUM, with `label="right"`.
+- **Clip**: 0.010 BTC a trade on BTCUSDT, for every configuration and every
+  execution path, with no Kelly sizing. Results are also given per 100 USDT
+  of clip a day, with the clip's notional taken at entry. One position at a time, never more than one clip; for S-M, never more
+  than the simulator's hard limit of two clips (K-cap).
+  In the simulator the clip is the fixed `clip_btc` setting, which replaces
+  `clip_notional` and the touch-share cap, so K-cap compares with a constant.
+- **Taker fills** come from an event-time taker executor (new code; the
+  existing `pipeline/execution.run_taker` prices mid to mid and is not used).
+  An entry walks the first snapshot at or after decision + 10 ms across the
+  ten visible levels, at their volume-weighted price for the clip, with no
+  slippage added on top of the walk. An entry whose clip exceeds that
+  snapshot's visible depth is skipped and counted; **this skip applies only at
+  entry**, and no entry is skipped for its snapshot's age (a decision is made
+  at a row stamp, so the book it reads is fresh, and the snapshot walked is
+  never older than the order). An exit walks the first snapshot at or after
+  its decision + 10 ms whatever its age; depth beyond the tenth level is
+  charged at the tenth level's price and counted, as the simulator's
+  `flatten_beyond_visible_book`. **An order whose walked snapshot is stamped
+  more than 1 s after the order arrives** (a feed gap) is counted as
+  `entry_late_snapshot` or `exit_late_snapshot` and reported, for every taker
+  order, the passive slots' taker exits included; it is a measurement
+  and excludes no day. An exit that no snapshot follows before the book ends
+  walks the last one, and if that snapshot is more than 5 s
+  (`suspend_after_pause_s`) older than the order the day is flagged
+  `flatten_stale` and excluded, as in the simulator (R16). Funding (R14) and
+  the accounting identity (R15), with turnover equal to the sum of fill
+  notionals, hold for it as for the simulator. The label's walks and the
+  executor's call the same function. **Its timing in full**: entries are
+  decided from 00:01 to 23:58, both ends included; an entry is skipped when
+  the size beyond the visible levels exceeds 10⁻⁹ of the clip (float noise
+  is not depth); the exit is decided at the first row stamped at or after
+  `t + h`, `t` the entry decision (at `t + h` itself if no row follows), or
+  at 23:59 if that comes first, and walks the first row at or after that
+  decision + 10 ms, never a row before the entry's; the next decision may be
+  taken at a row stamped at or after the exit's walked snapshot (or the
+  exit's arrival, if later), so a decision on the exit's own row may enter.
+  Funding is charged at the mid of the last snapshot strictly before each
+  settlement; an entry filled at a settlement's exact stamp does not yet hold
+  the position, and an exit filled there still does. The walk tables, the
+  thinning and the placebos follow these rules; the label keeps its own exit
+  snapshot (the first at or after the entry snapshot + `h`), which can differ
+  from the executor's by a snapshot.
+- **Passive fills** (S-P, S-M, S25-Z, A0 and FILL) come from round one's event-time simulator
+  with these settings: a queue per order joining the tail of the visible size
+  (R5), advance and fills only from prints at the price (R6; a fill at the
+  price is floored to the instrument's lot, as the venue matches, so a
+  pro-rata share of a print smaller than a lot is no fill) or through it
+  (R7), proportional cancellation attribution, pro-rata arrival growth,
+  trade-tape crossed policy, post-only, order and cancel latency 10 ms, feed
+  latency 0, `soft_limit_clips` 1, `max_sequence_gaps` the frozen value of
+  [Blocks](#blocks) (the simulator's default of 0 is not used), `warmup_s` 60,
+  quoting stops 23:58 and the
+  flatten at 23:59 (between the stop and the flatten a quoter holding a
+  position is still asked at each snapshot and only its taker exit is
+  honoured, so an exit due before 23:59 is crossed when due, not at the
+  flatten; a passive decision stamped outside 00:01 to 23:58, the taker's
+  entry hours, is not passed to the quoter), markouts at 1, 5, 10 and 30 s, decomposition at 5 s,
+  `suspend_after_pause_s` 5 (no snapshot for 5 s pulls every resting order
+  and nothing is quoted until the next one; the same 5 s is R16's
+  `flatten_stale` threshold), and `vol_half_life_s` 60 and `touch_window_s`
+  3600, the simulator's defaults, which the signal-entry quoter does not use.
+  The entry is a new signal-entry quoter (round one's `SignalExecutor`, which
+  re-pegs and exits passively, is not used): one clip posted at the touch on
+  the signal's side at decision + 10 ms, **kept at its first price**, never
+  re-pegged, and cancelled if unfilled at the first snapshot `h` after its
+  post (not after the decision); a decision first seen more than `h` after
+  its stamp is not posted (`expired_unseen`). After a partial fill the rest
+  stays at its price until that cancel, the exit is `h` after the first
+  fill, for the position then held, and a fill that lands while the entry's
+  cancel is in flight is crossed at the next snapshot. **An entry pulled by a pause
+  is not re-posted**: its unfilled part counts as unfilled, and a part filled
+  before the pause is exited as any fill. Once filled, the exit is a
+  reduce-only cross `h` after the fill, priced by the taker executor's walk
+  (`flatten_slippage_bp` 0), with the late-snapshot counters of the taker
+  executor. **The decision reaches the quoter as a tape row stamped at the
+  decision row's stamp `t`.** Under the simulator's strictly-before rule that
+  row is first seen by the event after `t`, and the order is live no earlier
+  than `t` + 10 ms; a unit test checks that no event at or before `t` sees the
+  signal and that every post is live at or after `t` + 10 ms. A regime guard
+  ([the regime-break policy axis](#the-regime-break-policy-axis)) cancels a
+  resting entry at the first event after the flag. The brackets (`none`,
+  `all_ahead`; `pessimistic`) are run for K-queue.
+- **The market maker** (S-M) is round one's S1 with the signal lean, on the
+  same simulator settings: S1 at round one's frozen values `skew_bp` 2, `k`
+  0.5 and `min_edge_bp` 4 (`configs/mm_prereg.yaml`), with `sigma_ref` the
+  median of the simulator's `vol_bp_1m` (its estimator, at
+  `vol_half_life_s` 60) over W's rows, written to the fitted-values file
+  ([Blocks](#blocks)), `soft_limit_clips` 1,
+  `clip_btc` 0.010, the lean λ ∈ {0.5, 1, 2} on its signal's
+  tape (`pipeline/market_making.signal_tapes`: the signal's accepted entry
+  decisions, each with a signed strength in bp, μ for a regressor and, for a
+  classifier, the side times the median absolute forward move over the hold
+  on the fold's training rows), `lean_window_s` equal to the signal's hold,
+  and the regime guard of
+  `pipeline/market_making` (`guard_pull`, or `guard_widen` as a measurement)
+  with `guard_window_min` equal to 60 × the window in hours. **At these values
+  S-M will rarely post on BTCUSDT**: S1's half-spread, the maker fee plus
+  `min_edge_bp` plus `k` × σ, is at least 6 bp, beyond the tenth visible level of BTCUSDT's
+  book, and the simulator never quotes past the visible book (R11); so S-M
+  posts only when the lean moves its reservation price past its half-spread,
+  and then on one side at the touch. K-trades will most likely leave it
+  inconclusive, and `guard_widen` will rarely differ from `guard_pull`. The
+  values are kept ([Choices and their reasons](#choices-and-their-reasons)).
+- **Fees for verdicts**: the base tier, 2.0 bp maker and 5.5 bp taker
+  (`BYBIT_BASE`). Other published tiers
+  (`BYBIT_LINEAR_TIERS`, group `g1`, which holds BTCUSDT, down
+  to 0.0 maker and 1.5 taker) and the programme's −1.0 bp maker rebate are
+  measurements only, each with `BYBIT_FEE_CAVEAT`. A 0/0 schedule is used for
+  A0 and S25-Z only, and labelled; a label fee of 0 bp is a searched value of
+  the classifier's label, not a fee any verdict is taken at.
+- **Funding** is charged at each settlement on the position held then
+  (R14); a day without its funding history is excluded.
+- **The day**: no entry before 00:01 or after 23:58 UTC; anything open at
+  23:59 is closed by a costed taker order. The accounting identity (R15) is
+  checked at every day's end.
+
+---
+
+## Labels, features and models
+
+Every label, feature and model below is built on BTCUSDT.
+
+**Labels.**
+
+- **The walked-book taker label** (new code), stratum C. At row `t` with hold
+  `h`, for the clip: long P&L = (VWAP of selling the clip into the bids at the
+  exit snapshot − VWAP of buying it from the asks at the entry snapshot) / the
+  entry snapshot's mid × 1e4 − 2 × fee, the entry snapshot being the first at
+  or after `t` + 10 ms and the exit snapshot the first at or after that + `h`,
+  walked by the taker executor's function; short symmetric. Class `long` if
+  the long P&L is positive, `short` if the short P&L is, `hold` otherwise. The
+  **label fee** is a searched value, 0 or 5.5 bp, charged on both sides; S25's
+  and A0's label is at 0 bp. The label clip is the traded clip and the label
+  horizon is the hold, so the label declares `h` and the purge is derived
+  from it. A row whose entry snapshot cannot fill the clip within the ten
+  levels (an entry the executor would skip), or that has no entry or exit
+  snapshot, has no label rather than `hold`, and is not a training row.
+- **The forward move**, stratum R: the mid at the exit snapshot over the mid
+  at the entry snapshot, − 1, in bp (a simple return), both snapshots as for
+  the walked label; forward-only, unsmoothed. It is new code:
+  `labels/targets.py`'s `forward_smoothed_move_bp` at `smoothing=1` gives the
+  log of the mid's ratio from the decision row with its horizon in rows, and
+  is not used.
+- **The control label**: a time-based form (new code) of
+  `labels/targets.py`'s `smoothed_move_bp` at `smoothing=20` rows: the log of
+  the mean mid over the 20 rows ending at the first row stamped at or after
+  `t + h`, over the mean mid over the 20 rows ending at `t`, × 1e4. Its
+  horizon is in time, as every horizon here; only its smoothing is in rows.
+  It is partly known at decision time and is used only to train the control
+  models of K-label: the network on the control label, at the frozen fits
+  only, on the holds of R*'s neighbourhood, when R*'s model
+  is the network ([selection](#selection-on-d-admission-and-the-finalists)).
+
+**Features.**
+
+- **The microstructure set**: the registry's book, depth and flow features
+  over ten levels, plus the 2025 set the features pull request adds where the
+  registry lacks it (one-second realised volatility, return-sign
+  autocorrelation, turn count, run length, inter-trade time, lagged level-0
+  logs), at these windows on row stamps: realised volatility and return-sign
+  autocorrelation over 1 s; turn counts over 2, 5 and 10 s; the ask's, bid's
+  and mid's level-0 log changes over 1 and 5 s; the trade run length,
+  inter-trade time and time since the last trade over 60 s.
+  **Winsorising** clips each such feature at the 0.1% and 99.9%
+  quantiles of its own trailing 3,600 s on row stamps, never at whole-day
+  quantiles: over (s_t − 3,600 s, s_t], the row included, at pandas' linearly
+  interpolated quantiles of the window's finite values. **No rolling
+  normaliser** is applied to any input: the logistic model standardises
+  inside its fit (on the fold's training rows) and the network inside its
+  graph (on the fold's training days), and the boosted model needs no scale,
+  so `features/normalise.RollingNormaliser`, its 2,000-row window and its
+  scale floors have no part in the study. **A feature in raw size units** (order-flow imbalance such as
+  the registry's `ofi_1` and `ofi_20`, depth and print-volume sums) is then
+  divided by the median touch size on W, written to the
+  fitted-values file, before the float16 cast. In this set those are `ofi_1`
+  and `ofi_20` alone: every depth and flow column is a ratio, a share, a mean
+  count, a log or in bp. The touch size is the median of the level-0 sizes of
+  both sides pooled over every row of W (the mean of the two middle values
+  when their number is even). A test on W checks that every
+  stored column is finite after the cast; a column that fails it is stored at
+  float32 on every block, recorded in the amendment. A column fails when a
+  value finite at float64 exceeds 65,504 (float16's largest) in absolute
+  value after the scaling; a missing value passes, and a column already
+  infinite before the cast is reported beside the failures and not widened,
+  since float32 would not make it finite.
+- **The ten-level tensor**: 40 columns. Each level's price distance from the
+  touch is divided by the larger of σ × mid and a spread floor, σ being the
+  standard deviation of the mid's row-to-row log changes over the trailing
+  60 s on row stamps, and the floor the median quoted spread on W. Each level's log(1 + size) is z-scored against its mean and standard
+  deviation on W. W's values are written to the fitted-values file. Level
+  0's distance is zero on both sides by this definition; its two columns are
+  kept, constant, so that every level has the same layout (the network's
+  standardisation leaves a constant column unscaled). σ is pandas' rolling
+  sample standard deviation, undefined until the window holds two changes,
+  and the distance columns are missing on such a row; the floor is the exact median of
+  ask − bid at level 0, in USDT, over every W row; the size moments are W's
+  mean and population standard deviation.
+- **Prints are aligned backward**: a print belongs to the first row stamped
+  at or after it, so row `t` holds the prints in (s_{t−1}, s_t], s being the
+  row stamps (`searchsorted(..., side="left")`, the rule of
+  `features/align.py`). `features/flow.align_to_grid` puts a print into the
+  last row stamped at or before it, which on `reconstruct`'s event-time rows
+  gives row `t` the prints after its stamp; it is not used as it stands. The
+  existing flow features and the 2025 trade-plane features (inter-trade time
+  included) use the backward rule.
+- Every feature passes `validation/leakage.py` before any D run (K-leak). The
+  depth and flow builders, which are frame builders outside the registry,
+  are wrapped as registered features with declared lookbacks, so that the
+  checker, the purge and `N` cover them. For trade-plane features the
+  checker cuts the prints at a time strictly inside a row interval, not at a
+  row, and the streaming-parity test compares values at each decision stamp.
+  Every gate input is in basis points computed from prices, never a
+  normalised column (K-units).
+- **Lookbacks and `N`**: every rolling window is declared in seconds on row
+  stamps, except the network's 64-row window and the control label's 20-row
+  smoothing, and the windows the existing code declares in rows: the
+  registry's book features keep their row lookbacks (the longest 70 rows,
+  `ofi_20_norm`), and the flow builder declares its longest window, 120 rows.
+  `N` is the longest lookback declared in seconds, rounded up to
+  whole minutes; on a cold-start day a row is also unscored until the
+  row-declared windows have their rows since that day's midnight. **`N` is
+  61 minutes**, fixed here: over the whole microstructure set and the tensor,
+  whatever the selection keeps, the longest lookback in seconds is a 60 s
+  window plus the 3,600 s of winsorising. It is the `N` of the purge and of
+  the cold starts.
+- **Selection**: `features/selection.py`, once, on January 2025, from the
+  microstructure set, on every tenth row
+  (31 × 86,400 = 2.68 million rows at most), against one target: the
+  walked-book label at 0 bp with `h` = 20 s as `y`, and the forward move at
+  `h` = 20 s as `forward`. `FeatureSelector` runs at its defaults
+  (`score_target="ic"`, at most 40 features, correlation 0.95, variance 1e-6),
+  so it ranks by absolute correlation with `forward`, and `y` only marks the
+  rows that have a label. The selected list ("micro-selected") is the input
+  set for stratum C's micro inputs, for the bound regressor
+  and as the network's auxiliary input; it is recorded in the amendment.
+
+**Models.** No hyperparameter of any model is searched; every model uses
+this repository's defaults, with one registered seed per fit: **42** for
+every fit, the boosted, logistic and network classes' default (the ridge
+models draw no random numbers).
+
+- **Gradient boosting** (`models/gbm.py`, `gbm` below), three classes. With
+  `balance_classes` (its default), a fit (a walk-forward fold or a frozen
+  model) whose training rows lack the `long` or the `short` class gives that
+  side a probability of 0 (`models/linear._align_columns` fills a missing
+  class with zeros), so that side never trades with that model. This is the
+  code's intended behaviour, not a fault; the fits and sides it affects are
+  reported. The same holds for the logistic model.
+- **Logistic regression** (`models/linear.LogisticBaseline`, `logistic`),
+  three classes, the cheap baseline of stratum C.
+- **The Gaussian-head network** (`tcn`): `models/tcn.py`'s causal dilated
+  network (window 64 rows, 32 channels, 4 levels, kernel 3, dropout 0.1, at
+  most 20 epochs) with a head for μ and log σ², trained by Gaussian negative
+  log-likelihood plus 0.01 × the mean of (log σ² − log v)², v being the
+  variance of the fold's training targets, with log σ² clamped to
+  log v ± 6. Early stopping (patience 3 epochs) and the checkpoint both read
+  the rank correlation of μ with the realised forward move on the inner
+  validation; `TCNBaseline`'s internal 15% split is not used. Fits run on the
+  MPS device, one at a time. Its inputs are standardised inside the graph by
+  their mean and population standard deviation at the training rows' window
+  ends, merged day by day; a constant column is left unscaled.
+- **The bound regressor** (`bound_ridge`, `pipeline/stages.UNCERTAIN`): two
+  ridge models (`models/uncertainty.HeteroscedasticRegressor`, at its
+  defaults), μ from the first and σ from the second, the cheap baseline of
+  stratum R.
+- **Windows**: each of the network's windows is the 64 consecutive 100 ms
+  rows ending at the decision row, in training and in inference alike.
+  Training targets are taken on every tenth row (about one a second);
+  decisions are made on every row. Windows are built per batch by a lazy
+  window dataset (new code) that streams them per day from the every-row
+  feature store and never materialises them for a whole fit or day:
+  `models/tcn._windowise` copies, and at 4 million rows of about 70 inputs a
+  materialised fit would need about 72 GB. A row whose window is incomplete
+  (it reaches before the history the day may read, or holds a missing value)
+  has no prediction, and so no decision. Each epoch shuffles the training
+  days into shards of four days, read one shard at a time, and shuffles the
+  windows inside each shard, all from the fit's seeded generator.
+- **Training rows**: every fit reads at most 4 million training rows, taken
+  evenly in time from every tenth row: the kept positions are
+  ⌊i × total / 4,000,000⌋ over the training days' every-tenth rows in day
+  order, in integer arithmetic, so every day is thinned alike. `total` counts
+  every such row stamped before the purge, labelled or not, and a kept row
+  without a label is then dropped, never replaced.
+
+---
+
+## The search space
+
+The search is a catalogue of configurations. A configuration's **cell** is
+its full set of values; its **group** is its categorical values (stratum,
+model, inputs, gate); the ordered values (hold, decision, label fee,
+regime window) span the group's grid. Every cell is scored on every one of
+D's 150 walk-forward test days ([selection](#selection-on-d-admission-and-the-finalists)).
+
+| Axis | Values | Kind | Code |
+|---|---|---|---|
+| Instrument | BTCUSDT | fixed | `data/bybit.py`, `data/bybit_trades.py`; this study's loader (new code) |
+| Stratum | C: a three-class classifier with the hold-first rule; R: a Gaussian regressor with the EV gate | one slot each | the hold-first rule and the EV gate (new code) |
+| Model | C: `gbm`, `logistic`; R: `tcn`, `bound_ridge` | categorical | `models/gbm.py`, `models/linear.py`, `models/tcn.py` with the Gaussian head (new code), `models/uncertainty.py` |
+| Label | C: the walked-book taker label; R: the forward move | fixed by stratum | new code |
+| Label fee (C) | 0, 5.5 bp | ordered | — |
+| Inputs | C: micro-selected, or micro-selected + tensor; R: the network on tensor + micro-selected, the bound regressor on micro-selected | categorical in C, fixed by the model in R | `features/selection.py`; the tensor and the 2025 set (new code) |
+| Hold `h`, equal to the label horizon | 5, 20, 50, 120 s on row stamps | ordered | time-based horizons (new code) |
+| Decision (C) | 25, 50, 100, 240 trades a day, the hold-first thresholds' target rate | ordered | per-side θ (new code), on the pattern of `labels/directional.py` |
+| Decision (R) | k ∈ {0, 0.5, 1} and β ∈ {0, 1, 2} bp | ordered | the EV gate (new code) |
+| Market gate | `open`; `quiet_out` (realised volatility at or above the 30th percentile of the fold's training rows); `tight_only` (spread at or below their 70th percentile) | categorical | `backtest/gating.MarketGate`, as `experiments/grand_search.gate_for`, on the mid's realised volatility over the trailing 60 s and the quoted spread, both in bp from book prices |
+| Regime policy, taker and passive entry | none, pull 4 h, pull 24 h, pull 120 h | ordered by window (none is window 0) | `pipeline/execution.guarded_rows`; fold-wise flags (new code) |
+| Regime policy, market maker | pull at its signal's window; widen and the other windows measured | slot value | `pipeline/market_making` (`guard_pull`, `guard_widen`) |
+| Execution | taker (S25, S-C, S-R); signal-entry quoter (S-P, S25-Z); S1 with the lean (S-M) | slot, never chosen | the taker executor and the quoter (new code); `pipeline/market_making` |
+| Exit | close by time at `h`; a passive exit measured only | fixed | — |
+| Measured, never chosen | the fee tier; the fill rule (touch, trade-through, queue) and the brackets `none`, `all_ahead`, `pessimistic`; latency 110 ms | robustness | the fill-rule comparison (new code) |
+
+**Fixed, not searched**, with the reason:
+
+- hyperparameters and seeds: the repository's defaults, one registered seed
+  per fit;
+- cooldown 0 beyond the one-position rule, and the monthly walk-forward
+  cadence;
+- the instrument: BTCUSDT alone ([Choices and their
+  reasons](#choices-and-their-reasons));
+- the normaliser window: none, since no rolling normaliser is applied
+  ([Labels, features and models](#labels-features-and-models)); a window
+  would need a new feature store, about 45 GB;
+- feature selection: once, on January, at most 40 features;
+- sizing: one clip;
+- holds of 300 s and longer, already negative on the repository's 5 s grid;
+- exits other than the clock: a take-profit or stop needs a walk along each
+  holding path, about 25 times the cost of the clock exit;
+- the flag source: the hourly monitor on Binance's BTCUSDT futures bars; the
+  book CUSUM stays a reported second detector.
+
+**Counts.**
+
+| | Categorical groups | Ordered grid per group | Taker cells | Signal configurations (fits per fold) |
+|---|---:|---|---:|---:|
+| C | 12 (2 models × 2 inputs × 3 gates) | hold 4 × rate 4 × label fee 2 × regime 4 = 128 | 1,536 | 32 |
+| R | 6 (2 models × 3 gates) | hold 4 × k 3 × β 3 × regime 4 = 144 | 864 | 8 |
+| **In all** | **18** | | **2,400** | **40** (200 walk-forward fits) |
+
+A gate, a regime window and a decision threshold need no fit of their own,
+so 40 signal configurations (C: model × inputs × hold × label fee; R: model
+× hold) cover the 2,400 taker cells. The 200 walk-forward fits are 80 boosted,
+80 logistic, 20 network and 20 bound-regressor fits. The simulator runs on D
+are fixed by rule ([selection](#selection-on-d-admission-and-the-finalists)):
+S25-Z's 12 cells, always; S-P's at most 27 cells and 3 regime measurements
+(its cell at each regime window other than its signal's own, of none, 4, 24
+and 120 h); S-M's 3 cells and 6 regime measurements (`guard_pull` and
+`guard_widen` at 4, 24 and 120 h with λ = 1); A0 and FILL's 4 runs on O. The
+passive-exit variant of S-P and S25-Z runs on the held-out blocks only, never
+on D. The **trial bound** is N_max = 2,400 + 12 + 30 + 9 + 4 = **2,455**; the
+trial ledger records the actual N, and every row counts in N_trials even
+beyond N_max.
+
+**The catalogue** is the 2,400 taker cell keys, written
+`<instrument>|C|<model>|<inputs>|<gate>|hold_s=<h>|trades_per_day=<n>|label_fee_bp=<f>|regime=<r>`
+and `<instrument>|R|<model>|<inputs>|<gate>|hold_s=<h>|k=<k>|beta_bp=<β>|regime=<r>`,
+with instrument `BTCUSDT`, inputs `micro`, `micro+tensor` or `tensor+micro`,
+regime `none`, `pull_4h`, `pull_24h` or `pull_120h`, and numbers written as
+in the configuration (`0`, `0.5`, `5.5`). Sorted in byte order and joined with
+a newline after each key, they have sha256
+`dba3b16a5ffb70ca03974c6a53a9529ba4009cdf796da92c2389b3822288538d`. The
+single entry point checks this hash before stage 1 and refuses any key
+outside the catalogue. S25 is the key
+`BTCUSDT|C|gbm|micro|open|hold_s=50|trades_per_day=240|label_fee_bp=0|regime=none`.
+
+---
+
+## Strata, decision rules and execution paths
+
+**The hold-first rule** (stratum C). The model gives `p_long`, `p_hold`,
+`p_short`. Go long when `p_long ≥ θ_long` and `p_long > p_short`; short
+symmetrically; otherwise hold. `θ_long` and `θ_short` are set on the inner
+validation, without the market gate or the regime guard, so that each side
+would enter half of the target rate of trades a day before the one-position
+rule. The gate and the guard only remove decision rows, so a gated or guarded
+cell trades less than its target rate. θ is set on every row of the inner
+validation, as decisions are made on every row: with `d` its UTC days, each
+side takes `n` = round(rate / 2 × `d`) entries (half to even, at least one),
+and its θ is the `n`-th largest of its probability over the rows where that
+probability is finite and above the other side's (the smallest of them if
+fewer rows qualify, and no trade on that side if none does).
+
+**The EV gate** (stratum R). With μ and σ the predicted forward move over `h`
+in bp, `c` = 2 × 5.5 bp, `w_t` the cost in bp of walking the current book for
+the clip and back (from the snapshot, in bp of mid), and `β` the buffer in bp
+(not the break date `b`): go long when `μ − kσ > c + w_t + β`, short when
+`−μ − kσ > c + w_t + β`. One entry per event (a run of rows on which the gate
+is open, on either side: a run that turns from long to short without a
+closed row is one event); a new entry needs the gate to close and reopen. An
+event that opens while a position is held may still enter at its first free row; once
+an event has entered it gives no other entry. A missing input (a row without
+a prediction, or a crossed snapshot, which has no walk cost) keeps the gate
+closed. Every trade is one
+full clip: no Kelly sizing is applied (`strategies/sizing.py`'s
+`FractionalKelly` cannot size this gate in either unit; see
+[Choices and their reasons](#choices-and-their-reasons)).
+
+**Every configuration** holds one position at a time: the next entry is
+possible only when the previous position is closed and no entry order is
+resting; an order whose cancel is in flight counts as resting until the
+cancel is acknowledged or the order is filled. For a taker that is the hold after each entry; for the quoter it is
+the wait of at most `h` for a fill, and after a fill the time to the exit.
+Profit and loss comes only from realised fills in the execution path, never
+from a sum of predicted values.
+
+**The execution paths.** The taker enters and exits through the event-time
+taker executor, the exit `h` after the entry. The signal-entry quoter posts
+one clip at the touch on the signal's side, kept at its first price, waits at
+most `h`, and once filled exits by a taker order `h` after the fill. The
+market maker quotes both sides with round one's S1, its reservation price
+leaning on the signal ([Common settings](#common-settings)). **The passive
+variant with a passive exit** (S-P and S25-Z, measurement only): the exit is
+posted at the touch at `h` after the fill and crossed if still open after a
+further `h`.
+
+---
+
+## The regime-break policy axis
+
+**The flags** come from the frozen break detector ([The break
+detector](#the-break-detector)): hourly Binance BTCUSDT log returns over one
+stream from 2024-12-01, each divided by the root mean square of its UTC hour,
+under `MonitorSpec(history_len=365, online_len=90, min_history=121)` with the
+statistics scale and dependence. A flag is an alarm, effective at the close of
+the hour whose return produced it. The flags come from the same instrument the
+search trades, on another venue's bars, which the book archive's change cannot
+move.
+
+**Causal on D, fold by fold.** For test month m of the walk-forward, the
+24-value hour profile is fitted on the hours from 2024-12-01 to the last hour
+before m's first day; one `detect_breaks` call runs over the stream from
+2024-12-01 to m's last hour; and the guard uses that run's alarms in
+[m's start − 120 h, m's end]. On H, F and P, and in the dry run, the flags are
+the frozen detector's, its profile fitted on all of D. A **flag-causality
+test**, on the pattern of `validation/leakage.py`, checks in every fold that,
+for every hour τ of test month m, mutating every bar after τ leaves every flag
+the guard uses at or before τ unchanged. The flags in the lead-in before m's
+start come from fold m's run, whose hour profile is fitted on hours up to m's
+start; they may use bars up to m's start, and the test begins at m's first
+hour. If it fails, K-flag-leak voids every slot with a window above 0.
+
+**The policy acts before execution**, and only on pairs that
+`pipeline/execution.VALID_PAIRS` already allows:
+
+- **none**: no guard;
+- **pull w** (taker and passive entry): no new entry decision in
+  (flag, flag + w], which is what `pipeline/execution.guarded_rows` computes.
+  An open position runs to its exit at `h`. A resting passive entry is
+  cancelled at the first event after the flag, since its fill would be a new
+  entry;
+- **the market maker**: pull is `guard_pull` (no quotes) and widen is
+  `guard_widen` (half-spread doubled), with `guard_window_min` equal to
+  60 × w.
+
+The windows are w ∈ {4, 24, 120} h. 120 h is the monitor's re-arm time
+(`min_history` 121 hours), so the longest guard covers the span after an alarm
+in which the monitor cannot alarm again.
+
+**Regime attribution**, reported for every slot with a window above 0: the
+slot's mean minus that of its window-0 twin, against the 95th percentile of
+the same difference under 200 random flag sets, each with as many flags as the
+block has at hours drawn uniformly over its usable hours, seeds 0–199 (20 sets
+for a simulator slot): set `k`'s hours are drawn without replacement by
+`numpy.random.default_rng(k)`, so no hour carries two flags. It is a measurement, not a kill: a strategy that pays is
+not a false positive because its guard adds nothing.
+
+**Relation to R.** [R](#r-the-break-conditional) stays a separate,
+conditional hypothesis about the policy "stop at the first alarm in F", with
+the same frozen detector; the axis is a short guard after any alarm. A finalist
+with a window above 0 keeps its guard on H, F and P, so F− and F+ are its own
+guarded series, and `b`'s alarm triggers its guard too.
+
+---
+
+## The development-period procedure (D only)
+
+The search runs in registered stages; the [compute budget](#compute-budget)
+gives each one's time and disk.
+
+0. **Stage 0, before any 2025 fetch: the hard budget.** The entry point
+   checks the catalogue's sha256. The code to come is timed on 2024 days
+   already on disk (BTCUSDT 2024-02-11, a quiet day, and 2024-03-05, the
+   busiest), and D's wall time is projected from those times, Null B at full
+   size (137 × the catalogue's cell-days) and the refit included. **The
+   ceiling is 6 days of wall time for D**; the budget below projects about
+   2.0–3.6 days. Over the ceiling, cuts are made in this order until the
+   projection fits: (1) the 120 s hold; (2) stratum C's micro-selected +
+   tensor inputs; (3) the `quiet_out` gate. The cuts, the
+   new catalogue hash, the new N_max, the configuration's new
+   null-placeholder sha256 and S25's and S25-Z's neighbourhoods as cut go
+   into a dated amendment committed before stage 1. Nothing is cut once a 2025 file is on disk; a run slower
+   than projected only takes longer. **The walk-table parity test** of [the
+   placebo search](#the-placebo-search) runs here, on the same 2024 days,
+   before any 2025 fetch: a failure blocks stage B until it is fixed by a
+   dated amendment.
+1. **Stage 1: fetch, replay and features**, W and D
+   ([fetch plan](#fetch-plan)); no H, F or P file is on disk before the
+   amendment. Validate every day; exclusions per the [blocks](#blocks).
+   Features go to two float16 stores: every tenth row (positions 0, 10, 20,
+   … of each day's rows from its midnight, the rows the fits take their
+   targets on); and every row, holding the network's inputs, kept through D.
+2. **Leakage**: every feature through `validation/leakage.py`, the fold-level
+   leakage test and the flag-causality test; any failure stops the study
+   until fixed by a dated amendment (K-leak, K-flag-leak).
+3. **Selection**, on January.
+4. **Walk-forward over D** by calendar month: for each test month from
+   February to June (150 test days), train on D's days before it except the
+   last seven, which are the inner validation (the seven calendar days before
+   the month: their usable days, fewer when one is excluded, never filled from
+   earlier days); purge the hold plus the
+   longest feature lookback before the inner validation and before the test
+   month (`experiments/grand_search.py`'s purge is not used). The inner
+   validation sets the per-side θ from the target rate, which reads no
+   outcome, and the network's checkpoint by inner rank IC, which reads only
+   days before the purge. **The fold-level leakage test**: mutating every
+   price after fold m's cutoff, and every label at a row after it, leaves fold
+   m's weights, θ, gate levels and checkpoint unchanged (by sha256). The
+   cutoff is the end of fold m's inner validation plus the hold, inside the
+   purge before test month m: the inner validation's labels and forward moves
+   read prices up to a hold past its end, and nothing fitted reads later.
+   Where the last exit snapshot a target row before that end reads lies later
+   (the 10 ms latency and the grid can put it a snapshot past), the cutoff is
+   that snapshot, still inside the purge. The test runs the study's own fit
+   code, twice per fold: once on stage 1's stores and targets, once on a
+   scratch copy in which every row after the cutoff, of the last inner day
+   and of the test month, is mutated, the book's prices moved and the labels,
+   forward moves and gate inputs recomputed from them.
+   **The test's fits run on the CPU.** In every fold it compares one fit of
+   each model at a hold of 20 s (stratum C's on the micro-selected inputs at
+   a 0 bp label fee), with θ at the four rates and the gate levels; the
+   network is trained for one epoch (`epochs` = 1) with its inner validation
+   scored, and its weights, that epoch's inner rank IC and its checkpoint
+   epoch are compared. The CPU reproduces the network's weights bit for bit
+   from its seed, which a unit test checks; PyTorch does not promise that on
+   MPS, where two fits could differ without a leak and void the study under
+   K-leak. Its cost, about 1 to 1.5 hours a network fit on the CPU, is timed
+   at stage 0 and enters D's projection.
+5. **Stage A: fits.** The 200 walk-forward fits (40 signal configurations ×
+   5 folds), the predictions on the test days, and for each signal
+   configuration and test day a **candidate-row tape**: the rows at which the
+   loosest cell could enter (θ at 240 trades a day; k = 0 and β = 0; gate
+   open; no guard), each with its scores, gate states and guard state. Every
+   stricter cell is a subset of these rows. The daily IC is computed on all
+   decision rows and stored as one value per day.
+6. **Stage B: taker scoring, every cell on every test day.** Per day and
+   hold, a **walk table** holds the long and the short
+   walked P&L at every 100 ms row, from the taker executor's walk (10 ms
+   latency, funding included), built in memory one day at a time and never
+   stored. Each cell's entries are thinned from its tape (one position at a
+   time, an event-jump loop); its trades' long and short walked P&L,
+   `pnl_long_bp` and `pnl_short_bp`, are looked up; net is read on the cell's
+   side, and **G = net − (`pnl_long_bp` + `pnl_short_bp`)/2**, which equals
+   side × (`pnl_long_bp` − `pnl_short_bp`)/2: the cell's edge with the costs
+   taken out. Drift is not taken out (a tape with more longs than shorts keeps
+   the difference of the two shares times the drift); Null B and K-drift on
+   the held-out blocks control it. Every cell-day writes one row to the trial
+   ledger.
+7. **Stage D: the choice, admission and the placebo search**
+   ([selection](#selection-on-d-admission-and-the-finalists), [the placebo
+   search](#the-placebo-search)), with the refit replication.
+8. **Stage C: the simulator**: S25-Z, S-P and S-M on their signals, and A0
+   and FILL on O.
+9. **Stage E: the frozen fits.** For every hold and label fee in the
+   neighbourhood of each stratum's chosen cell, admitted or not, and of
+   S25's: at most 12 boosted or logistic fits (6 for C\*'s holds and label
+   fees, 6 for S25's), at most 3 bound-regressor fits (R\*'s holds) and at
+   most 4 network fits with 4 control fits, trained on D from 2025-01-01 to 06-23 with the purge
+   before 06-24; their θ and checkpoints set on 06-24 to 06-30, with the same
+   purge before 07-01 at that window's end, as in every walk-forward fold. These cover
+   every cell of every finalist's neighbourhood, so K-nbhd on a held-out block
+   runs only frozen files. The weights stay in the ignored `models/`
+   directory; every weight file's sha256, every threshold and every checkpoint
+   epoch go in the amendment.
+10. **σ of the daily series and the minimum detectable effects** (below), per
+    slot, and the detector's alarm rate on D.
+11. **A dry run of the entry point**, end to end, before the amendment: on
+    D's last 44 days (2025-05-18 to 06-30) standing in for H, and on the three
+    `ob200` reader-test days standing in for F and P, whose read (statuses,
+    kills, placebos, R and P's reading) runs end to end on the stand-in H's
+    statuses; stage 1 fetches the reader-test days' prints and funding for it
+    beside their books. Its outputs are
+    discarded and never reported; it is the reader-test days' one use besides
+    the reader test. It repeats stage 0's walk-table parity test as a check; a
+    failure there is a bug under the [amendment
+    protocol](#amendment-protocol), and D is re-run in full.
+12. **The amendment**, committed before H is read, with the study's single
+    entry point (`experiments/short_horizon_2025.py`), which computes every
+    slot, placebo, bracket, neighbourhood cell, tier, status and regime-map
+    row for a block in one read session.
+
+---
+
+## Selection on D, admission and the finalists
+
+**Frozen before scoring.** The configuration's `search` block fixes, before
+stage 1: the catalogue and its hash, the choice and admission rules, the nulls
+with their seeds, shifts and replications, the ceiling and the reduction
+order. **The study code is frozen before the stage 1 fetch**: a dated note,
+`docs/short_horizon_2025_code_freeze.md`, records the commit of all study code
+(the entry point, features, labels, models, executor, quoter, nulls and
+statistics) before any W or D file is fetched, and any change to that code
+before H is read is a correction under the [amendment
+protocol](#amendment-protocol). Every score on a test day of February to June
+comes from the single entry point. It writes the **trial ledger**,
+`data/short_horizon_2025/short_horizon_2025_trials.parquet` (zstd), one row per
+D run, configuration and test day, with the columns `run`, `key`, `day`,
+`net_bp`, `G_bp`, `pnl_long_bp`, `pnl_short_bp`, `trades` and `skips`, split
+into parts under 100 MB if it needs to be. The parts stay under `data/` and
+are never committed. A small **manifest**,
+`experiments/results/short_horizon_2025_trials.json`, records the
+catalogue's sha256, each run's commit, every part's sha256 and row count, and
+the ledger's sha256 (every part's bytes in order) and row count; the manifest
+is committed at the end of each stage, and H's open checks the parts on disk
+against it. **N_trials** is the number of distinct (run, key) pairs: every
+configuration scored in every complete D run, counted even beyond N_max. It
+is the N quoted on every page and given to N_eff and the deflated Sharpe
+ratio; the rows of a superseded run stay in the ledger and in N_trials.
+
+**Hand runs.** No configuration is added to the catalogue after stage 0. A
+computation on a February to June test day outside the entry point (a
+configuration run by hand, or any statistic of a label, a return, a
+prediction or a P&L on those days, a feature's IC included) is a **hand
+run**. Replay, validation, the leakage tests and feature building are not.
+A hand run is logged in the ledger's manifest with its date, what it computed
+and the days it read, and it sets every searched slot (S-C, S-R, and S-P or
+S-M when their signal is C\* or R\*) to `not admitted on D (hand run)`, with
+p = 1 on every block. The rule can only lower statuses, and it leaves the
+catalogue and its hash unchanged. W and January are the sandbox, where
+nothing is counted.
+
+**The choice: one cell per stratum.**
+
+- In each group, a cell's **S** is the median, over its neighbourhood, of
+  each cell's mean daily `net_bp_trade` at the base tier over the 150 test
+  days. **The neighbourhood** is `validation/search.neighbourhood_scores`'
+  block over the ordered axes (hold; rate, or k and β; label fee; regime
+  window): every cell within one step on every ordered axis, diagonals
+  included, at the cell's categorical values. The ordered axes enter it as
+  numbers: hold in seconds, rate in trades a day, k, β and label fee in bp,
+  and the regime window in hours (0 for none, 4, 24, 120), never as the
+  catalogue's strings, which would sort `pull_120h` before `pull_4h`; a test
+  asserts S25's 24-cell neighbourhood. Every cell is counted whatever
+  its trade rate; a cell without a trade on D scores 0, which the entry point
+  writes (`neighbourhood_scores` drops a missing value). The entry point uses
+  a vectorised version of `neighbourhood_scores`, tested equal to it on small
+  grids.
+- Across every group of the stratum, the chosen cell
+  (**C\*** or **R\***) is the one with the highest S among cells averaging at
+  least 5 trades a day; ties go to the cell's own mean, and then to the key
+  first in the catalogue's byte order. The 5-trade filter
+  only limits which cell may be chosen. The outright peak, the highest S
+  whatever the trade rate, is reported beside
+  it. If no cell qualifies, the stratum's slot is `not run (no admissible cell
+  on D)`; the filter is not relaxed.
+
+**Signal admission (information)**, for C\* and R\*; both conditions must
+hold:
+
+- **(iii) carry-forward**: for each test month m in March to June, the choice
+  is re-run on the test months before m, and the newly chosen cell's G is
+  scored on m's days after a 5-day embargo (m's calendar days 1 to 5 are
+  dropped); a month with no admissible cell, or with no trade on its scored
+  days, contributes 0. The mean over the four months must
+  be > 0. This mean, computed for net too, is the D estimate of the effect
+  that the power on H is computed from;
+- **(iv) the placebo search**: max(p_A, p_B) ≤ 0.05 ([below](#the-placebo-search)).
+
+**Slot admission (payoff).** A slot that fails is `not admitted on D
+(<conditions>)`, naming every condition that fails (for example `not admitted
+on D (i, iv)`), and enters Holm with p = 1 on every block. A prediction of
+`not admitted on D (i)` is scored on condition (i) alone.
+
+- **S-C ← C\*, S-R ← R\***: the signal is admitted, and (i) the chosen cell's
+  S > 0; and (ii) the neighbourhood median of the monthly mean net is > 0 in at
+  least 4 of the 5 test months.
+- **S-P**: its signal is the admitted C\* or R\*; if both are admitted, the one
+  with the larger carry-forward G, C\* on a tie; **if neither is admitted,
+  S25's signal**. It enters by the signal-entry quoter at that cell. Its
+  neighbourhood is the signal's hold × rate × label fee (or hold × k × β) at
+  the signal's categorical and regime values, every cell simulated on the 150
+  test days. It is admitted on (i) and (ii) computed on
+  `net_per_100_clip_day`.
+- **S-M**: S1 with the lean on S-P's signal, the cell λ = 1 and its
+  neighbourhood λ ∈ {0.5, 1, 2}, the lean window the signal's hold, the guard
+  `guard_pull` at the signal's regime window (none when it has none). It is
+  admitted on (i) and (ii) on `net_per_100_clip_day`, and on its making part
+  being positive on D: the mean of `spread + adverse(5 s)` over its passive
+  fills, in bp per fill, the quantity K-dir reads.
+- S-P and S-M make no choice on a passive outcome, and S25's signal is fixed
+  before D, so neither needs a search-level null; their conditions only remove
+  slots.
+- A searched slot whose chosen cell is S25's is `same as S25` and enters Holm
+  with p = 1.
+
+**Reported, gating nothing.** Every D number of a finalist is labelled
+"selected, biased upward". Beside it: N_trials and
+N_eff = `effective_count(N_trials, mean_pairwise_correlation(daily G panel))`
+(`evaluation/significance.py`); the deflated Sharpe ratio of each finalist's
+daily G and net; the selection premium (the median of the null maximum of A,
+and A minus it); the probability of backtest overfitting by combinatorially
+symmetric cross-validation per stratum (10 blocks of 15 days, 252 splits, the
+identical rule: the in-sample choice is ranked by S on the out-of-sample days
+among the cells admissible in-sample, and a logit at or below 0 counts as
+overfit); and the minimum detectable effect and the power at t ≥ 3 for
+the carry-forward estimate.
+
+**The finalists are fixed now: k = 5**, four searched slots (S-C, S-R, S-P,
+S-M) and the named S25. Every slot exists on every block, whatever D shows.
+The chosen cell of a non-admitted C\* or R\*, and a non-admitted S-P or S-M,
+are still run once on H and F as labelled measurements, with no placebo and
+no status, and on P only when P is opened for a qualifying slot, in that read
+session. At 10 days on F or P (9 degrees of freedom) the one-sided p at
+t = 3 is 0.0075, and Holm's first step α/m stays above it only for m ≤ 6: a
+sixth slot would cost power with no gain, and a seventh would let Holm,
+rather than the t ≥ 3 bar, decide on short F and P series. One slot per stratum
+and execution path is the most informative use of five.
+
+---
+
+## The placebo search
+
+**Purpose.** To measure how good the best configuration of each stratum looks
+when no configuration has information, under exactly D's selection. A searched
+finalist's p-value against the maximum over strata of that null must be at
+most 0.05: single-step max-T (Romano–Wolf), at most a 5% chance that any
+searched slot is admitted by noise. **p_search** is max(p_A, p_B) of the
+stratum with the larger A, times R_D and capped at 1 (Bonferroni over D runs):
+whether the search found anything beyond selection noise whatever the fee.
+It is the one D number quoted as a result, labelled "on development data,
+selected".
+
+**What is re-run, and what is not.** Re-run: every step that reads a test
+day's outcome, which is the per-cell daily series, the 5-trade filter, the
+neighbourhood medians, the choice inside each group and across groups, and
+the admission statistic. Not re-run: fits, θ, checkpoints,
+feature selection, gate levels and guard flags; none of them reads a test
+day's outcome, which the fold-level leakage test and the flag-causality test
+enforce. Since no step culls a configuration on an outcome, re-running these
+steps is the whole search re-run on placebo targets.
+
+**The statistic.** A = the median, over the chosen cell's neighbourhood, of
+each cell's day-level t of G, a cell without trades scoring 0, as does a
+cell with fewer than two days with a trade or with no dispersion (the
+statistic must be finite). G is centred at
+zero for every fee and execution path; the t keeps the scale when a null
+pairing has another volatility; the neighbourhood median lowers the null
+maximum.
+
+- **Null A: hour-block sign flips, 999 draws.** Each UTC hour of the usable
+  test days draws a sign from `numpy.random.default_rng(b)`, b = 0 to 998:
+  the hours in time order take 1 − 2 × `default_rng(b).integers(0, 2,
+  size=hours)`, 0 keeping the side and 1 flipping it.
+  The sign is shared by every configuration in that hour, so their
+  dependence is kept. A flipped trade's P&L, funding included, is the
+  stored walk of the opposite side. A trade belongs to the UTC hour of its
+  entry snapshot.
+- **Null B: day re-pairing over every shift** s with 7 ≤ s ≤ 143, on the
+  circular calendar order of D's 150 test days (n = 150, 137 shifts), one
+  shift for every configuration. The source day's accepted entries (time of
+  day and side, after its own guard) are executed on the target day's walk
+  tables; an entry that falls while the mapped previous position is still
+  open is skipped and counted. A pair whose source or target day is excluded
+  contributes nothing, and is counted. **The parity
+  test** runs at stage 0, on the 2024 days already on disk (BTCUSDT
+  2024-02-11 and 2024-03-05), before any 2025 fetch: at s = 0 the walk-table
+  route equals the executor entry by entry, and ordinary entries scored from
+  walk tables equal the executor's. A failure blocks stage B until it is fixed
+  by a dated amendment; Null B has no fallback, and the dry run repeats the
+  test as a check.
+- **The bar.** p_A = (1 + #{b : max over strata of A^b ≥ A_j}) / (1 + 999),
+  and p_B = (1 + #{s : max over strata of A^s ≥ A_j}) / (1 + 137). A searched
+  slot passes (iv) when **max(p_A, p_B) ≤ 0.05 / R_D**, R_D being the number
+  of complete D runs (1 unless a correction re-ran D;
+  [selection](#selection-on-d-admission-and-the-finalists)). The rule is the
+  count itself: the entry point computes the counts directly, and a unit test
+  checks the boundary at 137 shifts (at R_D = 1, at most 5 shifts at or above
+  A_j pass and 6 fail). `verdicts.exceeds_placebos`, whose interpolated
+  percentile admits more, is not used for (iv).
+- **The refit replication, mandatory, once.** Every fold's training labels are
+  circularly shifted by 28 days within its training span (a label at `t`
+  takes the one at start + ((t − start − 28 days) mod span): on February's
+  span of about 24 days the labels move about 4 days, and none is lost),
+  every boosted and
+  logistic fit is redone, and stratum C's whole selection is re-run, giving
+  the refit A of stratum C's chosen cell, A_refit. It adds a condition for C\*
+  only: C\* passes (iv) when the bar above holds **and** A_C\* > A_refit,
+  strictly. It compares stratum C's A with stratum C's own refit, because only
+  stratum C is refitted; the maximum over strata already enters through p_A
+  and p_B. The network and the bound regressor are not refitted, for cost.
+- Also: a global sign flip, reported as a diagnostic only (it is an
+  anti-signal when information exists).
+
+Outside the null: S-P and S-M, which make no choice on a passive outcome, and
+S25, which is fixed. S25's D values are shown against the same two nulls
+applied to its fixed cell, with no selection; every slot's own placebos run on
+the held-out blocks. The amendment records every replication's A per stratum,
+the seeds, the shifts, the quantiles and the p-values.
+
+**What the breadth costs.** A synthetic null with no market data, under an
+assumed correlation along each axis, puts the 95th percentile of A at about
+2.2 for a 126-cell catalogue and about 2.6 for this catalogue of 2,400 cells
+(2.53 to 2.63 over four runs of 500 replications); the real nulls
+decide. A true edge therefore needs a neighbourhood-median t of G of about
+2.6 over 150 days to be admitted. Breadth costs admission power on D; it
+never costs the validity of H, which rests only on H being untouched and m
+being fixed.
+
+---
+
+## Metrics
+
+- **`net_bp_trade`**: for one round trip, (exit value − entry value) over
+  the entry notional, × 1e4, less fees in bp of the entry notional, plus
+  funding. **Primary for S25, S-C and S-R**, and the measure the choice on D
+  ranks by. A day's value is the day's net in USDT
+  summed over its round trips, over the sum of their entry notionals, × 1e4:
+  basis points of traded notional (every trade is one clip, so the weights
+  differ only with the price at entry). The daily series has one value per day with at least
+  one trade.
+- **`net_per_100_clip_day`**: **primary for S-P and S-M.** Its daily series has one
+  row for every usable calendar day of the block: the sum of that day's net
+  in USDT × 100 / the clip's notional at each entry, and 0 for a day without
+  a fill. The zero rows are written into the table given to `assess`, which
+  averages only the rows it is given (`evaluation/significance.py`). For
+  S-P the entry is the posted clip, its notional at its first fill's price;
+  for S-M, which posts no clip per entry, an entry is a run of fills from a
+  flat position to the next flat position, its net over the clip's notional
+  at its first fill's price, and the day's funding over the mean of its
+  entries' notionals.
+- **`gross_bp_trade`**: `net_bp_trade` before fees and funding. **Primary for
+  S25-Z**, with the day's value formed as for S25 (gross USDT over entry
+  notional), beside its net at 0/0. For S25-Z, and for S-P's per-trade
+  figures, the entry notional is the filled part of the entry, the maker
+  fills on its side at their prices, not the posted clip.
+- **G** (on D only): for each trade, net on its side minus the mean of the
+  long and the short walked P&L over the same entry and hold; a day's value
+  is the mean over its trades. It is the edge with the costs taken out, and
+  it is centred at zero under Null A of [the placebo
+  search](#the-placebo-search), whose sign flips make the side independent of
+  the move. It keeps the drift times the imbalance of longs and shorts, so it
+  is not centred under Null B, which applies a source day's sides to a target
+  day's drift; drift is controlled by Null B and by K-drift on held-out
+  blocks.
+- **The daily series decides.** The mean, the day-level t, the Newey–West t,
+  the median day, K1, K-days, the placebos, K-nbhd, σ_D and the minimum
+  detectable effect are all computed on the slot's daily series as
+  defined above, never on trade rows. `assess` is given one row per day
+  (`cluster="day"`, `series=None`); a series with fewer than two days is not
+  given to it (`assess` raises on one cluster), fails the bar's day count and
+  enters Holm with p = 1. The degrees of freedom are the number of
+  days in the series minus one, per slot and per block.
+- **`gross_bp_turnover`**: gross over turnover (both sides' notional), × 1e4:
+  the fee break-even per side. Reported for every slot against the base
+  fee and the cheapest published fee for the side used.
+- **IC**: per day, the rank correlation between the signal's score
+  (`p_long − p_short`, or μ) and the realised forward mid move over `h`,
+  measured from the mid at the entry snapshot (the first at or after the
+  decision + 10 ms) to the mid at the first snapshot at or after that + `h`,
+  over all decision rows; its mean over days.
+- For passive fills: fill ratio, markouts at 1, 5, 10 and 30 s by fill path
+  (queue or trade-through), and the decomposition `spread + adverse(5 s)` (the
+  part of the result earned at the fill, the "making" part of round one) and
+  the rest (the move held after it).
+- Beside every verdict: trades a day, share of days positive, median day,
+  maximum drawdown, net in USDT a day at the clip used, funding, the result
+  at every published tier, the result split by side, the counts of skipped
+  entries, `entry_late_snapshot`, `exit_late_snapshot` and
+  `flatten_beyond_visible_book`, and, for a slot with a regime window above 0,
+  its [regime attribution](#the-regime-break-policy-axis).
+- **Statistics**: `evaluation/significance.assess` on the daily series; the
+  day level decides. Score every calendar day of the block, with no row
+  filtered or reweighted by label, outcome or model state. The one-sided
+  day-level p-value is `market_making/verdicts.day_t(daily series).p_one_sided`
+  (Student t at days − 1, through `verdicts.t_sf`), Holm is `verdicts.holm`
+  and the placebo comparison `verdicts.exceeds_placebos`. Beside every
+  verdict, the **Newey–West t** of the daily mean (Bartlett weights, lag 5
+  days; new code in `evaluation/significance.py`), because consecutive days in
+  one regime are not independent; its lag counts positions in the daily
+  series, not calendar days. A series of constant positive days has an
+  infinite day-level t and p = 0.
+- **Minimum detectable effect**, recorded in the amendment for each slot
+  and for S25-Z: `(3 + 0.84) × σ_D / √n_eff`, the mean that the t ≥ 3 bar would
+  catch with 80% power, with `σ_D` the standard deviation of the daily series
+  over D's 150 walk-forward test days at the chosen cell and `n_eff` = 44 × the
+  share of those 150 days with a trade (44 for S-P and S-M, whose series has
+  every usable day; 24 in place of 44 for a slot on S25's signal, whose status
+  window on H is 24 days). For a searched slot, σ_D is also given at the
+  carry-forward estimate, with the power of the t ≥ 3 bar against it. On F (F− or all of F) and on P, the "below the minimum
+  detectable effect" label uses the same formula, with σ_D and the share as
+  frozen and the usable days of the series the status is assessed on in place
+  of 44: those days are the status window's usable days after the days
+  flagged stale in any run are dropped, the days the series holds, and the
+  share is the one the frozen σ_D and MDE imply, so the label on F or P is
+  the frozen MDE × √(44 / those days) (24 in place of 44 on S25's signal) and
+  no share is estimated on a held-out block.
+
+---
+
+## Status rules
+
+**The family** is the five finalists, **{S25, S-C, S-R, S-P, S-M}, with m = 5
+on every block**: H, F (F− or all of F), P, and each of R's split days.
+
+**The bar.** A slot passes on a block when no kill condition fires and all
+of these hold on its daily series ([Metrics](#metrics)):
+
+- its one-sided day-level p-value passes Holm's procedure at 5% with
+  **m = 5**. A slot enters with p = 1 when it is killed, void or inconclusive
+  under K-trades; `not run`, `not admitted on D` or `same as S25`; not taken
+  to the block; or scored on P only by its mean (R supported). So m never
+  depends on an outcome, and a result on too few trades never moves another
+  slot to a laxer Holm step. At m = 5, Holm's first step needs t ≥ 2.42 at 43
+  degrees of freedom, 2.54 at 19 and 2.82 at 9, so the t ≥ 3 bar below binds
+  on every block, and the breadth of the search costs nothing on H;
+- the day-level t is at least 3, its degrees of freedom being the days in the
+  series minus one;
+- the Newey–West t is at least 2;
+- the median day is positive;
+- the series has at least 20 days with a trade on H, and at least 10 on F
+  (or F−) and on P (S-P and S-M: usable days).
+
+**No deflation on H for D's trials.** H is untouched by the search, and E
+separates selection from confirmation. The finalists, their neighbourhoods,
+θ, checkpoints, weights, the fitted-values file and the regime windows are
+frozen by sha256 before H's gate opens. D's trial count acts only on D,
+through the placebo search, the deflated Sharpe ratio and the probability of
+backtest overfitting.
+
+**Precedence**, the same on every block, so that each result has exactly one
+status:
+
+1. **void** — K-leak, K-flag-leak (for a slot with a regime window above 0),
+   K-units, K-acct or K-cap fires; counted as killed.
+2. **inconclusive (too few trades)** — K-trades: fewer than 100 trades over
+   the block (round trips for the taker slots; entries with any fill, that is
+   round trips, for S-P and S25-Z; returns to a flat position for S-M). Nothing below
+   is evaluated.
+3. **killed** — any kill condition fires. Rejection needs no significance.
+4. **candidate** (on H) or **passes** (on F and P) — the bar is met.
+5. **inconclusive** — otherwise; labelled "below the minimum detectable
+   effect" when the mean is smaller in size than the MDE (only when no kill
+   fired). Never reported as a positive.
+
+**The statuses set on D**, each entering Holm with p = 1 on every block:
+`not admitted on D (<condition (i) to (iv)>)`, `not admitted on D (hand
+run)`, `not run (no admissible cell on D)` and `same as S25`.
+
+**Slots on S25's signal**: S25, S25-Z, and S-P and S-M when their signal is
+S25's ([the information set of
+S25](#what-was-known-before-this-was-written)). On H their status, kills,
+placebos, bar and K-trades are computed on H's usable days from 2025-07-08 to
+07-31 only (24 days; the bar's 20 days with a trade, or usable days for S-P
+and S-M, still apply), and `candidate` is written **candidate (H before
+2025-08-01)**. That is their best and final status: they are not taken to F, R
+is not tested for them, and on F and P they enter Holm with p = 1. Their
+numbers on H from 2025-08-01 to 08-20 and on all of H, on F (one whole block)
+and on P (only when P is opened for another slot) are computed in the same
+read sessions, kills and placebos included, and reported as measurements
+labelled "inside S25's information set": each reports the outcome of every
+condition of the slot's kill list on those days, the placebo means and the
+random draws' 95th percentile, with no precedence applied and no status.
+
+**F.** With `b` the first alarm of the frozen detector in F, F− is F's usable
+days before the alarm's day and F+ its usable days after it; the alarm's own
+day is in neither. **Statuses on F, kills included, are computed on F−** when
+there is an alarm in F, F− has at least 20 usable days, R was not declared
+untestable on D, and R is not void (below). Otherwise they are computed on
+all of F, labelled "assessed on all of F", and F is not split. F+ enters only
+R. Taken to F, except the slots on S25's signal: every
+candidate, and every slot inconclusive on H at precedence step 5 (with
+or without the label "below the minimum detectable effect") with a positive
+mean (for S25-Z, both claims' means positive). **A result inconclusive under
+K-trades (step 2) is not taken to F, whatever its sign**: its mean is not
+evaluated, so it cannot route it.
+
+| On H | On F (F− or all of F) | R (below) | On P | Status |
+|---|---|---|---|---|
+| candidate | passes | not supported | passes | **confirmed** |
+| candidate | passes | not supported | does not pass, no kill | **candidate, not confirmed** |
+| candidate | passes | supported | mean ≤ 0 | **confirmed until the break** |
+| candidate | passes | supported | mean > 0 | **candidate; the break did not last** |
+| candidate | does not pass, no kill | reported, not used | not read for it | **candidate, not confirmed** |
+| inconclusive (step 5), positive | passes | not tested | passes | **confirmed on P, first significant on F** |
+| inconclusive (step 5), positive | passes | not tested | does not pass, no kill | **exploratory: significant on F, not confirmed** |
+| inconclusive (step 5), positive | does not pass, no kill | not tested | not read for it | **inconclusive** |
+| either | a kill fires | — | not read for it | **killed on F** |
+| either | passes | not supported or not tested | a kill fires | **killed on P** |
+| either | a void condition fires | — | not read for it | **void** (counted as killed) |
+| either | passes | any | a void condition fires | **void** (counted as killed) |
+
+A result void on F or P keeps the status `void`, the precedence's first
+step, counted as killed and never named "killed on F" or "killed on P" (a
+void condition is a fault of the measurement, not a kill that was
+evaluated); F's table carries a void row for it, and P is not read for a
+slot void on F.
+"Passes" on F and P is the bar above, with m = 5. "R untestable" and "R not
+tested" are read as "not supported". For a slot with R supported, P is
+scored only as mean ≤ 0 (the break persisted) or > 0 (it did not last):
+neither K-trades nor any kill condition is applied to it on P, but the void
+conditions are (a void result on P is `void`), and a P series without a day
+with a trade has mean 0, as a neighbour cell without a trade scores 0 in
+K-nbhd, so it reads as the break persisted. A slot that is `candidate`
+after H keeps that status whatever F and P show unless a kill fires there; the
+later reads add to it. **A slot first significant on F gets no second
+route to candidacy**: it is "exploratory: significant on F" until P, which is
+its only confirmatory test; R is not tested for it, and the README never calls
+it a candidate.
+
+P is read once, after F's results are committed, only for slots that
+passed on F. F is read once, after H's results are committed, whatever H's
+outcome: its detector alarms and every frozen slot's and measured row's
+numbers on F are reported as measurements even when nothing is taken there.
+**For a slot not taken to F, F is reported as one whole block, never split at `b`.** Every
+comparison from H into F crosses the archive change and is labelled so.
+
+**An unreadable block** (more than a quarter of its days excluded,
+[Blocks](#blocks)) changes no status. If H is unreadable, every slot is
+recorded as `not assessed (H unreadable)` and none is taken to F; F is still
+read and reported as
+measurements, and H, F and P are spent all the same. If F is unreadable for a
+slot, its status after H stands, marked "F unreadable", and P is not read for
+it. If P is unreadable, each slot read on P keeps its status after F, marked "P unreadable": a candidate that
+passed on F is **candidate, not confirmed (P unreadable)**, whatever R showed,
+and one first significant on F is **exploratory: significant on F, not
+confirmed (P unreadable)**.
+
+**R void.** If a later run of the detector does not reproduce an earlier
+run's alarms ([The break detector](#the-break-detector)), R is `void` and read
+as not supported. Found when H is read (against D's alarms in the
+amendment), R is void, and F is assessed on all of F, labelled. Found when F
+is read, `b` does not split F and statuses on
+F are computed on all of F, labelled. Found when P is read, F's statuses stand
+as committed, and P is scored with the full bar, R read as not supported.
+The check compares, by timestamp and channel, the alarms of the read's run
+with each earlier run's on that run's own dates only: D's as the amendment
+records them on 2025-01-01 to 06-30, and each earlier block's as its
+results file records them on that block's dates (H's read compares with D
+alone; F's with D and H; P's with D, H and F). E's seven days enter no
+comparison: the first run over them is H's, whose alarms there are reported
+and have no earlier record to reproduce; an alarm on W's dates is likewise
+reported, never compared.
+
+**No number at a fee tier other than the base, under a non-default fill rule
+or exit, on F for a slot not taken to F, for a measured row, for a
+regime-map segment, on H before 2025-08-01 (except as the status window of a
+slot on S25's signal), with the gap-excluded days included, or inside S25's
+information set may be described as the strategy working.** Such numbers are
+measurements.
+
+**S25-Z** is outside the family. It is tested alone at α/6 = 0.83%
+(α/(m + 1)), one-sided,
+at the larger of its two claims' p-values (round two's rule for a hypothesis
+with two claims), with the t, Newey–West t, median-day and day-count
+conditions holding for both claims; it follows the same precedence as a slot
+on S25's signal, on H before 2025-08-01, and is not taken to F. Its best
+possible status is **candidate (H before 2025-08-01), conditional on a
+zero-fee venue**: the condition (0 bp on both sides) is stated as a number,
+and the base-tier result, measured on the same trades, is reported beside it.
+
+### Kill conditions per slot
+
+| Slot | Execution | Primary series | Kills | Reported beside |
+|---|---|---|---|---|
+| S25, S-C, S-R | taker | `net_bp_trade` | K1, K-label, K-placebo, K-drift, K-nbhd (the full ordered neighbourhood, regime window included), K-days, K-fee, K-latency | the control model's IC (S-R on the network); regime attribution |
+| S-P | signal-entry quoter | `net_per_100_clip_day` | the taker slots' list, the stale signal in K-placebo, and K-queue | the fill decomposition; regime attribution |
+| S-M | S1 with the lean | `net_per_100_clip_day` | S-P's list, and **K-dir as a kill** | the λ neighbourhood; pull against widen |
+| S25-Z | signal-entry quoter at 0/0 | `gross_bp_trade`, and net at 0/0 | K1 and K2, K-label, K-placebo with the stale signal, K-drift, K-nbhd, K-days, K-queue, K-latency; no K-fee | net at the base tier on the same trades |
+
+Void conditions; the slot is recorded as `void`:
+
+- **K-leak** — any ported feature fails the leakage checker
+  (`validation/leakage.py`, data mutated after a cutoff changes a value before
+  it), or the fold-level leakage test fails. Every result of the study is
+  void.
+- **K-flag-leak** — the flag-causality test fails
+  ([the regime-break policy axis](#the-regime-break-policy-axis)). Every slot
+  with a regime window above 0 is void; found before D, the fix is a dated
+  amendment, as for K-leak.
+- **K-units** — an input to the EV gate, the market gate or a cost (a fee, the
+  walk of the book, funding) is not in basis points computed from prices (a
+  normalised column reached it). The result of every slot whose gate or cost
+  input it reaches is void, S-P's and S-M's also when it reaches their
+  signal's gate. S25-Z is not exempt: its verdict is at 0/0, but its gross
+  comes from the same walks and its net at 0/0 from the same funding.
+- **K-acct** — the accounting identity (R15) fails on any day, or turnover
+  does not equal the sum of fill notionals. For S-P, S-M and S25-Z a fault
+  in any run of the slot's read (the true run, a placebo, a neighbour cell,
+  a bracket, the latency or shift re-run) voids the slot, and the faulty run
+  is recorded: a run that cannot be accounted leaves its comparison unmade.
+- **K-cap** — |position| exceeds one clip at any event (taker slots, S-P and
+  S25-Z), or for S-M the simulator's hard limit, `soft_limit_clips` + 1 = 2
+  clips. S1 may send a re-priced order while the old one's cancel is in
+  flight, and both can fill; the simulator then sends a reduce-only taker
+  order back to the soft limit. S-M's time above one clip and those orders
+  are counted and reported. For the signal-entry quoter an order whose cancel
+  is in flight counts as resting, so its position never exceeds one clip.
+  For the simulator slots K-cap reads the true run only, the largest
+  position its fills reach on any day; a placebo's or a neighbour cell's
+  position is not the slot's claim, and is recorded, not read.
+
+Kill conditions:
+
+- **K1** — the mean of the slot's daily series on the block is ≤ 0 (for
+  S25-Z, K1 on gross and K2 on net at 0/0).
+- **K-label** — the signal's IC (from the entry snapshot's mid, as defined
+  under [Metrics](#metrics)) is ≤ 0 on the block (the model has no
+  information about the move it trades).
+- **K-placebo** — the true mean does not exceed: the 95th percentile of the
+  200 random-direction draws; the sign-flipped signal's mean; the one-day
+  shifted signal's mean; and, for the passive slots and S25-Z, the stale
+  signal's mean (below).
+- **K-drift** — the true mean does not exceed the larger of the all-long and
+  the all-short versions' means at the same entry times (the result is the
+  block's drift, not the signal).
+- **K-nbhd** — the mean of the daily series on the block, recomputed with
+  each cell of the chosen cell's neighbourhood in place of the chosen cell,
+  has a median ≤ 0 over the cells. The neighbourhood is the one of
+  [selection](#selection-on-d-admission-and-the-finalists), every cell
+  counted whatever its trade rate on D; a neighbour cell with no trade on the
+  block scores 0. **S25's** covers 24 cells: hold {20, 50, 120} s × rate {100,
+  240} × label fee {0, 5.5} × regime {none, pull 4 h}. For S-P it is its
+  signal's hold × rate × label fee (or hold × k × β), each cell entered
+  passively; for S-M, λ ∈ {0.5, 1, 2}; for S25-Z, S25's hold × rate × label
+  fee (12 cells). It runs only the frozen models, thresholds and checkpoints
+  whose sha256 the amendment records.
+- **K-days** — half or fewer of the days in the daily series are positive
+  (days with a trade for the taker slots and S25-Z; every usable day for S-P
+  and S-M).
+- **K-latency** — a positive result that is ≤ 0 when every order and cancel is
+  live 110 ms after the decision instead of 10 ms (one more 100 ms row). A unit
+  test checks that every fill's snapshot is stamped at or after its decision
+  + 10 ms, and that the label's walks and the executor's use the same
+  function.
+- **K-fee** — the fee break-even per side (`gross_bp_turnover` for a taker
+  slot; for S-P and S-M the maker fee at which net is zero with the taker exit
+  at the base fee) is at or below the base fee for that side. For a positive
+  net at the base tier this can only fire through an accounting fault, so it
+  is also a check; its main use is the report of how far each slot was from
+  paying.
+- **K-queue** (S-P, S-M, S25-Z) — a positive result that is not positive under
+  the joint pessimistic queue bracket (pessimistic cancellation attribution
+  and `all_ahead` arrival growth), or under either `none` or `all_ahead`
+  alone.
+- **K-dir** (S-M only) — the making part, `spread + adverse(5 s)` over the
+  passive fills, is not positive while the net is (`verdicts.k_dir`): a
+  quoter's claim is the part earned at the fill, and a positive net without it
+  is inventory carried through a move.
+
+Not kills, but they set the status:
+
+- **K-trades** — fewer than 100 round trips over the block (entries with any
+  fill for the quoter, not the simulator's fill rows, which count partial
+  fills and taker exits; returns to a flat position for the market maker)
+  makes the result inconclusive whatever its sign; it
+  is applied before any kill (the precedence above).
+- **K-MDE** — a result that does not pass, with no kill, and is smaller in
+  size than the MDE is "inconclusive, below the minimum detectable effect".
+
+Reported, not a kill: **the fill decomposition** for S-P and S25-Z,
+`spread + adverse(5 s)` over the passive fills and the rest. A directional
+signal entered passively is meant to earn the move held after the fill, so a
+non-positive part at the fill with a positive result is the mechanism under
+test, not a fault.
+
+Each condition is applied to every claim of a slot. A condition that needs a
+positive result (K-queue, K-latency, K-dir) fires only when the result is
+positive under the default rules. On F the conditions are applied to the
+series the status is assessed on (F− or all of F).
+
+### Placebos
+
+Each is re-run through the same execution, fee, guard and accounting as the
+true slot, on the same block. For S-M each placebo replaces its signal tape.
+
+| Placebo | What changes | Used by | Seeds |
+|---|---|---|---|
+| sign-flipped | the signal's direction reversed at the same entry times | every slot, S25-Z | — |
+| random direction | the same entry times, each direction drawn at random | every slot, S25-Z | 200 draws, 0–199 |
+| one-day shift | the signal tape shifted by one day at the same time of day, circularly within the block | every slot, S25-Z | — |
+| stale | the signal delayed by one hold | S-P, S-M, S25-Z | — |
+| all-long, all-short | the same entry times, one direction (K-drift) | every slot, S25-Z | — |
+| control model | the network trained on the control label; its IC against its own label and against the realised move, reported beside K-label | S-R on the network | the training seed |
+| other break dates | `b` replaced by every admissible split day of F other than `b` (at least 20 usable days before it, at least 10 after), enumerated in full; the reference set keeps those at which the slot also passes on the days before them | R | none; enumerated |
+
+The taker slots' placebos come from the walk tables, and their K-latency from
+walk tables at 110 ms. **Placebo positions.** Each placebo runs on the true
+slot's entry decision times with its own one-position state. A decision time
+at which the placebo is still in a position, or has an entry resting, is
+skipped and counted; the skip counts are reported beside K-placebo and
+K-drift. For a taker slot nothing is skipped, since a taker exit's time does
+not depend on the direction; for the quoter a placebo order fills at other
+times than the true one, or not at all, so it may still be busy at the next
+one. **The one-day shift** gives each usable day the signal tape of the
+previous usable day, circularly over the block's usable days, so it steps
+over excluded days: days excluded for any reason, a day flagged
+`flatten_stale` in any run of the read included; a day the shift's own run
+flags stale is left out in turn and the shift is taken again from the
+previous kept day, until no day changes, so the set of excluded days only
+grows and no excluded day's tape enters a series. For a slot on S25's
+signal on H, whose status, kills and placebos are computed on its usable
+days from 2025-07-08 to 07-31, the circle is those days: 07-08 takes the
+tape of the last usable day at or before 07-31, never one from 08-01, which
+lies inside S25's information set. The slot has one shifted series on H:
+its measurement on all of H, inside the information set, reads the same
+series (08-01 and the later days from their previous usable day, as
+elsewhere), so no day's shift carries a tape from inside the information set
+to a day outside it, and the read runs one shift.
+
+---
+
+## S25, the named 2025 configuration
+
+**S25 is one point of the catalogue**, fixed now:
+
+| Coordinate | Value |
+|---|---|
+| Instrument | BTCUSDT |
+| Stratum | C |
+| Model | `gbm`, the repository's defaults |
+| Inputs | micro-selected |
+| Label | the walked-book taker label at a 0 bp label fee |
+| Hold | 50 s, closed by time |
+| Decision | the hold-first rule at 240 trades a day |
+| Gate | `open` |
+| Regime policy | none |
+| Execution | taker in and taker out, through the event-time taker executor |
+| Clip | 0.010 BTC |
+| Verdict | `net_bp_trade` at the base tier (5.5 bp taker), funding included |
+
+**How it is treated.**
+
+- It is reachable: it is a cell of the catalogue, and the leaderboard shows it
+  with a badge and its rank "r of N".
+- It is fixed before D: no admission and no search-level null. It goes to H
+  whatever D shows; its D values are shown against its own Null A and Null B
+  distributions.
+- Its status is taken on H's days before 2025-08-01 only and stops at
+  **candidate (H before 2025-08-01)**; the rest of H, F and P are inside its
+  [information set](#what-was-known-before-this-was-written) and give
+  measurements ([status rules](#status-rules)).
+- It is a member of the family and carries the taker slots' kill list. Its
+  K-nbhd covers 24 cells (hold {20, 50, 120} s × rate {100, 240} × label fee
+  {0, 5.5} × regime {none, pull 4 h}), with one frozen fit per hold and label
+  fee (6 fits).
+- It is the fallback signal of S-P and S-M, so passive entry and the market
+  maker are always measured on at least one fixed signal.
+
+**Statement.** On H's days before 2025-08-01, at the base tier, S25 earns a
+positive `net_bp_trade`.
+**Prediction:** killed by K1.
+
+### S25-Z, the gross edge before fees (outside the family)
+
+**Statement.** On H's days before 2025-08-01, under the queue fill rule,
+S25's signal entered by the
+signal-entry quoter (one clip posted at the touch, a taker exit `h` after the
+fill) has a positive `gross_bp_trade`, and its net with fees at zero on both
+sides (gross plus funding) is positive too. It asks whether the signal pays
+before fees, which is what a venue charging nothing would earn. Its
+neighbourhood is S25's hold × rate × label fee, 12 cells. Tested alone at α/6
+([status rules](#status-rules)); its best status is "candidate (H before
+2025-08-01), conditional on a zero-fee venue", and it is never reported without the same trades' net at the base
+tier and at the cheapest published tier beside it, nor as a result a Bybit
+account could trade. Its fee break-even is the maker fee at which its net is
+zero with the taker exit at the base 5.5 bp, and separately at 1.5 bp; a
+published tier "pays" it only when its net is positive at that tier's own
+maker and taker fees together, its entries at the maker fee and its exits
+at the taker fee. **Prediction:** killed by K1: resting entries are
+adversely selected, and the repository's maker finding is that this inverts a
+crossing signal's gross edge.
+
+### Leaderboard regions
+
+Two regions of the catalogue are reported as measurements, with no slot: **T1**
+= C × `gbm` × micro-selected × label fee 5.5 × gate `open` × regime none, and
+**T2** = R × `tcn` × gate `open` × regime none. Each region's best
+neighbourhood cell is reported with its S, A and rank. Stratum R has no named
+point.
+
+### The edge ladder
+
+One table, each step labelled with the one thing that changed:
+
+1. A0 on O at 0/0, crossing and under the three fill rules;
+2. S25's gross and net on D's walk-forward;
+3. S25 on H before 2025-08-01, then on all of H and on F, labelled inside its
+   information set;
+4. S25's fee break-even per side against every published tier;
+5. S25-Z's net at 0/0, with FILL's fill ratios beside it.
+
+---
+
+## The searched finalists
+
+- **S-C** — on H at the base tier, the cell C\*, chosen and admitted on D
+  ([selection](#selection-on-d-admission-and-the-finalists)), earns a positive
+  `net_bp_trade`, taker in and out. **Prediction:** `not admitted on D (i)`.
+- **S-R** — the same for R\*: the network or the bound regressor with the EV
+  gate `μ − kσ > 11 bp + walk cost + β`, one entry per event, one clip a trade.
+  **Prediction:** `not admitted on D (i)`. Reported beside, when R\* is the
+  network: the control model's IC against its own label and against the
+  realised move, which shows on public data how much of a smoothed label is
+  known at decision time.
+- **S-P** — on H at the base tier, its signal (the admitted C\* or R\*, else
+  S25's), one clip posted at the touch on the signal's side and kept at its
+  first price, filled from prints after the queue ahead under rules R5–R7, a
+  taker exit `h` after the fill, earns a positive `net_per_100_clip_day`, on
+  the zero-filled series of every usable day. Reported beside: the fill
+  decomposition, the fill ratio, markouts by fill path, the passive-exit
+  variant, and the result at maker fees of 0 and −1 bp (the cheapest
+  published maker tier and the programme's rebate), each with the fee caveat.
+  **Prediction:** `not admitted on D (i)`; if it reaches H, killed by K1. On
+  S25's signal its status is taken on H before 2025-08-01 only, as for S25.
+- **S-M** — on H at the base tier, S1 with the lean on S-P's signal earns a
+  positive `net_per_100_clip_day` with a positive making part. Reported
+  beside: the λ neighbourhood, and `guard_pull` against `guard_widen` at 4, 24
+  and 120 h with λ = 1. **Prediction:** `not admitted on D (i)`; if it reaches
+  H, killed by K1 or K-dir.
+
+## R, the break (conditional)
+
+**Tested for** every slot that is a candidate on H, whether or not it passes
+on F−, except the slots on S25's signal, which are never taken to F
+([status rules](#status-rules)); its statistic is computed and reported in
+either case, with F−'s result beside it. Not tested for any other
+slot, including one first significant on F; recorded as `not tested`,
+with the reason, and read as not supported.
+
+**Statement.** With `b` the first alarm of the frozen detector in F, and
+Δ(`d`) the mean of the daily series on F's usable days before split day `d`
+minus its mean on F's usable days after `d`: R is **supported** if the
+slot passes on F−, its mean on F+ is ≤ 0, and p_R ≤ 0.05, with
+p_R = (1 + #{`d` ≠ `b` in the **reference set** : Δ(`d`) ≥ Δ(`b`)}) / (1 +
+the number of days of the reference set other than `b`); **not supported**
+otherwise. `b` is never counted in its own reference set, so p_R ≤ 0.05
+needs at least 19 other split days. S25-Z, like every slot on S25's signal,
+is never tested for R ([status rules](#status-rules)), and nothing about it
+is evaluated at the split days.
+
+**The reference set** is every admissible split day `d` ≠ `b` of F (at least
+20 usable days before it and at least 10 after; about 58 days), enumerated in
+full, at which the slot also passes the bar on F's days before `d`.
+**The whole bar is evaluated at each `d`**, kills and Holm included, as on F−
+with F's usable days before `d` in its place, with m = 5: the other slots
+taken to F are evaluated there the same way and enter Holm with p = 1 where they are
+killed, void or inconclusive under K-trades on those days, as do those not
+taken to F, and K-trades counts the trades before `d`. Nothing is re-run for
+it: every series the bar reads (the slot's daily values and IC, its 200
+random-direction draws and other placebos, its neighbour cells, its 110 ms and
+bracket re-runs) is computed once per day over all of F in F's read session,
+the one-day shift circular within all of F as on F−, and each split day only
+slices those per-day values.
+Passing on F− selects lucky days before the true split, so the placebo splits
+go through the same selection; a comparison with unselected splits would make
+R come out supported too often. When the slot does not pass on F−,
+Δ(`b`) is reported with its percentile among all admissible days, as a
+measurement.
+
+**Untestable**, declared and not retuned, and read as not supported: no
+alarm in F; fewer than 20 usable days before `b` or fewer than 10 after it;
+the detector's alarm rate on D above one per 14 days (declared in the
+amendment, before H is read; `b` then does not split F); or fewer than 19
+days in the reference set besides `b`.
+
+**Reported beside**: every alarm in H and F with the channel that moved
+(scale or dependence, and the mean channel's odds), the second detector's
+alarms, and the earlier
+daily-bar run's alarms (item 5 of [what was known](#what-was-known-before-this-was-written)),
+labelled as already public. The blocks are not moved by any alarm, including
+alarms inside H.
+
+**The regime axis does not replace R.** A slot with a regime window above 0
+enters R with its own guarded series; the axis is a short guard after any
+alarm, R a stop at the first alarm in F.
+
+**What R can establish** is that a policy fixed in advance, "stop at the first
+alarm", separates days on which a strategy paid from days on which it did not;
+not why it stopped.
+
+---
+
+## Measurements without a hypothesis
+
+None enters a verdict, and none can be quoted as a result.
+
+**A0, S25 under a short-window protocol, on O.** S25's signal (gradient
+boosting on BTCUSDT on the walked-book label at 0 bp, micro-selected inputs),
+trained on 2025-01-01 to 01-27, thresholds for 240 trades a day set on 01-28
+to 02-03 (the purge of the hold plus `N` taken before 01-28 and before 02-04,
+as in every walk-forward fold), a 50 s hold, run on O (2025-02-04 to 02-26): crossing at 0/0, and
+posted at the touch under each of the three fill rules of FILL. Reported:
+`gross_bp_turnover`, net at the base tier and at every published tier, trades
+a day and IC. A0 differs from S25 only in protocol (thresholds from O's
+preceding week, 0/0 fees, scored on O); it is the first step of S25's
+[edge ladder](#s25-the-named-2025-configuration). It carries no comparison
+figure and no prediction.
+
+**FILL, the fill rule, with a prediction.** A0's passive order stream on O,
+the same orders under three rules: the same decisions and the same quoter are
+run under each rule, so which decisions become orders can differ between
+rules through the one-position rule (an order filled earlier frees the
+quoter earlier):
+
+| Rule | A resting order fills | Bias |
+|---|---|---|
+| (a) on touch | in full, at the first print at or through its price from the side that hits it, whatever is queued ahead | optimistic bound, labelled so |
+| (b) trade-through | only on prints strictly through its price, up to their size (R7 alone) | pessimistic |
+| (c) queue | after the visible queue ahead is consumed by prints at its price (R5, R6), or on prints through it (R7) | the simulator's default |
+
+Reported for each: fill ratio, markouts at 1, 5, 10 and 30 s by path, gross and
+net. **The fill ratio** is the share of posted orders that receive any fill
+(the convention of `fill_rate` in `backtest/maker.py`); filled volume over
+posted volume is reported beside it. The prediction below is on the share of
+orders.
+**Prediction, fixed now: the fill ratio is at least 0.75 under (a) and at most
+0.50 under (c).** The same three rules are reported for S25-Z's and S-P's
+streams on H.
+
+**The fee break-even**, per slot and block: `gross_bp_turnover` for the
+taker slots; for S-P, S-M and S25-Z, the maker fee at which net is zero with
+the taker exit at the base fee and, separately, at 1.5 bp. Compared with
+every published tier, with the fee caveat. A tier pays a passive slot only
+when the slot's net is positive at that tier's own maker and taker fees
+together (its taker exits at the tier's taker fee, never the base tier's);
+S-P's result at maker fees of 0 and −1 bp keeps the taker exit at the base
+5.5 bp, since the cheapest maker tier and the programme's rebate are
+maker-side figures, and a maker fee alone prices half the round trip.
+
+**Measured rows**: the chosen cell of a non-admitted C\* or R\*, and a
+non-admitted S-P or S-M, run once on H and F with no placebo and no status,
+and on P only when P is opened for a qualifying slot, in that read session
+([selection](#selection-on-d-admission-and-the-finalists)).
+
+**The D leaderboard, marginals and nulls**: every configuration with its D
+numbers, ranks and region tags, the per-axis marginals, and every replication
+of the placebo search ([artefacts](#artefacts-and-headline-sentences)). Every
+D number is labelled "selected, biased upward" and is never quoted as a
+result, except p_search ([the placebo search](#the-placebo-search)).
+
+**H before 2025-08-01**, a labelled sensitivity: every slot not on S25's
+signal at its frozen cell on H's usable days from 2025-07-08 to 07-31 (24
+days), the part of H that the [information set of
+S25](#what-was-known-before-this-was-written) does not cover. Same daily
+series and statistics, no status. For a slot on S25's signal these 24 days
+are its status window, and its numbers on all of H are the measurement.
+
+**Verdicts with the gap-excluded days included**: each verdict's mean, t and
+median day recomputed with the days excluded for sequence gaps put back.
+
+### The regime map
+
+A measurement for every slot and every measured row, never a status.
+
+- On D, each slot's walk-forward daily net is cut at each test month's
+  fold-wise alarms ([the regime-break policy
+  axis](#the-regime-break-policy-axis)); on H, F and P it is cut at the
+  frozen detector's alarms (on P only when P is opened for a qualifying slot,
+  in that read session; otherwise the map ends at F's last day).
+- Each segment is reported with its dates, usable days, mean, day-level t and
+  cumulative net; a segment under 10 usable days is drawn but carries no t.
+  A segment starts on the first day that begins at or after its alarm, so the
+  alarm's own day closes the segment before it; a block boundary also cuts a
+  segment, and the table says which of the two opened it.
+- One chart per execution path (taker, passive entry, market maker) shows the
+  cumulative daily net through 2025, with the alarms marked and the blocks
+  shaded.
+- The detector cuts the segments before any result is computed for them.
+  Every segment is shown and none is selected; no segment enters any rule. A
+  positive stretch for a taker or a maker appears here as what it is: a
+  description between two alarms, read against the statuses beside it.
+
+---
+
+## The break detector
+
+Fixed now, run as the ledger opens each block.
+
+- **Input**: hourly log returns, close to close, of Binance USDT-M futures
+  BTCUSDT 1h klines, each divided by the root mean square of D's hourly
+  returns at the same UTC hour (a 24-value profile fitted on D only), so that
+  the daily cycle of volatility is not read as a series of breaks. Inside the
+  search on D the profile is fitted fold by fold, on the hours before each
+  test month only ([the regime-break policy
+  axis](#the-regime-break-policy-axis)); the frozen profile fitted on all of D
+  gives the flags on H, F and P and in the dry run. Both flag lists are
+  recorded, and their difference on D is reported, not corrected.
+- **One continuous stream from 2024-12-01**, so the monitor is warm by
+  2025-01-01. Bars are fetched from that day, so the stream's first return is
+  its second hour (`log_returns`, close to close); no 2024-11 bar is needed. E's hourly bars are in it: they are fetched and read when the
+  ledger opens H (bars only; E's book, prints and funding are never fetched),
+  so no return spans the embargo. **A missing hour** has its close carried
+  forward and a zero return, and is counted and reported; the walk continues
+  without a reset, and the move over the gap enters the next return. The
+  stream's first bar must be present: it has nothing to carry forward, and
+  the stream is never started at a later hour, so a missing first bar stops
+  the detector until it is fetched.
+- **Bars for E, H, F and P come from Binance's daily archives only**, one day
+  at a time, inside the opened access of their block. No monthly kline
+  archive for a month after 2025-06 is fetched or cached before P's read (the
+  existing code prefers, and always caches, monthly kline archives, which
+  would put a later block's bars on disk early). The study's loader refuses a
+  monthly kline file whose month reaches past the highest opened block.
+- **Monitor**: `validation/structural_breaks.py` on the `structural-break`
+  library at commit `0636813fdd4ccc9f25490d97f62d6fccecb01881` (tag `v0.1.0`,
+  as locked in `uv.lock`; a moved tag does not move it),
+  `MonitorSpec(history_len=365, online_len=90, min_history=121,
+  statistics=("scale", "dependence"), minimum_gap=0)`, in hours, with the
+  recorded thresholds 9.09 and 7.93 (`RECORDED_THRESHOLDS[(365, 90)]`). One
+  `detect_breaks` call runs over the whole stream from 2024-12-01 to the last
+  hour of the highest opened block, its windows anchored at the stream's
+  start. The walk is causal, so each later run must reproduce every alarm of
+  the earlier runs, D's as the amendment records them (timestamp and
+  channel, from the run with the frozen profile over 2024-12-01 to
+  2025-06-30; the fold-wise runs use other profiles, are recorded separately
+  and never enter this check) and each block's as its results file records
+  them; if it does not, R is void and read as not supported (see
+  "R void" under the status rules).
+- **The mean channel** is read from the `odds_mean` column of the same run,
+  against 8.93, and reported. It is not in `statistics`, so it never
+  re-anchors the walk and never defines `b`.
+- **`b`**: the first alarm effective in F, effective at the close of the hour
+  whose return produced it. F− is F's usable days before the alarm's day, F+
+  its usable days after it; the alarm's own day is in neither.
+- **On D**, the monitor's alarm rate over 2025-01-01 to 06-30, from the
+  frozen-profile run, is recorded in the amendment. Above one alarm per 14 days, R is declared untestable then,
+  before H is read, `b` does not split F, and the monitor is not retuned.
+  This rate is optimistic: the hour-of-day profile is fitted on D itself, and
+  the recorded thresholds were calibrated on Gaussian null paths
+  (`structural_breaks.py`), not on heavy-tailed hourly returns. On F, where
+  the profile is out of sample, the first alarm is likely to come sooner, and
+  after a re-anchor the monitor can alarm again once `min_history` (121 hours)
+  has passed. An early first alarm leaves F− short or R untestable: it lowers
+  R's power, and the placebo splits keep it from making R easier to support.
+- **Reading**: bars up to 2025-06-30 are development data; E's and H's bars
+  open with H, F's with F and P's with P, through the ledger.
+- **Reported beside, never defining `b`**: `validation/changepoint.detect` on
+  the 1 s grid of BTCUSDT's mid and spread from the Bybit book (`to_grid`,
+  `label="right"`), at its defaults (window 2000, threshold 20, reference 40,
+  minimum gap 20,000, its four statistics). It runs continuously over D,
+  **restarts on H's first day**, because E's book is never fetched, runs
+  continuously over H, **restarts on F's first day**, 2025-08-21, so that no
+  `ob500` state is carried into `ob200` data and F's read needs nothing of H,
+  and runs continuously from F through P; any alarm within a day of
+  2025-08-21, that is within 24 hours of 2025-08-21 00:00 UTC, is labelled
+  "at the archive change". A day enters its 1 s stream when its book is on
+  disk and its only exclusion is sequence gaps (the grid carries the last
+  book across a gap); a day excluded for anything else is left out and the
+  stream runs on. An alarm is stamped at the right label of the last grid
+  row of the block of rows that fired it. D's run is made by stage C under
+  the development access and frozen in the amendment
+  (`detector.second_detector_D`); H's, F's and P's by their reads, P's span
+  running on from F, and the dry run's stand-ins run it on their own days.
+  Also the earlier daily-bar run,
+  labelled as public before this registration.
+
+---
+
+## Fetch plan
+
+Nothing below has been fetched. Sizes are the archives' own, summed from the
+`HEAD` requests. Every archive goes through this study's fetch (new code, on
+the pattern of `data/ensure.py`: only missing days are fetched, and no
+archive is kept after its replay).
+
+**Replay workers.** `data/ensure.ensure_book` replays one day at a time
+(`workers=1`), which would take W and D about 7–14 hours. Running
+`data/bybit.download_range` with more workers runs out of memory instead:
+`reconstruct` holds a day's rows as Python dictionaries until the day ends, at
+most 864,000 rows (one per 100 ms) of about 5.5 KB each, so 5–6 GB per worker
+at peak. The fetch therefore replays books with **at most 4 worker
+processes**, fewer if four times the peak resident memory of one replayed day
+exceeds 24 GB. That peak is measured at stage 0, before stage 1, on the two
+timing days' `ob500` archives kept under `data/timing_archives/` (2024-02-11
+and 2024-03-05, the busiest; a day's row count, not its archive's size, sets
+it), each replayed alone in a fresh process, with the replay's seconds beside
+it; the larger peak sets the workers, and both go into stage 0's record and
+the amendment. The replay itself is unchanged.
+
+**A failed download is not an exclusion.** `data/ensure._fetch_days` reports
+any exception as an unavailable day, and `data/bybit._one_day` turns any
+download error, a 404 or a dropped connection alike, into a skipped day. A
+failed download of a large archive, which belongs to a busy day, would then
+be excluded as a missing plane and tilt D and H toward calm days. In this
+study's fetch, **every day the `HEAD` check lists as present must be
+fetched**: any failure other than an HTTP 404 (a timeout, a dropped or reset
+connection, another HTTP status, an archive that does not decompress) deletes
+the partial file and is retried with backoff (60 s × 3^(k−1) after the k-th
+failure, at most 12 hours) until the day is on disk, and a
+stage is not complete, and nothing is computed on its block, until every such
+day is on disk or excluded by one of two terminal rules, on every block, W
+and D included. An **unreadable archive**: a day whose archive was downloaded
+completely at least twice with the same sha256 and still does not
+decompress, or whose replay raises on a complete archive (`reconstruct`'s
+"produced no usable book rows", a line the decoder cannot parse); likewise
+for prints. An **unfetchable day**: one whose download still fails after 10
+attempts spread over at least 48 hours. Each is an exclusion, counted per
+block by reason, and counts toward the more-than-a-quarter unreadable rule.
+Only an HTTP 404 makes a missing plane; a 404 on a day the `HEAD`
+check found present is reported as such. Funding and hourly bars follow the
+same rule: a failed request is retried, and only the venue's answer that it
+has no data (an HTTP 404, or an empty funding history) is a missing plane.
+The print downloader's 120 s timeout (`data/bybit_trades.download_day`)
+bounds each socket read, not the whole file, so a large file does not fail by
+its size; a stalled connection does, and is retried. The study's book
+download uses the same 120 s per socket read. Each complete archive's
+checksums are checked before it is read (the book zip's CRC by
+`zipfile.testzip`, the prints' gzip by decompressing it whole); a failure is a
+corrupt download, deleted and retried, and only the identical-sha256 rule
+above makes it unreadable, so a damaged transfer is never taken for a bad
+archive.
+
+| Stage | When | What | Book archives (GB) | Print archives (GB) |
+|---|---|---|---:|---:|
+| 1 | after this registration and the code it names are merged, and after stage 0's amendment if it cuts anything | W and D (212 days, `ob500`); funding for W and D; hourly bars 2024-12-01 to 2025-06-30; the three `ob200` reader-test days of 2026 (0.6 GB of the book column) with their prints and funding, for the dry run's F and P read (their prints not checked by `HEAD` and not in the print column) | 76.0 | 15.3 |
+| 2 | inside H's opened access, after the amendment is committed and the ledger has recorded the open | H (44 days, `ob500`), H's funding, E's and H's hourly bars from daily archives | 11.4 | 2.1 |
+| 3 | inside F's opened access, after H's results are committed | F (88 days, `ob200`), F's funding and hourly bars from daily archives | 15.8 | 5.9 |
+| 4 | inside P's opened access, after F's results are committed, only if the condition holds | P (45 days, `ob200`), P's funding and hourly bars from daily archives | 9.9 | 3.5 |
+| **In all** | | stages 1 to 3 always; stage 4 only if P is opened | **113.1** (about 87 of `ob500`, 26 of `ob200`) | **26.9** |
+
+Totals are sums of the unrounded sizes. About 140 GB pass through the
+network in all, 126.5 GB if P is not opened:
+91.3 GB in stage 1, 13.5 GB in stage 2, 21.7 GB in stage 3 and 13.4 GB in
+stage 4. H's and F's archives are always fetched (H's for S25, F's because F
+is always read), and P's only when P is opened, each through the ledger.
+
+**The ledger opens before the fetch.** `open` writes its entry first and
+commits and pushes it, and the block's fetch then runs under that access; the entry records each fetched
+file's sha256 and UTC download time. `open` refuses if any book, print,
+funding or hourly-bar file of that block is already on disk, and H's `open`
+also if any hourly bar of E is.
+
+E's book, prints and funding are never fetched; its hourly bars are fetched
+with H's. At most one archive per worker is on disk at once; the largest book
+archive of W and D is 0.92 GB (the median 0.34 GB), so under 4 GB with four
+workers. Archives pass through and are deleted after replay. Replayed at ten
+levels, a BTCUSDT day of 2024 took 40 MB on average and 60 MB at most, so W
+and D take 8–13 GB. Print parquet is budgeted at 0.13 to 0.25 of its archive,
+2–4 GB for W and D.
+
+**Disk.** 121 GB were free on the machine when this was registered; with the
+10 GB margin about 111 GB are usable. Features go to **two float16 stores, one
+zstd-compressed parquet file per day**, holding model inputs only; labels,
+costs, the gate's inputs, the walk tables and every fill are computed from the
+book's float64 prices, never from a store, and the parity tests run at
+float16. The every-tenth-row store holds the inputs the fits train on; the
+every-row store holds the network's inputs and is kept through D, so it is
+never rebuilt. Peak on D:
+
+| Item | GB |
+|---|---:|
+| Replayed books, 212 days at 40–60 MB | 8–13 |
+| Print parquet | 2–4 |
+| Every-tenth-row store, float16 | 3 |
+| Every-row store, float16 | 18 |
+| Archives in flight, 4 × 0.92 GB at most | 3.7 |
+| Candidate tapes and the nulls' hourly sums (40 signal configurations) | ≤ 4 |
+| Models and results | about 7 |
+| **Peak** | **46–53** |
+
+Walk tables are never stored. **W's and D's features are deleted after H's
+results are committed and before stage 3**; no later read uses them (F and P
+run only frozen models), and they can be rebuilt from the books. Before each
+stage, the fetch checks that free disk exceeds the stage's budget (its
+archives in flight, books, prints and features) by 10 GB, and refuses to start
+otherwise. The amendment records the measured sizes.
+
+---
+
+## Compute budget
+
+On the machine the market-making rounds ran on (10 cores, 32 GB, an MPS
+device). Worker counts are runtime arguments the ledger records, not hashed
+values: at most 4 for the book replay; at most 6 for the simulator, while 6 ×
+the peak resident memory of one day stays within 24 GB (2.9 GB measured on
+the busiest BTCUSDT day of 2024; each read session's first simulated day
+runs alone to measure that peak, and each later batch runs as many workers
+as the largest peak measured so far allows, at most 6); 8 for everything else. Fits run one at a
+time on all cores (`models/gbm.py`, `n_jobs=-1`); network fits queue on the
+single MPS device, which is part of the environment fingerprint. Each heavy
+run starts under `nohup caffeinate` with its log in `logs/`.
+
+**Unit costs**, measured on this machine on synthetic arrays and 2024 days
+already on disk: a boosted fit on 1 million rows × 40 (× 100) columns 15 s
+(32 s), its prediction on a day 0.6 s; a logistic fit on 1 million × 100
+2.2 s; a network training batch 8.9 ms on MPS (557 ms on the CPU), so a full
+network fit 22–44 minutes; the event-jump entry loop 6 ms per cell-day; the
+simulator 5.6–10.3 s per BTCUSDT cell-day in one process, 0.85–2.5 s of wall
+time on 6 workers; the normaliser 49 s per day for 28 columns. Null B and
+the refit have no measured unit cost yet: stage 0 measures Null B's
+vectorised cost per cell-day and shift, the refit's re-prediction of every
+row of the test days, the network's training batch and its inference per row
+(each timed over a whole day's rows, the busier timing day's, since a sample's
+time per batch or per row carries the device's start-up; the sample's figures
+are kept beside the day's), the network's inference per test day and its
+scoring of the inner validation at every epoch, and the replay's seconds and
+peak resident memory on the two timing days' `ob500` archives kept under
+`data/timing_archives/`, each replayed alone in a fresh process: the slower
+archive's seconds stand for a day in place of the 2–3 minutes above, and the
+larger peak sets the replay workers; stage 0 refuses to run without both
+archives and reads no other there. It also times the fold-level leakage
+test's network on the CPU (a training batch and inference per row) and a day
+of a feature store read and written, and projects that test's fits, twice
+per fold, with its mutated days. It projects Null B at 137 × the
+catalogue's cell-days, at the worker counts above (8, the simulator 6, the
+replay's as measured), whatever count a run is started with, and its record
+holds every figure it measured.
+
+| Stage | Size | Estimate |
+|---|---|---|
+| 1: fetch, replay, features, selection | 91.3 GB of archives; 212 days replayed at 2–3 minutes on 4 workers (1.8–2.7 hours); two feature stores, each built once | 4–6 hours |
+| A: fits | 200 walk-forward fits (boosted 80 × 1–2.2 minutes, logistic 80, bound regressor 20, network 20 × 22–44 minutes on MPS), predictions, the network's inference on every row of the test days and its inner-validation scoring at every epoch, candidate tapes | 10–18 hours, the network dominating (7.3–14.7 hours), plus the inference and scoring stage 0 times |
+| B: taker scoring | 2,400 cells × 150 days = 360,000 cell-days from walk tables | under 1 hour on 8 workers |
+| D: the choice and Null A | Null A (999 draws on hourly sums), carry-forward, PBO and DSR | 2–5 hours |
+| D: Null B | 137 shifts × 360,000 cell-days, about 49 million re-pairings, at most the entry loop's 6 ms each | at most about 82 CPU-hours, about 10 hours on 8 workers; less if vectorised, as stage 0 measures |
+| D: the refit | 80 boosted fits (1.3–2.9 hours), 80 logistic fits, every row of the 150 test days re-predicted from the every-row store, stratum C re-scored | about 3–7 hours, timed at stage 0 |
+| C: simulator | at most about 7,750 cell-days (S25-Z 1,800; S-P at most 4,500; S-M 1,350; A0 and FILL 92) | 1.8–5.4 hours (19–58 hours at 9–27 s a cell-day, the bound stage 0 tests) |
+| E: freeze | frozen fits, A0 and FILL on O, σ_D and the MDEs, the dry run | 17–33 hours |
+| **D in all** | | **about 48–85 hours, 2.0–3.6 days**, under the 6-day (144-hour) ceiling; with the simulator at 9–27 s a cell-day, about 65–138 hours, still under it. Stage 0's projection decides whether the reduction order cuts |
+| H's read | the taker slots from walk tables; about 237 runs × 44 days for each simulator slot (206 placebo runs, at most 27 neighbours, 3 brackets, 1 latency); measured rows and the regime map | at most about 31,300 cell-days, 7–22 hours, one read session of at most 1.5 days |
+| F's read | every frozen slot once as a measurement; each slot taken to F with its full kills about twice its H cost (88 days) | under a day, plus about 2 × H per slot taken |
+| P's read | each slot read on P | about 1 × H per slot read |
+| R's reference set, on F | about 58 split days per candidate, slices of per-day values computed on F | minutes, inside F's read session |
+
+Every fit reads at most 4 million training rows, taken evenly in time, so a
+fit's cost does not grow with D. The amendment records the measured times and
+the largest worker's peak memory; a run slower than projected takes longer,
+and nothing registered is dropped to save time once a 2025 file is on disk
+(the reduction order acts only at stage 0).
+
+---
+
+## Who may read what, and the code that will enforce it
+
+### The code to come
+
+The pull requests that follow this one add, before stage 1:
+
+- **the search's single entry point** over stages 0 to E, with the catalogue
+  hash check and the trial ledger; candidate-row tapes, walk tables at every
+  100 ms row and the event-jump thinning loop; the vectorised neighbourhood
+  scores, tested equal to `validation/search.neighbourhood_scores`, with the
+  ordered axes as numbers and a test of S25's 24-cell neighbourhood; the
+  market gate's two inputs on row stamps, the mid's realised volatility over
+  the trailing 60 s and the quoted spread, both in bp from float64 prices,
+  with their K-units test (`backtest/gating.MarketGate`'s default columns,
+  `log_mid_vol50` on the 5 s grid and `spread_bp_now`, are not used);
+- **the signal pieces**: the per-side θ of the hold-first rule, the EV gate,
+  the Gaussian head with its lazy window dataset, the ten-level tensor, the
+  2025 microstructure set, the walked-book label, and the time-based forward
+  move and control label, each under the leakage checker and with
+  streaming-versus-batch parity tests; the depth and flow builders wrapped as
+  registered features with declared lookbacks, and prints aligned backward
+  ([Labels, features and models](#labels-features-and-models));
+- **the `ob200` archive name** in `data/bybit.py`, proven on a synthetic fixture before stage 1, and on the
+  three reader-test days, against D's frozen `max_sequence_gaps`, before H is
+  opened ([Data](#data)); and the daily-only fetch of hourly bars in
+  `data/binance.py`;
+- **the fold-wise detector flags**, the flag-causality test and the
+  fold-level leakage test;
+- **the placebo search**: Null A, Null B with its walk-table route and its
+  parity test against the executor (run at stage 0), the counts of admission
+  (iv) computed directly with a unit test at the 137-shift boundary, the
+  refit replication, carry-forward,
+  CSCV PBO, and the deflated Sharpe ratio with N_eff;
+- **execution**: the event-time taker executor; the simulator's signal-entry
+  quoter, with a unit test that an order whose cancel is in flight counts as
+  resting, and S1 with the lean and its `sigma_ref` from W on a fixed
+  `clip_btc`, wired to `guard_pull`
+  and `guard_widen`; the simulator's taker orders priced by the executor's
+  walk function in place of `_walk` with `flatten_slippage_bp` 0.5, with a
+  parity test of the two walks and the late-snapshot counters in the
+  simulator; the fill-rule comparison;
+- **statistics**: the one-sided day-level p-value, Holm and the placebo
+  comparison through `market_making/verdicts.day_t`, `holm`,
+  `exceeds_placebos` and `t_sf`, and the Newey–West t in
+  `evaluation/significance.py`;
+- **this study's fetch and feature stores** ([fetch plan](#fetch-plan)): the
+  book replay on at most 4 workers with its measured peak memory, the retry
+  of every failed download until success (only an HTTP 404 is a missing
+  plane), the two float16 stores with the raw-size scaling and the
+  finiteness test, the disk check before each stage, and the
+  deletion of W's and D's features before stage 3;
+- **the presentation**: regime attribution and the regime map; the
+  leaderboard, marginals, nulls and regime-map files, the figures, and the
+  filler of the headline sentences ([artefacts](#artefacts-and-headline-sentences));
+- **this study's loader and ledger**, on the pattern of
+  `market_making/round2.py`, with block constants of its own (round one's
+  `block_of` is not used): the YAML validated against this registration,
+  placeholders hashed as in the earlier rounds, the instrument's tick and lot
+  steps from the venue's specification, and an access that permits days per
+  block and plane. The entry point,
+  `experiments/short_horizon_2025.py`, is committed with all study code
+  before the stage 1 fetch (the code-freeze note of
+  [selection](#selection-on-d-admission-and-the-finalists)) and frozen with
+  the amendment, and computes everything a block's read produces, statuses
+  and kills included, in one read session.
+
+### Access
+
+**The development access** permits W and D (book, prints, funding), the
+hourly bars up to 2025-06-30 and the reader-test days.
+It refuses every 2025 day after 2025-06-30 in every plane, including the daily
+bars already on disk (`data/bars/BTCUSDT/klines-1d`); a read of those after
+that date falls under the ledger rule below.
+
+**The ledger**, `experiments/results/short_horizon_2025_ledger.json`, guards
+E's bars, H, F and P.
+
+- **H** opens only if the amendment records the YAML's sha256, the file on
+  disk has it and is committed, the tree is clean, every frozen weight file's
+  sha256, every frozen finalist file's and the fitted-values file's sha256
+  equal the amendment's, the trial ledger's manifest is committed with
+  the sha256 and the row count the amendment records and the parts on disk
+  are exactly the manifest's (each at its sha256 and row count, in its order,
+  and no other part beside them), the catalogue's sha256 equals the
+  registered one (or stage 0's amendment's), and no book, print, funding or
+  hourly-bar file of H and no hourly bar of E is already on disk (the Binance
+  daily bars of item 5 of [what was
+  known](#what-was-known-before-this-was-written) are not a plane of this
+  study).
+- **Every open (H, F and P), and the start of every process of a read
+  session**, also require: `git status --porcelain --untracked-files=normal`
+  lists nothing but the ledger file; `git diff --name-only <session's
+  commit>..HEAD` lists nothing but the ledger file (for an open, HEAD is the
+  session's commit); and the **environment fingerprint**, the sha256 of the
+  installed distributions with their versions (`structural-break` at its
+  locked commit included), equals the one H's open entry records.
+- **The open entry is committed and pushed before the block's fetch
+  begins.** It records block, session commit, config sha256, environment
+  fingerprint and UTC time; the fetch's per-file records are committed when
+  the fetch ends, before anything is computed. Every later process of the
+  session, and every later open, refuses unless that entry is in HEAD's
+  history, so a crashed read cannot be erased and opened again.
+- **A read session** is bound to (block, commit, config sha256, environment
+  fingerprint). Any number of processes and resumptions at that commit count
+  as the first read; outputs are not inspected until the session writes the
+  block's results file. A resumption at another commit is a second read. The
+  **worker count** is a runtime argument recorded in the ledger, not part of
+  the configuration's hash; a test shows the entry point's outputs identical
+  at 1 and at N workers, and a resumption may use fewer workers.
+- **A read that cannot finish.** A failed process of a first read is resumed
+  at the same commit. If the same stage fails again with the same exception,
+  or the read has not finished after five resumptions, the session closes by
+  writing the block's results file with every slot `not assessed
+  (<block> read failed)`, the stage reached and the exception. The block is
+  then handled as an unreadable block of the same letter: after H, nothing is
+  taken to F, F is read as measurements at the same commit and P is not
+  read; after F, H's statuses stand, marked "F read failed", and P is not
+  read; after P, as P unreadable. No code changes; a corrected run is a
+  successor registration.
+- **The session closes** by writing the block's statuses and every kill,
+  computed by the entry point, to `experiments/results/short_horizon_2025_H.json`
+  (`_F.json`, `_P.json` for the later blocks), and that file's sha256 into
+  the block's ledger entry.
+- **F** opens only if H's results file is committed unchanged (its sha256
+  equals the ledger's), `git diff --name-only <H read's commit>..HEAD` lists
+  only `README.md` and paths under `experiments/results/` and under `docs/`
+  outside `docs/preregistration/` (so the code, the configuration, this
+  registration, the tests, the entry point and the lock file are those of the
+  H read), the frozen weights' and the fitted-values file's sha256 still
+  match, the conditions above on every open hold, and no book, print,
+  funding or hourly-bar file of F is on disk. **P** opens on the same conditions against F's read, and
+  only when a slot qualifies; its session then computes the qualifying
+  slots' statuses and, as measurements, every other frozen slot, measured row
+  and regime-map segment on P.
+- Each first read writes block, commit, config sha256 and UTC time before the
+  access is returned; a second read raises unless forced, and everything it
+  produces is stamped `second read` and cannot change a status.
+
+**H, F and P are spent** for every configuration of this catalogue. A
+successor
+registration, a corrected re-run after a bug included, uses blocks after
+2025-12-31 and never the reader-test days.
+
+Round one's `prereg.Access` and the round-two access are not used to read any
+day of this study. `pipeline/execution`'s market-maker path builds its access
+with round one's `access_for`, so it is not used either: the passive
+strategies call `market_making/simulator` directly, on days loaded through
+this study's loader.
+
+---
+
+## Amendment protocol
+
+Stage 0's cuts, if the projection needs any, are a dated amendment of their
+own, committed before stage 1 with the new catalogue hash, N_max, the
+configuration's new null-placeholder sha256 and S25's and S25-Z's
+neighbourhoods as cut; the code-freeze note follows it, also before stage 1. After the
+development runs, and before H is read, one dated amendment is appended and
+committed: the days excluded and the sequence-gap threshold (by its
+formula), the tick and lot steps and the selected features;
+the reader-test days' message counts,
+intervals and gaps; the trial ledger's sha256 and row count, N_trials, N_eff,
+R_D and the hand-run log; for each stratum the chosen cell with its neighbourhood, its S and the
+outright peak; every replication of the placebo search (A per stratum under
+Null A and Null B and at the refit, the seeds, the shifts, the quantiles and
+the p-values); each admission decision with its reason, the carry-forward
+estimates, PBO, the deflated Sharpe ratios (each finalist's, S25's included,
+at N_trials with the simulator trials counted, with the variance each is
+deflated against: the taker slots' and S25's against the Sharpe ratios of
+every taker cell's daily G on D, S-P's and S-M's against those of every S-P
+and S-M cell simulated on D) and the selection premium, and the power of
+the t ≥ 3 bar against each searched slot's carry-forward estimate; S-P's
+signal with the values that chose it; σ of each slot's daily series on D and
+the minimum detectable effects; the A0 and FILL tables on O; the detector's
+alarm rate on D, with every alarm's timestamp and channel, and, if it applies,
+the declaration that R is untestable; the fold-wise flag lists and the
+detector's 24-value hour-of-day profile fitted on D; the sha256 of the
+fitted-values file ([Blocks](#blocks)); the sha256 of every frozen weight
+file and of each frozen finalist file, every threshold and every checkpoint
+epoch; the entry point, committed before the stage 1 fetch and frozen with
+it; the
+compute record, with the replay's measured peak memory, the worker counts,
+the device and the stores' sizes; the fits that lacked a class, with the
+side; the second detector's run over D, with every alarm's timestamp and
+statistic; and the sha256 of `configs/short_horizon_2025.yaml` after the frozen
+values are written into its placeholders, on a line of the form
+``Frozen configuration sha256: `<hash>` ``. Nothing else may change. Each
+frozen value has one placeholder: weight sha256s under
+`models.weights_sha256`, checkpoint epochs under `models.checkpoint_epoch`,
+the fits that lacked a class under `models.fits_lacking_a_class`,
+hold-first thresholds under `slots.<slot>.thresholds`, the search's records
+under `search.result_trials`, `search.result_choice`, `search.result_admission`
+(each slot's deflated Sharpe ratios with the variance they are deflated
+against, and the searched slots' power at the bar, by slot)
+and `search.result_nulls`, the fold-wise flags under
+`detector.flags_D_foldwise`, the second detector's run over D under
+`detector.second_detector_D` and the frozen finalist files' sha256 under
+`artefacts.frozen_finalist_files_sha256`; a neighbourhood lists its cells, their D values
+and the outright peak, and refers to those by cell without repeating them.
+**A frozen finalist file** holds a slot's configuration, weights, thresholds,
+gate levels, regime window and fitted values; a later trial on the venue
+loads exactly that set, and this study places no order.
+
+A correction found after this registration and before H is read (a bug in a
+ported feature, the label, the simulator or a reader) is made only by a
+further dated amendment that states it and, if it could change a development
+number, re-runs D in full before anything is frozen. Every change to the
+frozen study code before H is read is such a correction. **Complete D runs
+are numbered**, and R_D is their number: the rows of every superseded run stay
+in the trial ledger and in N_trials, and admission (iv) and p_search are taken
+at α / R_D (Bonferroni over runs), so that fixing and re-running until
+something is admitted is paid for. After H is read, nothing
+is changed and nothing is re-run under a different rule; the ledger's
+conditions for opening F and P enforce this for the code, the configuration,
+this document, the environment, the frozen weights and the fitted values.
+After any block is read, no finalist is re-ranked, no cell re-chosen, no m
+changed, no regime window retuned and no detector refitted, and the D
+leaderboard is never re-run on held-out data.
+
+**A defect found after a read can only lower a status.** It is stated in a
+dated note, `docs/short_horizon_2025_defects.md` (under `docs/` and outside
+`docs/preregistration/`, so the F and P gates still pass), which names the
+mechanism by which the defect could raise a result (a look-ahead in the
+executor, a funding sign, a wrongly chosen cell). Every status it could
+affect becomes `void (defect found after the <block> read)`, which counts as
+killed for routing to F and P and enters Holm with p = 1 on later blocks.
+Holm on a block already read is recomputed from its committed results file
+with that p set to 1, and a status may only fall. Later reads still run on
+the unchanged code; their numbers for a voided slot are reported as
+measurements. Nothing can raise a status; a corrected run is a successor
+registration.
+
+**The ledger rule.** Only reads through the ledger count. A number computed on
+H, F or P outside it — in a notebook, a script run by hand, or a second read —
+is not a result, cannot change a status, and is reported as such if it is
+reported at all. A negative verdict on H ends the regime question for that
+slot: F is still read and reported, but nothing is taken to P.
+
+---
+
+## Artefacts and headline sentences
+
+**Files**, written by the entry point:
+
+- `experiments/results/short_horizon_2025_trials.json`, the trial ledger's
+  manifest, its parts staying under `data/short_horizon_2025/`; N_trials, its distinct (run, key)
+  pairs, is the N quoted on every page, and its sha256 and row count go in
+  the amendment;
+- `…_leaderboard.csv`: every configuration with gross, net, G, trades a day,
+  day-level t, IC, S, A, the admissible flag, its rank within its stratum and
+  overall, the region tags (T1, T2) and S25's badge; the header gives N
+  planned, scored and skipped;
+- `…_marginals.csv`: for each axis value, the median gross, net and G over
+  cells, the form of `docs/findings.md`'s grand-search marginals; the regime
+  row is the median per window;
+- `…_nulls.csv`: every replication's A per stratum under Null A and Null B,
+  the refit point, the quantiles and the p-values;
+- `…_regime_map.csv`: per slot and block, every segment between alarms;
+- the frozen finalist files, by sha256 in the amendment.
+
+**Pages and figures**, in the README, in both themes through `<picture>`: the
+placebo search (the real A against both null distributions and the refit
+point, with p_search); the finalists on H, then F and P, one row per slot and
+S25-Z, with the status, the first kill and its value against its reference
+(`verdicts.KillCheck`), the mean, t, Newey–West t, median day, trades, MDE,
+placebo percentile, K-nbhd median, the fee break-even per side against every
+tier, H before 2025-08-01 and the regime attribution; the S25 page (the edge
+ladder, the T1 and T2 region rows, the rank r of N); the regime map, one chart
+per execution path; the break-detector view for 2024-12-01 to 2025-12-31
+when P is opened, otherwise to F's last day, 2025-11-16
+(blocks and the slots' guard windows shaded, every alarm with its channel,
+`b`, F− and F+, the 1 s CUSUM's restarts, and the public 2025-09-13 daily-bar
+alarm labelled); the fill-rule comparison (A0 on O; S-P and S25-Z on H); and
+the rows of `docs/findings.md` and the README summary.
+
+**Headline sentences, fixed now.** The bracketed parts are filled by the entry
+point and never edited.
+
+| Outcome | Sentence |
+|---|---|
+| Search on D | "Searched [N] configurations ([axes]) on 150 development days of BTCUSDT; on development data, selected, the best direction edge [was / was not] distinguishable from search noise (p_search = [x]; Null A p = [y], Null B p = [z]; [R_D] D runs)." |
+| Payoff on D | "[No configuration paid the 5.5 bp taker fee on development data / S-[x] was admitted on development data, selected]." |
+| Each slot on H, F, P | "[slot] on [block]: [status]; first kill [K-x] at [value] against [reference]." |
+| S25 | "S25's gross edge was [x] bp of turnover against the 5.5 bp taker fee; break-even [y] bp per side; on H before 2025-08-01: [status]." |
+| Passive entry and market maker | "Passive entry and the market maker on [signal]: [D status / H status]; the market maker's making part on [block] was [v] bp per fill." |
+| Regime axis, one per slot with a window above 0 | "[slot] on H: its [w] h guard after detector alarms [did / did not] add more than random pauses ([percentile] of the random flag sets)." |
+| Regime map | "Between detector alarms, [slot] was positive in [a] of [b] segments; the detector cut the segments, not the results." |
+| Break | "R: [supported / not supported / untestable (reason) / not tested]." |
+
+The first kill is the first that fires in the order of the slot's row of
+[the kill table](#kill-conditions-per-slot). Values are in bp of traded
+notional for S25, S-C, S-R and S25-Z, and per 100 USDT of clip a day for S-P
+and S-M. In the regime-axis sentence "did" means the slot's difference from
+its window-0 twin is above the 95th percentile of the random flag sets. The
+making part's [block] is H when S-M has a status on H, else D.
+
+A negative result therefore reads as the pipeline measuring how far each
+configuration was from paying; it is not a missing result. D numbers are never
+quoted as results, except p_search, labelled "on development data, selected";
+otherwise only H, F and P statuses are.
+
+**Later horizons.** The configuration's `search` block is generic: the same
+block, entry point, ledger, nulls, regime axis, verdict helpers and status
+rules carry over to a later registration with only values changing. Funding
+carry would use a clock of 8 h settlements, a week as the cluster, a universe
+from `pipeline/discovery.py`, the positioning features, taker execution at
+settlement, the same detector with windows in settlements, Null A flipping
+signs per settlement-week and Null B re-pairing whole weeks; daily trend, 1 d
+klines with a month as the cluster. Each needs its own blocks, the Newey–West
+lag in cluster units, and a replacement for the rule that a day starts flat
+and is the cluster.
+
+---
+
+## What this study cannot establish
+
+- **A fee schedule of 2025.** Bybit's tiers are the ones published in 2026,
+  applied to 2025.
+- **Queue dynamics inside 100 ms.** The book is a 100 ms photograph; queue
+  position is a rule, bracketed, and K-queue requires a verdict to survive the
+  pessimistic side of the bracket, not the truth.
+- **Anything about capacity.** The clip is 0.01 BTC, and own impact is not
+  modelled.
+- **Anything beyond one instrument, one venue and one year.**
+- **A strategy outside the catalogue.** The catalogue is finite and fixed in
+  advance; what it does not contain is not looked for.
+- **A passive-only edge without direction information.** The passive-entry and
+  market-making slots inherit their signal from the taker search or from S25,
+  so an edge that only a quoter could earn is not searched for.
+- **That H and F are comparable.** The book archive changes on F's first day;
+  a difference between H and F may be the archive.
+- **That S25 was chosen blind to H's days from 2025-08-01, to F or to P.**
+  Its [information set](#what-was-known-before-this-was-written) is stated;
+  the slots on its signal take their status from H's days before 2025-08-01
+  only and can be no more than candidates.
+- **A null calibrated by refitting every model.** The refit replication of the
+  placebo search covers the gradient-boosted and logistic models only; the
+  network and the bound regressor rest on the fold-level leakage test.
+- **What a regime-map segment means.** Segments between alarms are
+  descriptive; none is a status.
+- **Why a strategy stopped.** R tests a causal stopping policy on a detector
+  of BTC's returns; it does not identify the mechanism.
+
+---
+
+## Choices and their reasons
+
+The registration was reviewed three times before it was merged and before any
+data was read, for peeking, for multiplicity and for feasibility, and the
+revision was checked once more for consistency; a last review read it for
+consistency, for decisions left until after a read, and against the code it
+names. After the recast, a review for search multiplicity, protocol and
+executability read the search before any data was read. Every
+blocking and should-fix point was taken in, and the notes where they
+pointed to a gap. It was then recast, still before any data was read, from
+a test of hand-picked hypotheses into a registered search, from three
+designs (one built for rigour, one for feasibility, one for presentation)
+judged against each other; the design built for rigour is the base. Where
+the reviews or the designs proposed different things, a fix left a value
+open, or a proposal was not taken, the choice and its reason:
+
+**The recast into a search.**
+
+- **No configuration is culled on a test day's outcome**, rather than
+  successive halving of families or fits: every fit is made and every taker
+  cell is scored on all 150 days, so the placebo search re-runs the whole
+  search exactly, and halving would raise its null maximum.
+- **The choice ranks by net, admission reads G**: net is what a slot claims;
+  G has the costs taken out, so its Null A is centred whatever the fee; the
+  drift it keeps is controlled by Null B and K-drift.
+- **Two admission levels**, information then payoff: a signal can be
+  admitted for its information and still not pay, which is when passive entry
+  and the market maker matter, so they are admitted on their own payoff.
+- **S-P and S-M always run, on S25's signal when nothing is admitted**, rather
+  than only inheriting an admitted signal: otherwise they would usually never
+  run. They choose nothing on a passive outcome, so they need no search null.
+- **The market maker is one S1 slot with the lean**, at round one's frozen
+  values, rather than a searched family of quoters: both rounds of 2024
+  killed pure quoting.
+- **k = m = 5**, one slot per stratum and execution path plus S25: at m = 5
+  the t ≥ 3 bar binds on every block, so the breadth of the search costs
+  nothing on H; a sixth slot would cost power with no gain, and a seventh
+  would let Holm, rather than the t ≥ 3 bar, decide on short F and P series.
+- **S25-Z at α/6**: the earlier α/(m + 1) rule carried to m = 5.
+- **The slots on S25's signal take their status from H before 2025-08-01 and
+  stop at candidate** (multiplicity and protocol reviews), rather than a
+  narrower statement of S25's information set: the registration does not
+  claim S25 blind to market conditions after 2025-08-01, so only D and H's
+  days before that date can test it, and a status on later days could be
+  earned on blocks its coordinates may reflect.
+- **S25 is one fixed point**, rather than named points chosen on D: a point
+  chosen on D is a region, so T1 and T2 survive as leaderboard regions with
+  no slot.
+- **The regime policy is a searched axis with pull only for the taker and
+  passive entry**, the pairs `VALID_PAIRS` allows; a new meaning of "widen"
+  (a stricter entry) was rejected, and a synthetic null showed no saving from
+  it either way. **The hour profiles are fitted fold by fold on D**, because
+  one profile fitted on all of D would leak later months into earlier folds'
+  guards.
+- **BTCUSDT only**, rather than an instrument axis: the author chose one
+  instrument to bound the data and the compute (about 140 GB through the
+  network, a disk peak of 46–53 GB and about 2.0–3.6 days for D), over the
+  whole registered span from W to P; the break detector already reads
+  BTCUSDT, so its flags and the trades are on one instrument.
+- **A market gate, a 120 s hold and 25 trades a day** were
+  added to the rigour design's grid; a second boosted hyperparameter set, a
+  4 × 4 grid of k and β, take-profit, stop and cooldown exits, and the
+  network on the tensor alone were not, each for cost without a prior reason.
+- **A hard budget fixed before any fetch**: the catalogue hash, a 6-day
+  ceiling and a reduction order, applied only at stage 0, so that nothing is
+  cut once a 2025 file is on disk.
+- **Two float16 feature stores**, rather than one float32 store: half the
+  disk and half the bytes read on every fold, and costs, labels and fills
+  come from float64 book prices, never from a store.
+- **The regime map is a measurement**, every segment shown and none selected,
+  rather than a status: it is the way to show a period in which a taker or a
+  maker paid without choosing that period after seeing it.
+- **No earlier figure enters the expected outcome or the edge ladder**; the
+  prior rests on this repository's own results and the fee arithmetic.
+
+**The review of the search** (search multiplicity, protocol, executability).
+Every blocking and minor point was taken in; where a point offered two fixes:
+
+- **Admission (iv) is the count p-value alone**, rather than keeping
+  `exceeds_placebos` with another interpolation: one rule, the stricter,
+  computed by the entry point as a count.
+- **K-cap for S-M is the simulator's hard limit of two clips**, rather than a
+  new setting that blocks an order on a side while a cancel there is in
+  flight: S1 runs as round one ran it, and its time above one clip is
+  reported.
+- **p_search is the one D number quoted**, labelled and adjusted over D runs,
+  rather than every D sentence carrying a label: it is the search's answer to
+  whether it found anything beyond selection noise.
+- **Raw-size features are scaled by W's median touch size**, with float32 only
+  for a column that still fails the finiteness test, rather than float32 for
+  every raw-size column: the disk budget holds.
+- **The trial ledger's catalogue hash and commits go in a manifest**, rather
+  than a header: a parquet file stays one table, and the manifest carries its
+  sha256 and row count.
+
+**Earlier choices, kept.**
+
+- **Holm's m is fixed on every block**, not the number taken to F or P: the
+  stricter of the two proposals, and fixed before any read.
+- **A missing hour carries its close with a zero return**, rather than being
+  dropped: one row per hour keeps the windows in hours and the hour-of-day
+  profile aligned, and the move over the gap enters the next return either way.
+- **R is tested for every candidate on H (the slots on S25's signal
+  excepted), with a reference set of split days at which the slot also
+  passes**: testing on H's candidacy removes the
+  gate on F−, and the conditioned reference set removes the selection that
+  "confirmed until the break" still makes. The split days are enumerated
+  (about 58), `b` excluded, so the floor is 19 qualifying days besides `b`
+  (the smallest p_R is then 1/20), not 50 of 200 draws.
+- **A result first significant on F is "exploratory" and P is its only
+  confirmatory test**, rather than α being split between H and F: H stays the
+  only gate to candidacy.
+- **S25-Z is tested alone**, not as a member of the family, so that a
+  claim conditional on a zero-fee venue cannot change the finalists' bar.
+- **The passive entry is kept at its first price**, not re-pegged: no
+  re-peg cadence is left to choose, and the order keeps its queue place.
+- **The clip is fixed** (`clip_btc`, 0.010 BTC), rather than K-cap being
+  measured against
+  the clip in force at entry: it gives K-cap one meaning.
+- **Three reader-test days in January 2026**, not one: more cadence and gap
+  data for the `ob200` replay, all outside every block.
+- **H's and F's first days start cold**, rather than carrying rolling state
+  across E or across the archive change: no E day is read, and no `ob500`
+  state is carried into `ob200` data.
+- **K-latency applies to every slot and to S25-Z**, the passive paths
+  included.
+- **K-trades is applied before the kills**: a result on fewer than 100 trades
+  is inconclusive whatever its sign, so a handful of losing trades neither
+  kills nor passes a slot.
+- **The mean channel is read from `odds_mean`**, the column `detect_breaks`
+  writes; its internal name is `sr_mean`.
+- **The EV gate trades one full clip, and Kelly sizing is dropped**
+  (feasibility review). `FractionalKelly.scale(edge, volatility)` returns fraction × edge /
+  volatility², clipped to [0, 2]. At its default fraction of 0.25, with μ and
+  σ in bp, a gated trade with μ = 15 and σ = 10 gets 0.0375 of a clip, below
+  the 0.001 BTC lot, so the slot would be inconclusive by construction; in
+  decimal units the same trade gets 375, clipped to the cap, so every trade
+  would be one clip and Kelly would do nothing. A scaling between the two
+  would be a value set without a basis. Without it, stratum R's trade count is
+  its gate's, and K-trades counts round trips as for stratum C.
+- **Feature selection ranks by correlation with the forward move at `h` = 20 s** (`FeatureSelector`'s default `score_target="ic"`), with the
+  walked-book label at 0 bp as `y`. The feasibility review proposed the label
+  at 5.5 bp; the 0 bp label, fixed after the multiplicity review, is kept.
+  Under this ranking the label only marks which rows are usable, and it
+  exists on the same rows at either fee.
+- **The other values the feasibility review found open on D were already
+  pinned** after the other reviews, and are kept: the control label's
+  smoothing at k = 20 rows (one constant for the three holds, rather than k
+  equal to the horizon in rows); the 5-trade filter, which limits only the
+  chosen cell while every neighbour counts; `not run` with p = 1 for a
+  slot with no admissible cell; and `max_sequence_gaps` as the 95th
+  percentile of D's per-day gap counts (rather than the smallest value that
+  keeps 90% of D's days).
+- **The values the code to come needed are fixed here**, each as a value or a
+  rule that reads only W, January or a fold's training rows: the Gaussian
+  head's variance-prior weight and clamp, the tensor's σ window and spread
+  floor, the winsorising quantiles and window, the network's early stopping
+  on the inner validation's rank IC, and how `N` is derived from lookbacks
+  declared in rows. Left open, each would be an uncounted axis.
+- **The minimum detectable effect on F and P** uses the frozen σ_D and share
+  with that series' usable days, rather than H's 44, so that the label on a
+  later block describes the days it has. Its formula on H was already
+  `(3 + 0.84) × σ_D / √n_eff`, as the feasibility review asked.
+- **At most 4 replay workers**, rather than a replay that writes rows into
+  preallocated arrays (feasibility review): the replay stays the code that
+  wrote the 2024 books, and the cost is a few hours of wall time.
+- **A per-day feature store**, rather than features computed afresh on each
+  run: every walk-forward fold and every cell reads the same D days again
+  (float16 since the recast, above).
+- **The fill ratio counts orders with any fill**, rather than filled volume
+  over posted volume: it is the repository's existing `fill_rate`. A partial fill
+  counts as filled, which makes FILL's prediction for the queue rule harder to
+  meet, not easier; filled volume is reported beside it.
+- **Only `validate_book`'s `positive_prices` error excludes a day**, as
+  registered, rather than any error in its report: the registration named a
+  non-positive price, and adding the function's other checks now would add
+  exclusions that D has not been looked at for. The off-grid check moves to
+  the simulator's day loader, where the code has it, and `flatten_stale`
+  joins the exclusions as R16 has it.
+- **K-dir is a kill for S-M only, and reported for S-P and S25-Z**
+  (multiplicity review, notes). It guards a market maker, whose claim is the
+  part earned at the fill, as in round one; a directional signal entered
+  passively is meant to earn the move after it, so the kill would remove the
+  mechanism under test. For S-P and S25-Z it could only cause false
+  negatives; the false-positive routes stay guarded by K-placebo (with the
+  stale signal), K-drift, K-queue and K-latency.
+- **The detector's alarm rate on D stays in-sample, and is reported as
+  optimistic** (peeking and multiplicity reviews, notes), rather than
+  measured with a profile fitted elsewhere: the leniency can only end R early
+  or make it untestable, never make it supported.
+- **No 2026 confirmation block is registered here.** P is the last block of
+  2025; a confirmation on 2026 data needs its own registration, which the
+  spent-blocks rule confines to dates after 2025-12-31 and which is committed
+  before any 2026 book or print is fetched (the reader-test days excepted).
+- **No entry is skipped for a late snapshot**, and late snapshots are counted
+  at entry and exit instead (final consistency check). The registered "more
+  than 1 s old" entry skip could not apply: decisions are made at row stamps,
+  and the snapshot walked is never older than the order. Reading it as "the
+  next snapshot comes more than 1 s late" would make a trade depend on the
+  feed after the decision, at the feed gaps where a skip would select most.
+- **P is read for every slot that passed on F**, without the earlier
+  "at least 20 usable days" condition: counted in calendar days it always
+  held, and counted in days with a trade it left a slot that passed on
+  F with 10 to 19 such days without a status; the bar on F already asks for
+  10.
+- **A slot inconclusive under K-trades enters Holm with p = 1**: its
+  p-value is not evaluated, and a small one would otherwise move another
+  slot to a laxer step.
+- **With R supported, an empty P series has mean 0**, as a neighbour cell
+  without a trade scores 0 in K-nbhd: a strategy that does not trade after
+  the break has not paid after it.
+- **A result inconclusive under K-trades is not taken to F** (consistency
+  review, which left the reading open): its mean is not evaluated at
+  precedence step 2, so its sign cannot route it. Taking it would give a
+  slot with too few trades a route to "confirmed on P, first significant on
+  F" through a sign the precedence does not read; F still reports its numbers
+  as measurements.
+- **Both terminal fetch rules, not one** (review of decisions left until
+  after a read, which offered either): the identical-hash rule ends a corrupt
+  archive, and only the attempt cap ends a download that keeps failing; both
+  count toward the unreadable rule, so neither can quietly thin a block.
+- **The open entry is pushed as well as committed**: a local commit can be
+  reset without trace, a pushed one cannot.
+
+**Values the study code fixed.** Writing the code named under [the code to
+come](#the-code-to-come) needed values the text above left open. They were
+written into this registration on 9 October 2026, before any data was read,
+each where it applies and with one line here:
+
+- **`max_sequence_gaps` by numpy's linear percentile over every D day whose
+  book replayed, rounded to nine decimals before it is rounded up**: the
+  formula needs an interpolation and a set of days, and float noise must not
+  add a gap.
+- **A day after a hole starts cold**, rather than reading rolling state
+  across it: a day the study excludes is not trusted for history either.
+- **Retries back off 60 s × 3^(k−1), at most 12 hours**: the 10-attempt,
+  48-hour rule then ends a day only at its eleventh failure, about 54 hours
+  after the first, and the cap keeps an outage from stretching a stage.
+- **120 s per socket read for books as for prints**: a large archive does not
+  time out by its size, and a stalled connection does.
+- **Checksums before an archive is read** (`testzip`, the whole gzip): a
+  damaged transfer is retried as corrupt rather than taken for unreadable.
+- **Stream statistics from a scan separate from the replay**: `reconstruct`,
+  which wrote the 2024 books, stays unchanged.
+- **The touch size pools both sides' level-0 sizes over every W row**: one
+  scale serves every raw-size column, whichever side it measures.
+- **Only `ofi_1` and `ofi_20` are raw-size columns**: every other depth and
+  flow column is already a ratio, a share, a mean count, a log or in bp.
+- **The finiteness test fails a value above 65,504 in absolute value after
+  scaling; a missing value passes; an infinity at source is reported and not
+  widened**: float16's limit is the test, a lookback's first rows are not a
+  failure, and float32 cannot repair an infinity.
+- **Every tenth row is positions 0, 10, 20, … of each day's rows**: the store
+  and the fits' targets take the same rows, by position, whatever the stamps.
+- **The 2025 set's windows are 1 s for volatility and sign autocorrelation,
+  2, 5 and 10 s for turn counts, 1 and 5 s for the level-0 lags and 60 s for
+  the print features**: short windows for the quantities that move within a
+  hold, one minute for prints, which arrive less often than book updates.
+- **Winsorising over (s_t − 3,600 s, s_t], the row included, at pandas'
+  linear quantiles**: the same half-open window as every trailing window
+  here, and the plainest estimator; a row's bounds read nothing after it.
+- **No rolling normaliser on the inputs**: each model that needs a scale
+  fits it on its own training rows, which adds no row-declared window and no
+  second store.
+- **Level 0's tensor distances stay, at zero**: the registered distance from
+  the touch makes them constant, and keeping them gives every level the same
+  layout; information there would need another definition.
+- **The tensor's σ is a sample standard deviation, missing until two changes,
+  its floor the exact median spread in USDT, its size moments population
+  moments**: each is the estimator the definition names at its plainest.
+- **The registry's row lookbacks and the flow builder's 120 rows stay
+  row-declared**: they are the existing code's windows, and the cold-start
+  rule already covers row-declared windows by the rows since midnight.
+- **`N` = 61 minutes over the whole set and the tensor, whatever the
+  selection keeps**: it follows from the declared windows alone, so it is
+  fixed now rather than in the amendment, and it is at least the selected
+  set's.
+- **A row without a fillable entry or without snapshots has no label**,
+  rather than `hold`: a trade the executor would skip says nothing about the
+  move, and `hold` would teach the model that it does.
+- **Seed 42 for every fit**: the model classes' default, one value fixed
+  before any fit, so no seed is chosen on an outcome.
+- **The network standardises inside its graph, on its training rows' window
+  ends; a constant column stays unscaled**: a weight file then reads raw
+  store rows, and a zero scale would divide by nothing.
+- **Training rows thinned by position over the days in order**: every day
+  keeps the same share of its rows, so a long fold does not drop its last
+  days.
+- **The fold-level test fits on the CPU, one fit a model a fold at 20 s, the
+  network for one epoch**: equal sha256 means no leak only where the fit is
+  reproducible bit for bit, which the CPU is and MPS is not promised to be;
+  one epoch reads every training and inner-validation row a full fit reads,
+  at a cost stage 0 can carry.
+- **θ on every row of the inner validation, n = round(rate / 2 × days), the
+  n-th largest probability above the other side's**: the rate is a count of
+  decision rows, and decisions are made on every row.
+- **An event that opens during a position can enter at its first free row**:
+  one entry per event bounds the trades, and an event is not lost to a
+  position it did not cause.
+- **The taker's exit is decided at the first row at or after `t + h` and the
+  next decision may sit on the exit's own row**: the executor's rules, which
+  the walk tables, the thinning and Null B's parity test reproduce; the
+  position is closed at that snapshot.
+- **Entry skipped beyond 10⁻⁹ of the clip**: float noise in the walk is not
+  depth.
+- **Funding at the mid of the last snapshot before a settlement, an entry at
+  its exact stamp not yet held and an exit there still held**: a settlement
+  is charged on the position open just before it, priced by what was known.
+- **The quoter cancels an unfilled entry `h` after its post, drops a decision
+  first seen more than `h` late, exits `h` after the first fill and crosses a
+  fill that lands during a cancel at the next snapshot**: the wait counts
+  from the order's life, a stale decision is not traded, and the position
+  never exceeds one clip.
+- **FILL's "same orders" are the same decisions under each rule**: the
+  one-position rule makes the orders themselves depend on the fills.
+- **Ties after the own mean go to the first key in byte order; the peak is
+  the highest S whatever the rate**: a rule that needs no outcome, and the
+  peak shows what the filter removed.
+- **A cell with fewer than two days or no dispersion has a t of G of 0**:
+  the null's maximum must be finite, and such a cell has no evidence.
+- **The carry-forward drops m's days 1 to 5; a month with no admissible cell
+  or no trade scores 0**: the embargo is in calendar days, and a month the
+  rule cannot score has earned nothing.
+- **PBO ranks the in-sample choice among the cells admissible in-sample, a
+  logit at or below 0 overfit**: the identical rule, and a median rank counts
+  against the choice.
+- **The Newey–West lag counts positions in the daily series**: the series'
+  values are its days (with a trade, or usable for S-P and S-M), and the lag
+  is in its own units.
+- **Null A's signs are 1 − 2 × `default_rng(b).integers(0, 2, size=hours)`
+  over the hours in time order**: one draw per replication, reproducible
+  from its seed alone.
+- **A constant positive daily series has p = 0**: `day_t`'s infinite t, kept
+  rather than special-cased.
+- **The stream's first bar must be present**: there is nothing to carry
+  forward, and starting the stream later would move its windows.
+- **A regime-map segment starts on the first day that begins at or after its
+  alarm, and a block boundary also cuts**: a day is not split, the alarm's
+  own day began under the old regime, and a block change is visible.
+- **The network's batches shuffle shards of four days and the windows within
+  each**: one shard of the every-row store is in memory at a time, and the
+  shuffle comes from the fit's seed alone.
+- **Random flag sets draw distinct hours, set `k` from `default_rng(k)`**: a
+  real alarm never repeats an hour, and the seed range is the registered one.
+- **A trade's Null A hour is that of its entry snapshot**: the hour in which
+  the position is opened, whatever hour its decision row fell in.
+
+**Choices the entry point made.** Writing the single entry point needed a few
+more values the text above left open. They were written in on 9 and 10
+October 2026, before any data was read, one line each:
+
+- **The trial ledger's parts stay under `data/`, and a committed manifest
+  records them**, rather than committing the parquet files: the repository
+  ignores parquet and refuses any file over 1 MB, and the manifest's sha256 of
+  every part, checked against the files on disk when H opens, binds the rows
+  as a commit would; H does not open while a part is missing or differs.
+- **The refit's shifted labels are matched by time**, not by exact stamp: a
+  training row takes the label of the last training row at or before its
+  stamp less the shift, within twice the rows' median spacing, else none,
+  since event-time rows never repeat a stamp a whole number of days apart.
+- **A row with a missing input is dropped from a fit and not scored**, as a
+  warm-up row is, rather than imputed: an imputed value is a guess the model
+  would learn from.
+- **A column with no value in January is dropped before selection**: it has
+  no variance to select on and would leave the selector no complete row.
+- **S-M's failure on its making part is named "(i)"**, the payoff condition
+  it adds to: the registered statuses list only (i) to (iv).
+- **A side with no candidate row has its threshold written as 2**: a
+  probability never reaches it, so the side never trades, and the loader
+  needs a finite number.
+- **The amendment's epoch and S-C threshold mappings may be empty**: no
+  epoch is frozen when R\* is not the network, and no S-C threshold when C\*
+  does not exist.
+- **`net_per_100_clip_day` takes each signal-entry attempt's net over its own
+  entry's notional and the day's funding over the mean of those notionals**:
+  the simulator settles funding on the day, not on an attempt, and every entry
+  is one clip, so the notionals differ only with the price.
+- **Stage 0 times the network over a whole day's rows and the replay on the
+  two timing days' archives**: a training batch or a row's inference timed on
+  a sample carries the device's start-up, which a day's rows spread thin, so
+  the projection takes the day's figures (the sample's kept beside them); the
+  replay's seconds and peak memory, measured on the `ob500` archives of
+  2024-02-11 and 2024-03-05 under `data/timing_archives/`, stand for a day's
+  replay and set its workers, in place of the 2–3 minutes a day.
+
+Written in on 12 October 2026, still before any data was read, after three
+reviews of the study code against this text (for leakage, for fidelity and
+for execution), where the code had to choose between two readings or the
+text left a gap:
+
+- **A day is the rows stamped from its midnight to the next**: a replayed
+  file holds the next day's first second; read, it would give a day's last
+  labels, forward moves and walks, and a flatten after a feed gap, the next
+  day's book, across a block boundary a later block's.
+- **The fold-level leakage test runs the study's own fit code on a mutated
+  copy of stage 1's files**: a test that re-implements the fits can pass
+  while the fits leak; its cutoff reaches the last exit snapshot an inner
+  target reads, so a snapshot read inside the purge cannot stop the study.
+- **Training rows are thinned over every every-tenth row of the span,
+  labelled or not, in integer arithmetic**: the kept positions then depend
+  only on the span, and float rounding cannot move one.
+- **The refit's shift wraps as often as the span needs**: wrapped once, a
+  shift of 28 days on February's span of about 24 would leave its first
+  four days without labels.
+- **The inner validation is the seven calendar days before the month,
+  whatever is usable in them**: filling it from earlier days would move
+  training days into it and make "the last seven" differ between folds.
+- **The frozen fits and A0 keep the purge at both ends of their threshold
+  window, as every fold does**: one code sets every θ and checkpoint, and no
+  threshold row's label reads past its window (for A0, into O); it costs the
+  frozen fits the last hold and 61 minutes of 06-30.
+- **On H the one-day shift of a slot on S25's signal wraps within 07-08 to
+  07-31, and its measurement on all of H reads the same shifted series**:
+  wrapped over all of H, 07-08 would take the tape of 08-20, inside S25's
+  information set; one shifted series per slot keeps the read's one shift
+  run and leaves the measurement, labelled inside the information set, a
+  plain slice of it.
+- **The one-day shift steps over every excluded day, the stale days of any
+  run included, and a stale day found by a shift run is stepped over in
+  turn**: the excluded set only grows, so the shift's source is settled when
+  the read ends and no excluded day's tape enters a series.
+- **The reproduction check compares each earlier run's alarms on its own
+  dates only**: D's on 2025-01-01 to 06-30, each block's on its dates; E's
+  hours are first run with H and have no earlier record to reproduce.
+- **A result void on F or P is `void`, not `killed on F` or `killed on P`**:
+  the void conditions are faults of the measurement, which the sentence for
+  a kill would misname; void is counted as killed either way.
+- **K-acct voids a simulator slot on a fault in any of its runs, and K-cap
+  reads the true run only**: a placebo or neighbour run that cannot be
+  accounted leaves its comparison unmade, while a placebo's position is not
+  the slot's claim.
+- **The MDE label on F and P takes the days the series holds and the share
+  the frozen σ_D and MDE imply**: no share is estimated on a held-out block,
+  and a day dropped as stale is not a day the series could have caught an
+  effect on.
+- **P's first day reads F's last day only as P's own session validates it**:
+  a results file records statuses, not what a reader may read, and the
+  day's own files are what the frozen threshold applies to.
+- **A measurement inside S25's information set reports its whole kill list,
+  the placebo means and the 95th percentile, with no precedence and no
+  status**: it is read for what it shows, and a status there would be a
+  result the information set forbids.
+- **Each read's first simulated day runs alone to measure its peak memory**:
+  the registered bound is on the peak of a day of that block, which is known
+  only once one has run.
+- **A tier pays a passive slot only at its own maker and taker fees
+  together, and S-P's maker 0 and −1 bp figures keep the taker exit at 5.5
+  bp**: a maker fee alone prices half the round trip.
+- **S-M's entry is a run of fills flat to flat, at the clip's notional at
+  its first fill's price, and S25-Z's per-trade figures are over the filled
+  entry notional**: the market maker has no posted clip per entry, and a
+  partially filled entry is the notional traded.
+- **A fill at the price is floored to the lot**: the pro-rata share of a
+  print is a queue estimate, not a size the venue matches.
+- **Between 23:58 and the flatten only the quoter's taker exit is honoured,
+  and decisions outside 00:01 to 23:58 never reach it**: the exit's time is
+  the hold's, not the day's end, and the quoter's hours are the taker's.
+- **The second detector reads every day whose book is on disk and excluded
+  for nothing but sequence gaps, stamps an alarm at its block's last grid
+  label, and is run on D by stage C**: a 1 s grid carries a book across a
+  gap, a block's alarm has no finer time, and D's run before the amendment
+  leaves nothing of it to a read.
+- **The amendment freezes the deflated Sharpe ratios with the variance they
+  are deflated against, the power at the bar, the fits that lacked a class
+  and the second detector's run on D, in placeholders of their own**: a value
+  the amendment must carry has one placeholder, and the H gate reads
+  placeholders, not stage records.
+- **S-M keeps S1's frozen values although at them it will rarely post on
+  BTCUSDT**: the registered choice is one S1 slot at round one's frozen
+  values, not a searched quoter; values picked now from BTCUSDT's book would
+  be an unsearched choice, so the expected behaviour is written down instead.
+- **The `ob200` reader test is a placeholder the ledger reads**: H's gate
+  then checks the proof the registration asks for rather than trusting that
+  it ran.
+- **The reader-test days' prints and funding are fetched with their books**:
+  the dry run's F and P read cannot run end to end on a book alone.
+- **Stage 0 projects at the registered worker counts and needs both timing
+  archives**: a run's own worker count, or a fallback figure, could
+  otherwise cut the catalogue.
+
+---
+
+The configuration as registered, with every placeholder `null`, has sha256
+`23751a848ddb6e1ee652139b36de085d589bb2be827c9b9a0e49365c6c4308c4`.
+(Earlier versions of this file on its unmerged branch had other hashes, all
+superseded drafts that do not count:
+`e01ba377857e895b2d81d6a625434fb183210825ea906f2801e922eef7c93308`
+before the reviews,
+`c2da1566d9297499cd01e1d084e5bf6a0116b19a88d4dbccdf2b62ffae495262` before the
+feasibility review's later points,
+`6d35940bc3e4845b30056daaf60887d01dbf2c6e6ddbb361ff8ab3ecd1fec1f5` before the
+final consistency check,
+`729f042bc55cae70fbdf786d8f38581b2539fc1a422a978d8bf9c674cee58fd8` before the
+last review, and
+`511626b7c0464cd91bafc469ea151af0769121b13946a2066c46a6ca22265fe7` before the
+recast into a search, and
+`3db898a0100496b164785a8cabf9af5540e56fd8d8227915101e97ef884c969f` before the
+market maker's round trips were defined, and
+`035c4f44d85c3b3926e08016ad94a4c9bb20a51c7ac775514a256ef0af324f71` before the
+review of the search, and
+`77263756c67b48a3cbfbceb0f04cd92162d301615ef0f744d32ee6edff727156` before the
+search was narrowed to BTCUSDT, and
+`d6bbad00c9532d3d66b54f14cc948c9ce6ff55c6e423fe9796757c8bd8825a5d` before the
+values the study code fixed were written in, `N` among them, which left 24
+placeholders, and
+`1db2ffde12b2698fe5189dfb283e264e2cadb061cd46c8dcadf578ce8e883f90` before the
+trial ledger's parts were moved under `data/` beside a committed manifest, and
+`d84a0738e6c7889424934bff384a3210d25bcb84ac60d7cdffb64f72081fe60a` before
+stage 0's timing of the network over a whole day's rows and of the replay on
+the two timing days' archives was written in, and
+`3cd428257e46e0772229c18d1feadb9dba5efe48af83cbf7284588efd37e4c12` before
+the clarifications after the reviews of the study code, the `ob200` reader
+test's placeholder among them, which left 25 placeholders,
+`28f63504d7e367615360464100328e01552cec9e0f043904c96118ae87c6920f` before
+the reader-test days' prints and funding were added to stage 1's fetch, and
+`cbae8c75e636596f63d0f14f401a0941d37d375a3f1429a9ac257a8d5e2899b7` before
+the clarifications the fixes of the study code called for, with the
+placeholders for the fits that lacked a class and the second detector's run
+on D, which left 27 placeholders.)
+This study's loader will check that putting `null` back into every placeholder
+of the frozen file gives this hash, or the hash recorded by the latest
+amendment committed before stage 1 (stage 0's, if it cuts anything), as the
+earlier rounds' loaders do.
+
+---
+
+## Amendments
+
+### 2026-10-18: the D amendment
+
+Written by the entry point (`experiments/short_horizon_2025.py`, stage E) and reviewed
+before it is committed. Every frozen value is in the configuration's placeholders.
+
+Frozen configuration sha256: `e9cb5e0355e4506e6e450356135836b6106a6f3c6ecaa76aa6a07d0733acbdef`
+
+- Complete D runs: R_D = 1; N_trials = 2435 (2400 taker cells and 35 simulator trials); trial ledger sha256 `5ce9e8dead514100dd05e254b2222e564737e194d5cd706afe97c22578be1f9b`, 364742 rows.
+- C*: `BTCUSDT|C|logistic|micro|open|hold_s=120|trades_per_day=25|label_fee_bp=0|regime=pull_120h`; R*: `None` (selected, biased upward).
+- p_search = 0.007246 (on development data, selected).
+- Statuses set on D: {'S-C': 'not admitted on D (i, ii)', 'S-R': 'not run (no admissible cell on D)'}.
+- The fitted-values file's sha256 `ca327600da8e231edd5296d4ee9ee7ca93472001ca1536de1e513d6af109a6b9`.
+- The ob200 reader test against max_sequence_gaps = 0 (D's medians: 863963.0 messages, 100.0 ms between messages, 0.0 sequence gaps):
+  2026-01-05: passes; 863876 messages, 100.0 ms, 0 gaps.
+  2026-01-06: passes; 863617 messages, 100.0 ms, 0 gaps.
+  2026-01-07: passes; 863117 messages, 100.0 ms, 0 gaps.
+- Deflated Sharpe ratios: S25 G 0, net 0; S-C G 0, net 0; S-R G not computed, net not computed; S-P net 0; S-M net 0 (deflated against N_trials with the simulator trials counted, and the variance of the Sharpe ratios of every S-P and S-M cell's daily net_per_100_clip_day simulated on D, over the days no run flagged, 0 on a day without a fill; N_trials with the simulator trials counted, and the variance of the Sharpe ratios of every taker cell's daily G on D's usable test days).
+- Power of the t >= 3 bar: S-C 2.929e-11 against a carry-forward net of -8.895 bp (sigma_D 12.22, n_eff 23.76).
+- Fits that lacked a class: none.
+- The second detector on D: 722 alarms over 181 days read, the first at 2025-01-02T14:53:22+00:00.
+
+### 2026-10-19: a correction to the dry run, before H is read
+
+The dry run copied the committed configuration and this document into its
+temporary repository. After the D amendment the configuration is frozen, so the
+rehearsal refused to start ("already frozen") and its tests failed. The dry run
+now copies the registration as registered: the configuration with every
+placeholder reset (the registered null-placeholder hash) and this document with
+its amendments section as it stood before stage E. The change is in
+`pipeline/short_horizon/dry_run.py` alone; the dry run computes no development
+number and reads no market data, so no number of D changes and D is not
+re-run; R_D stays 1. Two test modules that read the committed configuration
+were changed in the same way. The stray "None yet." left above the D
+amendment by stage E is removed.
+
+### 2026-10-28: corrections before H is read
+
+Two reviews of the code after the dry-run correction found the defects below.
+Each is corrected here, before H is read, as the amendment protocol requires
+of a change to the frozen study code; the code-freeze note records the commit
+the code is frozen at after them. None of the corrections reads a 2025 file of
+H, F or P (none is on disk), none changes a value of the frozen configuration
+(its sha256 stays `e9cb5e03…`, the D amendment's), and none could change a
+development number: every one acts on a held-out read, a gate or a page, or
+only records beside a D number what it rests on. **D is not re-run, R_D stays
+1, and no D number changes**; the recomputation of every D number from the
+committed results files and the stage records gives the same values before
+and after them. Each is dated 2026-10-28.
+
+**1. The passive slots' one-day shift after a stale day**
+(`pipeline/short_horizon/heldout.py`, `compute_block`). The series of S25-Z,
+S-P and S-M were built from the simulated runs before the one-day shift stepped
+over the days flagged stale, so a shift simulated again from the previous kept
+day never reached the series (the read recorded the new source while the
+number came from the old one), and K-placebo could pass when it should fire.
+The stale days are now found first (the taker slots' and every simulated run
+flagged), the shift steps over them, and every series is built from the runs it
+returns. A regression test: with day 1 stale and day 2 shifted again from day 0
+(+7), the shifted series is (1, 7, 1) and K-placebo fires.
+
+**2. One FILL table** (`pipeline/short_horizon/page_numbers.py`). The pages'
+FILL table pooled every passive day file of the read and dropped only the rows
+their own run flagged, so a day another run flagged stale stayed in the figure
+while the results file's table left it out. The pages now show the results
+file's table (`heldout_measures.fill_rules`) on the days the read kept.
+
+**3. N on the pages** (`pipeline/short_horizon/pages.py`). The search sentence
+quoted N from stage D's record, 2,400, the taker cells alone; the N quoted on
+every page is N_trials, 2,435 with stage C's 35 simulator trials, as the
+manifest and the leaderboard's header already say. It is now read from the
+committed trial manifest, and the pages were written again: the sentence and the
+README summary say 2,435, and nothing else on the pages changed.
+
+**4. The replay's sequence-gap count** (`data/bybit.py`, `reconstruct`). A
+snapshot reset the gap counter with the book, so a gap healed by a later
+snapshot was forgotten by the replay, whose count the loader excludes a day on,
+while the archive scan (`archive_message_stats`) kept it. The counter now lives
+outside the book's state. D is unaffected: the scan found no sequence gap on
+any of D's 181 days, and the scan's count is never below the replay's.
+
+**5. An erased open entry** (`pipeline/short_horizon_ledger.py`, `open`). The
+open read the block's entries from HEAD's ledger only, so an H entry erased by a
+later commit, or a reset, opened again as a first read, against "a crashed read
+cannot be erased and opened again". The open now reads every version of the
+ledger in HEAD's history, and the upstream's when one is set, refuses when any
+holds an entry for the block that HEAD lacks, and stamps a forced re-open
+"second read".
+
+**6. The fee caveat carries 2025's dates** (`backtest/costs.py`,
+`pipeline/short_horizon/beside_verdict.py`, `pages.py`, `reporting/finalists.py`).
+Section 3 of "What was known" promises a caveat parametrised by period on every
+number at a tier other than the base; the code copied the earlier rounds' text,
+"February to April 2024", beside every verdict, and A0's tier table carried
+none. `fee_caveat(period)` now writes it: beside each verdict with the first and
+last day of its status window, on A0's tier table with O's dates (2025-02-04 to
+2025-02-26) and beside the ladder's tier rows on the pages with the days of
+S25's break-even there (2025-07-08 to 2025-07-31). `BYBIT_FEE_CAVEAT` keeps its
+text byte for byte for rounds one and two; the frozen `result_O` is not touched.
+
+**7. The push check** (`short_horizon_ledger.py`, `session`). A local branch
+set as the upstream passed the check that the open entry was pushed. The
+upstream must now be a remote-tracking branch, the remote is asked with
+`git ls-remote` for its tip, and that tip must contain the commit that wrote the
+entry; a remote that cannot be reached refuses the session with that reason.
+
+**8. An access bound to its block** (`data/study_access.py`). An access issued
+for one block's read could be widened to a later block by copying it
+(`dataclasses.replace`). An access beyond development must now name its read
+session and grant nothing beyond that block's opening.
+
+**9. The statuses set on D** (`pipeline/short_horizon/reads.py`,
+`preset_on_d`). A read took the statuses set on D, which enter Holm with p = 1,
+from the run's local stage records, which no gate hashes. It now takes them
+from the frozen configuration's `search.result_admission`, whose sha256 every
+open and every process of a read checks, with the hand-run log (entry 21);
+stage E's rehearsal reads them from the values the amendment freezes and, as
+entry 17 has a read do, runs a slot preset on D as a measurement.
+
+**10. A fault outside the status window** (`heldout.py`, `statuses.py`,
+`reads.py`). A K-units, K-acct or K-cap fault anywhere in H voided S25's and
+S25-Z's status, which is taken on 2025-07-08 to 07-31 only. Each fault is now
+recorded with its day; only a fault inside a slot's status window voids it, and
+S25's and S25-Z's faults after 07-31 are reported beside their numbers inside
+S25's information set.
+
+**11. A day's gap count and the next day's first second** (`data/bybit.py`).
+A day's gap count included the archive's messages stamped after the next
+midnight, which the loader cuts from the day's book. Only gaps on messages
+stamped before the next UTC midnight now count, in the replay and the scan
+alike. D is unaffected (no sequence gap on any D day).
+
+**12. Caches of a read** (`heldout.py`, `heldout_passive.py`,
+`second_detector.py`). A day's cached features, network scores, simulated runs
+and the second detector's grid were returned before the session's access was
+checked, and were not kept apart by session. The access now permits the day
+before a cached output is returned, and a read session's caches are kept under
+its block and commit. Development's caches are where they were.
+
+**13. A ledger test** (`tests/test_sh_ledger.py`). The test of an unlocked
+detector library expected the refusal only where the library is not installed
+from its locked commit; it now reads the library as unlocked wherever it is.
+Tests only.
+
+**14. D's results files hashed.** The leaderboard, marginals and nulls files and
+the pages were hashed by no gate. Every open now checks D's three files against
+the sha256 recorded here, and H's open the pages too (each read writes the pages
+again); D's three files may no longer change after a read
+(`short_horizon_ledger.py`), and stage E's amendment records them
+(`freeze.py`). The leaderboard's sha256 differs from stage D's record
+(`30b97881…`) because stage E rewrote its header, `# N trials: 2400` to
+`# N trials: 2435`, after D; the committed file differs from D's in that line
+alone. The pages are recorded after entries 3, 6, 16, 20 and 21 wrote them
+again.
+
+- Results file sha256: `experiments/results/short_horizon_2025_leaderboard.csv` `895a1ffef669c8744a29a8536aa7dbf2d3e956114a650946bcaa2d75e2d83e4c`
+- Results file sha256: `experiments/results/short_horizon_2025_marginals.csv` `a27fec523bb898cebc1242bb4182cbdc14054d862f1803ec97fcd07fdeb39c07`
+- Results file sha256: `experiments/results/short_horizon_2025_nulls.csv` `1a2468344bd84d9027b470ceacfadcc67645ae8c94727fcf1ac9643a1e091079`
+- Results file sha256: `experiments/results/short_horizon_2025_pages.md` `a14bb60867a0ce130637b31281d9e314da9b9c674f14c202d9c4c043116de6ba`
+
+**15. A clarification of the D amendment** (text only). The D amendment's prose
+names S-C's and S-R's statuses and leaves out two things its values record. S-P
+and S-M were `not admitted on D (i, ii)`, on C*'s signal (stage C;
+`search.result_admission`). The detector raised 16 alarms on D, 1.24 per 14 days
+(`alarm_rate_D` 0.0884 a day), above one per 14 days, so R is declared
+untestable (`r_untestable_declared: true`) and b does not split F: F is
+assessed as one block.
+
+**16. S-M's condition (i)** (`pages.py`). S-M's "(i)" on D is its making part,
+−0.43 bp per fill, while its S was positive, +0.000525 per 100 USDT of clip a
+day, on one round trip in 150 days. The pages and the rows for
+`docs/findings.md` now say so beside the passive sentence, whose registered text
+is not edited: "(i: making part −0.43 bp per fill; S = +0.0005)". No status
+changes.
+
+**17. A slot preset on D is a measurement on H and F** (`heldout.py`,
+`compute_block`). The chosen cell of a non-admitted C* and a non-admitted S-P or
+S-M ran their full placebo, neighbour, bracket and latency sets on the held-out
+blocks, though this document runs them "with no placebo and no status". A slot
+whose status was set on D now runs its true run and its registered
+measurements only (the regime runs, the passive exit, FILL on H), on the usable
+days and on the gap days put back alike. Because a day
+any run flags stale leaves every series, this changes which days the
+status-bearing slots keep; the change is made before H is read and is blind to
+any outcome.
+
+**18. What each deflated Sharpe ratio rests on** (`search.py`, `passive.py`,
+`freeze.py`). Every deflated Sharpe ratio on D is exactly 0, and the variance
+each is deflated against was not recorded, though this document asks for it.
+The stages now record beside each its variance, benchmark SR0, Sharpe ratio and
+days, and the amendment lists them. For D they are recomputed here from the
+trial ledger and stage C's cell-days (D is not re-run; the recomputation gives
+N_eff 13.2271 and every ratio 0, as frozen), at N_trials 2,435:
+
+- S25 and S-C (C*), against the variance of the daily Sharpe ratios of every
+  taker cell's daily G on D's usable test days, 0.5647, so SR0 = 2.630 a day:
+  S25 G Sharpe ratio 0.955 and net −11.05 a day on 150 days; C* G 0.297 and net
+  −0.605 on its 81 days with a trade. S-R has none (no admissible cell).
+- S-P and S-M, against the variance of the daily Sharpe ratios of every S-P and
+  S-M cell simulated on D, 0.05548, so SR0 = 0.824 a day: S-P −0.447 and S-M
+  0.082 on 150 days.
+
+Each ratio's statistic z lies 10.5 to 29.1 below 0 (S25 G −13.44, net −10.49;
+C* G −29.09, net −13.32; S-P −26.04; S-M −17.95), where the normal distribution
+function, computed as (1 + erf(z/√2))/2, is exactly 0 in double precision below
+about −8.5; the zeros are that, not a fault.
+
+**19. The passive MDEs on kept days** (`freeze.py`, `slot_mdes`). σ_D of S-P,
+S-M and S25-Z was taken row by row, leaving in a day another cell's run flagged.
+It is now taken on the days no simulated run flagged, as stage C's admission
+reads them. No cell-day was excluded on D (4,742 simulator rows = 31 cells × 150
+days + 4 runs × 23 days of O, none flagged), so the frozen σ_D and MDEs are
+unchanged.
+
+**20. A note beside the payoff sentence** (`pages.py`). Beside "No
+configuration paid the 5.5 bp taker fee on development data" the pages now say
+that no admissible cell had a positive net: the 24 cells with one are R cells,
+none admissible (3 to 7 trades in 150 days), 16 of them at +73.6 to +83.2 bp on
+3 trades.
+
+**21. Hand runs.** The definition under [Selection on D](#selection-on-d-admission-and-the-finalists)
+names no instrument: "a computation on a February to June test day outside the
+entry point ... any statistic of a label, a return, a prediction or a P&L on
+those days". On 2026-10-26 and 27 two exploratory replications of the author's
+2025 results, run on separate local branches outside the entry point, computed
+return statistics on days of D's test months on other instruments and venues:
+per-day P&L, edge and rank IC on Binance BTC/FDUSD spot prints (2025-02-04 to
+02-26 and 2025-06-08 to 06-30), and the label's and return's shares by day and
+the per-day P&L of 29 gate configurations on Bybit ETHUSDT linear-perpetual
+books (2025-02-01 to 02-06). Whether a day of another instrument is "a test
+day" is not settled by the text; the conservative reading is taken, and both
+are counted as hand runs. They are logged in the trial ledger's manifest
+(`experiments/results/short_horizon_2025_trials.json`, its `hand_runs`, with
+their dates, what they computed and the days they read; the trial ledger's sha256
+and row count it records are unchanged), and they set every searched slot on C\* or R\*, S-C, S-R, and S-P
+and S-M (whose signal is C\*), to `not admitted on D (hand run)`. Each was
+already at p = 1 on every block, so Holm is unaffected; the catalogue and its
+hash are unchanged. Every read applies the label (`reads.preset_on_d`), and the
+pages show it in the passive sentence.

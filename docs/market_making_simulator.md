@@ -236,6 +236,12 @@ the spread was filled first by every print at its price until the next
 snapshot, whichever bracket was set: exactly the fills a faster competitor
 reacting to the same snapshot would have taken.
 
+**Whole lots.** A fill at the price is floored to the instrument's lot: the
+pro-rata share of a print, or what is left of it after a proportionally
+attributed cancellation, is not a size the venue matches, and the part below
+one lot stays unfilled (biases fills down by less than a lot a print).
+*Test.* `test_a_fill_at_the_price_is_floored_to_the_lot`.
+
 **Off-book prints.** A print more than 25 bp outside the price range of the ten
 visible levels of the latest snapshot at or before it could not have swept that
 book (a negotiated block trade, or a bad record) and is offered to no own order;
@@ -594,8 +600,8 @@ seconds apart:
 ## Speed
 
 Pure Python over per-day arrays; numba is not installed and is not added. On
-one development day already listed as read in the pre-registration's
-disclosure (BICOUSDT, 2024-02-15: 249,105 snapshots and 15,506 prints), with the
+one development day already listed as read in the pre-registration
+(BICOUSDT, 2024-02-15: 249,105 snapshots and 15,506 prints), with the
 touch quoter, the event loop ran at about 217,000 events a second (1.2 s for the
 day) with a peak resident set of about 600 MB, most of it the Parquet read.
 After the review fixes (re-checking kept orders against the limits at every
@@ -759,6 +765,57 @@ Two quoters exist only to test the others:
 one-sided t (closed-form for integer degrees of freedom), Holm's procedure, the
 placebo percentile, the shuffled-state shift, the fee break-even on a grid, and
 the status rule.
+
+## Additions for the short-horizon study
+
+The 2025 short-horizon study (`docs/preregistration/short_horizon_2025.md`)
+runs its passive paths through this simulator with six additions. Each is off
+by default, so round one's and round two's runs are unchanged.
+
+* **A fixed clip.** `clip_btc` replaces `clip_notional` and the touch share:
+  the clip is that size, rounded down to the lot, at every decision, so K-cap
+  compares the position with a constant. Exactly one of the two is set. The
+  time spent with the position above one clip is reported
+  (`time_above_one_clip_s`), beside the soft-limit returns (`flattens_soft_limit`).
+* **The shared walk.** Every taker order (flattens, the soft-limit return and a
+  quoter's cross) is priced by `backtest/walk.walk_book`, the function the
+  event-time taker executor (`backtest/taker.py`) and the walked-book label
+  call, with `flatten_slippage_bp` on top (0.5 by default, 0 in the study).
+  The walk is the former loop's arithmetic in the same order, so the prices
+  are the same to the last bit (`test_mm_taker_walk.py`). A taker order whose
+  walked snapshot is stamped more than one second after it arrives is counted
+  as `exit_late_snapshot`, as the executor counts it; nothing is excluded for it.
+* **Fill rules.** `fill_rule` is `queue` (R5-R7, the default), `touch` (in full
+  at the first print at or through the price, whatever is queued ahead: an
+  optimistic bound) or `trade_through` (R7 alone: pessimistic).
+  `market_making/fill_rules.compare_fill_rules` runs one order stream under all
+  three and reports the fill ratio, the volume ratio, gross, net and markouts by
+  path.
+* **The quoter's own orders.** A quoter that defines
+  `observe(own_orders, opened_ns)` is told, before each decision, which of its
+  orders are not done — each marked when its cancel is in flight — and when
+  the current position was opened. A real participant knows both from its
+  acknowledgements; nothing after the snapshot is passed.
+* **The signal-entry quoter** (`market_making/signal_entry.py`): one clip at
+  the touch per decision, kept at its first price, cancelled after the hold, a
+  feed pause or a regime flag and never re-posted, with a taker exit a
+  hold after the first fill. An order whose cancel is in flight counts as
+  resting, so a decision arriving meanwhile is skipped and the position never
+  exceeds one clip.
+* **Resting entries cancelled after a regime flag.** With
+  `cancel_entries_on_flag`, the simulator cancels every resting entry (an order
+  decided while flat or on its own side, whose fill would open or add to the
+  position) at the first event after each flag of the `flag_s` tape at or after
+  its decision, whatever the event (a snapshot, a print or a settlement). This
+  is `pipeline/regime.cancel_times` in event time: a fill after the flag would be
+  a new entry inside the guard. Exits are left alone, so an open position runs
+  to its exit. Each cancel is counted (`entries_cancelled_by_flag`). It biases
+  nothing in the strategy's favour: the cancel goes out with the cancel latency,
+  and a print before it lands can still fill the order (`test_sim_flag_cancel.py`).
+
+S1 with the signal lean, its `sigma_ref` (the median `vol_bp_1m` over the
+warm-up block's rows, `vol_at_rows`) and the study's settings are in
+`pipeline/short_horizon_execution.py`.
 
 ## Not in this simulator yet
 

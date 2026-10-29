@@ -328,6 +328,10 @@ MODELS = {
     # trading_research.labels.targets for what they are asked to predict.
     "ridge": "trading_research.models.regression:RidgeBaseline",
     "xgboost_regressor": "trading_research.models.regression:GradientBoostedRegressor",
+    # The causal network with a Gaussian head: a move in bp and its variance.
+    # Its checkpoint is read on validation days, so it is fitted with
+    # ``fit(x, y, validation=...)`` or ``fit_days``, or with ``epochs`` fixed.
+    "tcn_gaussian": "trading_research.models.tcn:GaussianTCN",
     # Randomised tree ensembles and a second booster. Present for what they
     # contribute to a stack -- members that split differently make different
     # mistakes -- as much as for their own scores.
@@ -338,7 +342,7 @@ MODELS = {
 
 #: Which models can be fitted on which kind of target. A classifier handed a
 #: basis-point target would silently treat every distinct value as a class.
-REGRESSION_MODELS = frozenset({"ridge", "xgboost_regressor"})
+REGRESSION_MODELS = frozenset({"ridge", "xgboost_regressor", "tcn_gaussian"})
 
 #: Named ensembles. Members are averaged, so the entry stays a string a config
 #: can carry. The network is excluded from the default: it needs its own
@@ -383,6 +387,24 @@ COMPOSITES: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 
 
+def _plugin_model(name: str, params: dict[str, Any]) -> Any | None:
+    """A model registered as a plugin (a contrib file or an entry point) under ``name``,
+    built with ``params``; ``None`` when no plugin of that name exists.
+
+    The built-in names are answered above and never reach the registry, whose
+    built-in adapters call back into this module; only a name the repository does
+    not define is looked up there, so a model added with
+    ``trading-research strategies new NAME --kind model`` is usable by name in
+    every stage that takes a model as a string, the search's included."""
+    from trading_research.plugins import registry
+
+    try:
+        spec = registry.get(name, "model")
+    except registry.PluginError:
+        return None
+    return spec.build(**params)
+
+
 def build_model(name: str, **params: Any) -> Any:
     """Instantiate a model by name, so a config can select one as a string."""
     if name in ENSEMBLES:
@@ -412,8 +434,14 @@ def build_model(name: str, **params: Any) -> Any:
         built = [build_model(member, **params) for member in members]
         return Agreement(built) if kind == "agreement" else Gated(built[0], built[1])
     if name not in MODELS:
+        plugin = _plugin_model(name, params)
+        if plugin is not None:
+            return plugin
         known = sorted([*MODELS, *ENSEMBLES, *COMPOSITES, *META, *UNCERTAIN])
-        raise StageError(f"unknown model {name!r}; known: {', '.join(known)}")
+        raise StageError(
+            f"unknown model {name!r}; known: {', '.join(known)}, or a model plugin "
+            "(trading-research strategies list)"
+        )
     module_path, class_name = MODELS[name].split(":")
     import importlib
 

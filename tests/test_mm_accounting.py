@@ -163,6 +163,25 @@ def test_decomposition_sums_to_net() -> None:
         assert parts["making"] == pytest.approx(parts["spread"] + parts["adverse"] - parts["fees"])
 
 
+def test_each_sides_turnover_is_its_fills_notional_and_a_mismatch_raises() -> None:
+    """K-acct's second half: maker and taker turnover equal the sums of their
+    fills' price x size on every simulated day, and a ledger that disagrees raises."""
+    from trading_research.market_making.simulator import check_turnover
+
+    for seed in range(5):
+        market = random_market(seed, n_snapshots=400, prints_per_snapshot=1.5, funding=True)
+        result = simulate_day(market, TouchQuoter(), FUZZ)
+        fills = result.fills
+        notional = fills["price"] * fills["size"]
+        assert result.counters["maker_turnover"] == pytest.approx(notional[fills["maker"]].sum())
+        assert result.counters["taker_turnover"] == pytest.approx(notional[~fills["maker"]].sum())
+    booked = result.counters["maker_turnover"]
+    with pytest.raises(IdentityError, match="maker turnover"):
+        check_turnover(fills, booked * (1 + 1e-6), result.counters["taker_turnover"])
+    with pytest.raises(IdentityError, match="taker turnover"):
+        check_turnover(fills, booked, result.counters["taker_turnover"] + 1.0)
+
+
 def test_fee_breakeven_matches_a_rerun_at_that_fee() -> None:
     """The touch quoter's decisions do not read the fee, so the break-even from
     one run is exact: re-run at it and the net is zero."""

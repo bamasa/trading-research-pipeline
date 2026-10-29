@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import NamedTuple
 
 
 class OrderState(IntEnum):
@@ -80,3 +81,14 @@ class Order:
     def working(self) -> bool:
         """Not done and not being cancelled: the order a quote is compared with."""
         return self.state is not OrderState.DONE and self.cancel_ns is None
+
+
+class OwnOrder(NamedTuple):
+    """What a quoter may know of one of its own orders that is not done yet."""
+
+    side: int
+    #: Ticks.
+    price: int
+    remaining: float
+    #: A cancel is on its way; until it lands the order can still fill.
+    cancelling: bool

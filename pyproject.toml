@@ -71,6 +71,7 @@ dev = [
 
 [project.scripts]
 trading-research = "trading_research.cli:app"
+trp = "trading_research.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/bamasa/trading-research-pipeline"
@@ -148,6 +149,7 @@ disable_error_code = ["misc", "name-defined", "unused-ignore"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "slow: tests that take more than a couple of seconds",

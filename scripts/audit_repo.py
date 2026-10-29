@@ -1,10 +1,10 @@
-"""Disclosure audit for the public repository.
+"""Repository audit for the public repository.
 
-This project was written from scratch, but it was informed by closed-source work.
-The checks below are the automated half of that boundary: they fail the build if
-anything that belongs on the private side of the line shows up in the working
-tree. They run in CI on every push, not just before the first release, because a
-leak is much cheaper to catch in review than after it is public.
+The checks below fail the build if anything that does not belong in a public
+repository shows up in the working tree: a machine's paths, a secret, a heavy
+artefact, a notebook's outputs. They run in CI on every push, not just before
+the first release, because a leak is much cheaper to catch in review than after
+it is public.
 
 What is checked:
 
@@ -344,12 +344,12 @@ def main() -> int:
     check_ignore_rules(findings)
     check_sources_are_tracked(paths, findings)
 
-    print(f"disclosure audit: scanned {len(paths)} files")
+    print(f"repository audit: scanned {len(paths)} files")
     if findings:
         print(f"\n{len(findings)} problem(s) found:\n")
         for item in findings:
             print(f"  {item}")
-        print("\nFix these before committing. See docs/disclosure_policy.md.")
+        print("\nFix these before committing.")
         return 1
     print("no problems found")
     return 0

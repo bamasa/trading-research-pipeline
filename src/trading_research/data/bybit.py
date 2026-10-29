@@ -26,6 +26,15 @@ is exactly where it does most damage.
 each instant. Interpolating between updates would invent liquidity that was
 never quoted, and at a hundred milliseconds the difference is the whole signal.
 
+Two archive names
+-----------------
+From 2025-08-21 the venue publishes the linear book at two hundred levels a
+side (``ob200``) instead of five hundred (``ob500``), under a name that differs
+only in that token, and no day under both. Ten levels are inside either, and the
+replay reads both the same way; the name is chosen by the day
+(:func:`archive_kind`) and carried into the ``source`` column, so a book from
+one archive is never mistaken for one from the other.
+
 Memory
 ------
 A day is about a gigabyte of JSON. It is streamed line by line and only the
@@ -36,13 +45,15 @@ than the input.
 from __future__ import annotations
 
 import heapq
+import re
 import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 try:  # pragma: no cover - the fallback is exercised only without the extra
@@ -64,6 +75,34 @@ ARCHIVE_URL = (
 #: Levels the archive carries per side. Sampling keeps fewer.
 ARCHIVE_DEPTH = 500
 
+#: The same archive at two hundred levels a side. The venue publishes book days
+#: from :data:`ARCHIVE_CHANGE` onwards under this name only, and no day under
+#: both, so the name is chosen by date rather than by trying one and then the
+#: other: a fallback on a 404 would hide a day that is missing under both.
+ARCHIVE_URL_OB200 = (
+    "https://quote-saver.bycsi.com/orderbook/linear/{symbol}/{day}_{symbol}_ob200.data.zip"
+)
+
+#: The first day published as ``ob200``; every earlier day is ``ob500``.
+ARCHIVE_CHANGE = date(2025, 8, 21)
+
+#: Levels a side, per archive name.
+ARCHIVE_DEPTHS: dict[str, int] = {"ob500": ARCHIVE_DEPTH, "ob200": 200}
+
+_ARCHIVE_URLS: dict[str, str] = {"ob500": ARCHIVE_URL, "ob200": ARCHIVE_URL_OB200}
+
+
+def archive_kind(day: date) -> str:
+    """The archive name the venue publishes ``day``'s book under."""
+    return "ob200" if day >= ARCHIVE_CHANGE else "ob500"
+
+
+def source_tag(kind: str) -> str:
+    """The ``source`` value of a book replayed from archive ``kind``."""
+    if kind not in _ARCHIVE_URLS:
+        raise ValueError(f"unknown archive {kind!r}; expected one of {sorted(_ARCHIVE_URLS)}")
+    return f"bybit-linear-{kind}"
+
 
 def _price(item: tuple[float, float]) -> float:
     """Key for the level heaps. A module-level function rather than a lambda so
@@ -75,8 +114,11 @@ class BybitArchiveError(RuntimeError):
     """An archive is missing, malformed, or its sequence broke."""
 
 
-def archive_url(symbol: str, day: date) -> str:
-    return ARCHIVE_URL.format(symbol=symbol, day=day.isoformat())
+def archive_url(symbol: str, day: date, kind: str | None = None) -> str:
+    """The archive's URL; ``kind`` defaults to the name the day is published under."""
+    name = archive_kind(day) if kind is None else kind
+    source_tag(name)  # refuses an unknown name
+    return _ARCHIVE_URLS[name].format(symbol=symbol, day=day.isoformat())
 
 
 @dataclass
@@ -86,7 +128,6 @@ class BookState:
     bids: dict[float, float] = field(default_factory=dict)
     asks: dict[float, float] = field(default_factory=dict)
     last_update: int | None = None
-    gaps: int = 0
 
     def apply(self, side: str, rows: list[list[str]]) -> None:
         book = self.bids if side == "b" else self.asks
@@ -133,6 +174,26 @@ def _messages(path: Path) -> Iterator[dict[str, Any]]:
                 yield _loads(line)
 
 
+_ARCHIVE_DAY = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+
+def _day_end_ms(path: Path, first_stamp: int) -> int:
+    """The next UTC midnight after the archive's day, in milliseconds: the day its
+    file name carries (when its first message is not stamped after that day),
+    else the UTC day of its first message. A sequence gap is counted for the day
+    only on a message stamped before it (an archive's tail in the next day's
+    first second is cut from the day's book, and its gaps with it)."""
+
+    def end_of(day: date) -> int:
+        end = datetime(day.year, day.month, day.day, tzinfo=UTC) + timedelta(days=1)
+        return int(end.timestamp() * 1000)
+
+    found = _ARCHIVE_DAY.search(path.name)
+    if found is not None and first_stamp < end_of(date.fromisoformat(found.group(1))):
+        return end_of(date.fromisoformat(found.group(1)))
+    return end_of(datetime.fromtimestamp(first_stamp / 1000, tz=UTC).date())
+
+
 def reconstruct(
     path: Path | str,
     *,
@@ -159,16 +220,25 @@ def reconstruct(
     The stamp is the message's ``ts``, the time the venue generated it; prints
     carry their match time. The two differ by a few milliseconds (see
     ``market_making.analysis.clock_offset_profile``).
+
+    The sequence gaps (``attrs["sequence_gaps"]``) are counted over the whole
+    replay, a later snapshot healing the book but not the count, and only on
+    messages stamped before the next UTC midnight of the archive's day, as
+    :func:`archive_message_stats` counts them.
     """
     state = BookState()
     rows: list[dict[str, Any]] = []
     bucket: int | None = None
+    gaps = 0  # outside the book's state: a snapshot resets the book, not the count
+    day_end: int | None = None
 
     for message in _messages(Path(path)):
         kind = message.get("type")
         data = message.get("data", {})
         stamp = int(message["ts"])
         update = data.get("u")
+        if day_end is None:
+            day_end = _day_end_ms(Path(path), stamp)
 
         if kind == "snapshot":
             state = BookState()
@@ -180,11 +250,12 @@ def reconstruct(
                 state.last_update is not None
                 and update is not None
                 and update != state.last_update + 1
+                and stamp < day_end
             ):
                 # The book is wrong from here until the next snapshot. Counted
                 # and carried on the result rather than raised: one gap in a day
                 # is a data-quality fact, not a reason to lose the day.
-                state.gaps += 1
+                gaps += 1
             state.apply("b", data.get("b", []))
             state.apply("a", data.get("a", []))
             state.last_update = update
@@ -220,7 +291,7 @@ def reconstruct(
     frame = pd.DataFrame(rows)
     frame["symbol"] = frame["symbol"].astype("string")
     frame["source"] = frame["source"].astype("string")
-    frame.attrs["sequence_gaps"] = state.gaps
+    frame.attrs["sequence_gaps"] = gaps
     return frame.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
@@ -242,11 +313,12 @@ def download_day(
 
     cache = Path(cache_dir)
     cache.mkdir(parents=True, exist_ok=True)
-    target = cache / f"{symbol}-{day.isoformat()}-ob500.zip"
+    kind = archive_kind(day)
+    target = cache / f"{symbol}-{day.isoformat()}-{kind}.zip"
     if target.exists() and target.stat().st_size > 0:
         return target
 
-    url = archive_url(symbol, day)
+    url = archive_url(symbol, day, kind)
     partial = target.with_suffix(".part")
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
@@ -277,7 +349,13 @@ def _one_day(job: tuple[str, date, Path, Path, int, int, bool, bool]) -> dict[st
 
     try:
         archive = download_day(symbol, day, cache)
-        frame = reconstruct(archive, symbol=symbol, depth=depth, grid_ms=grid_ms)
+        frame = reconstruct(
+            archive,
+            symbol=symbol,
+            depth=depth,
+            grid_ms=grid_ms,
+            source=source_tag(archive_kind(day)),
+        )
     except BybitArchiveError as exc:
         return {"day": day, "rows": 0, "skipped": str(exc)}
 
@@ -348,3 +426,86 @@ def download_range(
                     on_day(rows[-1])
 
     return pd.DataFrame(rows).sort_values("day").reset_index(drop=True)
+
+
+@dataclass(frozen=True)
+class MessageStats:
+    """What an archive's message stream looked like, beside the book it builds.
+
+    Two archives of the same venue can differ in cadence (how often a delta is
+    sent, how often a snapshot resets the book) in ways a replayed book does not
+    show. These counts are what a comparison of two archive names rests on.
+    """
+
+    messages: int
+    snapshots: int
+    deltas: int
+    #: Median time between consecutive messages, in milliseconds.
+    median_interval_ms: float | None
+    #: Counted exactly as :func:`reconstruct` counts them: over the whole stream, a
+    #: snapshot healing the book but not the count, on messages stamped before the
+    #: next UTC midnight of the archive's day.
+    sequence_gaps: int
+
+
+_TYPE = re.compile(rb'"type"\s*:\s*"([a-z]+)"')
+_TS = re.compile(rb'"ts"\s*:\s*(\d+)')
+_UPDATE = re.compile(rb'"u"\s*:\s*(\d+)')
+
+
+def _scan(raw: bytes) -> tuple[str | None, int | None, int | None]:
+    """A message's type, stamp and update id, without decoding its levels.
+
+    The levels are most of every line and none of them is needed here, so the
+    three fields are found by pattern; a line the patterns do not fit is decoded
+    in full instead, so an unusual layout costs time rather than a wrong count.
+    """
+    kind, stamp, update = _TYPE.search(raw), _TS.search(raw), _UPDATE.search(raw)
+    if kind is not None and stamp is not None:
+        return (
+            kind.group(1).decode(),
+            int(stamp.group(1)),
+            int(update.group(1)) if update is not None else None,
+        )
+    message = _loads(raw)
+    data = message.get("data", {})
+    found = data.get("u")
+    return message.get("type"), int(message["ts"]), None if found is None else int(found)
+
+
+def _raw_lines(path: Path) -> Iterator[bytes]:
+    if path.suffix == ".zip":
+        archive = zipfile.ZipFile(path)
+        with archive, archive.open(archive.namelist()[0]) as binary:
+            yield from (raw for raw in binary if raw.strip())
+        return
+    with path.open("rb") as binary:
+        yield from (raw for raw in binary if raw.strip())
+
+
+def archive_message_stats(path: Path | str) -> MessageStats:
+    """Count an archive's messages, their median interval and its sequence gaps."""
+    stamps: list[int] = []
+    snapshots = deltas = gaps = 0
+    last: int | None = None
+    day_end: int | None = None
+    for raw in _raw_lines(Path(path)):
+        kind, stamp, update = _scan(raw)
+        if day_end is None and stamp is not None:
+            day_end = _day_end_ms(Path(path), stamp)
+        if kind == "snapshot":
+            snapshots += 1
+            last = update
+        elif kind == "delta":
+            deltas += 1
+            stamped_in_day = day_end is None or stamp is None or stamp < day_end
+            if last is not None and update is not None and update != last + 1 and stamped_in_day:
+                gaps += 1
+            last = update
+        else:
+            continue
+        if stamp is not None:
+            stamps.append(stamp)
+    intervals = np.diff(np.asarray(stamps, dtype=np.int64))
+    median = float(np.median(intervals)) if len(intervals) else None
+    return MessageStats(snapshots + deltas, snapshots, deltas, median, gaps)

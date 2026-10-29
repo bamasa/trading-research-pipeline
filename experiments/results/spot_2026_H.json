@@ -1,0 +1,2231 @@
+{
+ "blind": true,
+ "block": "H",
+ "measurements": {
+  "after_P": {},
+  "calibration": {
+   "a_buy": -2.914585952941524,
+   "a_sell": -3.1665725299468823,
+   "fill_s": {
+    "S25-BB": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.28464580227129993,
+       "mean_difference_bp": -0.28464580227129993,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.637482386096759,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.20241552550614172,
+       "mean_difference_bp": 0.20241552550614172,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.4315641146077971,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.0734290763543428,
+       "mean_difference_bp": 1.0734290763543428,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.637482386096759,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -0.8935451730040463,
+       "mean_difference_bp": -0.8935451730040463,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.4315641146077971,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.2840114603531342,
+       "mean_difference_bp": -0.2840114603531342,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.637482386096759,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.2014457403387897,
+       "mean_difference_bp": 0.2014457403387897,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.4315641146077971,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.17329025230031694,
+       "mean_difference_bp": 0.17329025230031694,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.637482386096759,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.015635566164130244,
+       "mean_difference_bp": 0.015635566164130244,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.4315641146077971,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -1.4460544028640636,
+       "mean_difference_bp": 1.4460544028640636,
+       "median_advantage_bp": -0.32399869808034987,
+       "median_difference_bp": 0.32399869808034987,
+       "orders": 31935,
+       "share_late": 0.637482386096759,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.080789952353739,
+       "mean_difference_bp": -1.080789952353739,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 31935,
+       "share_late": 0.4315641146077971,
+       "side": "sell"
+      }
+     ]
+    },
+    "S25-PB": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.3390787704006894,
+       "mean_difference_bp": -0.3390787704006894,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.4193232662192394,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.3891074647256159,
+       "mean_difference_bp": 0.3891074647256159,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.446168903803132,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.4540411299663576,
+       "mean_difference_bp": 1.4540411299663576,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.4193232662192394,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1667058209070689,
+       "mean_difference_bp": -1.1667058209070689,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.446168903803132,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.3374479622950121,
+       "mean_difference_bp": -0.3374479622950121,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.4193232662192394,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.3874379240140173,
+       "mean_difference_bp": 0.3874379240140173,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.446168903803132,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.03802873406065319,
+       "mean_difference_bp": 0.03802873406065319,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.4193232662192394,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -0.03118285593331758,
+       "mean_difference_bp": -0.03118285593331758,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.446168903803132,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -1.8156799784837925,
+       "mean_difference_bp": 1.8156799784837925,
+       "median_advantage_bp": -0.20640482574300567,
+       "median_difference_bp": 0.20640482574300567,
+       "orders": 14304,
+       "share_late": 0.4193232662192394,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.581106374722038,
+       "mean_difference_bp": -1.581106374722038,
+       "median_advantage_bp": -1.836997835448129e-12,
+       "median_difference_bp": -1.836997835448129e-12,
+       "orders": 14304,
+       "share_late": 0.446168903803132,
+       "side": "sell"
+      }
+     ]
+    }
+   },
+   "net_bp_trade_both_ways": {
+    "S25-BB": {
+     "book_walk": -19.426320038811205,
+     "print_rule": -18.87885878517433
+    },
+    "S25-PB": {
+     "book_walk": -19.75616636045945,
+     "print_rule": -19.08094592972431
+    }
+   },
+   "thinned": {
+    "0": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.731990002826443,
+       "mean_difference_bp": -0.731990002826443,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6473014541387024,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.776964472924292,
+       "mean_difference_bp": 0.776964472924292,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7453095642476042,
+       "mean_difference_bp": 1.7453095642476042,
+       "median_advantage_bp": -0.6016430877588185,
+       "median_difference_bp": 0.6016430877588185,
+       "orders": 14304,
+       "share_late": 0.6473014541387024,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.6640965565876098,
+       "mean_difference_bp": -1.6640965565876098,
+       "median_advantage_bp": -0.46939083952179506,
+       "median_difference_bp": -0.46939083952179506,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.728153625339864,
+       "mean_difference_bp": -0.728153625339864,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6473014541387024,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7714500345088677,
+       "mean_difference_bp": 0.7714500345088677,
+       "median_advantage_bp": 1.6761607156550359e-12,
+       "median_difference_bp": 1.6761607156550359e-12,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5869113684412351,
+       "mean_difference_bp": 0.5869113684412351,
+       "median_advantage_bp": 0.03674851723129087,
+       "median_difference_bp": -0.03674851723129087,
+       "orders": 14304,
+       "share_late": 0.6473014541387024,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.157806736208863,
+       "mean_difference_bp": -1.157806736208863,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.8892774740304366,
+       "mean_difference_bp": 2.8892774740304366,
+       "median_advantage_bp": -1.595322819686897,
+       "median_difference_bp": 1.595322819686897,
+       "orders": 14304,
+       "share_late": 0.6473014541387024,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.2120229718181084,
+       "mean_difference_bp": -3.2120229718181084,
+       "median_advantage_bp": -2.0774710244842898,
+       "median_difference_bp": -2.0774710244842898,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ]
+    },
+    "1": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7355863104108079,
+       "mean_difference_bp": -0.7355863104108079,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6455536912751678,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7786325420460458,
+       "mean_difference_bp": 0.7786325420460458,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6583473154362416,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7663814712653796,
+       "mean_difference_bp": 1.7663814712653796,
+       "median_advantage_bp": -0.6013995861291259,
+       "median_difference_bp": 0.6013995861291259,
+       "orders": 14304,
+       "share_late": 0.6455536912751678,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.6173925608931718,
+       "mean_difference_bp": -1.6173925608931718,
+       "median_advantage_bp": -0.45618821981283986,
+       "median_difference_bp": -0.45618821981283986,
+       "orders": 14304,
+       "share_late": 0.6583473154362416,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7310162781441688,
+       "mean_difference_bp": -0.7310162781441688,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6455536912751678,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7743607964852453,
+       "mean_difference_bp": 0.7743607964852453,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6583473154362416,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5966584026259858,
+       "mean_difference_bp": 0.5966584026259858,
+       "median_advantage_bp": 0.04746236773591498,
+       "median_difference_bp": -0.04746236773591498,
+       "orders": 14304,
+       "share_late": 0.6455536912751678,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.138797332464686,
+       "mean_difference_bp": -1.138797332464686,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6583473154362416,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.897362433868469,
+       "mean_difference_bp": 2.897362433868469,
+       "median_advantage_bp": -1.5864177632085645,
+       "median_difference_bp": 1.5864177632085645,
+       "orders": 14304,
+       "share_late": 0.6455536912751678,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.156683094880781,
+       "mean_difference_bp": -3.156683094880781,
+       "median_advantage_bp": -2.0835463213382877,
+       "median_difference_bp": -2.0835463213382877,
+       "orders": 14304,
+       "share_late": 0.6583473154362416,
+       "side": "sell"
+      }
+     ]
+    },
+    "2": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7375855383782687,
+       "mean_difference_bp": -0.7375855383782687,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6434563758389261,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7819060446708821,
+       "mean_difference_bp": 0.7819060446708821,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6622623042505593,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7903646756706304,
+       "mean_difference_bp": 1.7903646756706304,
+       "median_advantage_bp": -0.6000937979110206,
+       "median_difference_bp": 0.6000937979110206,
+       "orders": 14304,
+       "share_late": 0.6434563758389261,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.630105323662666,
+       "mean_difference_bp": -1.630105323662666,
+       "median_advantage_bp": -0.4604158217905887,
+       "median_difference_bp": -0.4604158217905887,
+       "orders": 14304,
+       "share_late": 0.6622623042505593,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7332674337109205,
+       "mean_difference_bp": -0.7332674337109205,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6434563758389261,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7771098062405273,
+       "mean_difference_bp": 0.7771098062405273,
+       "median_advantage_bp": 1.1281610462788288e-12,
+       "median_difference_bp": 1.1281610462788288e-12,
+       "orders": 14304,
+       "share_late": 0.6622623042505593,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5821367840927413,
+       "mean_difference_bp": 0.5821367840927413,
+       "median_advantage_bp": 0.05212488295300346,
+       "median_difference_bp": -0.05212488295300346,
+       "orders": 14304,
+       "share_late": 0.6434563758389261,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.138814462792455,
+       "mean_difference_bp": -1.138814462792455,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6622623042505593,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.9215533497504396,
+       "mean_difference_bp": 2.9215533497504396,
+       "median_advantage_bp": -1.6012837043007222,
+       "median_difference_bp": 1.6012837043007222,
+       "orders": 14304,
+       "share_late": 0.6434563758389261,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.1638810388542664,
+       "mean_difference_bp": -3.1638810388542664,
+       "median_advantage_bp": -2.058144328073377,
+       "median_difference_bp": -2.058144328073377,
+       "orders": 14304,
+       "share_late": 0.6622623042505593,
+       "side": "sell"
+      }
+     ]
+    },
+    "3": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.737971320342633,
+       "mean_difference_bp": -0.737971320342633,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6426174496644296,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7965775612887374,
+       "mean_difference_bp": 0.7965775612887374,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6619826621923938,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7578634773305581,
+       "mean_difference_bp": 1.7578634773305581,
+       "median_advantage_bp": -0.5851474080284796,
+       "median_difference_bp": 0.5851474080284796,
+       "orders": 14304,
+       "share_late": 0.6426174496644296,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.6352254926039835,
+       "mean_difference_bp": -1.6352254926039835,
+       "median_advantage_bp": -0.46613584509525463,
+       "median_difference_bp": -0.46613584509525463,
+       "orders": 14304,
+       "share_late": 0.6619826621923938,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7332940040979686,
+       "mean_difference_bp": -0.7332940040979686,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6426174496644296,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7915837610820692,
+       "mean_difference_bp": 0.7915837610820692,
+       "median_advantage_bp": 1.6859501344537513e-12,
+       "median_difference_bp": 1.6859501344537513e-12,
+       "orders": 14304,
+       "share_late": 0.6619826621923938,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5843507222642654,
+       "mean_difference_bp": 0.5843507222642654,
+       "median_advantage_bp": 0.04848423354492305,
+       "median_difference_bp": -0.04848423354492305,
+       "orders": 14304,
+       "share_late": 0.6426174496644296,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1304779427743483,
+       "mean_difference_bp": -1.1304779427743483,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6619826621923938,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.8992684711412666,
+       "mean_difference_bp": 2.8992684711412666,
+       "median_advantage_bp": -1.6028659705520119,
+       "median_difference_bp": 1.6028659705520119,
+       "orders": 14304,
+       "share_late": 0.6426174496644296,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.1779566650566413,
+       "mean_difference_bp": -3.1779566650566413,
+       "median_advantage_bp": -2.0754648245214504,
+       "median_difference_bp": -2.0754648245214504,
+       "orders": 14304,
+       "share_late": 0.6619826621923938,
+       "side": "sell"
+      }
+     ]
+    },
+    "4": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7202440952185626,
+       "mean_difference_bp": -0.7202440952185626,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6452740492170023,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7881682688912816,
+       "mean_difference_bp": 0.7881682688912816,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6596756152125279,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7795862556301565,
+       "mean_difference_bp": 1.7795862556301565,
+       "median_advantage_bp": -0.5715779786710768,
+       "median_difference_bp": 0.5715779786710768,
+       "orders": 14304,
+       "share_late": 0.6452740492170023,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.5915774069044173,
+       "mean_difference_bp": -1.5915774069044173,
+       "median_advantage_bp": -0.4570960365914851,
+       "median_difference_bp": -0.4570960365914851,
+       "orders": 14304,
+       "share_late": 0.6596756152125279,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7157883048417384,
+       "mean_difference_bp": -0.7157883048417384,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6452740492170023,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.782552670771372,
+       "mean_difference_bp": 0.782552670771372,
+       "median_advantage_bp": 1.4164829401516088e-12,
+       "median_difference_bp": 1.4164829401516088e-12,
+       "orders": 14304,
+       "share_late": 0.6596756152125279,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5806802102993788,
+       "mean_difference_bp": 0.5806802102993788,
+       "median_advantage_bp": 0.04863968490206898,
+       "median_difference_bp": -0.04863968490206898,
+       "orders": 14304,
+       "share_late": 0.6452740492170023,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1378055822073794,
+       "mean_difference_bp": -1.1378055822073794,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6596756152125279,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.913527493775407,
+       "mean_difference_bp": 2.913527493775407,
+       "median_advantage_bp": -1.5861394738131338,
+       "median_difference_bp": 1.5861394738131338,
+       "orders": 14304,
+       "share_late": 0.6452740492170023,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.1453400690478377,
+       "mean_difference_bp": -3.1453400690478377,
+       "median_advantage_bp": -2.0867470808632325,
+       "median_difference_bp": -2.0867470808632325,
+       "orders": 14304,
+       "share_late": 0.6596756152125279,
+       "side": "sell"
+      }
+     ]
+    },
+    "5": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7381883879934528,
+       "mean_difference_bp": -0.7381883879934528,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6460430648769575,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7916422777822458,
+       "mean_difference_bp": 0.7916422777822458,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6592561521252797,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7574610116283822,
+       "mean_difference_bp": 1.7574610116283822,
+       "median_advantage_bp": -0.6002613684025485,
+       "median_difference_bp": 0.6002613684025485,
+       "orders": 14304,
+       "share_late": 0.6460430648769575,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.5968891305524429,
+       "mean_difference_bp": -1.5968891305524429,
+       "median_advantage_bp": -0.45751226742723095,
+       "median_difference_bp": -0.45751226742723095,
+       "orders": 14304,
+       "share_late": 0.6592561521252797,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7330964790704209,
+       "mean_difference_bp": -0.7330964790704209,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6460430648769575,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7857864171417692,
+       "mean_difference_bp": 0.7857864171417692,
+       "median_advantage_bp": 5.603386090016216e-13,
+       "median_difference_bp": 5.603386090016216e-13,
+       "orders": 14304,
+       "share_late": 0.6592561521252797,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5956247612740253,
+       "mean_difference_bp": 0.5956247612740253,
+       "median_advantage_bp": 0.03696021910143499,
+       "median_difference_bp": -0.03696021910143499,
+       "orders": 14304,
+       "share_late": 0.6460430648769575,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1532102206949624,
+       "mean_difference_bp": -1.1532102206949624,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6592561521252797,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.916424115578385,
+       "mean_difference_bp": 2.916424115578385,
+       "median_advantage_bp": -1.628087623262994,
+       "median_difference_bp": 1.628087623262994,
+       "orders": 14304,
+       "share_late": 0.6460430648769575,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.1352850870070426,
+       "mean_difference_bp": -3.1352850870070426,
+       "median_advantage_bp": -2.05248282149247,
+       "median_difference_bp": -2.05248282149247,
+       "orders": 14304,
+       "share_late": 0.6592561521252797,
+       "side": "sell"
+      }
+     ]
+    },
+    "6": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7295347153767908,
+       "mean_difference_bp": -0.7295347153767908,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6466023489932886,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7813340343796188,
+       "mean_difference_bp": 0.7813340343796188,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6588366890380313,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.76925006575224,
+       "mean_difference_bp": 1.76925006575224,
+       "median_advantage_bp": -0.5741064961410721,
+       "median_difference_bp": 0.5741064961410721,
+       "orders": 14304,
+       "share_late": 0.6466023489932886,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.6148796726356782,
+       "mean_difference_bp": -1.6148796726356782,
+       "median_advantage_bp": -0.45504910464145165,
+       "median_difference_bp": -0.45504910464145165,
+       "orders": 14304,
+       "share_late": 0.6588366890380313,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7253364813617817,
+       "mean_difference_bp": -0.7253364813617817,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6466023489932886,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7760177375914187,
+       "mean_difference_bp": 0.7760177375914187,
+       "median_advantage_bp": 1.1170247710591914e-12,
+       "median_difference_bp": 1.1170247710591914e-12,
+       "orders": 14304,
+       "share_late": 0.6588366890380313,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.579059977847673,
+       "mean_difference_bp": 0.579059977847673,
+       "median_advantage_bp": 0.049500337483682204,
+       "median_difference_bp": -0.049500337483682204,
+       "orders": 14304,
+       "share_late": 0.6466023489932886,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1387873861229636,
+       "mean_difference_bp": -1.1387873861229636,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6588366890380313,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.904278414763624,
+       "mean_difference_bp": 2.904278414763624,
+       "median_advantage_bp": -1.6303395474857498,
+       "median_difference_bp": 1.6303395474857498,
+       "orders": 14304,
+       "share_late": 0.6466023489932886,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.1541476769635937,
+       "mean_difference_bp": -3.1541476769635937,
+       "median_advantage_bp": -2.0998182693463567,
+       "median_difference_bp": -2.0998182693463567,
+       "orders": 14304,
+       "share_late": 0.6588366890380313,
+       "side": "sell"
+      }
+     ]
+    },
+    "7": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7261282788155218,
+       "mean_difference_bp": -0.7261282788155218,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6470218120805369,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7790289441015339,
+       "mean_difference_bp": 0.7790289441015339,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7828979890202021,
+       "mean_difference_bp": 1.7828979890202021,
+       "median_advantage_bp": -0.5764258175296899,
+       "median_difference_bp": 0.5764258175296899,
+       "orders": 14304,
+       "share_late": 0.6470218120805369,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.601503544381047,
+       "mean_difference_bp": -1.601503544381047,
+       "median_advantage_bp": -0.45478100210290395,
+       "median_difference_bp": -0.45478100210290395,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7215508204742523,
+       "mean_difference_bp": -0.7215508204742523,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6470218120805369,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7742031337942819,
+       "mean_difference_bp": 0.7742031337942819,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.5807923680701231,
+       "mean_difference_bp": 0.5807923680701231,
+       "median_advantage_bp": 0.03685027066278036,
+       "median_difference_bp": -0.03685027066278036,
+       "orders": 14304,
+       "share_late": 0.6470218120805369,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1403328751816708,
+       "mean_difference_bp": -1.1403328751816708,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.9071329557577976,
+       "mean_difference_bp": 2.9071329557577976,
+       "median_advantage_bp": -1.6110986016066369,
+       "median_difference_bp": 1.6110986016066369,
+       "orders": 14304,
+       "share_late": 0.6470218120805369,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.156775705141907,
+       "mean_difference_bp": -3.156775705141907,
+       "median_advantage_bp": -2.066934441268498,
+       "median_difference_bp": -2.066934441268498,
+       "orders": 14304,
+       "share_late": 0.6571588366890381,
+       "side": "sell"
+      }
+     ]
+    },
+    "8": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7317555998842279,
+       "mean_difference_bp": -0.7317555998842279,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6489093959731543,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7822406123697242,
+       "mean_difference_bp": 0.7822406123697242,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6573685682326622,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.7618279505028567,
+       "mean_difference_bp": 1.7618279505028567,
+       "median_advantage_bp": -0.5804422778036439,
+       "median_difference_bp": 0.5804422778036439,
+       "orders": 14304,
+       "share_late": 0.6489093959731543,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.6354730519394634,
+       "mean_difference_bp": -1.6354730519394634,
+       "median_advantage_bp": -0.45818224859911194,
+       "median_difference_bp": -0.45818224859911194,
+       "orders": 14304,
+       "share_late": 0.6573685682326622,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.727257159785045,
+       "mean_difference_bp": -0.727257159785045,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6489093959731543,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7770034606433077,
+       "mean_difference_bp": 0.7770034606433077,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6573685682326622,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.593480845515854,
+       "mean_difference_bp": 0.593480845515854,
+       "median_advantage_bp": 0.04858661011191401,
+       "median_difference_bp": -0.04858661011191401,
+       "orders": 14304,
+       "share_late": 0.6489093959731543,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1544401359827496,
+       "mean_difference_bp": -1.1544401359827496,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6573685682326622,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.9185864632598353,
+       "mean_difference_bp": 2.9185864632598353,
+       "median_advantage_bp": -1.611409891369333,
+       "median_difference_bp": 1.611409891369333,
+       "orders": 14304,
+       "share_late": 0.6489093959731543,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.186732098960207,
+       "mean_difference_bp": -3.186732098960207,
+       "median_advantage_bp": -2.0942583674654136,
+       "median_difference_bp": -2.0942583674654136,
+       "orders": 14304,
+       "share_late": 0.6573685682326622,
+       "side": "sell"
+      }
+     ]
+    },
+    "9": {
+     "optimistic": [
+      {
+       "mean_advantage_bp": 0.7325843151551976,
+       "mean_difference_bp": -0.7325843151551976,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6496784116331096,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.7864077767136847,
+       "mean_difference_bp": 0.7864077767136847,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6600251677852349,
+       "side": "sell"
+      }
+     ],
+     "pessimistic": [
+      {
+       "mean_advantage_bp": -1.8225751380997355,
+       "mean_difference_bp": 1.8225751380997355,
+       "median_advantage_bp": -0.6256400549844741,
+       "median_difference_bp": 0.6256400549844741,
+       "orders": 14304,
+       "share_late": 0.6496784116331096,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.6322869273737401,
+       "mean_difference_bp": -1.6322869273737401,
+       "median_advantage_bp": -0.48496397687567305,
+       "median_difference_bp": -0.48496397687567305,
+       "orders": 14304,
+       "share_late": 0.6600251677852349,
+       "side": "sell"
+      }
+     ],
+     "rule": [
+      {
+       "mean_advantage_bp": 0.7271635471252295,
+       "mean_difference_bp": -0.7271635471252295,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6496784116331096,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": 0.781255538179966,
+       "mean_difference_bp": 0.781255538179966,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6600251677852349,
+       "side": "sell"
+      }
+     ],
+     "stale": [
+      {
+       "mean_advantage_bp": -0.6079491708235368,
+       "mean_difference_bp": 0.6079491708235368,
+       "median_advantage_bp": 0.04632297245955383,
+       "median_difference_bp": -0.04632297245955383,
+       "orders": 14304,
+       "share_late": 0.6496784116331096,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -1.1457436033042578,
+       "mean_difference_bp": -1.1457436033042578,
+       "median_advantage_bp": 0.0,
+       "median_difference_bp": 0.0,
+       "orders": 14304,
+       "share_late": 0.6600251677852349,
+       "side": "sell"
+      }
+     ],
+     "worse_of_two": [
+      {
+       "mean_advantage_bp": -2.978448357489579,
+       "mean_difference_bp": 2.978448357489579,
+       "median_advantage_bp": -1.6510470267843704,
+       "median_difference_bp": 1.6510470267843704,
+       "orders": 14304,
+       "share_late": 0.6496784116331096,
+       "side": "buy"
+      },
+      {
+       "mean_advantage_bp": -3.1769008917384367,
+       "mean_difference_bp": -3.1769008917384367,
+       "median_advantage_bp": -2.0900852395252967,
+       "median_difference_bp": -2.0900852395252967,
+       "orders": 14304,
+       "share_late": 0.6600251677852349,
+       "side": "sell"
+      }
+     ]
+    }
+   },
+   "thinned_capacity_median": 0.00439791699406843
+  },
+  "days_planned": 75,
+  "edge_ladder": [
+   {
+    "at_cheapest": -9.276812141966294,
+    "cheapest_tier": "vip5",
+    "label": "S25-T on spot books (no refit)",
+    "step": "S25-T",
+    "verdict": -19.277098735892146,
+    "zero_fees": 0.723474451959559
+   },
+   {
+    "at_cheapest": -9.426370311008261,
+    "cheapest_tier": "vip5",
+    "label": "S25-BB (refit on spot books)",
+    "step": "S25-BB",
+    "verdict": -19.426320038811205,
+    "zero_fees": 0.5735794167946797
+   },
+   {
+    "at_cheapest": -9.756076855925322,
+    "cheapest_tier": "vip5",
+    "label": "S25-PB by the book walk (prints-only inputs, same venue)",
+    "step": "S25-PB book walk",
+    "verdict": -19.75616636045945,
+    "zero_fees": 0.2440126486088023
+   },
+   {
+    "at_cheapest": -9.080857387628017,
+    "cheapest_tier": "vip5",
+    "label": "S25-PB by the print rule",
+    "step": "S25-PB",
+    "verdict": -19.08094592972431,
+    "zero_fees": 0.9192311544682797
+   },
+   {
+    "at_cheapest": -1.9470565997676514,
+    "cheapest_tier": "vip9",
+    "label": "S25-PF (the other venue)",
+    "step": "S25-PF",
+    "verdict": -17.34706412547981,
+    "zero_fees": 2.6529456481723437
+   }
+  ],
+  "excluded": {
+   "binance_spot_BTCFDUSD": {},
+   "bybit_spot_BTCUSDT": {}
+  },
+  "gap_days_put_back": {
+   "S25-BB": {
+    "days": 75,
+    "mean": -19.426320038811205,
+    "median": -19.433667305415767,
+    "newey_west_t": -400.13915721986956,
+    "p_one_sided": 1.0,
+    "put_back": 0,
+    "t": -336.1727923994329
+   },
+   "S25-T": {
+    "days": 63,
+    "mean": -19.277098735892146,
+    "median": -19.35806672086165,
+    "newey_west_t": -152.25635967925507,
+    "p_one_sided": 1.0,
+    "put_back": 0,
+    "t": -117.50048341926482
+   }
+  },
+  "measured_rows_kills": {
+   "S25-PB": [
+    {
+     "fired": true,
+     "hypothesis": "S25-PB",
+     "name": "K1",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "mean <= 0",
+     "value": -19.08094592972431
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PB",
+     "name": "K-label",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "IC <= 0",
+     "value": 0.15254734880888882
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PB",
+     "name": "K-placebo",
+     "note": "",
+     "outcome": "killed",
+     "reference": -19.01457473282075,
+     "test": "mean does not exceed every placebo",
+     "value": -19.08094592972431
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PB",
+     "name": "K-drift",
+     "note": "",
+     "outcome": "killed",
+     "reference": -19.017728779968856,
+     "test": "mean <= all-long or all-short",
+     "value": -19.08094592972431
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PB",
+     "name": "K-days",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.5,
+     "test": "half or fewer days positive",
+     "value": 0.0
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PB",
+     "name": "K-fee",
+     "note": "",
+     "outcome": "killed",
+     "reference": 10.0,
+     "test": "gross_bp_turnover <= taker fee",
+     "value": 0.45961499803105965
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PB",
+     "name": "K-latency",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 at 110 ms",
+     "value": -19.18528222057623
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PB",
+     "name": "K-fill",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 under worse of two less the thinned calibration's advantage",
+     "value": -23.029880353968466
+    }
+   ],
+   "S25-PFT": [
+    {
+     "fired": true,
+     "hypothesis": "S25-PFT",
+     "name": "K1",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "mean <= 0",
+     "value": -17.712888439827257
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PFT",
+     "name": "K-label",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "IC <= 0",
+     "value": 0.18616585174228487
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PFT",
+     "name": "K-placebo",
+     "note": "",
+     "outcome": "killed",
+     "reference": -17.267734996070395,
+     "test": "mean does not exceed every placebo",
+     "value": -17.712888439827257
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PFT",
+     "name": "K-drift",
+     "note": "",
+     "outcome": "killed",
+     "reference": -17.74996513560615,
+     "test": "mean <= all-long or all-short",
+     "value": -17.712888439827257
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PFT",
+     "name": "K-days",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.5,
+     "test": "half or fewer days positive",
+     "value": 0.0
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PFT",
+     "name": "K-fee",
+     "note": "",
+     "outcome": "killed",
+     "reference": 10.0,
+     "test": "gross_bp_turnover <= taker fee",
+     "value": 1.143672786544342
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PFT",
+     "name": "K-latency",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 at 110 ms",
+     "value": -17.675429383469314
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PFT",
+     "name": "K-fill",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 under worse of two less the thinned calibration's advantage",
+     "value": -27.650858304608796
+    }
+   ]
+  },
+  "measured_rows_not_assessed": {},
+  "prints_a_day": {
+   "binance_spot_BTCFDUSD": 56028.013333333336,
+   "bybit_spot_BTCUSDT": 689969.88
+  },
+  "rows": {
+   "S25-BB": {
+    "by_side": {
+     "long": -19.2318154240106,
+     "short": -19.84906189307451
+    },
+    "capacity_median": 0.0006519394177224636,
+    "capacity_median_infinite": false,
+    "cells": [
+     -19.409907910360158,
+     -20.235281047905058,
+     -19.39598594458498,
+     -19.974737594208218,
+     -19.47857555060031,
+     -19.61098507416424,
+     -19.426320038811205,
+     -19.72530266780835,
+     -19.41484003063574,
+     -19.59971804097954,
+     -19.30331605893028,
+     -19.713637389063265
+    ],
+    "counters": {
+     "decisions": 661428.0,
+     "entries": 31935.0,
+     "entries_busy": 628443.0,
+     "entries_no_snapshot": 0.0,
+     "entries_outside_hours": 1050.0,
+     "entries_skipped": 0.0,
+     "entry_late_snapshot": 0.0,
+     "exit_late_snapshot": 5.0,
+     "flatten_beyond_visible_book": 1.0,
+     "funding_settlements_with_position": 0.0
+    },
+    "days": 75,
+    "days_with_trade": 75,
+    "fee_break_even_bp": 0.2867889344281105,
+    "grid_row_share_traded": 0.0005538199774129547,
+    "gross_bp_trade": 0.5735794167946797,
+    "ic": 0.1192703320086387,
+    "inventory_pnl_bp_a_day": 36.69586327411997,
+    "inventory_pnl_quote": 191.64299999999915,
+    "long_only": -19.343601587822643,
+    "max_drawdown_quote": 51324.39089897291,
+    "mean": -19.426320038811205,
+    "median": -19.433667305415767,
+    "neighbourhood_median": -19.539146795789925,
+    "net_per_100_clip_a_day": -82.80700306465343,
+    "net_quote_a_day": -684.3252119863052,
+    "newey_west_t": -400.13915721986956,
+    "p_one_sided": 1.0,
+    "placebo_percentile": 100.0,
+    "placebos": {
+     "all_long": -20.11040254967536,
+     "all_short": -19.92156932226831,
+     "flipped": -20.605257490952653,
+     "random_p95": -19.888605869338985,
+     "shifted": -19.98061429832248
+    },
+    "share_days_positive": 0.0,
+    "skips": {
+     "all_long": 3.0,
+     "all_short": 0.0,
+     "flipped": 3.0,
+     "random": 310.0
+    },
+    "t": -336.1727923994329,
+    "tiers": {
+     "non_vip": -19.426320038811202,
+     "vip1": -15.426340147690025,
+     "vip2": -14.92634266129988,
+     "vip3": -14.426345174909732,
+     "vip4": -11.42636025656885,
+     "vip5": -9.426370311008261,
+     "zero_fees": 0.5735794167946797
+    },
+    "trades": 31935,
+    "trades_per_day": 425.8,
+    "void": [],
+    "volume_30_day_quote": 21114415.29234916
+   },
+   "S25-PB": {
+    "brackets": {
+     "optimistic": -19.07536300617966,
+     "pessimistic": -22.273064604798382,
+     "stale": -19.78212071565136,
+     "worse_of_two": -23.029880353968466
+    },
+    "by_side": {
+     "long": -18.875008466792117,
+     "short": -19.307590808456066
+    },
+    "capacity_median": 0.0004323110698306285,
+    "capacity_median_infinite": false,
+    "caps": {
+     "capacity_median": 0.0004323110698306285,
+     "fill_beyond_sweep_share": 0.5107869839449541
+    },
+    "counters": {
+     "decisions": 83621.0,
+     "entries": 13952.0,
+     "entries_busy": 69551.0,
+     "entries_no_print": 0.0,
+     "entries_outside_hours": 118.0,
+     "entry_late_print": 3601.0,
+     "exit_late_print": 7475.0,
+     "exits_no_print": 0.0,
+     "exits_no_print_either_side": 0.0,
+     "fill_beyond_sweep": 14253.0
+    },
+    "days": 75,
+    "days_with_trade": 75,
+    "entry_wait_s_median_of_days": 0.10550000000000001,
+    "exit_fallback_age_s_median_of_days": null,
+    "exit_wait_s_median_of_days": 1.3145,
+    "fee_break_even_bp": 0.45961499803105965,
+    "grid_row_share_traded": 0.002332507348434669,
+    "gross_bp_trade": 0.9192311544682797,
+    "hold_realised_s_median_of_days": 52.769,
+    "ic": 0.15254734880888882,
+    "inventory_pnl_bp_a_day": 36.69586327411997,
+    "inventory_pnl_quote": 191.64299999999915,
+    "long_only": -18.88220803099391,
+    "max_drawdown_quote": 21538.389430017953,
+    "mean": -19.08094592972431,
+    "median": -19.043376583480036,
+    "net_per_100_clip_a_day": -35.44130832163288,
+    "net_quote_a_day": -287.17852573357266,
+    "newey_west_t": -167.4759961440352,
+    "p_one_sided": 1.0,
+    "placebo_percentile": 79.0,
+    "placebos": {
+     "all_long": -19.017728779968856,
+     "all_short": -19.376398692621255,
+     "flipped": -19.28472780887444,
+     "random_p95": -19.01457473282075,
+     "shifted": -19.457226666090786
+    },
+    "share_days_positive": 0.0,
+    "skips": {
+     "all_long": 323.0,
+     "all_short": 242.0,
+     "flipped": 532.0,
+     "random": 56214.0
+    },
+    "t": -188.69350255328084,
+    "tiers": {
+     "non_vip": -19.08094592972431,
+     "vip1": -15.080910512885794,
+     "vip2": -14.580906085780978,
+     "vip3": -14.080901658676167,
+     "vip4": -11.080875096047276,
+     "vip5": -9.080857387628017,
+     "zero_fees": 0.9192311544682797
+    },
+    "trades": 13952,
+    "trades_per_day": 186.02666666666667,
+    "void": [],
+    "volume_30_day_quote": 9047213.383223169
+   },
+   "S25-PF": {
+    "brackets": {
+     "optimistic": -17.26099806415082,
+     "pessimistic": -23.166558741603417,
+     "stale": -22.95177857381879,
+     "worse_of_two": -28.0222171360106
+    },
+    "by_side": {
+     "long": -17.110959657891296,
+     "short": -17.489264492524633
+    },
+    "capacity_median": 0.003626917531149177,
+    "capacity_median_infinite": false,
+    "caps": {
+     "capacity_median": 0.003626917531149177,
+     "fill_beyond_sweep_share": 0.7549130336571042
+    },
+    "cells": [
+     -17.468468550922697,
+     -17.64087368455383,
+     -17.20751581480504,
+     -17.558826613378788,
+     -17.570712040563343,
+     -17.799753137269064,
+     -17.34706412547981,
+     -17.42009440521153,
+     -17.469887201370238,
+     -16.79570785896615,
+     -17.377436772208604,
+     -17.17656782904241
+    ],
+    "counters": {
+     "decisions": 35929.0,
+     "entries": 4427.0,
+     "entries_busy": 31419.0,
+     "entries_no_print": 0.0,
+     "entries_outside_hours": 83.0,
+     "entry_late_print": 2464.0,
+     "exit_late_print": 3285.0,
+     "exits_no_print": 0.0,
+     "exits_no_print_either_side": 0.0,
+     "fill_beyond_sweep": 6684.0
+    },
+    "days": 75,
+    "days_with_trade": 75,
+    "entry_wait_s_median_of_days": 1.706549,
+    "exit_fallback_age_s_median_of_days": null,
+    "exit_wait_s_median_of_days": 8.4976205,
+    "fee_break_even_bp": 1.3264728549639238,
+    "grid_row_share_traded": 0.00451715795563655,
+    "gross_bp_trade": 2.6529456481723437,
+    "hold_realised_s_median_of_days": 66.021371,
+    "ic": 0.21367917452344454,
+    "inventory_pnl_bp_a_day": 36.5673408894773,
+    "inventory_pnl_quote": 191.58219999999983,
+    "long_only": -17.244448048013417,
+    "max_drawdown_quote": 6029.092739908887,
+    "mean": -17.34706412547981,
+    "median": -17.031788136605694,
+    "neighbourhood_median": -17.44428147806711,
+    "net_per_100_clip_a_day": -10.212501693754048,
+    "net_quote_a_day": -80.38790319878515,
+    "newey_west_t": -130.9895658614087,
+    "p_one_sided": 0.9999999999999998,
+    "placebo_percentile": 98.5,
+    "placebos": {
+     "all_long": -17.53129318572356,
+     "all_short": -17.871468409240663,
+     "flipped": -18.007498538391165,
+     "random_p95": -17.442304600378442,
+     "shifted": -17.521774827943094
+    },
+    "share_days_positive": 0.0,
+    "skips": {
+     "all_long": 171.0,
+     "all_short": 169.0,
+     "flipped": 324.0,
+     "random": 34283.0
+    },
+    "t": -109.86239185490695,
+    "tiers": {
+     "regular": -17.34706412547981,
+     "spot_liquidity_provider": null,
+     "vip1": null,
+     "vip2_to_vip9": null,
+     "vip3": -9.347060216018951,
+     "vip9": -1.9470565997676514,
+     "zero_fees": 2.6529456481723437
+    },
+    "trades": 4427,
+    "trades_per_day": 59.026666666666664,
+    "void": [],
+    "volume_30_day_quote": 2787918.9176035603
+   },
+   "S25-PFT": {
+    "brackets": {
+     "optimistic": -17.633143581617425,
+     "pessimistic": -23.74724598226243,
+     "stale": -22.09109303215042,
+     "worse_of_two": -27.650858304608796
+    },
+    "by_side": {
+     "long": -17.701904592779638,
+     "short": -17.72565031615617
+    },
+    "capacity_median": 0.004450139842716834,
+    "capacity_median_infinite": false,
+    "caps": {
+     "capacity_median": 0.004450139842716834,
+     "fill_beyond_sweep_share": 0.7571223795018814
+    },
+    "counters": {
+     "decisions": 42725.0,
+     "entries": 5581.0,
+     "entries_busy": 37067.0,
+     "entries_no_print": 0.0,
+     "entries_outside_hours": 77.0,
+     "entry_late_print": 2741.0,
+     "exit_late_print": 3963.0,
+     "exits_no_print": 1.0,
+     "exits_no_print_either_side": 0.0,
+     "fill_beyond_sweep": 8451.0
+    },
+    "days": 75,
+    "days_with_trade": 75,
+    "entry_wait_s_median_of_days": 0.955876,
+    "exit_fallback_age_s_median_of_days": 70.85047,
+    "exit_wait_s_median_of_days": 6.791738,
+    "fee_break_even_bp": 1.143672786544342,
+    "grid_row_share_traded": 0.005694659713216079,
+    "gross_bp_trade": 2.2873888372812217,
+    "hold_realised_s_median_of_days": 62.750862,
+    "ic": 0.18616585174228487,
+    "inventory_pnl_bp_a_day": 36.5673408894773,
+    "inventory_pnl_quote": 191.58219999999983,
+    "long_only": -17.716975566532412,
+    "max_drawdown_quote": 7769.699315532078,
+    "mean": -17.712888439827257,
+    "median": -17.846884971531143,
+    "net_per_100_clip_a_day": -13.133786496609783,
+    "net_quote_a_day": -103.59599087376101,
+    "newey_west_t": -168.82505068232436,
+    "p_one_sided": 1.0,
+    "placebo_percentile": 75.0,
+    "placebos": {
+     "all_long": -17.74996513560615,
+     "all_short": -17.877449712383463,
+     "flipped": -17.927032628386968,
+     "random_p95": -17.599128004352792,
+     "shifted": -17.267734996070395
+    },
+    "share_days_positive": 0.0,
+    "skips": {
+     "all_long": 133.0,
+     "all_short": 141.0,
+     "flipped": 269.0,
+     "random": 27482.0
+    },
+    "t": -137.28101112744037,
+    "tiers": {
+     "regular": -17.712888439827257,
+     "spot_liquidity_provider": null,
+     "vip1": null,
+     "vip2_to_vip9": null,
+     "vip3": -9.712777528983864,
+     "vip9": -2.3126749364537282,
+     "zero_fees": 2.2873888372812217
+    },
+    "trades": 5581,
+    "trades_per_day": 74.41333333333333,
+    "void": [],
+    "volume_30_day_quote": 3521171.70273284
+   },
+   "S25-T": {
+    "by_side": {
+     "long": -19.30965081475322,
+     "short": -19.524855214749014
+    },
+    "capacity_median": 3.0151838386532195e-05,
+    "capacity_median_infinite": false,
+    "cells": [
+     -19.381431113558083,
+     -19.87949413246082,
+     -19.535872151348016,
+     -19.825144334834484,
+     -19.177993987732762,
+     -19.269426068818497,
+     -19.277098735892146,
+     -20.091598860953823,
+     -19.48958579157475,
+     -19.638788316502833,
+     -19.290051464602595,
+     -19.935870325932928
+    ],
+    "counters": {
+     "decisions": 3656.0,
+     "entries": 1124.0,
+     "entries_busy": 2526.0,
+     "entries_no_snapshot": 0.0,
+     "entries_outside_hours": 6.0,
+     "entries_skipped": 0.0,
+     "entry_late_snapshot": 0.0,
+     "exit_late_snapshot": 1.0,
+     "flatten_beyond_visible_book": 0.0,
+     "funding_settlements_with_position": 0.0
+    },
+    "days": 75,
+    "days_with_trade": 63,
+    "fee_break_even_bp": 0.3616880661825956,
+    "grid_row_share_traded": 1.949252088968721e-05,
+    "gross_bp_trade": 0.723474451959559,
+    "ic": 0.11538540604385024,
+    "inventory_pnl_bp_a_day": 36.69586327411997,
+    "inventory_pnl_quote": 191.64299999999915,
+    "long_only": -19.30965081475322,
+    "max_drawdown_quote": 1611.4892251098984,
+    "mean": -19.277098735892146,
+    "median": -19.35806672086165,
+    "neighbourhood_median": -19.512728971461385,
+    "net_per_100_clip_a_day": -2.901071502696206,
+    "net_quote_a_day": -21.486523001465304,
+    "newey_west_t": -152.25635967925507,
+    "p_one_sided": 1.0,
+    "placebo_percentile": 100.0,
+    "placebos": {
+     "all_long": -19.430746997809038,
+     "all_short": -20.60817608042233,
+     "flipped": -20.761824424736563,
+     "random_p95": -19.74033503266732,
+     "shifted": -21.233314925472534
+    },
+    "share_days_positive": 0.0,
+    "skips": {
+     "all_long": 0.0,
+     "all_short": 0.0,
+     "flipped": 0.0,
+     "random": 0.0
+    },
+    "t": -117.50048341926482,
+    "tiers": {
+     "non_vip": -19.277098735892146,
+     "vip1": -15.276984098321805,
+     "vip2": -14.776969768625511,
+     "vip3": -14.276955438929217,
+     "vip4": -11.276869460751463,
+     "vip5": -9.276812141966294,
+     "zero_fees": 0.723474451959559
+    },
+    "trades": 1124,
+    "trades_per_day": 14.986666666666666,
+    "void": [],
+    "volume_30_day_quote": 665451.67272396
+   }
+  },
+  "s25_t_rate": {
+   "registered": 240,
+   "trades_per_day": 14.986666666666666
+  },
+  "sentences": {
+   "P": [],
+   "S25-PF": [
+    "S25's coordinates on nine print inputs, on Binance BTC/FDUSD, August to October 2026: gross edge 1.33 bp of turnover against the 10 bp taker fee a Regular account paid; break-even 1.33 bp per side; killed."
+   ],
+   "S25-T": [
+    "S25 as frozen on Bybit's perpetual, unchanged on Bybit's spot book: 15.0 trades a day against 240 registered; killed."
+   ],
+   "calibration": [
+    "On Bybit's spot book, the print rule priced buys 0.34 bp and sells 0.39 bp better than the book walk."
+   ],
+   "each_slot_on_H": [
+    "S25-PF on H, Binance spot BTC/FDUSD: killed; first kill K1 at -17.35 bp against 0.00 bp.",
+    "S25-BB on H, Bybit spot BTCUSDT: killed; first kill K1 at -19.43 bp against 0.00 bp.",
+    "S25-T on H, Bybit spot BTCUSDT: killed; first kill K1 at -19.28 bp against 0.00 bp."
+   ]
+  },
+  "unreadable": []
+ },
+ "session": [
+  "H",
+  "9fc619830a0920740a60d9741fa5aa88cd933015",
+  "d1625173c0b7a15c8785a957d77596210f46893e792c834449152e39cf5476b7",
+  "54d2492d08947f6405b5325a86a9e844bba74c36da2c7ae9d70ee8994a0823d8"
+ ],
+ "stamp": "first read",
+ "statuses": {
+  "S25-BB": {
+   "bar": null,
+   "block": "H",
+   "caps": {},
+   "days": 75,
+   "first_kill": "K1",
+   "kills": [
+    {
+     "fired": true,
+     "hypothesis": "S25-BB",
+     "name": "K1",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "mean <= 0",
+     "value": -19.426320038811205
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-BB",
+     "name": "K-label",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "IC <= 0",
+     "value": 0.1192703320086387
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-BB",
+     "name": "K-placebo",
+     "note": "",
+     "outcome": "killed",
+     "reference": -19.888605869338985,
+     "test": "mean does not exceed every placebo",
+     "value": -19.426320038811205
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-BB",
+     "name": "K-drift",
+     "note": "",
+     "outcome": "killed",
+     "reference": -19.92156932226831,
+     "test": "mean <= all-long or all-short",
+     "value": -19.426320038811205
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-BB",
+     "name": "K-nbhd",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "neighbourhood median <= 0",
+     "value": -19.539146795789925
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-BB",
+     "name": "K-days",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.5,
+     "test": "half or fewer days positive",
+     "value": 0.0
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-BB",
+     "name": "K-fee",
+     "note": "",
+     "outcome": "killed",
+     "reference": 10.0,
+     "test": "gross_bp_turnover <= taker fee",
+     "value": 0.2867889344281105
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-BB",
+     "name": "K-latency",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 at 110 ms",
+     "value": -19.472511804242977
+    }
+   ],
+   "mde": 0.518851601039387,
+   "mean": -19.426320038811205,
+   "p": 1.0,
+   "slot": "S25-BB",
+   "status": "killed",
+   "trades": 31935,
+   "void": []
+  },
+  "S25-PF": {
+   "bar": null,
+   "block": "H",
+   "caps": {},
+   "days": 75,
+   "first_kill": "K1",
+   "kills": [
+    {
+     "fired": true,
+     "hypothesis": "S25-PF",
+     "name": "K1",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "mean <= 0",
+     "value": -17.34706412547981
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PF",
+     "name": "K-label",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "IC <= 0",
+     "value": 0.21367917452344454
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PF",
+     "name": "K-placebo",
+     "note": "",
+     "outcome": "killed",
+     "reference": -17.442304600378442,
+     "test": "mean does not exceed every placebo",
+     "value": -17.34706412547981
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PF",
+     "name": "K-drift",
+     "note": "",
+     "outcome": "killed",
+     "reference": -17.53129318572356,
+     "test": "mean <= all-long or all-short",
+     "value": -17.34706412547981
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PF",
+     "name": "K-nbhd",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "neighbourhood median <= 0",
+     "value": -17.44428147806711
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PF",
+     "name": "K-days",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.5,
+     "test": "half or fewer days positive",
+     "value": 0.0
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-PF",
+     "name": "K-fee",
+     "note": "",
+     "outcome": "killed",
+     "reference": 10.0,
+     "test": "gross_bp_turnover <= taker fee",
+     "value": 1.3264728549639238
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PF",
+     "name": "K-latency",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 at 110 ms",
+     "value": -17.339605301093766
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-PF",
+     "name": "K-fill",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 under worse of two less the thinned calibration's advantage",
+     "value": -28.0222171360106
+    }
+   ],
+   "mde": 0.49058739414653985,
+   "mean": -17.34706412547981,
+   "p": 1.0,
+   "slot": "S25-PF",
+   "status": "killed",
+   "trades": 4427,
+   "void": []
+  },
+  "S25-T": {
+   "bar": null,
+   "block": "H",
+   "caps": {},
+   "days": 63,
+   "first_kill": "K1",
+   "kills": [
+    {
+     "fired": true,
+     "hypothesis": "S25-T",
+     "name": "K1",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "mean <= 0",
+     "value": -19.277098735892146
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-T",
+     "name": "K-label",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "IC <= 0",
+     "value": 0.11538540604385024
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-T",
+     "name": "K-placebo",
+     "note": "",
+     "outcome": "killed",
+     "reference": -19.74033503266732,
+     "test": "mean does not exceed every placebo",
+     "value": -19.277098735892146
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-T",
+     "name": "K-drift",
+     "note": "",
+     "outcome": "killed",
+     "reference": -19.430746997809038,
+     "test": "mean <= all-long or all-short",
+     "value": -19.277098735892146
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-T",
+     "name": "K-nbhd",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "neighbourhood median <= 0",
+     "value": -19.512728971461385
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-T",
+     "name": "K-days",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.5,
+     "test": "half or fewer days positive",
+     "value": 0.0
+    },
+    {
+     "fired": true,
+     "hypothesis": "S25-T",
+     "name": "K-fee",
+     "note": "",
+     "outcome": "killed",
+     "reference": 10.0,
+     "test": "gross_bp_turnover <= taker fee",
+     "value": 0.3616880661825956
+    },
+    {
+     "fired": false,
+     "hypothesis": "S25-T",
+     "name": "K-latency",
+     "note": "",
+     "outcome": "killed",
+     "reference": 0.0,
+     "test": "positive, but <= 0 at 110 ms",
+     "value": -19.268159146547006
+    }
+   ],
+   "mde": 0.7421736577946012,
+   "mean": -19.277098735892146,
+   "p": 1.0,
+   "slot": "S25-T",
+   "status": "killed",
+   "trades": 1124,
+   "void": []
+  }
+ }
+}

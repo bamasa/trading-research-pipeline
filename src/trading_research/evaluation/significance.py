@@ -50,6 +50,7 @@ able to prove it does not work.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -208,3 +209,84 @@ def assess(
         effective_per_cluster=effective_count(members, correlation),
         positive_clusters=int((by_cluster > 0).sum()),
     )
+
+
+#: The registered Newey-West lag, in days of the daily series.
+NEWEY_WEST_LAG = 5
+
+
+@dataclass(frozen=True)
+class NeweyWestT:
+    """The mean of a daily series and its t under autocorrelated days."""
+
+    days: int
+    lag: int
+    mean: float
+    #: Heteroscedasticity- and autocorrelation-consistent standard error.
+    se: float
+    t: float
+
+
+def newey_west_t(
+    values: np.ndarray | pd.Series | list[float], lag: int = NEWEY_WEST_LAG
+) -> NeweyWestT:
+    """The t of a daily series' mean with a Newey-West (Bartlett) standard error.
+
+    Consecutive days in one regime are not independent, and the plain day-level
+    t treats them as if they were. The long-run variance of the series is
+
+        gamma_0 + 2 * sum_{l=1}^{L} (1 - l / (L + 1)) * gamma_l
+
+    with ``gamma_l`` the lag-``l`` autocovariance about the mean, divided by
+    ``n`` (not ``n - l``), and the mean's standard error is its square root over
+    ``sqrt(n)``. The Bartlett weights keep the variance non-negative. Lags count
+    positions in the series as given: one row per day, in calendar order.
+    Non-finite days are dropped first; with fewer than two days the t is NaN.
+    A series without dispersion (a non-positive variance) has an infinite t of
+    its mean's sign, as ``verdicts.day_t`` gives it, so a constant positive
+    series is not failed by this t; NaN when its mean is 0. A lag at or beyond
+    the series length is cut to ``n - 1``.
+    """
+    if lag < 0:
+        raise SignificanceError(f"the lag must be non-negative, got {lag}")
+    array = np.asarray(values, dtype=np.float64)
+    array = array[np.isfinite(array)]
+    n = len(array)
+    if n < 2:
+        mean = float(array.mean()) if n else float("nan")
+        return NeweyWestT(n, lag, mean, float("nan"), float("nan"))
+    mean = float(array.mean())
+    centred = array - mean
+    used = min(lag, n - 1)
+    variance = float(centred @ centred) / n
+    for step in range(1, used + 1):
+        weight = 1.0 - step / (used + 1.0)
+        variance += 2.0 * weight * float(centred[step:] @ centred[:-step]) / n
+    if variance <= 0:
+        t = math.copysign(math.inf, mean) if mean != 0 else math.nan
+        return NeweyWestT(n, used, mean, 0.0, t)
+    se = float(np.sqrt(variance / n))
+    return NeweyWestT(n, used, mean, se, mean / se)
+
+
+#: The registered bar on the day-level t, and the normal quantile of 80% power.
+T_BAR = 3.0
+Z_POWER_80 = 0.84
+
+
+def minimum_detectable_effect(sigma: float, n_eff: float, bar: float = T_BAR) -> float:
+    """``(bar + 0.84) * sigma / sqrt(n_eff)``: the mean that a t >= ``bar``
+    test on ``n_eff`` days of dispersion ``sigma`` catches with 80% power."""
+    if n_eff <= 0:
+        return float("nan")
+    return float((bar + Z_POWER_80) * sigma / np.sqrt(n_eff))
+
+
+def power_at_bar(effect: float, sigma: float, n_eff: float, bar: float = T_BAR) -> float:
+    """The probability that a daily series of ``n_eff`` days with this mean and
+    dispersion reaches t >= ``bar``, in the normal approximation:
+    ``Phi(effect * sqrt(n_eff) / sigma - bar)``."""
+    if n_eff <= 0 or not sigma > 0:
+        return float("nan")
+    z = effect * float(np.sqrt(n_eff)) / sigma - bar
+    return float(0.5 * (1.0 + math.erf(z / math.sqrt(2.0))))

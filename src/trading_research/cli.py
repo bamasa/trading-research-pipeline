@@ -32,6 +32,8 @@ from rich.console import Console
 from rich.table import Table
 
 from trading_research import __version__
+from trading_research.cli_paper import paper_app
+from trading_research.cli_synthetic import synthetic_app, verify_app
 from trading_research.data import store, synthetic
 from trading_research.data.schema import BARS_SCHEMA, BOOK_SCHEMA, TRADE_SCHEMA
 from trading_research.data.validate import (
@@ -47,6 +49,9 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+app.add_typer(synthetic_app, name="synthetic")
+app.add_typer(verify_app, name="verify")
+app.add_typer(paper_app, name="paper")
 
 console = Console()
 err_console = Console(stderr=True)
@@ -1421,6 +1426,14 @@ def reproduce_cmd(
     trades: Annotated[Path, typer.Option("--trades", help="Prints, for passive entry.")] = Path(
         "data/trades"
     ),
+    regimes: Annotated[
+        str,
+        typer.Option(
+            "--regimes",
+            help="Regime policies the search tries, comma-separated: none (as published), "
+            "pull_4h, pull_24h, pull_120h (no new entry that long after a break alarm).",
+        ),
+    ] = "none",
 ) -> None:
     """Run the whole pipeline on a clean checkout and report what it finds.
 
@@ -1447,12 +1460,22 @@ def reproduce_cmd(
     if execution not in EXECUTIONS:
         err_console.print(f"[red]--execution must be one of {', '.join(EXECUTIONS)}[/red]")
         raise typer.Exit(code=2)
+    from trading_research.pipeline.regime import RegimePolicy
+
+    searched = tuple(name.strip() for name in regimes.split(",") if name.strip()) or ("none",)
+    try:
+        for name in searched:
+            RegimePolicy.parse(name).check("taker" if execution == "taker" else "passive_entry")
+    except ValueError as exc:
+        err_console.print(f"[red]--regimes: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
     result = run(
         book_root=book,
         fetch=fetch,
         report=lambda line: console.print(f"  {line}"),
         execution=execution,
         trades_root=trades,
+        regimes=searched,
     )
 
     if not result.held_out:
@@ -1718,3 +1741,45 @@ def _print_mm_decomposition(summary: dict[str, float]) -> None:
         table.add_row(label, value)
     console.print(table)
     console.print("  [dim]net = spread + adverse + inventory - fees + funding[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# The command tree
+# ---------------------------------------------------------------------------
+#
+# One sub-app per step of the pipeline, each in its own cli_<area>.py and
+# registered by one line below. A group holds the flat commands above under
+# their own names, unchanged; the flat names keep working, hidden from the help
+# (cli_common.as_map), which lists the steps in the order the pipeline runs.
+
+from trading_research import (  # noqa: E402
+    cli_agent,
+    cli_backtest,
+    cli_catalog,
+    cli_common,
+    cli_data,
+    cli_demo,
+    cli_fees,
+    cli_instruments,
+    cli_pairs,
+    cli_regimes,
+    cli_search,
+    cli_signal,
+    cli_study,
+)
+from trading_research.cli_plugins import plugins_app  # noqa: E402
+
+app.add_typer(cli_data.build(app))
+app.add_typer(cli_regimes.build(app))
+app.add_typer(cli_instruments.build(app))
+app.add_typer(cli_signal.build(app))
+app.add_typer(cli_search.app)
+app.add_typer(cli_backtest.build(app))
+app.add_typer(cli_pairs.app)
+app.add_typer(cli_study.app)
+app.add_typer(cli_agent.app)
+app.add_typer(cli_demo.app)
+app.add_typer(cli_fees.app)
+app.add_typer(cli_catalog.app)
+app.add_typer(plugins_app, name="strategies")
+cli_common.as_map(app)
