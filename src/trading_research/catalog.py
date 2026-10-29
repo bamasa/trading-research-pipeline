@@ -260,6 +260,44 @@ DETECTORS: tuple[Implemented, ...] = (
     ),
 )
 
+PRODUCTION: tuple[Implemented, ...] = (
+    Implemented(
+        "deployment",
+        "a YAML file of frozen strategies, capital and limits; each model pinned to its sha256",
+        "trading_research.production.spec:load",
+    ),
+    Implemented(
+        "balancer",
+        "capital across strategies inverse to their volatility, capped, halved when reduced",
+        "trading_research.production.allocator:allocate",
+    ),
+    Implemented(
+        "drift monitor",
+        "a CUSUM of live round trips against the backtest's net and spread; halts on alarm",
+        "trading_research.production.monitors:DriftMonitor",
+    ),
+    Implemented(
+        "regime monitor",
+        "CUSUMs on the mid's return mean and a variance likelihood ratio; reduces on alarm",
+        "trading_research.production.monitors:RegimeMonitor",
+    ),
+    Implemented(
+        "feed monitor",
+        "the age of the last book row and the gaps the stream reported; halts when stale",
+        "trading_research.production.monitors:FeedMonitor",
+    ),
+    Implemented(
+        "supervisor",
+        "states per strategy, the portfolio's daily loss and drawdown, limits moved on each order",
+        "trading_research.production.supervisor:Supervisor",
+    ),
+    Implemented(
+        "health and metrics",
+        "/health, /ready and Prometheus /metrics over HTTP",
+        "trading_research.production.health:HealthServer",
+    ),
+)
+
 #: Command groups whose subcommands the catalogue lists with their help.
 COMMAND_SECTIONS: tuple[tuple[str, str], ...] = (
     ("data", "Data"),
@@ -299,7 +337,7 @@ def resolve(path: str) -> Any:
 
 def implemented_paths() -> list[str]:
     """Every ``implemented_by`` the hand-written tables name."""
-    rows: Iterable[Any] = (*SOURCES, *FEATURE_FILTERS, *EVALUATION, *DETECTORS)
+    rows: Iterable[Any] = (*SOURCES, *FEATURE_FILTERS, *EVALUATION, *DETECTORS, *PRODUCTION)
     return [row.implemented_by for row in rows]
 
 
@@ -512,6 +550,14 @@ def sections(repo: Path) -> list[tuple[str, list[str]]]:
     lines = _table(["command", "what it does"], [(f"`trp {c}`", h) for c, h in commands("paper")])
     out.append(("Paper trading", lines))
 
+    lines = _table(["component", "what it does", "implemented by"],
+                   [(d.name, d.what, f"`{d.implemented_by}`") for d in PRODUCTION])  # fmt: skip
+    lines += ["", *_table(["command", "what it does"],
+                          [(f"`trp {c}`", h) for c, h in commands("prod")])]  # fmt: skip
+    lines += ["", "Deploy: `deploy/` holds the image's compose file, Prometheus and its alerts; "
+              "[docs/production.md](production.md) says what each part does."]  # fmt: skip
+    out.append(("Production", lines))
+
     files = test_files(repo)
     areas: dict[str, tuple[int, int]] = {}
     for stem, count in files:
@@ -560,4 +606,5 @@ def summary(repo: Path) -> list[tuple[str, int, str]]:
         ("Evaluation measures", len(EVALUATION), "a function under `evaluation/`"),
         ("Regime detectors", len(DETECTORS), "a detector under `validation/`"),
         ("Registered studies", len(studies(repo)), "`trp study new NAME`"),
+        ("Production components", len(PRODUCTION), "a module under `production/`"),
     ]

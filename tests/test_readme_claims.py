@@ -109,14 +109,18 @@ def test_the_first_screen_fits_and_every_result_row_states_a_fee() -> None:
     for command in ("trp demo --execution all --verify", "trp verify all", "trp agent demo"):
         assert command in screen
     section = README.split("\n## Where it made money\n", 1)[1].split("\n## ", 1)[0]
-    rows = [
-        r for r in section.splitlines()
-        if r.startswith("| ") and not r.startswith(("| Study", "| Direction"))
-    ]  # fmt: skip
-    assert len(rows) >= 12
-    for row in rows:
-        fee = row.split("|")[3 if row.count("|") == 6 else 2]
-        assert re.search(r"\d", fee), row
+    rows, fee = 0, None
+    for line in section.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not line.startswith("| ") or set(line) <= {"|", "-", ":", " "}:
+            fee = None if not line.startswith("|") else fee
+            continue
+        if fee is None:
+            fee = next(i for i, c in enumerate(cells) if c.startswith("Fee"))
+            continue
+        assert re.search(r"\d", cells[fee]), line
+        rows += 1
+    assert rows >= 12
 
 
 @pytest.mark.parametrize("phrase", BANNED)

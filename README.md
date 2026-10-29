@@ -1,11 +1,11 @@
 # trading-research-pipeline
 
 A pre-registered strategy-search pipeline for crypto markets: data → regimes → instruments →
-signal → search → execution (taker | passive | maker) → verdict → study → agent → paper. From a
+signal → search → execution (taker | passive | maker) → verdict → study → agent → paper → prod. From a
 start date it picks the instrument, the frequency, the method and model, their parameters and
 the execution mode; it registers the condition that would kill the candidate before any held-out
 day is read, reads the held-out block once through a ledger, and states every result net of a
-dated fee. A model or a strategy of your own enters as one file.
+dated fee. A model or a strategy of your own enters as one file; what passes runs supervised.
 
 ```bash
 trp demo --execution all --verify   # the whole path on a generated market, then the checks
@@ -30,6 +30,7 @@ trp catalog                         # everything below, listed from the registri
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
 | **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
+| **Production** | frozen strategies as one portfolio: models pinned by sha256, a balancer across strategies, drift, regime-break and feed monitors, automatic halts, `/health`, `/ready` and Prometheus `/metrics`, a Docker image and alert rules; the broker is paper | [production](docs/production.md) · [components](docs/catalog.md#production) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 
 Adding one of your own — a model, a strategy, a feature set, a label, an execution or an
@@ -51,14 +52,14 @@ instrument — is [one file and one check](#add-a-strategy).
 
 Every number net of the fee in its row; what each does not establish is in the last column.
 
-| Direction | Market, held-out period | Fee a side, bp | Net of the fee | What it does not establish |
-|---|---|---|---|---|
-| Futures, taker: cross-sectional reversion rule | 26 Bybit USDT perpetuals, 26 Feb–11 Mar 2024 | taker 5.5 + 0.5 slippage | **+6.89 bp a trade** over 3,383; 22 of 26 instruments positive, median +6.99 | by day +6.18 bp, *t* 1.18 over 14 days; the six weeks after, −19.94 bp: it pays in a reverting market, and that state was not forecastable a day ahead |
-| Futures, taker: the rule with gradient-boosted trees deciding how long to hold | the same entries | taker 5.5 + 0.5 slippage | **+18.7 bp a trade** (XGBoost), +18.2 (LightGBM); paired *t* against the rule 10.5 | models fitted on the search block only, the arrangements compared on the held-out one; the rule underneath failed the next six weeks |
-| Futures, maker: the touch quoter at the 0 bp professional tier | Bybit ALICE, ALGO, JTO, ZEC, GALA, CAKE, 26 Feb–9 Mar 2024 | maker 0, taker 5.5 | **+0.845 USDT** per 100 USDT of clip a day | quoting itself lost 1.32; the gain is inventory carried through a rising fortnight, killed by its direction condition |
-| Futures, maker: the same quoter at the programme's rebate | the same | maker −1, taker 5.5 | **+2.217 USDT** per 100 USDT of clip a day | quoting itself lost 0.78; inventory again; needs the market-maker programme |
-| Futures, maker: the comparison quoter S1 off the registered instrument | Bybit XRPUSDT and CRVUSDT, 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | **+70.8 and +0.62 USDT a day** | the registered instrument was BICOUSDT, where it lost; the gain is carried inventory |
-| Spot, taker: the 2025 recipe on prints (S25-PF) | Binance BTC/FDUSD, 8 Aug–21 Oct 2026 | 0 | **+2.65 bp a trade** | a measurement at a zero fee; at the account's Regular 10 bp it is −17.35, killed |
+| Direction | Strategy and model | Frequency | Market | Period it held (held-out) | Fee a side, bp | Net of the fee | What it does not establish |
+|---|---|---|---|---|---|---|---|
+| Futures, taker | cross-sectional reversion rule: against the 26-perpetual index's 10-minute move; no model | 5-second grid, 10-minute hold (intraday, not HFT) | 26 Bybit USDT perpetuals | 26 Feb–11 Mar 2024; parameters set on the 26 days before | taker 5.5 + 0.5 slippage | **+6.89 bp a trade** over 3,383; 22 of 26 instruments positive, median +6.99 | by day +6.18 bp, *t* 1.18 over 14 days; the six weeks after, −19.94 bp: it pays in a reverting market, and that state was not forecastable a day ahead |
+| Futures, taker | the same rule; XGBoost or LightGBM decides how long to hold (meta-labelling) | 5-second grid, holds of minutes (intraday, not HFT) | the same entries | 26 Feb–11 Mar 2024; models fitted on the 26 days before | taker 5.5 + 0.5 slippage | **+18.7 bp a trade** (XGBoost), +18.2 (LightGBM); paired *t* against the rule 10.5 | the arrangements compared on the held-out block itself; the rule underneath failed the next six weeks |
+| Futures, maker | S1, an Avellaneda–Stoikov quoter skewed by inventory (the room gate where the search block chose it); no model | re-quoted on a 100 ms book (HFT) | Bybit ALICE, ALGO, JTO, ZEC, GALA, CAKE perpetuals | 26 Feb–9 Mar 2024; chosen on 25 development days | maker 0, taker 2.8 (professional tier) | **+0.845 USDT** per 100 USDT of clip a day | quoting itself lost 1.32; the gain is inventory carried through a rising fortnight, killed by its direction condition |
+| Futures, maker | the same, at the market-maker programme's rebate | re-quoted on a 100 ms book (HFT) | the same six | 26 Feb–9 Mar 2024 | maker −1, taker 2.8 | **+2.217 USDT** per 100 USDT of clip a day | quoting itself lost 0.78; inventory again; needs the programme |
+| Futures, maker | S1, the comparison quoter, off the registered instrument; no model | re-quoted on a 100 ms book (HFT) | Bybit XRPUSDT and CRVUSDT perpetuals | 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | **+70.8 and +0.62 USDT a day** | the registered instrument was BICOUSDT, where it lost; the gain is carried inventory |
+| Spot, taker | the 2025 recipe on prints (S25-PF): gradient-boosted trees on nine print features, the hold-first rule at 240 trades a day | print grid, 50-second hold (short horizon, HFT-adjacent) | Binance BTC/FDUSD | 8 Aug–21 Oct 2026; fitted on the development days before | 0 | **+2.65 bp a trade** | a measurement at a zero fee; at the account's Regular 10 bp it is −17.35, killed |
 
 Not positive after a fee anywhere: direction from one instrument's own book — rules, logistic,
 XGBoost and the TCN neural network on BTC, XRP and XMR — the spot maker, the 2021 BTCUSDT maker,
@@ -88,6 +89,7 @@ held-out blocks still unread. Every registered study:
 [Check it is not a fiction](#check-it-is-not-a-fiction) ·
 [Registered studies](#registered-studies) ·
 [Deploy: paper trading](#deploy-paper-trading) ·
+[Production](#production) ·
 [Agents](#agents) ·
 [The findings](#the-findings) ·
 [Methodology](#methodology) ·
@@ -506,6 +508,37 @@ A paper result is a measurement under those fill rules, never evidence that a
 strategy would have made money. The agent harness never runs `paper run` or
 `paper record`: inside a registered prospective block, live data is that
 block's held-out data.
+
+---
+
+## Production
+
+```bash
+trp prod check deploy/deployment.example.yaml           # fields, key guard, each model against its pin
+trp prod run deploy/deployment.example.yaml --minutes 60
+trp prod status runs/prod/<run>
+docker compose -f deploy/docker-compose.yml up --build  # the image, Prometheus and its alerts
+```
+
+A deployment file names the strategies a backtest validated, each model pinned to
+the sha256 the backtest recorded, the capital and the portfolio's limits. One
+paper session per strategy runs as `trp paper` runs it, and a supervisor watches
+every event it processes:
+
+- **Drift**: a CUSUM of live round trips against the backtest's net and spread;
+  a strategy that stopped earning what it was validated to earn is halted.
+- **Regime**: CUSUMs on the mid's return mean and variance; a break reduces the
+  strategy to half its weight. One false alarm in 96,000 calm samples, a
+  doubling of volatility found after a median of 14.
+- **Feed and limits**: a stale stream, the session's kill switch, the portfolio's
+  daily loss or drawdown halt; a halt latches and flattens.
+- **Balancer**: capital inverse to each strategy's volatility, capped, moved on
+  every state change; the weight is a limit on each order that grows a position.
+
+`/health`, `/ready` and Prometheus `/metrics` are served while it runs, and
+`deploy/alerts.yml` pages on a halt, a stale feed or a silent process. No order
+leaves the process: the venue adapter is the step this base is ready for, and
+[docs/production.md](docs/production.md) lists what it still needs.
 
 ---
 
@@ -1146,6 +1179,7 @@ added as a plugin is listed the next time the page is written.
 | Evaluation measures | 14 | a function under `evaluation/` |
 | Regime detectors | 2 | a detector under `validation/` |
 | Registered studies | 2 | `trp study new NAME` |
+| Production components | 7 | a module under `production/` |
 
 ---
 

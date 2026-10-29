@@ -17,6 +17,7 @@ Everything the repository can run, written by `trp catalog --write` from where e
 - [Fee tables](#fee-tables)
 - [Registered studies](#registered-studies)
 - [Paper trading](#paper-trading)
+- [Production](#production)
 - [Test cases](#test-cases)
 
 ## Instruments and data: where to get them
@@ -290,9 +291,29 @@ Start one: `trp study new NAME`.
 | `trp paper status` | Where a run stands: running or finished, its PnL, position, gaps and kill switch. |
 | `trp paper parity` | Streaming against batch features on a stored day: the largest deviation per feature. |
 
+## Production
+
+| component | what it does | implemented by |
+|---|---|---|
+| deployment | a YAML file of frozen strategies, capital and limits; each model pinned to its sha256 | `trading_research.production.spec:load` |
+| balancer | capital across strategies inverse to their volatility, capped, halved when reduced | `trading_research.production.allocator:allocate` |
+| drift monitor | a CUSUM of live round trips against the backtest's net and spread; halts on alarm | `trading_research.production.monitors:DriftMonitor` |
+| regime monitor | CUSUMs on the mid's return mean and a variance likelihood ratio; reduces on alarm | `trading_research.production.monitors:RegimeMonitor` |
+| feed monitor | the age of the last book row and the gaps the stream reported; halts when stale | `trading_research.production.monitors:FeedMonitor` |
+| supervisor | states per strategy, the portfolio's daily loss and drawdown, limits moved on each order | `trading_research.production.supervisor:Supervisor` |
+| health and metrics | /health, /ready and Prometheus /metrics over HTTP | `trading_research.production.health:HealthServer` |
+
+| command | what it does |
+|---|---|
+| `trp prod check` | Check a deployment: every field, the key guard, each model against its pin; the plan. |
+| `trp prod run` | Run a deployment on replayed days or live public streams, supervised. |
+| `trp prod status` | Show a run's supervisor state: strategies, transitions, portfolio. |
+
+Deploy: `deploy/` holds the image's compose file, Prometheus and its alerts; [docs/production.md](production.md) says what each part does.
+
 ## Test cases
 
-2321 test functions in 236 files, by area (the first word of the file name):
+2344 test functions in 238 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
@@ -341,6 +362,7 @@ Start one: `trp study new NAME`.
 | placebo | 1 | 24 |
 | plugins | 3 | 33 |
 | positioning | 1 | 10 |
+| production | 1 | 22 |
 | readme | 1 | 6 |
 | regime | 4 | 50 |
 | report | 1 | 13 |
@@ -352,6 +374,7 @@ Start one: `trp study new NAME`.
 | sh | 46 | 341 |
 | sh2025 | 1 | 38 |
 | short | 1 | 5 |
+| showcase | 1 | 1 |
 | significance | 1 | 17 |
 | sim | 1 | 4 |
 | splits | 1 | 32 |
