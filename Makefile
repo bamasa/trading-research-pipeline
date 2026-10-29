@@ -22,7 +22,7 @@ test:  ## Run the test suite
 	uv run pytest
 
 cov:  ## Run the test suite with a coverage report
-	uv run pytest --cov --cov-report=term-missing
+	uv run pytest --cov --cov-branch --cov-config=pyproject.toml --cov-report=term-missing
 
 demo:  ## Generate the synthetic demo dataset and validate it
 	uv run trading-research generate-demo-data --output data/demo
