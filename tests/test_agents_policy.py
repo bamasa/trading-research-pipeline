@@ -524,8 +524,10 @@ def test_a_scoped_search_is_allowed(tool: str, data: dict[str, str]) -> None:
         "trading-research pairs screen -s ETHUSDT -s BTCUSDT --start 2024-01-01 --end 2024-01-31",
         "trp pairs backtest -s ETHUSDT -s BTCUSDT",
         "trading-research catalog --write docs/catalog.md",
+        "trp prod check deploy/deployment.example.yaml",
+        "trp prod run deploy/deployment.example.yaml --minutes 5",
     ],
 )
-def test_pairs_and_catalog_are_refused_to_every_role(role: str, command: str) -> None:
+def test_pairs_catalog_and_prod_are_refused_to_every_role(role: str, command: str) -> None:
     # CLAUDE.md lists them as run by the owner only; the policy has no rule for them.
     assert not bash(policy(role), command)

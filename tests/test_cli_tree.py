@@ -123,6 +123,7 @@ EVERY_GROUP = {
     "study": "Registered studies",
     "agent": "Registered studies",
     "paper": "Deploy",
+    "prod": "Deploy",
     "demo": "End to end",
     "reproduce": "End to end",
     "fees": "End to end",
