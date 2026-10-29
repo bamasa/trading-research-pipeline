@@ -48,6 +48,7 @@ ORDER: tuple[str, ...] = (
     "study",
     "agent",
     "paper",
+    "prod",
     "demo",
     "reproduce",
     "fees",
@@ -57,7 +58,7 @@ ORDER: tuple[str, ...] = (
 #: The map, as one line under the help.
 MAP = (
     "data → regimes → instruments → signal → search → execution (taker | passive | maker) "
-    "→ verdict → study → agent → paper"
+    "→ verdict → study → agent → paper → prod"
 )
 
 #: Top-level commands that stay visible: the panel each sits in and its line of help.
@@ -90,6 +91,10 @@ GROUPS: dict[str, tuple[str, str]] = {
     "paper": (
         DEPLOY_PANEL,
         "10 Paper: a model on a public stream or a replayed day; no key, no order is ever sent.",
+    ),
+    "prod": (
+        DEPLOY_PANEL,
+        "11 Production: frozen strategies supervised, balanced, with health and metrics; paper broker.",
     ),
 }
 

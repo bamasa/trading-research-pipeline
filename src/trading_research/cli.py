@@ -33,6 +33,7 @@ from rich.table import Table
 
 from trading_research import __version__
 from trading_research.cli_paper import paper_app
+from trading_research.cli_prod import prod_app
 from trading_research.cli_synthetic import synthetic_app, verify_app
 from trading_research.data import store, synthetic
 from trading_research.data.schema import BARS_SCHEMA, BOOK_SCHEMA, TRADE_SCHEMA
@@ -52,6 +53,7 @@ app = typer.Typer(
 app.add_typer(synthetic_app, name="synthetic")
 app.add_typer(verify_app, name="verify")
 app.add_typer(paper_app, name="paper")
+app.add_typer(prod_app, name="prod")
 
 console = Console()
 err_console = Console(stderr=True)
