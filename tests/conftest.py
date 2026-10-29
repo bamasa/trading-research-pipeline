@@ -7,6 +7,13 @@ failure points at the code under test rather than at a different random draw.
 
 from __future__ import annotations
 
+import os
+
+# GitHub Actions sets GITHUB_ACTIONS, and typer then forces a terminal: help comes
+# back with escape codes and the tests that read it as text fail only in CI. Set
+# before typer is imported, and inherited by every subprocess a test starts.
+os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
+
 from collections.abc import Callable
 from pathlib import Path
 
