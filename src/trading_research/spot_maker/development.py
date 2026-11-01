@@ -52,11 +52,13 @@ def _g(value: Any) -> str:
 
 def calibration_line(found: dict[str, Any]) -> str:
     if found.get("status") != "run":
-        return f"{found.get('status')}; every verdict labelled \"{found.get('label')}\""
+        return f'{found.get("status")}; every verdict labelled "{found.get("label")}"'
     parts = [f"{s}: fills ordered on {_g(found[s]['ordering_share'])} and the prints rule's making "
              f"part inside the book's bracket on {_g(found[s]['bracket_share'])} of {found[s]['days']} "
              f"days" for s in rg.CALIBRATION_SLOTS]  # fmt: skip
-    verdict = "passes" if found["passes"] else f"does not pass; every verdict labelled \"{found['label']}\""
+    verdict = (
+        "passes" if found["passes"] else f'does not pass; every verdict labelled "{found["label"]}"'
+    )
     return "; ".join(parts) + f"; it {verdict}"
 
 
@@ -81,7 +83,9 @@ def short_summary(summary: dict[str, Any]) -> dict[str, Any]:
 def stage_d(study: MakerStudy, stage_1: dict[str, Any]) -> dict[str, Any]:
     commit = require_code_freeze(study)
     if commit != stage_1["code_freeze"]:
-        raise RuntimeError(f"stage 1 ran under {stage_1['code_freeze']}, the note now names {commit}")
+        raise RuntimeError(
+            f"stage 1 ran under {stage_1['code_freeze']}, the note now names {commit}"
+        )
     require_config_pinned(study, commit)
     disk = study.disk_check("D")
     days = list(study.days("D"))

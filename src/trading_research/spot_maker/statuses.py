@@ -112,7 +112,9 @@ def summarise(records: Sequence[Mapping[str, Any]], slot: str) -> dict[str, Any]
     venue_btc = sum(float(d["true"]["capacity_venue_btc"]) for d in days)
     out["capacity"] = slot_btc / venue_btc if venue_btc > 0 else (math.inf if slot_btc else 0.0)
     posted = sum(float(d["true"]["posted_btc"]) for d in days)
-    out["fill_ratio"] = sum(float(d["true"]["filled_maker_btc"]) for d in days) / posted if posted else math.nan
+    out["fill_ratio"] = (
+        sum(float(d["true"]["filled_maker_btc"]) for d in days) / posted if posted else math.nan
+    )
     for name in ("touch", "delayed", "latency", "all_long", "all_short", "flipped"):
         if runs and name in runs[0]:
             out[name] = _mean([r[name] for r in runs])

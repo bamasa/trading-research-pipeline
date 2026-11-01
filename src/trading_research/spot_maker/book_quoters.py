@@ -39,7 +39,9 @@ def _price(view: MarketView, side: int, position: float, settings: MakerSettings
     """A quote of ``side`` at its own touch, skewed by the position, post-only, in ticks."""
     tick, shift = view.tick, 1.0 - settings.skew_bp * 1e-4 * position / settings.clip
     if side > 0:
-        return math.floor(min(view.best_bid * tick * shift, (view.best_ask - 1) * tick) / tick + 1e-6)
+        return math.floor(
+            min(view.best_bid * tick * shift, (view.best_ask - 1) * tick) / tick + 1e-6
+        )
     return math.ceil(max(view.best_ask * tick * shift, (view.best_bid + 1) * tick) / tick - 1e-6)
 
 

@@ -14,7 +14,9 @@ from trading_research.spot_maker import blocks as bk
 
 def test_development_access_reads_reader_test_w_and_d_only() -> None:
     access = bk.development_access()
-    access.require(bk.INSTRUMENT, [date(2026, 3, 3), date(2026, 4, 30), date(2026, 7, 31)], "prints")
+    access.require(
+        bk.INSTRUMENT, [date(2026, 3, 3), date(2026, 4, 30), date(2026, 7, 31)], "prints"
+    )
     for refused in (date(2026, 8, 1), date(2026, 8, 8), date(2025, 6, 1), date(2026, 1, 5)):
         with pytest.raises(HeldOutLocked):
             access.require(bk.INSTRUMENT, [refused], "prints")

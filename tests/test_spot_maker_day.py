@@ -59,4 +59,6 @@ def test_the_own_cell_is_the_true_run_and_values_are_numbers(record: dict) -> No
         assert (math.isnan(value) and math.isnan(found["runs"]["cells"][own])) or (
             found["runs"]["cells"][own] == value
         )
-        assert found["true"]["tiers"]["zero_fees"] >= found["true"]["net_bp_fill"] or math.isnan(value)
+        assert found["true"]["tiers"]["zero_fees"] >= found["true"]["net_bp_fill"] or math.isnan(
+            value
+        )

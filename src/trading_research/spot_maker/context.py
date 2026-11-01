@@ -141,5 +141,7 @@ def compute_days(study: MakerStudy, days: Sequence[date], access: Any, folder: P
     return [json.loads((folder / f"{d}.json").read_text("utf-8")) for d in days]
 
 
-def signal_days(study: MakerStudy, days: Sequence[date], access: Any, folder: Path) -> list[dict[str, Any]]:
+def signal_days(
+    study: MakerStudy, days: Sequence[date], access: Any, folder: Path
+) -> list[dict[str, Any]]:
     return compute_days(study, days, access, folder, signal_job)

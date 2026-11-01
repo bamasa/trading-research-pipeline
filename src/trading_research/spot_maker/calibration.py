@@ -169,7 +169,9 @@ def calibration_day(spot_checkout: Path, day: date, count: int, signal: Any) -> 
         events, prints, off_grid = load_book_day(spot_checkout, day)
     except (ev.DayUnavailable, ev.OffGridPrice, FileNotFoundError, ValueError) as exc:
         return {**head, "usable": False, "reason": f"{type(exc).__name__}: {exc}"[:200]}
-    frames = [thin_prints(prints, count, seed).reset_index(drop=True) for seed in rg.CALIBRATION_SEEDS]
+    frames = [
+        thin_prints(prints, count, seed).reset_index(drop=True) for seed in rg.CALIBRATION_SEEDS
+    ]
     start = int(pd.Timestamp(day, tz="UTC").value)
     decisions = day_decisions(signal, frames[0], None, start + COLD_MINUTES * 60 * rg.NS_PER_S)
     out: dict[str, Any] = {**head, "usable": True, "prints": len(prints), "off_grid": off_grid,
@@ -208,7 +210,9 @@ def verdict(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         n = len(tests)
         ordering = sum(t[0] for t in tests) / n if n else math.nan
         bracket = sum(t[1] for t in tests) / n if n else math.nan
-        ok = bool(n and ordering >= rg.CALIBRATION_MIN_SHARE and bracket >= rg.CALIBRATION_MIN_SHARE)
+        ok = bool(
+            n and ordering >= rg.CALIBRATION_MIN_SHARE and bracket >= rg.CALIBRATION_MIN_SHARE
+        )
         out[slot] = {"days": n, "ordering_share": ordering, "bracket_share": bracket, "passes": ok}
         passes = passes and ok
     out["passes"] = passes
@@ -250,7 +254,11 @@ def run_calibration(repo: Path, spot_checkout: Path | None, counts: Mapping[str,
             record = calibration_job(*arg)
             write_json(folder / f"{record['day']}.json", record)
     records = [json.loads((folder / f"{d}.json").read_text("utf-8")) for d in days]
-    return {**verdict(records), "status": "run", "per_day": {r["day"]: _day_line(r) for r in records}}
+    return {
+        **verdict(records),
+        "status": "run",
+        "per_day": {r["day"]: _day_line(r) for r in records},
+    }
 
 
 def _day_line(record: Mapping[str, Any]) -> dict[str, Any]:
@@ -261,7 +269,10 @@ def _day_line(record: Mapping[str, Any]) -> dict[str, Any]:
     for slot, found in record["slots"].items():
         rules = {r: [found["book"][r]["maker_fills"], found["book"][r]["maker_btc"],
                      found["book"][r]["making_part"]] for r in rg.CALIBRATION_RULES}  # fmt: skip
-        rules["prints"] = [found["prints"]["maker_fills"], found["prints"]["maker_btc"],
-                           found["prints"]["making_part"]]
+        rules["prints"] = [
+            found["prints"]["maker_fills"],
+            found["prints"]["maker_btc"],
+            found["prints"]["making_part"],
+        ]
         out[slot] = rules
     return out

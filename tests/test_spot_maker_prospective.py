@@ -44,7 +44,9 @@ def test_only_results_docs_and_the_fee_amendment_change_since_h() -> None:
 def test_p_days_are_fetched_inside_the_sealed_access(tmp_path: Path) -> None:
     days = [date(2026, 11, 1), date(2026, 11, 2)]
     venue = syn.SpotVenue(syn.SpotMarket(frozenset(days[:1])))
-    access = bk.MakerAccess(bk.opened_blocks("P"), "first read", ("P", "c", "s", "f"), seal=bk._SEAL)
+    access = bk.MakerAccess(
+        bk.opened_blocks("P"), "first read", ("P", "c", "s", "f"), seal=bk._SEAL
+    )
     with syn.no_network():
         found = pr.fetch_days(tmp_path, days, access, opener=venue, sleep=lambda _: None)
     assert found["2026-11-01"]["status"] == "fetched" and bk.day_file(tmp_path, days[0]).exists()

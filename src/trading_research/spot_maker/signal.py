@@ -64,7 +64,9 @@ def copy_signal(source: Path, repo: Path, binding: SignalBinding) -> dict[str, s
         if not (target.exists() and sha256_bytes(target.read_bytes()) == digest):
             data = (Path(source) / SOURCE_DIR / sub / name).read_bytes()
             if sha256_bytes(data) != digest:
-                raise HeldOutLocked(f"{sub}/{name} at the source is not at its frozen sha256 {digest}")
+                raise HeldOutLocked(
+                    f"{sub}/{name} at the source is not at its frozen sha256 {digest}"
+                )
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
         out[name] = digest

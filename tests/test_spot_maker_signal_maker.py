@@ -42,7 +42,10 @@ def test_a_long_fills_by_trade_through_and_exits_at_the_ask_proxy() -> None:
     run = _run(_tape(PRINTS), [(2, 1)])
     rows = run.log.rows
     assert [(r[1], r[2], round(r[3], 6), r[5]) for r in rows] == [
-        (1, 100.00, 0.004, "entry"), (1, 100.00, 0.006, "entry"), (-1, 100.01, 0.01, "exit")]
+        (1, 100.00, 0.004, "entry"),
+        (1, 100.00, 0.006, "entry"),
+        (-1, 100.01, 0.01, "exit"),
+    ]
     assert run.counters["entries_filled"] == 1 and run.holds_s == [pytest.approx(52.0)]
 
 

@@ -74,7 +74,9 @@ def run_quoter(
         raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
     run = DayRun.start(settings)
     stamps = np.zeros(0, dtype=np.int64) if signal_ns is None else np.asarray(signal_ns, np.int64)
-    sides = np.zeros(0, dtype=np.int64) if signal_side is None else np.asarray(signal_side, np.int64)
+    sides = (
+        np.zeros(0, dtype=np.int64) if signal_side is None else np.asarray(signal_side, np.int64)
+    )
     at = instants(tape, settings, stamps if len(stamps) else None)
     sigma = signal_sides(at, stamps, sides, settings.hold_ns)
     flat, lat, limit = settings.flatten_ns(tape), settings.latency_ns, settings.limit
@@ -105,7 +107,9 @@ def run_quoter(
                                        settings.rule)  # fmt: skip
             run.note(tape, side, price, size, int(at[j]) + lat, int(ends[j]) + lat, found)
             for i, q in zip(*found, strict=True):
-                run.log.add(int(tape.ts[i]), side, price, float(q), True, "bid" if side > 0 else "ask")
+                run.log.add(
+                    int(tape.ts[i]), side, price, float(q), True, "bid" if side > 0 else "ask"
+                )
             moved += side * float(found[1].sum())
             unknown += side * known_after(tape, found, int(ends[j]))
         position += moved

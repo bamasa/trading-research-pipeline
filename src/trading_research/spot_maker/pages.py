@@ -67,12 +67,15 @@ def calibration_lines(results: Mapping[str, Any]) -> list[str]:
     head = ["### The fill rule's calibration against a book", ""]
     if not isinstance(found, Mapping) or found.get("status") != "run":
         status = found.get("status") if isinstance(found, Mapping) else "not recorded"
-        return [*head, f"{status}: every verdict above carries the label \"{label}\".", ""]
+        return [*head, f'{status}: every verdict above carries the label "{label}".', ""]
     rows = [[slot, str(found[slot]["days"]), _f(found[slot]["ordering_share"]),
              _f(found[slot]["bracket_share"]), "yes" if found[slot]["passes"] else "no"]
             for slot in rg.CALIBRATION_SLOTS]  # fmt: skip
-    verdict = ("it passes; no verdict carries a label" if label is None
-               else f"it does not pass; every verdict above carries the label \"{label}\"")
+    verdict = (
+        "it passes; no verdict carries a label"
+        if label is None
+        else f'it does not pass; every verdict above carries the label "{label}"'
+    )
     return [*head, "Bybit spot BTCUSDT on D's days, with its book: the share of days on which the "
             "maker volume filled orders trade-through <= queue <= touch in the market-making "
             "simulator, and on which the prints rule's making part (the prints thinned to "
@@ -87,7 +90,9 @@ def verdict_rows(results: Mapping[str, Any]) -> list[list[str]]:
     for slot in rg.FAMILY:
         status, s = results["statuses"][slot], results["summaries"].get(slot) or {}
         if not s:
-            out.append([slot, status["status"], _kill_text(status.get("first_kill"))] + ["n/a"] * 10)
+            out.append(
+                [slot, status["status"], _kill_text(status.get("first_kill"))] + ["n/a"] * 10
+            )
             continue
         trip = _f(s.get("net_bp_round_trip")) if slot == "MK-S" else "no round trips"
         out.append([

@@ -102,7 +102,9 @@ class MakerLedger:
     def committed_entries(self) -> dict[str, list[dict[str, Any]]]:
         done = subprocess.run(["git", "show", f"HEAD:{rg.LEDGER_PATH.as_posix()}"], cwd=self.repo,
                               capture_output=True, text=True)  # fmt: skip
-        loaded: dict[str, list[dict[str, Any]]] = json.loads(done.stdout) if done.returncode == 0 else {}
+        loaded: dict[str, list[dict[str, Any]]] = (
+            json.loads(done.stdout) if done.returncode == 0 else {}
+        )
         return loaded
 
     def write(self, entries: Mapping[str, Any]) -> None:
@@ -128,14 +130,18 @@ class MakerLedger:
         recorded = registration.value(("compute", "record"))["code_freeze"]["commit"]
         note = Path(self.repo) / rg.CODE_FREEZE_NOTE
         latest = code_freeze_commit(note.read_text("utf-8")) if note.exists() else None
-        if latest is None or (not str(recorded).startswith(latest) and not latest.startswith(str(recorded))):
+        if latest is None or (
+            not str(recorded).startswith(latest) and not latest.startswith(str(recorded))
+        ):
             raise HeldOutLocked(f"the code-freeze commit {recorded} is not the note's {latest}")
         if subprocess.run(["git", "merge-base", "--is-ancestor", str(recorded), "HEAD"],
                           cwd=self.repo).returncode != 0:  # fmt: skip
             raise HeldOutLocked(f"HEAD does not descend from the code-freeze commit {recorded}")
         changed = self.git("diff", "--name-only", str(recorded), "--", *rg.CODE_PATHS).strip()
         if changed:
-            raise HeldOutLocked(f"the study code changed since the code freeze: {changed.split()[:3]}")
+            raise HeldOutLocked(
+                f"the study code changed since the code freeze: {changed.split()[:3]}"
+            )
         return str(recorded)
 
     def verify_pinned(self, registration: rg.Registration, commit: str) -> None:
@@ -143,13 +149,17 @@ class MakerLedger:
         document only by appending one frozen-hash line and no null-hash line."""
         then = self.git("show", f"{commit}:{rg.CONFIG_PATH.as_posix()}")
         if unfrozen_text(then) != unfrozen_text(registration.base_text or registration.text):
-            raise HeldOutLocked("the configuration changed outside its placeholders since the freeze")
+            raise HeldOutLocked(
+                "the configuration changed outside its placeholders since the freeze"
+            )
         before = self.git("show", f"{commit}:{rg.DOCUMENT_PATH.as_posix()}")
         if not registration.document.startswith(before.rstrip("\n")):
             raise HeldOutLocked("the document changed since the freeze other than by appending")
         added = registration.document[len(before.rstrip("\n")) :]
         if len(rg.FROZEN_HASH_PATTERN.findall(added)) != 1 or rg.NULL_HASH_PATTERN.findall(added):
-            raise HeldOutLocked("the appended text must hold one frozen-hash line, no null-hash line")
+            raise HeldOutLocked(
+                "the appended text must hold one frozen-hash line, no null-hash line"
+            )
 
     def verify_tree(self, since: str | None = None) -> None:
         dirty = [line[3:] for line in self.git("status", "--porcelain").splitlines()]
@@ -188,10 +198,14 @@ class MakerLedger:
         self.verify_trials(registration)
         on_disk = self.files_on_disk(block)
         if on_disk:
-            raise HeldOutLocked(f"{len(on_disk)} files of {block} are already on disk: {on_disk[:2]}")
+            raise HeldOutLocked(
+                f"{len(on_disk)} files of {block} are already on disk: {on_disk[:2]}"
+            )
         previous = committed.get(block, [])
         if previous and not force:
-            raise HeldOutLocked(f"{block} was opened on {previous[0]['utc']}: a second read needs force")
+            raise HeldOutLocked(
+                f"{block} was opened on {previous[0]['utc']}: a second read needs force"
+            )
         environment = environment_fingerprint()
         if block == "P" and committed["H"][0]["environment"] != environment:
             raise HeldOutLocked("the environment is not the one H was read in")

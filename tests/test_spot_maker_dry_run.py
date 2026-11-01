@@ -37,15 +37,26 @@ REPO = Path(__file__).resolve().parent.parent
 @pytest.fixture(scope="module")
 def dry(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     keep = tmp_path_factory.mktemp("spot_maker_dry_run")
-    env = {**os.environ,
-           "PYTHONPATH": os.pathsep.join([str(REPO / "src"), os.environ.get("PYTHONPATH", "")])}
-    command = [sys.executable, "-m", "experiments.spot_maker_2026", "--dry-run", "--keep", str(keep)]
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([str(REPO / "src"), os.environ.get("PYTHONPATH", "")]),
+    }
+    command = [
+        sys.executable,
+        "-m",
+        "experiments.spot_maker_2026",
+        "--dry-run",
+        "--keep",
+        str(keep),
+    ]
     done = subprocess.run(command, cwd=REPO, capture_output=True, text=True, timeout=3_000,
                           check=False, env=env)  # fmt: skip
     assert done.returncode == 0, done.stderr[-3000:]
     repo = keep / "repo"
     names = {rg.SIGNAL_SLOT_FILE: "slot", rg.SIGNAL_FIT: "fit"}
-    digests = {names[p.name]: sha256_bytes(p.read_bytes()) for p in (repo / rg.SIGNAL_DIR).iterdir()}
+    digests = {
+        names[p.name]: sha256_bytes(p.read_bytes()) for p in (repo / rg.SIGNAL_DIR).iterdir()
+    }
     binding = SignalBinding(digests["slot"], digests["fit"], STAND_IN_THETA)
     study = MakerStudy(repo, keep / "source", binding, DRY_CALENDAR, disk=lambda _: 1_000.0)
     return {"report": json.loads(done.stdout), "study": study}
@@ -68,7 +79,10 @@ def test_the_amendment_froze_the_configuration_it_records(dry: dict[str, Any]) -
     record = registration.value(("compute", "record"))
     assert record["trials"]["rows"] == 3 and len(record["disk"]) == 3  # stage 1, D, calibration
     calibration = registration.value(("calibration", "result"))
-    assert calibration["status"] == rg.CALIBRATION_NOT_RUN and calibration["label"] == rg.CALIBRATION_LABEL
+    assert (
+        calibration["status"] == rg.CALIBRATION_NOT_RUN
+        and calibration["label"] == rg.CALIBRATION_LABEL
+    )
     manifest = json.loads((study.repo / rg.TRIALS_MANIFEST_PATH).read_text("utf-8"))
     assert manifest == record["trials"]
 

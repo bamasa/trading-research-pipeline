@@ -49,12 +49,16 @@ def open_block(study: MakerStudy, block: str, *, force: bool = False) -> dict[st
     candidates: tuple[str, ...] = ()
     if block == "P":
         h = h_results(study)
-        candidates = tuple(sorted(s for s, v in h["statuses"].items() if v["status"] == "candidate"))
+        candidates = tuple(
+            sorted(s for s, v in h["statuses"].items() if v["status"] == "candidate")
+        )
     return ledger_of(study).open(block, force=force, candidates=candidates)
 
 
 def h_results(study: MakerStudy) -> dict[str, Any]:
-    loaded: dict[str, Any] = json.loads((Path(study.repo) / rg.RESULTS_PATHS["H"]).read_text("utf-8"))
+    loaded: dict[str, Any] = json.loads(
+        (Path(study.repo) / rg.RESULTS_PATHS["H"]).read_text("utf-8")
+    )
     return loaded
 
 

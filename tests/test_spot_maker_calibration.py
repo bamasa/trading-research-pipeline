@@ -103,7 +103,9 @@ def _record(fills: tuple[int, int, int], making: tuple[float, float, float], pri
 
 
 def test_the_registered_test_and_its_label(tmp_path: Path) -> None:
-    good = [_record((2, 5, 9), (-3.0, -1.0, 0.5), -1.5)] * 9 + [_record((5, 2, 9), (-3, -1, 0.5), 2.0)]
+    good = [_record((2, 5, 9), (-3.0, -1.0, 0.5), -1.5)] * 9 + [
+        _record((5, 2, 9), (-3, -1, 0.5), 2.0)
+    ]
     found = cb.verdict(good)
     assert found["passes"] and found["label"] is None and found["MK-Q"]["ordering_share"] == 0.9
     bad = good[:7] + [_record((5, 2, 9), (-3, -1, 0.5), 2.0)] * 3
@@ -113,7 +115,9 @@ def test_the_registered_test_and_its_label(tmp_path: Path) -> None:
     skipped = cb.verdict([{"usable": False}, _record((0, 1, 2), (0, 0, 0), 0.0)])
     assert skipped["MK-Q"]["days"] == 0 and not skipped["passes"]
     none = cb.run_calibration(tmp_path, None, {"2026-05-01": 1000}, None, tmp_path / "c")
-    assert none["status"] == "not run (no book day on disk)" and none["label"] == rg.CALIBRATION_LABEL
+    assert (
+        none["status"] == "not run (no book day on disk)" and none["label"] == rg.CALIBRATION_LABEL
+    )
     assert len(cb.calibration_days()) == 92
     away = cb.calibration_day(tmp_path, date(2026, 5, 1), 1000, None)
     assert away["usable"] is False

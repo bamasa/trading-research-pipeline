@@ -103,7 +103,11 @@ def run_signal_maker(
     sides = np.asarray(decision_side, dtype=np.int64)
     stamps = np.asarray(decision_ns, dtype=np.int64)
     opposite = next_opposite(sides)
-    first, last_post, flat = settings.first_ns(tape), settings.last_ns(tape), settings.flatten_ns(tape)
+    first, last_post, flat = (
+        settings.first_ns(tape),
+        settings.last_ns(tape),
+        settings.flatten_ns(tape),
+    )
     lat, busy = settings.latency_ns, -1
     run.counters["decisions"] = len(stamps)
     for k in range(len(stamps)):

@@ -52,7 +52,9 @@ def rule_checks(tape: PrintTape, proxies: Proxies, step_s: float = 60.0) -> dict
             if not np.isfinite(price):
                 continue
             orders += 1
-            got = {r: resting.fill(tape, side, price, rg.CLIP, start, end, r) for r in resting.RULES}
+            got = {
+                r: resting.fill(tape, side, price, rg.CLIP, start, end, r) for r in resting.RULES
+            }
             sums = {r: float(v[1].sum()) for r, v in got.items()}
             for idx, size in got.values():
                 stamps = tape.ts[idx]

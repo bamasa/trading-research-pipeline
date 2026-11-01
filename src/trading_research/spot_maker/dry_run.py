@@ -63,8 +63,10 @@ def registered_document(text: str) -> str:
 
 def make_repository(source: Path, target: Path) -> Path:
     """The registration as registered under git."""
-    texts = {rg.CONFIG_PATH: unfrozen_text((source / rg.CONFIG_PATH).read_text("utf-8")),
-             rg.DOCUMENT_PATH: registered_document((source / rg.DOCUMENT_PATH).read_text("utf-8"))}
+    texts = {
+        rg.CONFIG_PATH: unfrozen_text((source / rg.CONFIG_PATH).read_text("utf-8")),
+        rg.DOCUMENT_PATH: registered_document((source / rg.DOCUMENT_PATH).read_text("utf-8")),
+    }
     for relative, text in texts.items():
         (target / relative).parent.mkdir(parents=True, exist_ok=True)
         (target / relative).write_text(text, encoding="utf-8")

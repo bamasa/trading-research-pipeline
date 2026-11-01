@@ -122,8 +122,11 @@ def walk(repo: Path, days: Iterable[date], access: Any, table: FeeTable) -> Iter
         before = day - timedelta(days=1)
         if sd.follows(day, before) and (previous is None or previous.day != before):
             previous = load_day(repo, before, access, table)
-        if previous is not None and previous.day == before and previous.usable and sd.follows(
-            day, before
+        if (
+            previous is not None
+            and previous.day == before
+            and previous.usable
+            and sd.follows(day, before)
         ):
             current.warm = True
             current.history = previous.frame

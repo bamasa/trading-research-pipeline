@@ -43,7 +43,6 @@ def test_the_amendment_fills_every_placeholder_once(tmp_path: Path) -> None:
          "rehearsal": {"statuses": dict.fromkeys(rg.FAMILY, "killed")},
          "calibration": {"status": "not run (no book day on disk)", "passes": False}}  # fmt: skip
 
-
     values = dv.amendment_values(stage_0, stage_1, d, tmp_path, date(2026, 10, 27))
     assert set(values) == set(rg.PLACEHOLDERS)
     record = values[("compute", "record")]

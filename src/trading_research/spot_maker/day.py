@@ -75,7 +75,9 @@ class DayContext:
             return d.decision_side
         if slot == "MK-SQ":
             s = settings_for(slot)
-            inside = (d.decision_ns >= s.first_ns(self.tape)) & (d.decision_ns <= s.last_ns(self.tape))
+            inside = (d.decision_ns >= s.first_ns(self.tape)) & (
+                d.decision_ns <= s.last_ns(self.tape)
+            )
             return d.decision_side[inside]
         return np.zeros(0, dtype=np.int64)
 
@@ -106,7 +108,9 @@ def slot_day(ctx: DayContext, slot: str) -> dict[str, Any]:
     spec, voids = rg.SLOTS[slot], set[str]()
     run, base = ctx.runner(slot), settings_for(slot)
 
-    def value(settings: MakerSettings, sides: np.ndarray | None = None, mode: str = "both") -> float:
+    def value(
+        settings: MakerSettings, sides: np.ndarray | None = None, mode: str = "both"
+    ) -> float:
         return _value(ctx, run(settings, sides, mode), spec.unit, voids)[0]
 
     true_run = run(base, None, "both")
@@ -133,7 +137,9 @@ def slot_day(ctx: DayContext, slot: str) -> dict[str, Any]:
             "signal_decisions": len(sides), "void": sorted(voids)}  # fmt: skip
 
 
-def day_record(ctx: DayContext, *, warm: bool, slots: tuple[str, ...] = rg.FAMILY) -> dict[str, Any]:
+def day_record(
+    ctx: DayContext, *, warm: bool, slots: tuple[str, ...] = rg.FAMILY
+) -> dict[str, Any]:
     """The day's record: its activity and the held unit's P&L, and every slot's runs."""
     d = ctx.decisions
     return {

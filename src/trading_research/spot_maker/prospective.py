@@ -57,7 +57,9 @@ def check_since_h(changed: Sequence[str], base_sha256: str, h_config_sha256: str
     if outside:
         raise HeldOutLocked(f"{outside[:3]} changed since H's read; only results and docs may")
     if base_sha256 != h_config_sha256:
-        raise HeldOutLocked("the configuration without P's intervals is not the one H was read with")
+        raise HeldOutLocked(
+            "the configuration without P's intervals is not the one H was read with"
+        )
     if not document.startswith(h_document.rstrip("\n")):
         raise HeldOutLocked("the document changed since H's read other than by appending")
 
@@ -72,7 +74,9 @@ def check_open(today: date, h_committed: date, last_published: Callable[[], bool
     if today > deadline(h_committed):
         raise HeldOutLocked(f"P's deadline {deadline(h_committed)} has passed: no P read opens")
     if not last_published():
-        raise HeldOutLocked(f"P's last day {bk.BLOCKS['P'][1]} is not published on Binance's archive")
+        raise HeldOutLocked(
+            f"P's last day {bk.BLOCKS['P'][1]} is not published on Binance's archive"
+        )
 
 
 def fetch_days(repo: Path, days: Sequence[date], access: Any, *, opener: Any = None,

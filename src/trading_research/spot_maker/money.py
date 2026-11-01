@@ -155,7 +155,9 @@ def markouts(fills: DayFills, proxies: Proxies, horizons_s: Sequence[float]) -> 
     return out
 
 
-def markout_sums(fills: DayFills, proxies: Proxies, horizons_s: Sequence[float]) -> dict[str, float]:
+def markout_sums(
+    fills: DayFills, proxies: Proxies, horizons_s: Sequence[float]
+) -> dict[str, float]:
     """Each per-fill quantity as a sum and a count over the day's maker fills."""
     out: dict[str, float] = {}
     for name, values in markouts(fills, proxies, horizons_s).items():
