@@ -75,6 +75,16 @@ def check_registered(config_text: str, document: str) -> None:
         )
 
 
+def as_registered(config_text: str, document: str) -> tuple[str, str]:
+    """The configuration and document as registered, before the D amendment.
+
+    Every placeholder goes back to ``null`` and every ``Frozen configuration
+    sha256`` line leaves the document, so the dry run and the tests start from
+    the registration however far the study's own files have run.
+    """
+    return unfrozen_text(config_text), _FROZEN_LINE.sub("", document)
+
+
 def is_frozen(config_text: str) -> bool:
     """True when no placeholder is ``null``."""
     values = yaml.safe_load(config_text)["frozen"]

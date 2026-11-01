@@ -45,9 +45,11 @@ def run(source_repo: Path | str, *, keep: Path | None = None, workers: int = 4,
     source = Path(source_repo)
     temp = Path(tempfile.mkdtemp(prefix="mm_bybit_dry_"))
     try:
-        for rel in (config.CONFIG_PATH, config.DOCUMENT_PATH):
+        texts = config.as_registered((source / config.CONFIG_PATH).read_text(),
+                                     (source / config.DOCUMENT_PATH).read_text())  # fmt: skip
+        for rel, text in zip((config.CONFIG_PATH, config.DOCUMENT_PATH), texts, strict=True):
             (temp / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(source / rel, temp / rel)
+            (temp / rel).write_text(text)
         (temp / ".gitignore").write_text("/data/\n")
         _git(temp, "init", "-q")
         _git(temp, "-c", "user.name=dry", "-c", "user.email=dry-run@localhost", "add", ".")

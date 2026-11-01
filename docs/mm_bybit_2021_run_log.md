@@ -123,3 +123,13 @@ Times below are UTC on 27 October (MSK 28 October).
 - The results page written from the H record, the table and the gross
   aggregates (`mm_bybit_2021_H_gross.json`, sums of the read's row file;
   nothing re-run), every verdict labelled "uncalibrated fill rule".
+
+## 2026-11-01
+
+- Nothing run on market data; no result changes. The dry run and the ledger
+  and reader tests copied the configuration and document as committed, which
+  after the D amendment are frozen, so 15 tests failed on "already frozen" and
+  a freeze commit absent from the test repository. They now start from the
+  registration as registered (`config.as_registered`: every placeholder back
+  to `null`, the frozen sha256 line dropped). The change is to the dry run and
+  the tests only, after H's read was closed; the 65 tests of the study pass.

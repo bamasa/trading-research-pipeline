@@ -181,7 +181,7 @@ def test_the_configuration_hashes_to_the_registered_null_placeholder_sha256() ->
 
 
 def test_freezing_writes_the_placeholders_and_nothing_else() -> None:
-    text = config.CONFIG_PATH.read_text()
+    text = config.unfrozen_text(config.CONFIG_PATH.read_text())
     names = [path[-1] for path in config.placeholder_lines(text)]
     values = {name: {"value": k} for k, name in enumerate(names)}
     frozen = config.freeze_text(text, values)

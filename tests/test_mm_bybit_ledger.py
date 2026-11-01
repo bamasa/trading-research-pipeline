@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -23,9 +22,11 @@ def git(repo: Path, *args: str) -> str:
 def registered(tmp_path: Path) -> Path:
     """A repository holding the registration as registered, committed."""
     repo = tmp_path / "repo"
-    for rel in (config.CONFIG_PATH, config.DOCUMENT_PATH):
+    texts = config.as_registered((REPO / config.CONFIG_PATH).read_text(),
+                                 (REPO / config.DOCUMENT_PATH).read_text())  # fmt: skip
+    for rel, text in zip((config.CONFIG_PATH, config.DOCUMENT_PATH), texts, strict=True):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(REPO / rel, repo / rel)
+        (repo / rel).write_text(text)
     (repo / ".gitignore").write_text("/data/\n")
     git(repo, "init", "-q")
     git(repo, "config", "user.name", "test")
