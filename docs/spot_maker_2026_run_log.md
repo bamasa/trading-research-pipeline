@@ -62,3 +62,12 @@ summarised in the D amendment; this log records what happened and when.
   rule". No slot is a candidate: P is not opened.
 - A summary added to the results page by hand, its numbers copied from the
   results file.
+
+## 2026-11-01
+
+- Nothing run on market data; no result changes. The registration tests read
+  the configuration and document as committed, which after the D amendment are
+  frozen, so two failed. They now start from the registration as registered,
+  as the dry run does (placeholders back to `null`, the document cut before
+  its D amendment). Tests only, after H's read was closed; the study's 69 tests
+  pass.

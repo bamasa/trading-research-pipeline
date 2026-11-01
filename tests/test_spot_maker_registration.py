@@ -6,16 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from trading_research.market_making.prereg import PreRegistrationError
+from trading_research.market_making.prereg import PreRegistrationError, unfrozen_text
 from trading_research.spot_maker import registration as rg
+from trading_research.spot_maker.dry_run import registered_document
 
 REPO = Path(__file__).resolve().parents[1]
 
 
 def _texts() -> tuple[str, str]:
+    """The registration as registered, however far the study's own files have run."""
     return (
-        (REPO / rg.CONFIG_PATH).read_text(encoding="utf-8"),
-        (REPO / rg.DOCUMENT_PATH).read_text(encoding="utf-8"),
+        unfrozen_text((REPO / rg.CONFIG_PATH).read_text(encoding="utf-8")),
+        registered_document((REPO / rg.DOCUMENT_PATH).read_text(encoding="utf-8")),
     )
 
 
@@ -56,6 +58,8 @@ def test_amendment_hash_is_read_under_amendments_only() -> None:
     text, document = _texts()
     line = "Frozen configuration sha256: `" + "a" * 64 + "`"
     assert rg.Registration.from_text(text, document).amendment_hash() is None
-    assert rg.Registration.from_text(text, document + "\n" + line + "\n").amendment_hash() == "a" * 64
+    assert (
+        rg.Registration.from_text(text, document + "\n" + line + "\n").amendment_hash() == "a" * 64
+    )
     unit = rg.SLOTS["MK-SQ"].unit
     assert unit == pytest.approx(0.02) and len(rg.SLOTS["MK-Q"].cells()) == 9
