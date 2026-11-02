@@ -29,6 +29,7 @@ DOCUMENTS = [
     REPO / "agents/protocol.md",
     REPO / "agents/README.md",
     *ROLE_FILES,
+    *sorted((REPO / ".claude/skills").glob("*/SKILL.md")),
 ]
 CLI = cli_options()
 
@@ -42,7 +43,7 @@ def test_the_cli_is_read_from_the_application_itself() -> None:
     assert "--allow-heldout" in CLI["mm-backtest"] and "--no-fetch" in CLI["reproduce"]
 
 
-@pytest.mark.parametrize("path", DOCUMENTS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", DOCUMENTS, ids=lambda p: str(p.relative_to(REPO)))
 def test_every_command_a_document_names_exists(path: Path) -> None:
     named = named_commands(path.read_text())
     assert named, f"{path.name} names no command"
@@ -50,6 +51,18 @@ def test_every_command_a_document_names_exists(path: Path) -> None:
         command = parse_command(text)
         assert command is not None, f"{path.name}: {text!r} is not one command"
         assert problem(command) is None, f"{path.name}: {text!r}: {problem(command)}"
+
+
+SKILLS = sorted((REPO / ".claude/skills").glob("*/SKILL.md"))
+
+
+@pytest.mark.parametrize("path", SKILLS, ids=lambda p: p.parent.name)
+def test_each_skill_is_named_by_its_directory_and_says_when_to_use_it(path: Path) -> None:
+    head = path.read_text().split("---")[1]
+    meta = yaml.safe_load(head)
+    assert meta["name"] == path.parent.name
+    assert "Use when" in meta["description"] and len(meta["description"]) <= 1024
+    assert "CLAUDE.md" in path.read_text() or "agents/roles/" in path.read_text()
 
 
 def test_the_loop_checks_its_own_prompts_before_any_model_is_called() -> None:
@@ -175,7 +188,8 @@ def test_no_commit_and_no_harness_file_credits_a_co_author_or_a_tool() -> None:
     log = subprocess.run(["git", "log", "--format=%B"], cwd=REPO, capture_output=True,
                          text=True, check=True).stdout  # fmt: skip
     assert not trailer.search(log)
-    harness = [*REPO.glob("agents/**/*.*"), *REPO.glob("tests/test_agents_*.py"),
+    harness = [*REPO.glob("agents/**/*.*"), *REPO.glob(".claude/skills/**/*.*"),
+               *REPO.glob("tests/test_agents_*.py"),
                *REPO.glob("docs/agents*.md"), REPO / "CLAUDE.md"]  # fmt: skip
     for path in harness:
         if "runs" not in path.relative_to(REPO).parts and path.suffix in {".md", ".py", ".yaml"}:
