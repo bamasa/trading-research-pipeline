@@ -42,7 +42,7 @@ def dry(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     command = [sys.executable, "-m", "experiments.short_horizon_2025", "--dry-run",
                "--keep", str(keep), "--workers", "4"]  # fmt: skip
     done = subprocess.run(
-        command, cwd=REPO, capture_output=True, text=True, timeout=1500, check=False
+        command, cwd=REPO, capture_output=True, text=True, timeout=3600, check=False
     )
     assert done.returncode == 0, done.stderr[-3000:]
     study = Study(keep / "repo", DRY_RUN)

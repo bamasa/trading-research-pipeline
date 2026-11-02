@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
 from trading_research.spot_maker import registration as rg
 from trading_research.spot_maker import statuses as st
@@ -36,7 +37,7 @@ def test_a_strong_positive_family_becomes_candidates() -> None:
     values = {s: list(2.0 + 0.3 * rng.standard_normal(30)) for s in rg.FAMILY}
     records = _records(values)
     summaries = {s: st.summarise(records, s) for s in rg.FAMILY}
-    assert summaries["MK-S"]["days"] == 30 and summaries["MK-S"]["capacity"] == 0.01
+    assert summaries["MK-S"]["days"] == 30 and summaries["MK-S"]["capacity"] == pytest.approx(0.01)
     found = st.assess(summaries, "H", dict.fromkeys(rg.FAMILY, 0.1))
     assert {f["status"] for f in found.values()} == {"candidate"}
     assert st.after_p("candidate", None) == "candidate (P not yet read)"
