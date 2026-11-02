@@ -382,6 +382,7 @@ class ResearchLoop:
             self.config,
             self.document,
             grants=self.grants,
+            web_hosts=self.web_hosts,
             prefix=self.python,
             cli=self.cli,
             earlier=tuple(done.items()),

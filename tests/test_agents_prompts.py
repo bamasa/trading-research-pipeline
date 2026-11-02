@@ -223,3 +223,11 @@ def test_every_test_the_rules_table_names_exists() -> None:
     ]
     for rule in rules:
         assert any(rule.rstrip(".").lower()[:20] in r for r in first), rule
+
+
+def test_the_step_prompt_names_the_fee_hosts_the_owner_listed() -> None:
+    from agents.workflows.prompts import StepContext, step_prompt
+
+    ctx = StepContext("s", "b", "c.yaml", "d.md", web_hosts=frozenset({"www.binance.com"}))
+    assert "read: www.binance.com." in step_prompt("register", "registrar", ctx)
+    assert "read: none." in step_prompt("register", "registrar", StepContext("s", "b", "c", "d"))
