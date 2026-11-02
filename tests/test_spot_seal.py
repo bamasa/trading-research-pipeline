@@ -14,8 +14,9 @@ from trading_research.spot import access as sa
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "trading_research"
-#: The seal's home, and the one module that applies it.
-HOME = {"spot/access.py", "spot/ledger.py"}
+#: The seal's home, and the one module that applies it; the spot maker study keeps a
+#: seal of its own the same way, in its blocks and ledger.
+HOME = {"spot/access.py", "spot/ledger.py", "spot_maker/blocks.py", "spot_maker/ledger.py"}
 
 
 def _findings(path: Path, relative: str) -> list[str]:
