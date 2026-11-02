@@ -23,7 +23,9 @@ from agents.workflows.prompts import command_problem
 REPO = Path(__file__).resolve().parent.parent
 PLAN = (REPO / "docs/agents_demo_funding_carry.md").read_text()
 STUDY = "funding_carry_2026"
-CALENDAR = protected_calendar(REPO)
+# The plan was written before the study's registration, so it is held to every
+# other registration's ranges; once registered, the study protects its own too.
+CALENDAR = tuple(p for p in protected_calendar(REPO) if p.config != STUDY)
 SPAN = r"(\d{4}-\d\d-\d\d) to (\d{4}-\d\d-\d\d)"
 
 
