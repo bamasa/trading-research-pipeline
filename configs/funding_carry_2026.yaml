@@ -1,0 +1,255 @@
+# Funding-rate carry on Binance BTCUSDT and ETHUSDT, held out in 2026 and
+# confirmed in 2027: the machine-readable half of the pre-registration.
+#
+# docs/preregistration/funding_carry_2026.md is the other half: it says what
+# each value means and why it was chosen. The two are committed together,
+# before any funding rate, kline or mark price of either coin is fetched for
+# this study. They must agree.
+#
+# Every value here is fixed now, except those set to null with the comment
+# "frozen by the D amendment". Those are set on block D and written into this
+# file by the single dated D amendment, before block H is read. The amendment
+# records the sha256 of this file after that write; the study's ledger refuses
+# to open a held-out block unless the file on disk has it and is committed and
+# clean. Nothing else here changes, except under the document's amendment
+# protocol (the owner's information-set amendment before any fetch; the fee
+# amendment before P opens, which adds intervals only). The owner's P statement
+# is a line of the document and does not change this file.
+#
+# Conventions: units in the key's suffix (_bp, _usdt, _h), UTC dates
+# inclusive, interval ends exclusive where marked, seed ranges inclusive.
+# Instruments are keyed by venue and market, never by symbol alone.
+
+name: funding_carry_2026_preregistration
+registered: 2026-11-02
+document: docs/preregistration/funding_carry_2026.md
+registers: a delta-neutral funding carry on Binance (long spot, short the USD-M perpetual, equal quantity); four slots under Holm with m = 4
+searched: "theta of C2 and C3 only, each from a registered grid of 9 values on D by a registered rule; nothing else is chosen on data"
+computed_before_registration: "nothing: no funding rate, kline, mark price or basis of either coin fetched or opened for this study"
+instruments:
+  binance_spot_BTCUSDT: {id: "binance-spot:BTCUSDT", venue: binance, market: spot, symbol: BTCUSDT, quote: USDT}
+  binance_um_BTCUSDT: {id: "binance-um:BTCUSDT", venue: binance, market: futures-um, symbol: BTCUSDT, quote: USDT, contract: perpetual}
+  binance_spot_ETHUSDT: {id: "binance-spot:ETHUSDT", venue: binance, market: spot, symbol: ETHUSDT, quote: USDT}
+  binance_um_ETHUSDT: {id: "binance-um:ETHUSDT", venue: binance, market: futures-um, symbol: ETHUSDT, quote: USDT, contract: perpetual}
+pairs:
+  BTC: {spot: binance_spot_BTCUSDT, perp: binance_um_BTCUSDT}
+  ETH: {spot: binance_spot_ETHUSDT, perp: binance_um_ETHUSDT}
+
+prior_information:
+  - "no Binance funding rate, perpetual-versus-spot basis, or Binance ETH price of any date read for this study"
+  - "Binance BTCUSDT daily futures bars 2024-01-01..2026-09-30 on disk, drawn in the README's breaks figure; scale breaks 2026-02-06 up and 2026-08-14 down named there"
+  - "spot_2026 and spot_maker_2026 read Binance BTC/FDUSD prints and Bybit spot BTCUSDT books on 2026-03-03..05 and 2026-04-01..07-31 (their W and D; this study's H lies inside), and spot_2026's H 2026-08-08..10-21"
+  - "the ETH replication read Bybit ETHUSDT perpetual books and prints from late July to 2026-08-07"
+  - "Bybit funding read earlier: BTCUSDT 2024-12..2025-06 (the 2025 study), the market-making studies' 2024 instruments, two reader-test days of 2020-12 (the Bybit 2021 study)"
+  - "the author's 2025 research worked on BTC/FDUSD and ETH/USDT spot in 2025"
+  - "the drafting sessions' general knowledge runs to about mid-2026, overlapping H; no 2026 funding value was recalled or used"
+  - "Binance fee pages read on 2026-11-02 (fees block)"
+information_set:
+  owner_last_look: null  # {date, span_shown: [first, last]}: set only by the owner's dated amendment before any fetch; null: no statement
+  statement_inside_H_if: "the date of the last look falls on or after 2026-04-01, or the span shown holds any day of 2026-04-01..06-30"
+  no_statement: treated as inside H
+  as_registered: H inside the information set  # the owner stated no date on 2026-11-02
+  fallback: "H's kills stand; a slot passing H's bar is recorded 'candidate (H in the information set)'; every slot neither killed nor void on H is taken to P; P's statuses are the verdict"
+  blind_H: "only if the owner's amendment states a last look before 2026-04-01 with a span shown that holds no day of H: then only a candidate on H is taken to P, and P confirms it"
+  P_statement: "a dated amendment to the document only, committed before P opens, stating that no funding rate of either coin for a day of P was viewed; this file does not change; without it P's statuses carry '(P information set not stated)'"
+  owner_undertaking: "the owner does not view a funding rate of either coin for a day of P before P's read"
+  drafting_knowledge: "about mid-2026; no 2026 funding value recalled or used"
+
+expected_outcome:
+  arithmetic: "interest component 0.01% per settlement = 1 bp, 3 settlements a day = 3 bp/day; 91 days = 273 bp; one round trip 2 x (10 + 5) + 4 x 2 = 38 bp; mean about 2.6 bp/day; K1 fires on C1 only if the mean rate is below 38 / (3 x 91) = 0.14 bp per settlement, before basis"
+  predictions:
+    C1: "candidate (H in the information set) if most settlements sit at or above the 0.01% interest component and the long-run sigma of the daily series is under about 8 bp; inconclusive if sigma is larger"
+    C2: "killed by K-placebo on H; with a high theta, inconclusive (fewer than 60 held days)"
+    C3: "killed by K-placebo on H, by C2's arithmetic"
+    C4: "candidate (H in the information set) under C1's conditions; inconclusive next most likely, ETH's basis being noisier"
+    not_predicted: [the sign of the basis term on H, P's statuses]
+
+data:
+  archive: "https://data.binance.vision/data/{market}/monthly/{kind}/{symbol}/..."  # monthly archives only, each with its published .CHECKSUM
+  planes:
+    spot_klines: {market: spot, kind: klines, interval: 1h, price: last}
+    perp_klines: {market: futures/um, kind: klines, interval: 1h, price: last}
+    perp_mark_klines: {market: futures/um, kind: markPriceKlines, interval: 1h, price: mark}  # a parser to come; data/binance.py has none
+    perp_funding: {market: futures/um, kind: fundingRate, columns: [calc_time, funding_interval_hours, last_funding_rate]}
+  fetch_unit: whole months  # a month archive holding a protected day counts as that day
+  checksum: "the published .CHECKSUM; never read unchecked; an unfetchable .CHECKSUM is transient, then the month unfetchable; a mismatch twice is unreadable"
+  settlement_time: calc_time floored to the hour (UTC)
+  settlement_day: the UTC day holding the settlement time
+  settlements_per_day: counted from the archive, never assumed  # K-units checks the count against funding_interval_hours
+  rate_units: "integer units of 1e-8, the archive's eight decimals, parsed from the text"
+  daily_mark: "close of the 1h kline ending at 00:00 UTC of the next day (the 23:00 kline), last price, each leg"
+  first_day_start_mark: never needed  # no position is open at a block's first midnight
+  funding_notional: "the position's quantity x the open of the 1h mark-price kline starting at the settlement hour"
+  required_rows: "per day and pair: 24 spot and 24 perp 1h klines, a mark-price kline at each settlement hour, every hour of the mark price for K-liq"
+  missing_rows: "the day is excluded on that pair, reason missing_row; its funding, fees and price changes are carried to the next usable day, so the block's sum is unchanged"
+  unreadable_block: more than a quarter of a block's days excluded on a pair; that pair's slots not assessed (<block> unreadable on <pair>)
+  exclusion_reasons: [missing_row, unreadable, unfetchable, fee not sourced]
+  D_available_from: null  # {pair: first month every plane of the pair lists, at or after 2020-01}; frozen by the D amendment
+  excluded_days_D: null  # {pair: [[day, reason]]}; frozen by the D amendment
+  not_fetched: [E, E2, any Bybit file, any daily archive, aggTrades, book data]
+  fetch_rules: "every listed month of a block's planes is fetched; a failure other than HTTP 404 is retried with backoff; files under data/funding_carry_2026/"
+
+fees:
+  rule: "every fill pays the verdict-tier taker fee of its instrument's sourced interval in force at the fill's time, in bp of the fill's notional; funding carries no fee"
+  verdict_tier: regular  # VIP 0, no 30-day volume and no holdings
+  discounts_applied: none  # no BNB discount on either leg (the owner, 2026-11-02)
+  coverage: "a day is covered when every instant lies in a sourced interval for both instruments of its pair; a day not covered is excluded on that pair, reason fee not sourced"
+  interval_bounds: "[start, end) UTC"
+  D_convention: "D is computed at H's interval, as development only; D numbers are never results"
+  tier_values: "[maker_bp, taker_bp]"
+  read_by_the_code: at run time, from this block; the fee amendment changes no code
+  k_units_rel_tol: 1.0e-12
+  intervals:
+    binance_spot_BTCUSDT:
+      - {start: "2026-04-01T00:00:00Z", end: "2027-04-01T00:00:00Z", sources: [F1, F2, F3], tiers: {regular: [10.0, 10.0]}, notes: "read 2026-11-02; registered by the owner as covering H and P; not in the special-fee list F3"}
+    binance_spot_ETHUSDT:
+      - {start: "2026-04-01T00:00:00Z", end: "2027-04-01T00:00:00Z", sources: [F1, F2, F3], tiers: {regular: [10.0, 10.0]}, notes: "read 2026-11-02; registered by the owner as covering H and P; not in the special-fee list F3"}
+    binance_um_BTCUSDT:
+      - {start: "2026-04-01T00:00:00Z", end: "2027-04-01T00:00:00Z", sources: [F4, F5], tiers: {regular: [2.0, 5.0]}, notes: "F4 states the Regular user's USD-M maker 0.02% and taker 0.05% (updated 2026-05-01 UTC, read 2026-11-02); the table page F5 rendered no rows on 2026-11-02; registered by the owner as covering H and P"}
+    binance_um_ETHUSDT:
+      - {start: "2026-04-01T00:00:00Z", end: "2027-04-01T00:00:00Z", sources: [F4, F5], tiers: {regular: [2.0, 5.0]}, notes: "as binance_um_BTCUSDT"}
+  measurements: [zero fees on both legs, maker fees on both legs at the Regular tier]  # labelled "conditional on a zero-fee venue" and "conditional on maker fills", never a status
+  change_before_P: "if Binance changes the Regular table before P opens, a dated fee amendment adds the new interval, from the change's instant, before P's read; it ends the registered interval there and adds nothing else"
+  P_procedure: {sources: [F1 live, F2 live, F3 live, F4 live, F5 live, "Binance announcements naming a Regular-tier spot or USD-M fee change for these symbols"], retrieved: between 2027-04-01 and the fee amendment's commit, conflict: the higher verdict-tier fee on each side, deadline: blocks.P.deadline}
+  sources:
+    F1: {url: "https://www.binance.com/en/fee/trading", read: 2026-11-02, what: "Regular spot 0.100% / 0.100% without BNB, 0.075% / 0.075% with"}
+    F2: {url: "https://www.binance.com/bapi/composite/v1/public/commission/trade-level/get", read: 2026-11-02, what: "level 0 makerCommission 0.001, takerCommission 0.001"}
+    F3: {url: "https://www.binance.com/bapi/accounts/v1/public/commission/symbol-activity-list?currentPage=1&pageSize=500", read: 2026-11-02, what: "210 special-fee rows; neither BTCUSDT nor ETHUSDT listed"}
+    F4: {url: "https://www.binance.com/en/support/faq/binance-futures-trading-fees-360033544231", read_through: "https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query?articleCode=360033544231", read: 2026-11-02, published: "2019-09-08 (UTC)", updated: "2026-05-01 (UTC)", what: "a Regular User's maker fee is 0.02% and taker fee is 0.05% (USD-M); BNB discount 10%"}
+    F5: {url: "https://www.binance.com/en/fee/futureFee", read: 2026-11-02, what: "the USD-M fee table; no rows rendered ('No records found')"}
+
+blocks:
+  D: {role: development, reads: free, ranges: [[2020-01-01, 2020-11-30], [2021-07-01, 2024-01-31], [2024-07-01, 2025-06-30]], use: "theta of C2 and C3, sigma_D, the MDE, every slot's development series"}  # each range a block of its own for positions and gates
+  E: {role: embargo, start: 2025-07-01, end: 2026-03-31, fetched: false}
+  H: {role: held_out, start: 2026-04-01, end: 2026-06-30, days: 91, slots: [C1, C2, C3, C4], reads: 1, read_after: the D amendment is committed}
+  E2: {role: embargo, start: 2026-07-01, end: 2026-12-31, fetched: false}
+  P: {role: prospective, start: 2027-01-01, end: 2027-03-31, days: 90, reads: 1, condition: "every slot neither killed nor void on H (blind_H: every candidate on H)", read_after: "H's results committed, March 2027 published on every plane, the fee amendment's check made", deadline: 2027-04-30}
+block_rules:
+  days_independent: false  # a position is held across days; the Newey-West t reads the dependence
+  spent_after_read: [H, P]  # a successor uses days after 2027-03-31
+  edges: "every block in whole months, since fundingRate is published by the month only"
+
+common:
+  clip_usdt: 10000.0  # notional per leg at entry; no capacity beyond one clip claimed
+  quantity: "q = clip_usdt / the spot entry fill price (after slippage); the perpetual leg shorts the same q; not rounded to a lot step"
+  margin: {mode: isolated, leverage: 1, initial_margin: "q x the perpetual entry fill price"}
+  fills: "taker on both legs, at the open of the 1h kline (last price) of each leg, the hour after the decision"
+  slippage_bp: 2.0  # a side, each leg, adverse; verdict at 2
+  slippage_brackets_bp: [0.0, 1.0, 2.0]  # 0 and 1 are measurements
+  entry_C1_C4: open of the 00:00 UTC kline of the block's first day
+  exit_all: "open of the 22:00 UTC kline of the block's last day, every slot; an open gated position is closed there"
+  last_fill_hour: "22:00 (23:00 under K-delay) of the block's last day; a later fill is made at that hour"
+  funding_receipt: "a settlement is received when the position was filled strictly before the settlement time and is open at it: funding = q x funding mark x rate; positive rate pays the short"
+  capital_usdt: 20000.0  # both legs' notional; annual return a measurement
+  hedged_notional_usdt: 10000.0  # the denominator of every daily value
+
+slots:
+  C1: {pair: BTC, rule: always_on}
+  C2: {pair: BTC, rule: gated}
+  C3: {pair: ETH, rule: gated}
+  C4: {pair: ETH, rule: always_on}
+gate:
+  window_settlements: 21
+  open_when: "sum of the last 21 settled rates of the block, integer units of 1e-8, strictly exceeds 21 x theta x 1e4"
+  decision: at each settlement, its own rate included
+  fill: open of the next hour
+  first_decision: the block's 21st settlement  # no opening before 21 settlements of the block exist
+  theta_grid_bp: [0.0, 0.25, 0.5, 0.75, 1.25, 1.5, 2.0, 3.0, 5.0]  # bp per settlement
+  selection: "the largest D mean daily net at H's fee table and 2 bp slippage, over D's usable days, flat days 0; ties to the larger theta"
+  theta_bp: null  # {C2: theta, C3: theta}; frozen by the D amendment
+
+metrics:
+  daily_net_bp: "(funding received + q x (spot end mark - spot start mark) - q x (perp end mark - perp start mark) - fees - slippage) / hedged_notional_usdt x 1e4; a fill replaces the mark at its side of the day; flat days 0; every usable day of the block"
+  basis_term: "q x [(spot change) - (perp change)] on the day = -q x the change of (perp - spot)"
+  parts_reported: [funding, fees, slippage, basis_term]
+  statistic: "Newey-West t, Bartlett, lag 7 (evaluation/significance.newey_west_t), on the daily series"
+  p_value: "one-sided, Student t upper tail at the Newey-West t with n - 1 degrees of freedom (market_making/verdicts.t_sf)"
+  held_day: a day on which a position is open at any instant
+  sigma_d: null  # {slot: Newey-West long-run sd of the D series at the frozen theta, bp}; frozen by the D amendment
+  mde_bp: null  # {slot: (3 + 0.84) x sigma_d / sqrt(91 x the share of D's usable days held)}; frozen by the D amendment
+  mde_on_P: "the same with 90 in place of 91, computed by the code from sigma_d"
+  break_even_per_side: "(gross - slippage) / turnover x 1e4, turnover the sum of every fill's notional, both legs"
+
+statuses:
+  family: [C1, C2, C3, C4]
+  holm_m: 4  # on H and on P; void, killed, not assessed or not taken: p = 1
+  alpha: 0.05
+  bar: {holm: passes at 5% with m = 4, newey_west_t_min: 3.0, median_day: "> 0, over every usable day, flat days 0", held_days_min: {H: 60, P: 30}}
+  precedence: ["void", "inconclusive (too few held days)", "killed", "candidate (H in the information set) on H / passes on P", "inconclusive (below the minimum detectable effect)", "inconclusive"]
+  after_P: {"passes on P": confirmed, "no kill, does not pass": not confirmed, "a kill on P": killed on P, "a void condition on P": void, "P unreadable": "not confirmed (P unreadable)", "P read failed": "not confirmed (P read failed)", "not read by the deadline": "not confirmed (P not read by its deadline)", "not taken to P": the status on H}
+  P_mark: "(P information set not stated) unless the owner's P statement (information_set.P_statement) is committed in the document before P opens"
+  defect_after_read: "void (defect found after the <block> read)"
+  P_pending: "<H status> (P not yet read)"
+  read_failure: "a failed read is resumed at the same commit; the same stage failing again with the same exception, or five resumptions without finishing, closes the session: on H every slot not assessed (H read failed), on P as after_P"
+  family_assessed_when: every slot has values or one of these statuses
+  never_the_strategy_working: [zero fees, maker fees, slippage 0 or 1 bp, the series without basis, any D number]
+
+kills:
+  void: [K-acct, K-units, K-cap, K-leak]
+  order:
+    C1: [K1, K-fund, K-basis, K-liq, K-timing, K-delay, K-days, K-fee]
+    C4: [K1, K-fund, K-basis, K-liq, K-timing, K-delay, K-days, K-fee]
+    C2: [K1, K-fund, K-basis, K-liq, K-placebo, K-nbhd, K-delay, K-days, K-fee]
+    C3: [K1, K-fund, K-basis, K-liq, K-placebo, K-nbhd, K-delay, K-days, K-fee]
+  K-acct: "sum of daily values x hedged_notional / 1e4 differs from the ledger's net in USDT by more than 1e-9 x hedged_notional; or the reversed position's net differs from minus the gross less the fees and slippage"
+  K-units: "a rate or price reaches a result through a normalised column; settlements on a day differ from 24 / funding_interval_hours; a fill's fee differs from the table's"
+  K-cap: "more than one clip open, or the legs' quantities differ, at any instant"
+  K-leak: "the gate reads a rate settled after its decision"
+  K-held: "fewer held days than statuses.bar.held_days_min: inconclusive (too few held days), before any kill"
+  K1: mean daily net <= 0
+  K-fund: funding received over the block <= fees and slippage paid
+  K-basis: "the mean of the daily series without its basis term <= 0"
+  K-liq: "at any hour a position is open, the hour's high of the mark price >= the liquidation price at 1x isolated margin: q x F0 - funding paid from the margin - q x (high - F0) <= mmr x q x high"
+  mmr: 0.05  # conservative, unsourced; above Binance's first-bracket rates as the drafting session knew them, so K-liq fires no later than Binance would
+  K-timing: "median over 200 runs (seeds 0-199) of the mean daily net, entry at a random hour open of the first 7 days and exit at a random hour open of the last 7 days (to 22:00 of the last day), <= 0"
+  K-placebo: "true mean <= the 95th percentile of 200 random gates (seeds 0-199), or <= the gate shifted 21 settlements later"
+  K-nbhd: "median over the cells {theta's grid neighbour below, theta, its neighbour above} x windows {9, 21, 42} of each cell's mean <= 0; six cells at an edge of the grid; each window opens no earlier than its own count of settlements"
+  K-fee_reference: "7.5 bp when both legs trade equal notional at the registered table"
+  K-delay: "a positive mean <= 0 with every entry and exit fill one hour later"
+  K-days: "half or fewer of held days positive"
+  K-fee: "break_even_per_side <= the notional-weighted mean verdict-tier taker fee of the slot's fills"
+placebos:
+  random_timing: {slots: [C1, C4], seeds: [0, 199], entry: uniform over the 168 hour opens of the first 7 days, exit: "uniform over the hour opens of the last 7 days up to 22:00 of the last day", rng: numpy.random.default_rng(seed)}
+  random_gate: {slots: [C2, C3], seeds: [0, 199], rule: "the true run's spells (lengths in settlements) in a random order, the settlements flat after the 21st split into k + 1 gaps by a uniformly random composition; fills, costs and day rules as the true gate", rng: numpy.random.default_rng(seed)}
+  shifted_gate: {slots: [C2, C3], shift_settlements: 21, rule: "the true gate's state moved 21 settlements later; a spell running past the block closes at the last fill hour"}
+  reversed_position: {slots: [C1, C2, C3, C4], use: K-acct only}
+
+measurements: [funding, fees, slippage and basis apart, slippage at 0 and 1 bp, zero fees, maker fees, annual return on capital_usdt, the share of settlements at or above 1 bp, the largest hourly mark-price rise against the liquidation distance, every theta of the grid on D (development)]
+
+budget:
+  files: "D 54 months, H 3, P 3, each month 4 planes x 2 pairs; under 100 MB in all (estimated, not measured)"
+  E_and_E2: never fetched
+
+compute:
+  record: null  # {trials: {sha256, rows}, code_freeze: {commit}}; frozen by the D amendment
+
+access:
+  development: "D's months of the four instruments' four planes; every other month refused"
+  never: [E, E2, "any month holding a protected day of another study"]
+  ledger: experiments/results/funding_carry_2026_ledger.json
+  H_opens_if: ["the D amendment's Frozen configuration sha256 equals the committed configuration's", "the study code is the code-freeze commit's: HEAD descends from it, nothing of src/, experiments/funding_carry_2026.py, pyproject.toml or uv.lock changed since", "the configuration changed since that commit only in its placeholders and the document only by appending, with one Frozen configuration sha256 line and no Null-placeholder sha256 line", "the tree clean but for the ledger", "no path under data/funding_carry_2026/ names a month of H"]
+  open_entry: "block, the session's commit, the configuration's sha256, the environment fingerprint and the UTC time, committed before the block's fetch"
+  close: "the read writes experiments/results/funding_carry_2026_<block>.json and records its sha256 in the ledger"
+  P_opens_if: ["H's results committed unchanged", "every slot neither killed nor void on H (blind_H: every candidate on H)", "March 2027 published on every plane", "the fee amendment committed; since H's read only README.md, experiments/results/, docs/ outside docs/preregistration/, the document's appended amendments and the fee intervals changed", "by 2027-04-30", "no path under data/funding_carry_2026/ names a month of P"]
+  second_read: "stamped second read; changes no status"
+  spent: "H and P; a successor uses days after 2027-03-31"
+
+amendment:
+  placeholder_comment: frozen by the D amendment
+  information_set: "before any fetch: sets information_set.owner_last_look only, and records the new hash on a line Null-placeholder sha256: `<hash>` under Amendments"
+  D_amendment: "after D and before H: one dated entry, written by the entry point and reviewed before it is committed, filling the six placeholders and recording the configuration's sha256 on a line Frozen configuration sha256: `<hash>`; nothing else changes"
+  corrections_before_H: "a dated amendment naming the fault, re-running D in full if it could change a D number; no amendment cites a number seen on the data as its reason, except a fault it names; a change outside the placeholders records a new Null-placeholder sha256 line before the code freeze"
+  before_P: "the owner's P statement (document only) and the fee amendment (intervals only), by 2027-04-30"
+  after_a_read: "nothing changes or is re-run under another rule; a defect is written to docs/funding_carry_2026_defects.md and every status it touches becomes void (defect found after the <block> read)"
+
+artefacts:
+  results: experiments/results/funding_carry_2026_<block>.json
+  page: experiments/results/funding_carry_2026_page.md
+  run_log: docs/funding_carry_2026_run_log.md
+  code_freeze_note: docs/funding_carry_2026_code_freeze.md
+  page_row: [status, first kill against its reference, mean, Newey-West t, median day, held days, MDE, funding, fees, slippage, basis, placebo percentile, K-nbhd median, break-even per side]
+  headlines:
+    each_slot_H: "[slot] on H, Binance [pair]: [status]; first kill [K-x] at [value] against [reference]."
+    carry_H: "[slot] on H: funding [x] bp a day against fees and slippage [y] and basis [z]; [status]."  # C1 and C4
+    each_slot_P: "[slot] on P, Binance [pair]: [status]; first kill [K-x] at [value] against [reference]."
+  sentence_rules: "[pair] reads 'BTCUSDT spot and perpetual' or 'ETHUSDT spot and perpetual'; [status] as the precedence gives it, with its marks; a slot with no kill reads none at n/a against n/a; values with two decimals and their unit: K-days (share of held days positive), K-fee bp per side, K-liq (mark high over liquidation price), every other bp; [x], [y], [z] the block's means a day over usable days in bp of the hedged notional, [y] a positive cost"

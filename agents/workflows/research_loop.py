@@ -382,6 +382,7 @@ class ResearchLoop:
             self.config,
             self.document,
             grants=self.grants,
+            web_hosts=self.web_hosts,
             prefix=self.python,
             cli=self.cli,
             earlier=tuple(done.items()),
@@ -604,8 +605,12 @@ def parser() -> argparse.ArgumentParser:
     sub = found.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="run the loop for one study, or resume a run")
     run.add_argument("--study", help="the study's name: configs/<study>.yaml and its document")
-    run.add_argument("--brief", help="the owner's brief, in a sentence or two")
-    run.add_argument("--brief-file", type=Path, help="the owner's brief, from a file")
+    run.add_argument(
+        "--brief", help="the owner's brief, in a sentence or two; on --resume, the owner's answers"
+    )
+    run.add_argument(
+        "--brief-file", type=Path, help="the owner's brief, from a file; on --resume, the answers"
+    )
     run.add_argument("--grant", action="append", default=[], help="<config>:<block> to open")
     run.add_argument("--web-host", action="append", default=[], help="a fee page's host")
     run.add_argument("--resume", type=Path, help="a run directory to continue")
@@ -692,7 +697,13 @@ def main(argv: list[str] | None = None, prepare: Callable[[Path], None] | None =
         log = RunLog(args.resume)
         meta = json.loads((log.path / "run.json").read_text())
         meta["grants"] = sorted({*meta.get("grants", []), *args.grant})
-        resumed = {"utc": datetime.now(UTC).isoformat(), "grants": sorted(args.grant),
+        now = datetime.now(UTC).isoformat()
+        answers = args.brief_file.read_text() if args.brief_file else args.brief
+        if answers:  # the owner's answers to a stop, appended to the brief and dated
+            meta["brief"] = (
+                f"{meta['brief'].rstrip()}\n\n## The owner, {now[:10]}\n\n{answers.strip()}\n"
+            )
+        resumed = {"utc": now, "grants": sorted(args.grant), "answers": answers or "",
                    "model": os.environ.get("TRP_AGENT_MODEL"),
                    "commit": git(REPO, "rev-parse", "HEAD").strip(),
                    "calendar_branches": calendar_branches(REPO)}  # fmt: skip

@@ -254,12 +254,48 @@ Never published:
   ledger, on the owner's grant;
 - **the loop's environment**, `agents/.venv-agents/` (ignored).
 
-## What a live run still needs
+## Where a language model helps, and the leak it brings
 
-- **A live model run has not been made.** Every test answers the roles with a
-  fake or a scripted client. A first run needs the model's name, the SDK's
-  credentials in the environment and the SDK installed as above; the options
-  were checked against `claude-agent-sdk` 0.2.174 without starting a session.
+A model is useful here where reading and judgement are the work, and nowhere it
+would stand in for the data. Each use is a skill under `.claude/skills/`:
+
+- **Proposing hypotheses** (`propose-hypotheses`): it reads the findings
+  register, names a mechanism for each idea, writes the kill condition and the
+  arithmetic against the cost floor, and does not propose a killed idea again
+  without saying what changed.
+- **Reviewing code before a freeze** (`pre-freeze-review`): a checklist of the
+  defects past reviews found here (21 in the 2025 study's code before its first
+  held-out read), each finding reported with the input that exposes it.
+- **Screening instruments by news** (`news-screen`): delistings, incidents and
+  unlocks for a block that has not started, dated and sourced, proposing
+  exclusions only.
+
+The leak: a model's training data reaches into the periods this repository
+holds out. A number it recalls about a past market, or news it reads about a
+past date, is a held-out read by another route, and no ledger records it. So
+the model never supplies a number about a market, every number it uses comes
+from a file of this repository, and news is read only forward. The 2026 carry
+study's registrar recorded the same point about itself: its general knowledge
+runs into the study's held-out months, so those months are treated as inside
+the information set.
+
+## Live runs, and what one still needs
+
+- **The first live run** (2 November 2026, the funding-rate carry
+  study, `claude-agent-sdk` 0.2.176) took the loop through propose and
+  register to the run step, which stopped because the study has no code yet.
+  The researcher proposed four slots, each with its kills and expected
+  outcome; the registrar refused once, listing nine decisions the brief left
+  open, and registered after the owner answered them on `--resume`; the
+  owner committed the registration. Six attempts of three steps, the failed
+  ones included, at 5.90 USD as the SDK reports it at list prices. The
+  run found two faults the scripted tests had not: the step prompt did not
+  name the fee hosts the policy allowed, and prose describing the D
+  amendment's line froze the registrar's own files in the middle of its
+  turn. Both are corrected, each with a test. Running the loop from inside
+  another agent session, start it with a clean environment, so that the SDK
+  uses the logged-in command-line client's credentials and not the outer
+  session's.
 - **The study's code.** No role writes study code. A new study, such as the
   funding-rate carry study, needs its entry point and modules written,
   reviewed and frozen by the owner between registration and run.

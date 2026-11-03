@@ -71,6 +71,7 @@ class StepContext:
     config: str
     document: str
     grants: frozenset[str] = frozenset()
+    web_hosts: frozenset[str] = frozenset()
     prefix: str = "python"
     cli: str = "trading-research"
     earlier: tuple[tuple[str, dict[str, Any]], ...] = ()
@@ -84,6 +85,8 @@ def step_prompt(step: str, role: str, ctx: StepContext) -> str:
         "",
         f"Study: `{ctx.study}`. Registration: `{ctx.document}` with `{ctx.config}`.",
         f"The owner's grants for this run: {grants}.",
+        "Fee pages the owner listed for the registrar to read: "
+        f"{', '.join(sorted(ctx.web_hosts)) or 'none'}.",
         f"Run Python as `{ctx.prefix}` and the CLI as `{ctx.cli}`, one command per call.",
         "",
         "## The owner's brief",

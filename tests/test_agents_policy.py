@@ -529,3 +529,13 @@ def test_a_scoped_search_is_allowed(tool: str, data: dict[str, str]) -> None:
 def test_pairs_and_catalog_are_refused_to_every_role(role: str, command: str) -> None:
     # CLAUDE.md lists them as run by the owner only; the policy has no rule for them.
     assert not bash(policy(role), command)
+
+
+def test_a_registration_that_describes_the_frozen_line_is_not_frozen_by_it(tmp_path: Path) -> None:
+    doc = tmp_path / "docs" / "preregistration" / "s.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("The D amendment adds a line ``Frozen configuration sha256: `<hash>` ``.\n")
+    registrar = ToolPolicy(tmp_path, "registrar", "s", calendar=CALENDAR)
+    assert registrar.writable() == {"docs/preregistration/s.md": "any", "configs/s.yaml": "any"}
+    doc.write_text(doc.read_text() + "\nFrozen configuration sha256: `" + "a" * 64 + "`\n")
+    assert registrar.writable() == {"docs/preregistration/s.md": "append"}
