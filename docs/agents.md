@@ -254,6 +254,31 @@ Never published:
   ledger, on the owner's grant;
 - **the loop's environment**, `agents/.venv-agents/` (ignored).
 
+## Where a language model helps, and the leak it brings
+
+A model is useful here where reading and judgement are the work, and nowhere it
+would stand in for the data. Each use is a skill under `.claude/skills/`:
+
+- **Proposing hypotheses** (`propose-hypotheses`): it reads the findings
+  register, names a mechanism for each idea, writes the kill condition and the
+  arithmetic against the cost floor, and does not propose a killed idea again
+  without saying what changed.
+- **Reviewing code before a freeze** (`pre-freeze-review`): a checklist of the
+  defects past reviews found here (21 in the 2025 study's code before its first
+  held-out read), each finding reported with the input that exposes it.
+- **Screening instruments by news** (`news-screen`): delistings, incidents and
+  unlocks for a block that has not started, dated and sourced, proposing
+  exclusions only.
+
+The leak: a model's training data reaches into the periods this repository
+holds out. A number it recalls about a past market, or news it reads about a
+past date, is a held-out read by another route, and no ledger records it. So
+the model never supplies a number about a market, every number it uses comes
+from a file of this repository, and news is read only forward. The 2026 carry
+study's registrar recorded the same point about itself: its general knowledge
+runs into the study's held-out months, so those months are treated as inside
+the information set.
+
 ## Live runs, and what one still needs
 
 - **The first live run** (2 November 2026, the funding-rate carry
