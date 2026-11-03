@@ -1020,6 +1020,7 @@ Four rules hold everywhere, each a test that fails rather than a caveat:
 | [`extending.md`](docs/extending.md) | Plugins: the five kinds, the decorator, the conformance checks |
 | [`paper_trading.md`](docs/paper_trading.md) | The paper loop, the parity guarantee, the kill switch |
 | [`agents.md`](docs/agents.md) | The agent harness: roles, policy, logs, each rule with its test |
+| [`skills.md`](docs/skills.md) | The skills for an interactive session: how to call one, which fits each stage of a study, where a language model helps and where it leaks |
 | [`limitations.md`](docs/limitations.md) | What this does not establish |
 | [`preregistration/`](docs/preregistration/) | Every registered study, committed before its held-out data was fetched |
 | [`results.md`](docs/results.md) | Every experiment, numbered, with the script that produced it |
