@@ -254,12 +254,23 @@ Never published:
   ledger, on the owner's grant;
 - **the loop's environment**, `agents/.venv-agents/` (ignored).
 
-## What a live run still needs
+## Live runs, and what one still needs
 
-- **A live model run has not been made.** Every test answers the roles with a
-  fake or a scripted client. A first run needs the model's name, the SDK's
-  credentials in the environment and the SDK installed as above; the options
-  were checked against `claude-agent-sdk` 0.2.174 without starting a session.
+- **The first live run** (2 November 2026, the funding-rate carry
+  study, `claude-agent-sdk` 0.2.176) took the loop through propose and
+  register to the run step, which stopped because the study has no code yet.
+  The researcher proposed four slots, each with its kills and expected
+  outcome; the registrar refused once, listing nine decisions the brief left
+  open, and registered after the owner answered them on `--resume`; the
+  owner committed the registration. Six attempts of three steps, the failed
+  ones included, at 5.90 USD as the SDK reports it at list prices. The
+  run found two faults the scripted tests had not: the step prompt did not
+  name the fee hosts the policy allowed, and prose describing the D
+  amendment's line froze the registrar's own files in the middle of its
+  turn. Both are corrected, each with a test. Running the loop from inside
+  another agent session, start it with a clean environment, so that the SDK
+  uses the logged-in command-line client's credentials and not the outer
+  session's.
 - **The study's code.** No role writes study code. A new study, such as the
   funding-rate carry study, needs its entry point and modules written,
   reviewed and frozen by the owner between registration and run.
