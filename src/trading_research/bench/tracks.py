@@ -26,6 +26,7 @@ market state already known to exist, not whether that state will come back.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -45,14 +46,14 @@ GRID_SECONDS = 5
 RECORDED_HELP = (
     "the recorded tracks read Bybit's public top-of-book for 26 USDT perpetuals, one "
     "parquet per instrument and day under data/universe (1 February to 10 March 2024) "
-    "and data/universe_fresh (12 March to 20 April 2024), as the reversion experiments "
-    "wrote them (experiments/reversion_fresh.py); with --data pointing elsewhere, the "
-    "same layout"
+    "and data/universe_fresh (12 March to 19 April 2024); `trading-research bench fetch` "
+    "downloads them from Bybit's free archives (about 2,000 instrument-days)"
 )
 
 
-#: What a track's builder returns: each instrument's market and its first scored row.
-Markets = Union["Panel", list[tuple[MarketData, int]]]
+#: What a track's builder returns: every instrument's market, its first scored
+#: row, and its group (one independent market each: a seed, or the one span).
+Markets = Union["TrackData"]
 
 
 @dataclass(frozen=True)
@@ -77,14 +78,18 @@ class Track:
 # --- synthetic --------------------------------------------------------------------
 
 BOOK_STEPS = 216_000  # 200 ms snapshots: twelve hours
-BOOK_SEED = 20261104
+#: Three independent markets a track, so a verdict does not rest on one draw.
+BOOK_SEEDS = (20261104, 20261204, 20270104)
 BOOK_TRAIN_SHARE = 0.4
 
 
 def _book(signal_strength: float) -> Callable[[Path], Markets]:
     def build(_root: Path) -> Markets:
-        market = demo_market(steps=BOOK_STEPS, seed=BOOK_SEED, signal_strength=signal_strength)
-        return [(market, int(len(market.frame) * BOOK_TRAIN_SHARE))]
+        parts: list[Panel | list[tuple[MarketData, int]]] = []
+        for seed in BOOK_SEEDS:
+            market = demo_market(steps=BOOK_STEPS, seed=seed, signal_strength=signal_strength)
+            parts.append([(market, int(len(market.frame) * BOOK_TRAIN_SHARE))])
+        return TrackData(parts)
 
     return build
 
@@ -92,7 +97,7 @@ def _book(signal_strength: float) -> Callable[[Path], Markets]:
 CROSS_INSTRUMENTS = 12
 CROSS_DAYS = 8
 CROSS_FIT_DAYS = 3
-CROSS_SEED = 20261105
+CROSS_SEEDS = (20261105, 20261205, 20270105)
 HALF_SPREAD_BP = 1.0
 TOUCH_SIZE = 1_000.0
 
@@ -101,19 +106,23 @@ def _cross(null: bool) -> Callable[[Path], Markets]:
     def build(_root: Path) -> Markets:
         from trading_research.synthetic.cross_section import CrossSectionSpec, generate
 
-        spec = CrossSectionSpec(
-            n_instruments=CROSS_INSTRUMENTS, days=CROSS_DAYS, bar_s=GRID_SECONDS,
-            null=null, seed=CROSS_SEED,
-        )  # fmt: skip
-        data = generate(spec)
-        grids = {s: _touch_from_log(data.log_prices[s]) for s in spec.symbols}
-        start = pd.Timestamp(data.days[CROSS_FIT_DAYS], tz="UTC")
-        source = (
-            f"synthetic: synthetic.cross_section, {CROSS_INSTRUMENTS} instruments, "
-            f"{CROSS_DAYS} days of {GRID_SECONDS} s, {'null' if null else 'reversal planted'}, "
-            f"seed {CROSS_SEED}, a {2 * HALF_SPREAD_BP:g} bp quoted spread"
-        )
-        return Panel(grids, source, start=start)
+        parts: list[Panel | list[tuple[MarketData, int]]] = []
+        for seed in CROSS_SEEDS:
+            spec = CrossSectionSpec(
+                n_instruments=CROSS_INSTRUMENTS, days=CROSS_DAYS, bar_s=GRID_SECONDS,
+                null=null, seed=seed,
+            )  # fmt: skip
+            data = generate(spec)
+            grids = {s: _touch_from_log(data.log_prices[s]) for s in spec.symbols}
+            start = pd.Timestamp(data.days[CROSS_FIT_DAYS], tz="UTC")
+            source = (
+                f"synthetic: synthetic.cross_section, {CROSS_INSTRUMENTS} instruments, "
+                f"{CROSS_DAYS} days of {GRID_SECONDS} s, "
+                f"{'null' if null else 'reversal planted'}, seed {seed}, "
+                f"a {2 * HALF_SPREAD_BP:g} bp quoted spread"
+            )
+            parts.append(Panel(grids, source, start=start))
+        return TrackData(parts)
 
     return build
 
@@ -144,6 +153,15 @@ RECORDED: dict[str, tuple[str, date, date, date]] = {
 
 BOOK_COLUMNS = ["timestamp", "bid_price_0", "bid_size_0", "ask_price_0", "ask_size_0"]
 
+#: The recorded tracks' instruments, frozen with version 1: the 26 USDT
+#: perpetuals of the reversion study (results.md, section 27).
+RECORDED_SYMBOLS: tuple[str, ...] = (
+    "ADAUSDT", "ALGOUSDT", "APTUSDT", "ARBUSDT", "ATOMUSDT", "AVAXUSDT", "BCHUSDT",
+    "BICOUSDT", "BTCUSDT", "CRVUSDT", "DOGEUSDT", "DOTUSDT", "DYDXUSDT", "ETHUSDT",
+    "FILUSDT", "GALAUSDT", "INJUSDT", "LINKUSDT", "LTCUSDT", "MATICUSDT", "NEARUSDT",
+    "OPUSDT", "SOLUSDT", "UNIUSDT", "VETUSDT", "XRPUSDT",
+)  # fmt: skip
+
 
 def recorded_days(name: str) -> list[date]:
     _, first, _, last = RECORDED[name]
@@ -151,16 +169,14 @@ def recorded_days(name: str) -> list[date]:
 
 
 def recorded_present(name: str, data_root: Path) -> list[str]:
-    """The instruments with every day of the track on disk."""
+    """The track's instruments with every day of the track on disk."""
     directory = data_root / RECORDED[name][0]
-    if not directory.is_dir():
-        return []
     days = recorded_days(name)
-    return sorted(
-        p.name
-        for p in directory.iterdir()
-        if p.is_dir() and all((p / f"{d.isoformat()}.parquet").exists() for d in days)
-    )
+    return [
+        s
+        for s in RECORDED_SYMBOLS
+        if all((directory / s / f"{d.isoformat()}.parquet").exists() for d in days)
+    ]
 
 
 def _recorded(name: str) -> Callable[[Path], Markets]:
@@ -169,10 +185,10 @@ def _recorded(name: str) -> Callable[[Path], Markets]:
 
         folder, _, scored, _ = RECORDED[name]
         symbols = recorded_present(name, data_root)
-        if len(symbols) < 6:
+        if len(symbols) < len(RECORDED_SYMBOLS):
             raise FileNotFoundError(
-                f"{name}: found {len(symbols)} instruments with every day under "
-                f"{data_root / folder}; {RECORDED_HELP}"
+                f"{name}: found {len(symbols)} of {len(RECORDED_SYMBOLS)} instruments with "
+                f"every day under {data_root / folder}; {RECORDED_HELP}"
             )
         grids = {}
         for symbol in symbols:
@@ -190,7 +206,7 @@ def _recorded(name: str) -> Callable[[Path], Markets]:
             f"recorded: Bybit linear top-of-book, {len(symbols)} instruments, "
             f"{recorded_days(name)[0]} to {recorded_days(name)[-1]}, {GRID_SECONDS} s grid"
         )
-        return Panel(grids, source, start=pd.Timestamp(scored, tz="UTC"))
+        return TrackData([Panel(grids, source, start=pd.Timestamp(scored, tz="UTC"))])
 
     return build
 
@@ -244,6 +260,55 @@ class Panel:
         )
 
 
+class TrackData:
+    """A track's markets, in independent groups, and the fingerprint of what they hold.
+
+    A group is one market that shares nothing with another: a seed of a
+    synthetic track, or the one recorded span. Trades are clustered within a
+    group (by hour or day), never across groups.
+    """
+
+    def __init__(self, parts: list[Panel | list[tuple[MarketData, int]]]) -> None:
+        self.parts = parts
+
+    def __iter__(self) -> Iterator[tuple[MarketData, int, int]]:
+        for group, part in enumerate(self.parts):
+            for market, start in part:
+                yield market, start, group
+
+    @property
+    def instruments(self) -> int:
+        return sum(len(p) for p in self.parts)
+
+    def fingerprint(self) -> str:
+        """sha256 of every instrument's gridded top of book, timestamps included.
+
+        The bytes are the numbers, not a file, so the same archives downloaded on
+        another machine give the same fingerprint.
+        """
+        digest = hashlib.sha256()
+        for part in self.parts:
+            grids = (
+                part.grids
+                if isinstance(part, Panel)
+                else {m.symbol: m.frame[BOOK_COLUMNS] for m, _ in part}
+            )
+            for symbol in sorted(grids):
+                grid = grids[symbol]
+                digest.update(symbol.encode())
+                stamps = (
+                    pd.DatetimeIndex(grid["timestamp"])
+                    .as_unit("ns")
+                    .to_numpy(dtype="datetime64[ns]")
+                    .view("int64")
+                )
+                digest.update(np.ascontiguousarray(stamps).tobytes())
+                for column in BOOK_COLUMNS[1:]:
+                    values = grid[column].to_numpy(dtype="float64")
+                    digest.update(np.ascontiguousarray(values).tobytes())
+        return digest.hexdigest()
+
+
 TRACKS: dict[str, Track] = {
     t.name: t
     for t in (
@@ -252,8 +317,9 @@ TRACKS: dict[str, Track] = {
             "synthetic",
             "Does the strategy find an order-book edge that is known to be there?",
             "a rule reading the touch imbalance earns before fees; others may miss it",
-            f"synthetic: data.synthetic.generate, {BOOK_STEPS} steps of 200 ms, seed {BOOK_SEED}, "
-            "queue-imbalance signal planted (strength 0.15)",
+            f"synthetic: data.synthetic.generate, three markets of {BOOK_STEPS} steps of 200 ms, "
+            f"seeds {', '.join(map(str, BOOK_SEEDS))}, queue-imbalance signal planted "
+            "(strength 0.15)",
             _book(0.15),
             planted="queue imbalance",
         ),
@@ -262,7 +328,7 @@ TRACKS: dict[str, Track] = {
             "synthetic",
             "Does it stay quiet where the same market has nothing planted?",
             "nothing distinguishable from zero before fees",
-            "synthetic: the same generator and seed, signal strength 0",
+            "synthetic: the same generator and seeds, signal strength 0",
             _book(0.0),
         ),
         Track(
@@ -270,8 +336,9 @@ TRACKS: dict[str, Track] = {
             "synthetic",
             "Does a cross-sectional rule find a reversion that is known to be there?",
             "a rule trading against the index move earns before fees",
-            f"synthetic: synthetic.cross_section, {CROSS_INSTRUMENTS} instruments, "
-            f"{CROSS_DAYS} days, reversal planted, seed {CROSS_SEED}",
+            f"synthetic: synthetic.cross_section, three universes of {CROSS_INSTRUMENTS} "
+            f"instruments and {CROSS_DAYS} days, reversal planted, seeds "
+            f"{', '.join(map(str, CROSS_SEEDS))}",
             _cross(False),
             planted="cross-sectional reversion",
         ),
@@ -280,7 +347,7 @@ TRACKS: dict[str, Track] = {
             "synthetic",
             "Does it stay quiet on the same universe with the reversion removed?",
             "nothing distinguishable from zero before fees",
-            "synthetic: the same universe and seed, transients replaced by a random walk",
+            "synthetic: the same universes and seeds, transients replaced by a random walk",
             _cross(True),
         ),
         Track(
@@ -321,5 +388,6 @@ def iter_tracks(names: str) -> Iterator[Track]:
             yield TRACKS[name]
 
 
-__all__ = ["GRID_SECONDS", "RECORDED", "RECORDED_HELP", "TRACKS", "Markets", "Panel", "Track",
+__all__ = ["GRID_SECONDS", "RECORDED", "RECORDED_HELP", "RECORDED_SYMBOLS", "TRACKS", "Markets",
+           "Panel", "Track", "TrackData",
            "iter_tracks", "recorded_present"]  # fmt: skip

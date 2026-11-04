@@ -12,6 +12,8 @@ instrument, pooled:
 ``t``
     The day-clustered *t* of net (hour-clustered on a track shorter than five
     days): trades on one day share a market, so they are not independent.
+    Clusters never cross groups: each seed of a synthetic track is its own
+    market.
 ``placebo``
     The share of nineteen placebos whose gross is below the strategy's. Each
     placebo is the same decisions moved in time (rotated within the scored
@@ -69,6 +71,8 @@ class TrackScore:
     status: str  # "scored", "n/a" or "skipped"
     reason: str = ""
     instruments: int = 0
+    groups: int = 0
+    data_sha256: str = ""
     trades: int = 0
     clusters: int = 0
     cluster_unit: str = ""
@@ -77,6 +81,9 @@ class TrackScore:
     net_bp: float = math.nan
     gross_t: float = math.nan
     net_t: float = math.nan
+    #: One-sided p of net > 0 from its clustered t (Student, clusters - 1 df),
+    #: for a family correction across a board.
+    net_p: float = math.nan
     placebo: float = math.nan
     breakeven_taker_bp: float = math.nan
     net_at: dict[str, float] = field(default_factory=dict)
@@ -132,7 +139,7 @@ def score_track(
     real: list[pd.DataFrame] = []
     placebo: list[list[pd.DataFrame]] = [[] for _ in range(PLACEBOS)]
     used = 0
-    for market, start in chosen:
+    for market, start, group in chosen:
         strategy = build()
         missing = missing_inputs(strategy, market.frame)
         if missing:
@@ -148,7 +155,7 @@ def score_track(
         decisions[:start] = 0
         hold = int(strategy.horizon)
         cooldown = int(getattr(strategy, "cooldown", 0) or 0)
-        real.append(_taker(decisions, market, hold, cooldown))
+        real.append(_taker(decisions, market, hold, cooldown).assign(group=group))
         scored = decisions[start:]
         for j in range(PLACEBOS):
             shift = round((j + 1) * len(scored) / (PLACEBOS + 1))
@@ -158,6 +165,9 @@ def score_track(
         used += 1
 
     out = TrackScore(track.name, track.kind, "scored", instruments=used)
+    out.groups = len(chosen.parts)
+    out.data_sha256 = chosen.fingerprint()
+    real = [a for a in real if len(a)]
     attempts = pd.concat(real, ignore_index=True) if real else pd.DataFrame()
     out.seconds = round(time.perf_counter() - started, 1)
     if attempts.empty:
@@ -166,10 +176,11 @@ def score_track(
         return out
 
     ns = attempts["ts"].to_numpy(dtype="int64")
-    stamps = pd.to_datetime(ns, utc=True)
-    span_days = float(ns.max() - ns.min()) / 86_400e9
-    unit = "day" if span_days >= 5 else "hour"
-    keys = pd.Series(stamps.floor("1D" if unit == "day" else "1h"))
+    spans = attempts.assign(ns=ns).groupby("group")["ns"].agg(lambda v: v.max() - v.min())
+    unit = "day" if float(spans.max()) / 86_400e9 >= 5 else "hour"
+    floored = pd.to_datetime(ns, utc=True).floor("1D" if unit == "day" else "1h")
+    # Trades cluster within a group (a seed, or the one span), never across.
+    keys = pd.Series(attempts["group"].astype(str).to_numpy() + "|" + floored.astype(str))
     out.trades = len(attempts)
     out.cluster_unit = unit
     out.gross_bp = float(attempts["gross_bp"].mean())
@@ -177,8 +188,14 @@ def score_track(
     out.net_bp = float(attempts["net_bp"].mean())
     out.gross_t, out.clusters = _clustered_t(attempts["gross_bp"].reset_index(drop=True), keys)
     out.net_t, _ = _clustered_t(attempts["net_bp"].reset_index(drop=True), keys)
+    if math.isfinite(out.net_t):
+        from trading_research.market_making.verdicts import t_sf
+
+        out.net_p = float(t_sf(out.net_t, out.clusters - 1))
     gross_placebos = [
-        float(pd.concat(p, ignore_index=True)["gross_bp"].mean()) if any(len(x) for x in p) else 0.0
+        float(pd.concat([x for x in p if len(x)], ignore_index=True)["gross_bp"].mean())
+        if any(len(x) for x in p)
+        else 0.0
         for p in placebo
     ]
     out.placebo = float(np.mean([g < out.gross_bp for g in gross_placebos]))

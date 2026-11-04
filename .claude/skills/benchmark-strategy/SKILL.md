@@ -20,7 +20,17 @@ Four are synthetic, generated from a fixed seed with a known answer: an
 order-book edge and a cross-sectional reversion, each with its null. Two are
 recorded Bybit spans of 2024, chosen in hindsight: one where short reversion
 paid, one after it stopped. They need the archives under `data/universe` and
-`data/universe_fresh`; without them they are skipped, never faked.
+`data/universe_fresh`; without them they are skipped, never faked. The
+benchmark is frozen as version 1: a card whose data does not `match` is not
+comparable with the board, and saying so is part of reading it.
+
+The recorded tracks' data, downloaded and checked against version 1's
+fingerprints:
+
+```bash
+trading-research bench fetch
+trading-research bench verify
+```
 
 ## Scoring a strategy
 

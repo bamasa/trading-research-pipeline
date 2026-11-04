@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software or its benchmark, please cite it as below, and name
+  the benchmark version (version 1, frozen 2026-11-04) next to any number you
+  quote from a card.
+title: "trading-research-pipeline: a pre-registered strategy-search pipeline and benchmark for crypto markets"
+type: software
+authors:
+  - name: "trading-research-pipeline contributors"
+repository-code: "https://github.com/bamasa/trading-research-pipeline"
+url: "https://github.com/bamasa/trading-research-pipeline/blob/main/docs/benchmarks.md"
+license: MIT
+version: "0.1.0"
+date-released: "2026-11-04"
+keywords:
+  - quantitative finance
+  - backtesting
+  - benchmark
+  - limit order book
+  - cryptocurrency
+  - pre-registration
