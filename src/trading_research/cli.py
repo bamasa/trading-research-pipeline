@@ -1767,6 +1767,7 @@ from trading_research import (  # noqa: E402
     cli_signal,
     cli_study,
 )
+from trading_research.cli_bench import bench_app  # noqa: E402
 from trading_research.cli_plugins import plugins_app  # noqa: E402
 
 app.add_typer(cli_data.build(app))
@@ -1782,4 +1783,5 @@ app.add_typer(cli_demo.app)
 app.add_typer(cli_fees.app)
 app.add_typer(cli_catalog.app)
 app.add_typer(plugins_app, name="strategies")
+app.add_typer(bench_app, name="bench")
 cli_common.as_map(app)

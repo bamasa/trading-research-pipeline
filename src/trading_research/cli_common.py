@@ -43,6 +43,7 @@ ORDER: tuple[str, ...] = (
     "pairs",
     "review",
     "strategies",
+    "bench",
     "synthetic",
     "verify",
     "study",
@@ -78,6 +79,10 @@ GROUPS: dict[str, tuple[str, str]] = {
     "strategies": (
         EXTEND_PANEL,
         "Plugins: list, show, write a new one from a template, check, backtest.",
+    ),
+    "bench": (
+        EXTEND_PANEL,
+        "Benchmark: score a strategy on fixed tracks with a known answer, and the board.",
     ),
     "synthetic": (
         CHECK_PANEL,

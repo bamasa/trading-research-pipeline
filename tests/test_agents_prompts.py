@@ -29,6 +29,7 @@ DOCUMENTS = [
     REPO / "agents/protocol.md",
     REPO / "agents/README.md",
     REPO / "docs/skills.md",
+    REPO / "docs/benchmarks.md",
     *ROLE_FILES,
     *sorted((REPO / ".claude/skills").glob("*/SKILL.md")),
 ]

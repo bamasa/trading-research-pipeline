@@ -80,6 +80,7 @@ log `docs/<study>_run_log.md`, and [`agents/protocol.md`](agents/protocol.md).
 | `trading-research synthetic` | nothing; writes generated data and its `truth.json` under `data/synthetic/` | synthetic, never evidence about a market |
 | `trading-research verify` | nothing; generates its own data, writes pages under `artifacts/verify/` | checks code against planted answers, never a market |
 | `trading-research strategies` | the plugin registry; `check` and `backtest` run on the synthetic demo market unless `backtest --input` names a dataset | pages under `artifacts/plugins/`; `new` writes a plugin file and its test |
+| `trading-research bench` | tracks it generates, and the 2024 Bybit archives under `data/universe` and `data/universe_fresh`, outside every protected range | cards under `artifacts/bench/`; never fetches; a card is a measurement, never a study's result |
 | `trading-research validate-data`, `screen`, `review` | files already on disk | no network |
 | `trading-research prepare`, `select`, `train`, `predict`, `backtest`, `retrain-search`, `exit-search` | the pipeline's staged files | the window each is given, nothing else |
 | `trading-research download`, `download-book` | public archives over the network | free days only, written under `data/<study>/`; `fundingRate` and `klines` come as whole months |
