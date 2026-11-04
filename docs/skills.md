@@ -28,6 +28,7 @@ still the owner's.
 | Stage | Skill | Ask it, for example | It hands back |
 |---|---|---|---|
 | idea | `propose-hypotheses` | "Three hypotheses that build on the 10-minute reversion, cheapest to refute first" | three to five hypotheses, each with a mechanism, a kill condition and the arithmetic against the cost floor |
+| scoring an idea | `benchmark-strategy` | "Score my_rule on the benchmark and tell me at what fee it would pay" | the card: a mark per track, net at each fee, the break-even fee, and what a pass still needs |
 | registration | `preregister-study` | "Register the second one: blocks, slots, kills" | a document under `docs/preregistration/` and its YAML under `configs/`, with the null-placeholder sha256 |
 | before the freeze | `pre-freeze-review` | "Review the carry study's code before we freeze it" | each defect with `file:line`, the input that exposes it and the amendment it needs |
 | forward block | `news-screen` | "Screen the instruments of P for delistings and unlocks" | a dated table of exclusions and flags with their sources, never an addition |

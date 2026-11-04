@@ -118,6 +118,7 @@ EVERY_GROUP = {
     "pairs": "The pipeline, step by step",
     "review": "The pipeline, step by step",
     "strategies": "Extend",
+    "bench": "Extend",
     "synthetic": "Check",
     "verify": "Check",
     "study": "Registered studies",

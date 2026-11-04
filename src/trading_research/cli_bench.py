@@ -1,0 +1,192 @@
+"""``trp bench``: score a strategy on fixed tracks, and the board of every built-in one.
+
+The tracks and the rule are in :mod:`trading_research.bench`; this module only
+parses arguments, prints and writes. ``run`` takes any registered strategy or
+model, so a plugin of your own (``trp strategies new``) is scored the same way
+as the repository's.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Annotated, Any
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+bench_app = typer.Typer(
+    name="bench",
+    help="Benchmark: score a strategy on fixed tracks with a known answer, and the board.",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+console = Console()
+err_console = Console(stderr=True)
+
+TracksOption = Annotated[
+    str, typer.Option("--tracks", "-t", help="Track names separated by commas, or all.")
+]
+DataOption = Annotated[
+    Path,
+    typer.Option("--data", help="Where the recorded tracks' archives are (data/universe ...)."),
+]
+OutputOption = Annotated[Path, typer.Option("--output", "-o")]
+
+
+def _tracks(value: str) -> list[Any]:
+    from trading_research.bench import iter_tracks
+
+    try:
+        return list(iter_tracks(value))
+    except ValueError as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+
+
+def _print_score(score: Any) -> None:
+    from trading_research.bench import FEE_LADDER
+
+    if score.status != "scored":
+        console.print(f"  [dim]{score.track:<18} {score.status}: {score.reason[:160]}[/dim]")
+        return
+    colour = {True: "green", False: "red", None: "yellow"}[score.passed]
+    if not score.net_at:
+        console.print(f"  {score.track:<18} [{colour}]{score.verdict}[/{colour}]")
+        return
+    ladder = "  ".join(f"{name.split(' ')[0]} {score.net_at[name]:+.1f}" for name, _ in FEE_LADDER)
+    console.print(
+        f"  {score.track:<18} [{colour}]{score.verdict}[/{colour}]\n"
+        f"  {'':<18} {score.trades:,} trades, gross {score.gross_bp:+.2f}, net "
+        f"{score.net_bp:+.2f} bp/trade, t {score.net_t:+.2f}, placebo {score.placebo:.0%}, "
+        f"break-even fee {score.breakeven_taker_bp:+.2f} bp/side\n"
+        f"  {'':<18} [dim]net at fee: {ladder}[/dim]"
+    )
+
+
+@bench_app.command("list")
+def list_cmd(data: DataOption = Path("data")) -> None:
+    """The tracks: what each asks, what a good strategy does there, and whether it is here."""
+    from trading_research.bench import TRACKS
+    from trading_research.bench.tracks import recorded_present
+
+    table = Table(show_edge=False)
+    table.add_column("track", no_wrap=True)
+    table.add_column("kind", no_wrap=True)
+    for column in ("question", "a good strategy", "here"):
+        table.add_column(column, overflow="fold")
+    for track in TRACKS.values():
+        if track.kind == "synthetic":
+            here = "generated"
+        else:
+            count = len(recorded_present(track.name, data))
+            here = f"{count} instruments" if count >= 6 else "[yellow]not on disk[/yellow]"
+        table.add_row(track.name, track.kind, track.question, track.expected, here)
+    console.print(table)
+
+
+@bench_app.command("run")
+def run_cmd(
+    name: Annotated[str, typer.Argument(help="A registered strategy or model.")],
+    kind: Annotated[
+        str | None, typer.Option("--kind", "-k", help="strategy or model, if the name is both.")
+    ] = None,
+    tracks: TracksOption = "all",
+    param: Annotated[
+        list[str] | None,
+        typer.Option("--param", "-p", help="A constructor argument, key=value; repeatable."),
+    ] = None,
+    data: DataOption = Path("data"),
+    output: OutputOption = Path("artifacts/bench"),
+) -> None:
+    """Score one strategy or model on the tracks; writes OUTPUT/<name>/card.md and card.json."""
+    import os
+
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from trading_research.bench import MarketCache, run, write_card
+    from trading_research.cli_plugins import _params, _spec
+
+    spec = _spec(name, kind)
+    if spec.kind not in ("strategy", "model"):
+        err_console.print(f"[red]{name} is a {spec.kind}; bench takes a strategy or a model[/red]")
+        raise typer.Exit(code=2)
+    chosen = _tracks(tracks)
+    console.print(f"[bold]{spec.name}[/bold] ({spec.kind}, {spec.origin})")
+    card = run(spec, _params(param), chosen, MarketCache(data), on_score=_print_score)
+    console.print(f"marks [bold]{card.marks}[/bold]  -> {write_card(card, output)}")
+
+
+@bench_app.command("board")
+def board_cmd(
+    kind: Annotated[
+        str, typer.Option("--kind", "-k", help="strategy, model, or both.")
+    ] = "strategy",
+    names: Annotated[
+        str | None, typer.Option("--names", help="Only these plugins, separated by commas.")
+    ] = None,
+    tracks: TracksOption = "all",
+    data: DataOption = Path("data"),
+    output: OutputOption = Path("artifacts/bench"),
+    workers: Annotated[
+        int, typer.Option("--workers", "-w", min=1, help="Plugins scored at once, a process each.")
+    ] = 1,
+) -> None:
+    """Score every registered plugin of KIND on the tracks; writes OUTPUT/board.json and a card each.
+
+    With --workers above one, each plugin is scored in its own process, which
+    builds its own copy of the recorded tracks (about 4 GB each).
+    """
+    import os
+
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from trading_research.bench import MarketCache, board_rows, run, write_card
+    from trading_research.plugins import specs
+
+    kinds = ("strategy", "model") if kind == "both" else (kind,)
+    if any(k not in ("strategy", "model") for k in kinds):
+        err_console.print("[red]--kind is strategy, model or both[/red]")
+        raise typer.Exit(code=2)
+    wanted = {n.strip() for n in names.split(",")} if names else None
+    chosen = _tracks(tracks)
+    todo = [s for k in kinds for s in specs(k) if wanted is None or s.name in wanted]
+    cards = []
+    if workers == 1:
+        cache = MarketCache(data)
+        for spec in todo:
+            console.print(f"[bold]{spec.name}[/bold] ({spec.kind}, {spec.origin})")
+            card = run(spec, {}, chosen, cache, on_score=_print_score)
+            write_card(card, output)
+            cards.append(card)
+            console.print(f"  marks [bold]{card.marks}[/bold]")
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+
+        names_only = [t.name for t in chosen]
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_one_card, s.kind, s.name, names_only, str(data)) for s in todo]
+            for future in futures:
+                card = future.result()
+                console.print(f"[bold]{card.name}[/bold] ({card.kind}, {card.origin})")
+                for score in card.scores:
+                    _print_score(score)
+                write_card(card, output)
+                cards.append(card)
+                console.print(f"  marks [bold]{card.marks}[/bold]")
+    output.mkdir(parents=True, exist_ok=True)
+    path = output / "board.json"
+    payload = {"tracks": [t.name for t in chosen], "rows": board_rows(cards)}
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    console.print(f"-> {path}")
+
+
+def _one_card(kind: str, name: str, tracks: list[str], data: str) -> Any:
+    """One plugin on the tracks, in a worker process of its own."""
+    import os
+
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from trading_research.bench import TRACKS, MarketCache, run
+    from trading_research.plugins import get
+
+    return run(get(name, kind), {}, [TRACKS[t] for t in tracks], MarketCache(Path(data)))

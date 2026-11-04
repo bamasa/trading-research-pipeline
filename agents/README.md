@@ -16,7 +16,7 @@ adds no study code and changes none: it runs the commands that exist.
 | [`workflows/prompts.py`](workflows/prompts.py) | each role's system prompt and step prompt, and the handback it must end with |
 | [`workflows/research_loop.py`](workflows/research_loop.py) | the orchestrator, its gates, the code's verdict, the SDK runner and the helpers |
 | [`workflows/demo.py`](workflows/demo.py) and [`demo/`](demo/) | the demonstration on a synthetic study, with a scripted client in place of the model |
-| [`../.claude/skills/`](../.claude/skills/) | the same discipline as skills for an interactive session: the loop, proposing hypotheses, a registration, a review before the freeze and after it, a held-out read, the record, the checks before a commit, and a news screen for forward blocks only |
+| [`../.claude/skills/`](../.claude/skills/) | the same discipline as skills for an interactive session: the loop, proposing hypotheses, scoring a strategy on the benchmark, a registration, a review before the freeze and after it, a held-out read, the record, the checks before a commit, and a news screen for forward blocks only |
 | [`../docs/agents.md`](../docs/agents.md) | how to run it, the roles, each rule with its test, what is logged and published |
 | [`../docs/agents_demo_funding_carry.md`](../docs/agents_demo_funding_carry.md) | how the loop would run the roadmap's funding-rate carry study |
 

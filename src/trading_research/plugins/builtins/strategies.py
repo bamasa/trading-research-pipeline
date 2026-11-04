@@ -62,6 +62,9 @@ class Reversion:
         self.config = ReversionConfig(trades_per_day=trades_per_day)
         self.lookback = self.config.lookback
         self.horizon = self.config.hold
+        #: Rows to stand aside after a close, part of the frozen rule; an
+        #: execution that honours it (the benchmark's taker) re-enters no sooner.
+        self.cooldown = self.config.cooldown
         self.threshold = float("nan")
 
     def _signal(self, frame: pd.DataFrame) -> np.ndarray:
