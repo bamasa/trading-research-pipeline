@@ -70,7 +70,7 @@ def _print_score(score: Any) -> None:
 def list_cmd(data: DataOption = Path("data")) -> None:
     """The tracks: what each asks, what a good strategy does there, and whether it is here."""
     from trading_research.bench import TRACKS
-    from trading_research.bench.tracks import recorded_present
+    from trading_research.bench.tracks import recorded_present, today
 
     table = Table(show_edge=False)
     table.add_column("track", no_wrap=True)
@@ -80,6 +80,8 @@ def list_cmd(data: DataOption = Path("data")) -> None:
     for track in TRACKS.values():
         if track.kind == "synthetic":
             here = "generated"
+        elif track.opens is not None and today() < track.opens:
+            here = f"[cyan]sealed until {track.opens.isoformat()}[/cyan]"
         else:
             count = len(recorded_present(track.name, data))
             here = f"{count} instruments" if count >= 6 else "[yellow]not on disk[/yellow]"
@@ -201,15 +203,20 @@ def fetch_cmd(
     workers: Annotated[int, typer.Option("--workers", "-w", min=1)] = 6,
 ) -> None:
     """Download the recorded tracks' top-of-book from Bybit's free archives; days on disk are kept."""
-    from trading_research.bench.tracks import RECORDED, RECORDED_SYMBOLS, recorded_days
+    from trading_research.bench import TRACKS
+    from trading_research.bench.tracks import RECORDED, recorded_days, today, track_symbols
     from trading_research.data.ensure import DataUnavailable, ensure_universe
 
     for name, (folder, *_rest) in RECORDED.items():
         days = recorded_days(name)
+        opens = TRACKS[name].opens
+        if opens is not None and today() < opens:
+            console.print(f"[bold]{name}[/bold]: sealed until {opens}; fetch it then")
+            continue
         console.print(f"[bold]{name}[/bold]: {days[0]} to {days[-1]} -> {data / folder}")
         try:
             ensure_universe(
-                RECORDED_SYMBOLS, days[0], days[-1], root=data / folder, workers=workers,
+                track_symbols(name), days[0], days[-1], root=data / folder, workers=workers,
                 dry_run=dry_run, on_progress=lambda line: console.print(f"  {line}"),
             )  # fmt: skip
         except DataUnavailable as exc:
@@ -219,19 +226,46 @@ def fetch_cmd(
         console.print("next: trading-research bench verify")
 
 
+@bench_app.command("state")
+def state_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> None:
+    """The index's ten-minute autocorrelation on each panel track's scored span.
+
+    The state the reversion rule needs (about -0.10 where it paid, zero where it
+    did not); the forward track's registration is read against it.
+    """
+    from trading_research.bench.state import index_autocorrelation
+
+    for track in _tracks(tracks):
+        if track.kind == "synthetic" and "reversion" not in track.name:
+            continue
+        try:
+            value = index_autocorrelation(track.markets(data))
+        except FileNotFoundError as exc:
+            console.print(f"  {track.name:<18} [yellow]not here[/yellow]: {str(exc)[:120]}")
+            continue
+        console.print(f"  {track.name:<18} index ten-minute autocorrelation {value:+.4f}")
+
+
 @bench_app.command("verify")
 def verify_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> None:
     """Fingerprint each track's data and compare it with version 1's; exits 1 on a difference."""
     from trading_research.bench import FINGERPRINTS, VERSION
+    from trading_research.bench.tracks import Sealed
 
     differs = False
     for track in _tracks(tracks):
         try:
             found = track.markets(data).fingerprint()
+        except Sealed as exc:
+            console.print(f"  {track.name:<18} [cyan]sealed[/cyan]: {str(exc)[:120]}")
+            continue
         except FileNotFoundError as exc:
             console.print(f"  {track.name:<18} [yellow]not on disk[/yellow]: {str(exc)[:120]}")
             continue
         expected = FINGERPRINTS.get(track.name, "")
+        if not expected:
+            console.print(f"  {track.name:<18} read for the first time; its fingerprint is {found}")
+            continue
         if found == expected:
             console.print(
                 f"  {track.name:<18} [green]matches version {VERSION}[/green]  {found[:16]}"

@@ -46,7 +46,7 @@ them or does differently. Surveyed in November 2026; the sources are at the end.
 | PRUDEX-Compass | reliability as an axis | three seeds per synthetic track, nineteen time-shifted placebos per strategy, day-clustered *t* |
 | PBO, deflated Sharpe | the family is part of the test | Holm's adjustment across a board's strategies, track by track |
 | FinRL-Meta | data from the source, by a pipeline | `trading-research bench fetch` downloads the recorded tracks from Bybit's free archives; a fresh download was checked against the stored days and matched to the byte |
-| G-Research | a test on the future | not yet: see version 2 below |
+| G-Research | a test on the future | the forward track `bybit-2026-11`, registered 5 November 2026 before its first day, sealed until its fortnight has been published, read once |
 
 Two things none of the benchmarks surveyed here offer:
 
@@ -69,10 +69,10 @@ Two things none of the benchmarks surveyed here offer:
   nothing. The taker fill at the top of the book on a five-second grid is
   optimistic. Version 2 should add the event-time taker that walks the book with
   latency, and the queue simulator for passive orders, as tracks of their own.
-- **No forward track.** Version 2's strongest addition would be G-Research's: a
-  sealed track of a period after the submission date, scored once when it has
-  happened. The repository already reads its studies' prospective blocks this
-  way, through a ledger.
+- **One forward fortnight.** The forward track is fourteen days of one market
+  state; a strategy's verdict on it rests on fourteen day-clusters. A rolling
+  forward track, a new sealed fortnight registered as each one opens, would
+  make it a series.
 - **Survivorship.** The 26 instruments traded through all of both spans; a
   listing or a delisting inside a span is not represented.
 - **One axis.** Profitability and reliability are scored; risk (drawdown, tail

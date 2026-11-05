@@ -212,6 +212,19 @@ as correct behaviour. Both fixed.
 
 ## Pre-registered
 
+### The benchmark's forward fortnight (F1, P1)
+
+**Status: pre-registered, sealed until 21 November 2026.** The twelve
+strategies of the benchmark's version-1 board, frozen at their sources, scored
+on Bybit's 26 perpetuals from 6 to 19 November 2026, days that had not
+happened when the track was registered on 5 November
+([registration](preregistration/bench_forward_2026_11.md)). F1: a strategy
+passes if it pays the base taker fee with a day-clustered *t* of 2 and a Holm
+*p* below 0.05 over the twelve; the prior is that none does. P1, the
+reversion's condition stated in advance: at an index ten-minute
+autocorrelation of −0.05 or below on the fortnight its net is positive, above
+−0.02 it is not.
+
 ### Market making: the causal state gate (H2.3)
 
 **Status: pre-registered, half read.** The secondary hypothesis of the

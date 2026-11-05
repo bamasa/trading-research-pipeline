@@ -12,7 +12,7 @@ trp demo --execution all --verify   # the whole path on a generated market, then
 trp verify all                      # each component against data with a planted answer
 trp agent demo                      # the research loop through the agent harness, synthetic
 trp catalog                         # everything below, listed from the registries
-trp bench run reversion             # a strategy's card on the benchmark's six tracks
+trp bench run reversion             # a strategy's card on the benchmark's tracks
 ```
 
 ---
@@ -58,7 +58,7 @@ shows what is left once it cannot.
 | **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
-| **Benchmark** | six fixed tracks (planted edges, their nulls, two recorded Bybit spans), one scoring rule with placebos and a fee ladder, a card for any strategy | [benchmark](docs/benchmarks.md) |
+| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy | [benchmark](docs/benchmarks.md) |
 | **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 
@@ -1050,7 +1050,7 @@ Four rules hold everywhere, each a test that fails rather than a caveat:
 | [`extending.md`](docs/extending.md) | Plugins: the five kinds, the decorator, the conformance checks |
 | [`paper_trading.md`](docs/paper_trading.md) | The paper loop, the parity guarantee, the kill switch |
 | [`agents.md`](docs/agents.md) | The agent harness: roles, policy, logs, each rule with its test |
-| [`benchmarks.md`](docs/benchmarks.md) | The benchmark: six fixed tracks with a known answer, one scoring rule, the board of every strategy and the fee each would need |
+| [`benchmarks.md`](docs/benchmarks.md) | The benchmark: seven fixed tracks, a sealed forward one among them, one scoring rule, the board of every strategy and the fee each would need |
 | [`benchmarks_sota.md`](docs/benchmarks_sota.md) | The benchmark against the published ones (FI-2010, LOBCAST, LOB-Bench, TradeMaster, FinRL-Meta, QuantBench, FinTSB, G-Research): what each scores, what was taken, what version 2 needs |
 | [`skills.md`](docs/skills.md) | The skills for an interactive session: how to call one, which fits each stage of a study, where a language model helps and where it leaks |
 | [`limitations.md`](docs/limitations.md) | What this does not establish |

@@ -5,7 +5,7 @@ in the frame contract every strategy plugin reads, and the time trading starts:
 the rows before it are the history the strategy is fitted on, the rows after it
 are scored.
 
-Two kinds:
+Three kinds:
 
 * **synthetic** tracks are generated from a fixed seed, so anyone gets the same
   bytes without a download, and they carry a known answer: an edge was planted,
@@ -22,6 +22,11 @@ is the fortnight where the ten-minute reversion worked, the second the span
 after it where it did not. That makes them a benchmark, labelled as such, not
 evidence about any strategy: a result on them says how a rule behaves in a
 market state already known to exist, not whether that state will come back.
+
+* **forward**: the same instruments on a fortnight that had not happened when
+  the track was registered (5 November 2026). It is sealed until its days have
+  been published, then read once. Nothing could have been tuned to it, so it is
+  the one track whose result is evidence rather than a measurement.
 """
 
 from __future__ import annotations
@@ -29,7 +34,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Union
 
@@ -61,7 +66,7 @@ class Track:
     """One market a strategy is scored on, and what a good strategy should do there."""
 
     name: str
-    kind: str  # "synthetic" or "recorded"
+    kind: str  # "synthetic", "recorded" or "forward"
     question: str
     expected: str
     source: str
@@ -69,10 +74,27 @@ class Track:
     #: For a synthetic track, the effect planted ("" for a null); recorded tracks
     #: carry "" and are read by their own verdict.
     planted: str = ""
+    #: For a forward track, the first day it may be read: until then it is
+    #: sealed, and every attempt to build it says so instead.
+    opens: date | None = None
 
     def markets(self, data_root: Path) -> Markets:
         """Each instrument's market and the first scored row."""
+        if self.opens is not None and today() < self.opens:
+            raise Sealed(
+                f"{self.name} is sealed until {self.opens.isoformat()}: its scored days had "
+                f"not happened when it was registered, and it is read once, after they have"
+            )
         return self.build(data_root)
+
+
+class Sealed(FileNotFoundError):
+    """A forward track asked for before the day it opens."""
+
+
+def today() -> date:
+    """The UTC date; a function, so a test can move the clock."""
+    return datetime.now(UTC).date()
 
 
 # --- synthetic --------------------------------------------------------------------
@@ -158,7 +180,14 @@ def _touch_from_log(log_price: pd.Series) -> pd.DataFrame:
 RECORDED: dict[str, tuple[str, date, date, date]] = {
     "bybit-2024-02": ("universe", date(2024, 2, 1), date(2024, 2, 26), date(2024, 3, 10)),
     "bybit-2024-04": ("universe_fresh", date(2024, 3, 12), date(2024, 4, 6), date(2024, 4, 19)),
+    # Registered 2026-11-05, before its first scored day: fitted on the four
+    # weeks to the registration, scored on the fortnight after it.
+    "bybit-2026-11": ("forward_2026_11", date(2026, 10, 9), date(2026, 11, 6), date(2026, 11, 19)),
 }
+
+#: The forward track opens two days after its last scored day, once the venue
+#: has published that day's archive.
+FORWARD_OPENS = date(2026, 11, 21)
 
 BOOK_COLUMNS = ["timestamp", "bid_price_0", "bid_size_0", "ask_price_0", "ask_size_0"]
 
@@ -172,6 +201,29 @@ RECORDED_SYMBOLS: tuple[str, ...] = (
 )  # fmt: skip
 
 
+#: The forward track's instruments: the same 26, with MATICUSDT, which the venue
+#: retired when the token became POL, replaced by POLUSDT. Every one of them had
+#: a published book archive for 3 and 4 November 2026.
+FORWARD_SYMBOLS: tuple[str, ...] = tuple(
+    "POLUSDT" if s == "MATICUSDT" else s for s in RECORDED_SYMBOLS
+)
+
+
+def track_symbols(name: str) -> tuple[str, ...]:
+    """The instruments a recorded or forward track is frozen with."""
+    return FORWARD_SYMBOLS if name == "bybit-2026-11" else RECORDED_SYMBOLS
+
+
+#: The fewest instruments the forward track is read with. An instrument the
+#: venue publishes no archive for on a scored day is dropped and named in the
+#: source line, never filled; the recorded tracks, already on disk, need all 26.
+FORWARD_MINIMUM = 20
+
+
+def minimum_instruments(name: str) -> int:
+    return FORWARD_MINIMUM if name == "bybit-2026-11" else len(track_symbols(name))
+
+
 def recorded_days(name: str) -> list[date]:
     _, first, _, last = RECORDED[name]
     return [first + timedelta(days=k) for k in range((last - first).days + 1)]
@@ -183,7 +235,7 @@ def recorded_present(name: str, data_root: Path) -> list[str]:
     days = recorded_days(name)
     return [
         s
-        for s in RECORDED_SYMBOLS
+        for s in track_symbols(name)
         if all((directory / s / f"{d.isoformat()}.parquet").exists() for d in days)
     ]
 
@@ -194,9 +246,9 @@ def _recorded(name: str) -> Callable[[Path], Markets]:
 
         folder, _, scored, _ = RECORDED[name]
         symbols = recorded_present(name, data_root)
-        if len(symbols) < len(RECORDED_SYMBOLS):
+        if len(symbols) < minimum_instruments(name):
             raise FileNotFoundError(
-                f"{name}: found {len(symbols)} of {len(RECORDED_SYMBOLS)} instruments with "
+                f"{name}: found {len(symbols)} of {len(track_symbols(name))} instruments with "
                 f"every day under {data_root / folder}; {RECORDED_HELP}"
             )
         grids = {}
@@ -211,9 +263,11 @@ def _recorded(name: str) -> Callable[[Path], Markets]:
             book["timestamp"] = pd.to_datetime(book["timestamp"], utc=True)
             gridded = to_grid(book.sort_values("timestamp"), GRID_SECONDS, label="right")
             grids[symbol] = gridded.drop_duplicates("timestamp").reset_index(drop=True)
+        dropped = sorted(set(track_symbols(name)) - set(symbols))
         source = (
             f"recorded: Bybit linear top-of-book, {len(symbols)} instruments, "
             f"{recorded_days(name)[0]} to {recorded_days(name)[-1]}, {GRID_SECONDS} s grid"
+            + (f"; dropped, no archive for every day: {', '.join(dropped)}" if dropped else "")
         )
         return TrackData([Panel(grids, source, start=pd.Timestamp(scored, tz="UTC"))])
 
@@ -379,6 +433,19 @@ TRACKS: dict[str, Track] = {
             "scored 6 to 19 April 2024",
             _recorded("bybit-2024-04"),
         ),
+        Track(
+            "bybit-2026-11",
+            "forward",
+            "The future: a fortnight that had not happened when the track and the "
+            "board's strategies were frozen (registered 5 November 2026).",
+            "nothing is expected; a strategy with an edge after costs shows it here, "
+            "where nothing could have been fitted to it",
+            "forward: Bybit top-of-book, the same 26 instruments with POL for MATIC, "
+            "fitted 9 October to 5 November, scored 6 to 19 November 2026, "
+            "sealed until 21 November",
+            _recorded("bybit-2026-11"),
+            opens=FORWARD_OPENS,
+        ),
     )
 }
 
@@ -397,6 +464,21 @@ def iter_tracks(names: str) -> Iterator[Track]:
             yield TRACKS[name]
 
 
-__all__ = ["GRID_SECONDS", "RECORDED", "RECORDED_HELP", "RECORDED_SYMBOLS", "TRACKS", "Markets",
-           "Panel", "Track", "TrackData",
-           "iter_tracks", "recorded_present"]  # fmt: skip
+__all__ = [
+    "FORWARD_OPENS",
+    "FORWARD_SYMBOLS",
+    "GRID_SECONDS",
+    "RECORDED",
+    "RECORDED_HELP",
+    "RECORDED_SYMBOLS",
+    "TRACKS",
+    "Markets",
+    "Panel",
+    "Sealed",
+    "Track",
+    "TrackData",
+    "iter_tracks",
+    "recorded_present",
+    "today",
+    "track_symbols",
+]  # fmt: skip

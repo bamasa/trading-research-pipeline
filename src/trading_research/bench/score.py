@@ -172,7 +172,7 @@ def score_track(
     out.seconds = round(time.perf_counter() - started, 1)
     if attempts.empty:
         out.verdict = "no trades"
-        out.passed = None if track.kind == "recorded" or track.planted else True
+        out.passed = None if track.kind != "synthetic" or track.planted else True
         return out
 
     ns = attempts["ts"].to_numpy(dtype="int64")
