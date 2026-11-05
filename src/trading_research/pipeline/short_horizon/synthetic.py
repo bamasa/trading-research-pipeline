@@ -58,8 +58,11 @@ def _ms(day: date, hour: int = 0) -> int:
 
 def _zip(name: str, text: str) -> bytes:
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(name, text)
+    # A fixed date in the entry, so the same text is the same bytes at any hour.
+    entry = zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
+    entry.compress_type = zipfile.ZIP_DEFLATED
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(entry, text)
     return buffer.getvalue()
 
 
@@ -208,7 +211,7 @@ class SyntheticMarket:
             f"{t / 1000:.3f},{SYMBOL},{'Buy' if s > 0 else 'Sell'},{q:.3f},{_price(int(x))}"
             for t, s, q, x in zip(times, side, size, price, strict=True)
         ]
-        return gzip.compress(("\n".join(rows) + "\n").encode())
+        return gzip.compress(("\n".join(rows) + "\n").encode(), mtime=0)
 
     def hourly_closes(self) -> tuple[int, np.ndarray]:
         """Every hourly close from the stream's start to 2026-01-31: (first open ms, closes)."""

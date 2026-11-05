@@ -34,7 +34,8 @@ shows what is left once it cannot.
   making, model searches, ensembles), each with the number that killed it.
 - **What you can do with it.**
   - Score your own strategy on the [benchmark](docs/benchmarks.md): one file, one command,
-    the same card the repository's strategies get, including the fee it would need.
+    the same card the repository's strategies get, including the fee it would need. The
+    benchmark is frozen as version 1, its data fingerprinted, and citable ([`CITATION.cff`](CITATION.cff)).
   - Reuse the parts: data loaders, a market-making simulator, 29 models, and the measures
     that tell an edge from luck (placebos, Holm, deflated Sharpe, day-clustered *t*).
   - Run the [agent loop](docs/agents.md) that proposes, registers and reviews studies under
@@ -1050,6 +1051,7 @@ Four rules hold everywhere, each a test that fails rather than a caveat:
 | [`paper_trading.md`](docs/paper_trading.md) | The paper loop, the parity guarantee, the kill switch |
 | [`agents.md`](docs/agents.md) | The agent harness: roles, policy, logs, each rule with its test |
 | [`benchmarks.md`](docs/benchmarks.md) | The benchmark: six fixed tracks with a known answer, one scoring rule, the board of every strategy and the fee each would need |
+| [`benchmarks_sota.md`](docs/benchmarks_sota.md) | The benchmark against the published ones (FI-2010, LOBCAST, LOB-Bench, TradeMaster, FinRL-Meta, QuantBench, FinTSB, G-Research): what each scores, what was taken, what version 2 needs |
 | [`skills.md`](docs/skills.md) | The skills for an interactive session: how to call one, which fits each stage of a study, where a language model helps and where it leaks |
 | [`limitations.md`](docs/limitations.md) | What this does not establish |
 | [`preregistration/`](docs/preregistration/) | Every registered study, committed before its held-out data was fetched |

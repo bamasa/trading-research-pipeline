@@ -190,3 +190,57 @@ def _one_card(kind: str, name: str, tracks: list[str], data: str) -> Any:
     from trading_research.plugins import get
 
     return run(get(name, kind), {}, [TRACKS[t] for t in tracks], MarketCache(Path(data)))
+
+
+@bench_app.command("fetch")
+def fetch_cmd(
+    data: DataOption = Path("data"),
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Say what would be fetched, and fetch nothing.")
+    ] = False,
+    workers: Annotated[int, typer.Option("--workers", "-w", min=1)] = 6,
+) -> None:
+    """Download the recorded tracks' top-of-book from Bybit's free archives; days on disk are kept."""
+    from trading_research.bench.tracks import RECORDED, RECORDED_SYMBOLS, recorded_days
+    from trading_research.data.ensure import DataUnavailable, ensure_universe
+
+    for name, (folder, *_rest) in RECORDED.items():
+        days = recorded_days(name)
+        console.print(f"[bold]{name}[/bold]: {days[0]} to {days[-1]} -> {data / folder}")
+        try:
+            ensure_universe(
+                RECORDED_SYMBOLS, days[0], days[-1], root=data / folder, workers=workers,
+                dry_run=dry_run, on_progress=lambda line: console.print(f"  {line}"),
+            )  # fmt: skip
+        except DataUnavailable as exc:
+            err_console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+    if not dry_run:
+        console.print("next: trading-research bench verify")
+
+
+@bench_app.command("verify")
+def verify_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> None:
+    """Fingerprint each track's data and compare it with version 1's; exits 1 on a difference."""
+    from trading_research.bench import FINGERPRINTS, VERSION
+
+    differs = False
+    for track in _tracks(tracks):
+        try:
+            found = track.markets(data).fingerprint()
+        except FileNotFoundError as exc:
+            console.print(f"  {track.name:<18} [yellow]not on disk[/yellow]: {str(exc)[:120]}")
+            continue
+        expected = FINGERPRINTS.get(track.name, "")
+        if found == expected:
+            console.print(
+                f"  {track.name:<18} [green]matches version {VERSION}[/green]  {found[:16]}"
+            )
+        else:
+            differs = True
+            console.print(
+                f"  {track.name:<18} [red]differs from version {VERSION}[/red]  "
+                f"found {found[:16]}, expected {expected[:16] or 'none'}"
+            )
+    if differs:
+        raise typer.Exit(code=1)

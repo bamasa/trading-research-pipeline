@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from trading_research.bench.manifest import FINGERPRINTS, VERSION
 from trading_research.bench.score import FEE_LADDER, TrackScore, score_track
 from trading_research.bench.tracks import RECORDED_HELP, TRACKS, Markets, Track, iter_tracks
 
@@ -44,6 +45,8 @@ class Card:
     params: dict[str, Any]
     sha256: str | None
     scores: list[TrackScore] = field(default_factory=list)
+    version: str = VERSION
+    code: str = ""
 
     @property
     def marks(self) -> str:
@@ -53,8 +56,33 @@ class Card:
         return {
             "name": self.name, "kind": self.kind, "origin": self.origin,
             "params": self.params, "sha256": self.sha256,
-            "scores": [s.as_dict() for s in self.scores],
+            "version": self.version, "code": self.code,
+            "scores": [{**s.as_dict(), "data": data_check(s)} for s in self.scores],
         }  # fmt: skip
+
+
+def data_check(s: TrackScore) -> str:
+    """Whether a track's data is version 1's: ``matches``, ``differs`` or ``unknown``."""
+    expected = FINGERPRINTS.get(s.track)
+    if not s.data_sha256 or not expected:
+        return "unknown"
+    return "matches" if s.data_sha256 == expected else "differs"
+
+
+def code_version() -> str:
+    """The package version, and the commit when run from a git checkout."""
+    import subprocess
+
+    from trading_research import __version__
+
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+            check=True, cwd=Path(__file__).parent, timeout=5,
+        ).stdout.strip()  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        commit = ""
+    return f"{__version__} {commit}".strip()
 
 
 def _mark(s: TrackScore) -> str:
@@ -103,7 +131,7 @@ def run(
     on_score: Callable[[TrackScore], None] | None = None,
 ) -> Card:
     """Score one plugin on each track."""
-    card = Card(spec.name, spec.kind, spec.origin, params, spec.fingerprint())
+    card = Card(spec.name, spec.kind, spec.origin, params, spec.fingerprint(), code=code_version())
     build = builder(spec, params)
     for track in tracks:
         markets = cache.get(track)
@@ -135,23 +163,26 @@ def card_page(card: Card) -> str:
         f"# {card.name}: benchmark card",
         "",
         f"A {card.kind} ({card.origin}), parameters {card.params or 'as registered'}, "
-        f"source sha256 `{(card.sha256 or 'unavailable')[:16]}`. Written "
+        f"source sha256 `{(card.sha256 or 'unavailable')[:16]}`. Benchmark version "
+        f"{card.version}, code {card.code or 'unknown'}. Written "
         f"{datetime.now(UTC):%Y-%m-%d %H:%M} UTC by `trp bench run`.",
         "",
         f"Marks, one per track in the order below: **{card.marks}** "
         "(✓ as a good strategy should, ✗ not, · a planted effect it was not built for, "
         "- not run).",
         "",
-        "| track | verdict | trades | gross bp | net bp | t (net) | placebo | break-even taker fee |",
-        "|---|---|--:|--:|--:|--:|--:|--:|",
+        "| track | verdict | trades | gross bp | net bp | t (net) | placebo "
+        "| break-even taker fee | data |",
+        "|---|---|--:|--:|--:|--:|--:|--:|---|",
     ]
     for s in card.scores:
         if s.status != "scored":
-            lines.append(f"| {s.track} | {s.status}: {s.reason[:120]} | | | | | | |")
+            lines.append(f"| {s.track} | {s.status}: {s.reason[:120]} | | | | | | | |")
             continue
         lines.append(
             f"| {s.track} | {s.verdict} | {s.trades:,} | {_n(s.gross_bp)} | {_n(s.net_bp)} | "
-            f"{_n(s.net_t)} | {_pct(s.placebo)} | {_n(s.breakeven_taker_bp)} bp |"
+            f"{_n(s.net_t)} | {_pct(s.placebo)} | {_n(s.breakeven_taker_bp)} bp | "
+            f"{data_check(s)} |"
         )
     lines += ["", "## Net per trade at each fee, bp", "",
               "| track | " + " | ".join(f"{n} ({f:g} bp)" for n, f in FEE_LADDER) + " |",
@@ -175,15 +206,40 @@ def write_card(card: Card, output: Path) -> Path:
 
 
 def board_rows(cards: list[Card]) -> list[dict[str, Any]]:
+    """One row a card, each recorded track with its Holm-adjusted p of net > 0.
+
+    A board is a family: the best of twelve strategies is selected, and its
+    *t* has to clear more than one strategy's would. Holm's step-down
+    adjustment is applied across the board's strategies, track by track.
+    """
+    from trading_research.pairs.stats import holm_adjusted
+
+    holm: dict[tuple[str, str], float] = {}
+    for track in {s.track for c in cards for s in c.scores}:
+        scored = [
+            (c.name, s.net_p)
+            for c in cards
+            for s in c.scores
+            if s.track == track and math.isfinite(s.net_p)
+        ]
+        if scored:
+            adjusted = holm_adjusted([p for _, p in scored])
+            holm.update(
+                {(name, track): float(a) for (name, _), a in zip(scored, adjusted, strict=True)}
+            )
     rows = []
     for card in cards:
-        row: dict[str, Any] = {"name": card.name, "kind": card.kind, "marks": card.marks}
+        row: dict[str, Any] = {
+            "name": card.name, "kind": card.kind, "marks": card.marks,
+            "version": card.version, "code": card.code,
+        }  # fmt: skip
         for s in card.scores:
-            row[s.track] = s.as_dict()
+            row[s.track] = {**s.as_dict(), "data": data_check(s),
+                            "holm_p": holm.get((card.name, s.track))}  # fmt: skip
         rows.append(row)
     return rows
 
 
-__all__ = ["DISCLAIMER", "FEE_LADDER", "RECORDED_HELP", "TRACKS", "Card", "MarketCache",
-           "TrackScore", "board_rows", "builder", "card_page", "iter_tracks", "run",
-           "write_card"]  # fmt: skip
+__all__ = ["DISCLAIMER", "FEE_LADDER", "FINGERPRINTS", "RECORDED_HELP", "TRACKS", "VERSION",
+           "Card", "MarketCache", "TrackScore", "board_rows", "builder", "card_page",
+           "data_check", "iter_tracks", "run", "write_card"]  # fmt: skip
