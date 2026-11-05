@@ -2,7 +2,7 @@
 
 A backtest of one strategy on one span says little. Too much was chosen along
 the way: the span, the fee, the parameters, the way fills are counted. The
-benchmark fixes all of it. It runs six tracks and applies one scoring rule,
+benchmark fixes all of it. It runs seven tracks and applies one scoring rule,
 written down before any board was computed, to every strategy, whether it is
 the repository's or yours. Two cards can then be compared line by line.
 
@@ -18,6 +18,7 @@ compares with the published benchmarks is in
 trading-research bench list
 trading-research bench fetch
 trading-research bench verify
+trading-research bench state
 trading-research bench run reversion
 trading-research bench board
 ```
@@ -25,7 +26,8 @@ trading-research bench board
 `fetch` downloads the recorded tracks from Bybit's free archives (about 2,000
 instrument-days of top-of-book; days already on disk are kept, and the dry run
 says what it would fetch). `verify` fingerprints each track's data and
-compares it with version 1's. `run` takes any registered strategy or model and
+compares it with version 1's. `state` measures the market state the reversion
+needs on each track's scored span. `run` takes any registered strategy or model and
 writes its card under `artifacts/bench/<name>/` (`card.md`, `card.json`), with
 the benchmark version, the code version and, for each track, whether its data
 matches version 1. `board` does the same for every registered strategy
@@ -59,6 +61,7 @@ rule (`plugins/model_strategy.py`).
 | `null-reversion` | synthetic | The same universe with the transients replaced by a random walk of the same variance | nothing distinguishable from zero |
 | `bybit-2024-02` | recorded | Bybit top-of-book for 26 USDT perpetuals; fitted 1–25 February, scored 26 February to 10 March 2024: the fortnight where the ten-minute reversion paid (index autocorrelation about −0.10) | a rule betting on short reversion does its best here |
 | `bybit-2024-04` | recorded | The same instruments; fitted 12 March to 5 April, scored 6 to 19 April 2024, after the state changed (autocorrelation near zero) | the same rule loses or stands aside; a rule that only works in one state shows it here |
+| `bybit-2026-11` | forward | The same instruments (POL for MATIC); fitted 9 October to 5 November, scored 6 to 19 November 2026: days that had not happened when the track was registered. Sealed until 21 November, then read once | nothing is expected; an edge after costs shows here, where nothing could be fitted to it |
 
 The synthetic tracks are generated from fixed seeds, so anyone gets the same
 numbers without a download; a test checks two of their fingerprints against
@@ -75,6 +78,26 @@ Without the data the recorded tracks are skipped, never faked.
 are a benchmark, labelled as one: a known favourable state and a known
 unfavourable one. A strategy's result on them shows how it behaves in each
 state. It is not evidence that either state will come back.
+
+### The forward track
+
+The six other tracks are measurements: the recorded spans were picked after
+they were read, and the synthetic answers were planted by the people who
+wrote the strategies. The forward track is the test none of that touches,
+the way the G-Research competition froze its models and scored them on
+months that had not happened. It was registered on 5 November 2026, before its
+first scored day, with the twelve strategies of the board frozen at their
+sources
+([pre-registration](preregistration/bench_forward_2026_11.md)). Until 21
+November `bench` refuses to build it; then it is fetched, read once and
+committed as it comes.
+
+The registration also states in advance what the reversion should do. Its
+condition is the index's ten-minute autocorrelation, which `bench state`
+measures: −0.1323 on the 2024-02 track's scored span, where the rule paid,
+and +0.0219 on the 2024-04 track's, where it lost. At −0.05 or below on the
+forward fortnight the reversion should be positive after the base fee; above
+−0.02 it should not be.
 
 ## The scoring rule
 

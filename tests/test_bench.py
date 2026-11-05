@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -23,9 +24,9 @@ def small_book(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_every_track_states_its_question_and_what_a_good_strategy_does() -> None:
-    assert len(TRACKS) == 6
+    assert len(TRACKS) == 7
     for track in TRACKS.values():
-        assert track.kind in ("synthetic", "recorded")
+        assert track.kind in ("synthetic", "recorded", "forward")
         assert track.question.strip() and track.expected.strip() and track.source.strip()
     planted = [t for t in TRACKS.values() if t.planted]
     nulls = [t for t in TRACKS.values() if t.kind == "synthetic" and not t.planted]
@@ -172,9 +173,9 @@ def test_the_synthetic_tracks_are_the_bytes_version_1_froze() -> None:
 
 def test_every_track_has_a_frozen_fingerprint_and_a_card_says_whether_it_matches() -> None:
     from trading_research.bench import data_check
-    from trading_research.bench.manifest import FINGERPRINTS, VERSION
+    from trading_research.bench.manifest import FINGERPRINTS, FORWARD_TRACK, VERSION
 
-    assert VERSION == "1" and set(FINGERPRINTS) == set(TRACKS)
+    assert VERSION == "1" and set(FINGERPRINTS) == set(TRACKS) - {FORWARD_TRACK}
     same = TrackScore("null-book", "synthetic", "scored", data_sha256=FINGERPRINTS["null-book"])
     other = TrackScore("null-book", "synthetic", "scored", data_sha256="0" * 64)
     assert data_check(same) == "matches" and data_check(other) == "differs"
@@ -230,3 +231,51 @@ def test_a_synthetic_book_does_not_move_with_the_last_bits_of_exp() -> None:
             nudged = np.nextafter(nudged, np.inf)
         moved = tracks_module._touch_from_log(pd.Series(nudged, index=index))
         assert exact.equals(moved), ulps
+
+
+def test_the_forward_track_is_sealed_until_its_days_are_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    track = TRACKS["bybit-2026-11"]
+    reversion = lambda: get("reversion", "strategy").build()  # noqa: E731
+    monkeypatch.setattr(tracks_module, "today", lambda: date(2026, 11, 20))
+    sealed = score_track(track, reversion, data_root=tmp_path)
+    assert sealed.status == "skipped" and "sealed until 2026-11-21" in sealed.reason
+    runner = CliRunner()
+    assert (
+        "sealed until 2026-11-21"
+        in runner.invoke(app, ["bench", "fetch", "--dry-run", "--data", str(tmp_path)]).output
+    )
+    monkeypatch.setattr(tracks_module, "today", lambda: date(2026, 11, 21))
+    opened = score_track(track, reversion, data_root=tmp_path)
+    assert opened.status == "skipped" and "found 0 of 26" in opened.reason
+
+
+def test_the_forward_track_trades_the_same_instruments_with_pol_for_matic() -> None:
+    from trading_research.bench.manifest import FORWARD_REGISTERED
+    from trading_research.bench.tracks import FORWARD_SYMBOLS, RECORDED, RECORDED_SYMBOLS
+
+    assert len(FORWARD_SYMBOLS) == len(RECORDED_SYMBOLS) == 26
+    assert set(FORWARD_SYMBOLS) ^ set(RECORDED_SYMBOLS) == {"POLUSDT", "MATICUSDT"}
+    _, fitted, scored, last = RECORDED["bybit-2026-11"]
+    registered = date.fromisoformat(FORWARD_REGISTERED)
+    assert fitted < scored and registered < scored <= last < TRACKS["bybit-2026-11"].opens
+
+
+def test_the_strategies_read_on_the_forward_track_are_the_ones_registered() -> None:
+    """Changing one of the twelve before the read would make it a new strategy."""
+    from trading_research.bench.manifest import FORWARD_STRATEGIES
+
+    assert len(FORWARD_STRATEGIES) == 12
+    for (name, kind), sha in FORWARD_STRATEGIES.items():
+        assert get(name, kind).fingerprint() == sha, name
+
+
+def test_the_state_measure_sees_the_planted_reversion_and_not_its_null() -> None:
+    from trading_research.bench.state import index_autocorrelation
+
+    planted = index_autocorrelation(TRACKS["planted-reversion"].markets(Path()))
+    null = index_autocorrelation(TRACKS["null-reversion"].markets(Path()))
+    assert planted < -0.1 and abs(null) < 0.05
+    shown = CliRunner().invoke(app, ["bench", "state", "--tracks", "planted-reversion"])
+    assert shown.exit_code == 0 and f"{planted:+.4f}" in shown.output
