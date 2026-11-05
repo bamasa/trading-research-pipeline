@@ -62,7 +62,10 @@ rule (`plugins/model_strategy.py`).
 
 The synthetic tracks are generated from fixed seeds, so anyone gets the same
 numbers without a download; a test checks two of their fingerprints against
-version 1's on every run of the suite. The recorded tracks read one parquet per
+version 1's on every run of the suite. The reversion tracks' prices sit on a
+tick grid of about a millionth of the price, as a venue's do: `exp` differs in
+its last bits between a Mac and a Linux machine, and the grid rounds those bits
+away, so the tracks are the same bytes on both. The recorded tracks read one parquet per
 instrument and day under `data/universe` and `data/universe_fresh`, which
 `fetch` writes. A fresh download of two of those days was compared with the
 days this repository had stored since 2024 and matched value for value.
@@ -125,7 +128,7 @@ with the spread and slippage still paid.
 | `mean_reversion` | model | ·✓✓✓✗✗ | -14.44, -14.11 | -1.72 | 1.00 | -16.14, -8.27 | -2.57 | 1.00 | -3.44 / -5.14 |
 | `momentum` | model | ✓✓·✓✗✗ | -13.25, -15.66 | -1.12 | 1.00 | -13.63, -8.16 | -1.32 | 1.00 | -2.25 / -2.63 |
 | `order_flow` | model | ✓✓·✓✗✗ | -12.15, -90.68 | -0.57 | 1.00 | -12.09, -131.29 | -0.55 | 1.00 | -1.15 / -1.09 |
-| `xgboost` | model | ✓✓✓✓✗✗ | -12.62, -40.00 | -0.81 | 1.00 | -17.00, -7.65 | -3.00 | 1.00 | -1.62 / -6.00 |
+| `xgboost` | model | ✓✓·✓✗✗ | -12.62, -40.00 | -0.81 | 1.00 | -17.00, -7.65 | -3.00 | 1.00 | -1.62 / -6.00 |
 
 What the board says:
 
@@ -135,8 +138,11 @@ What the board says:
   by rules built for it: the book edge by `book_imbalance`, `order_flow`,
   `hold_first`, `logistic`, `xgboost`, `breakout` and `momentum` (a queue
   imbalance moves the price the way it leans, so a momentum model rides it);
-  the reversion by `reversion`, `hold_first`, `relative`, `logistic`,
-  `mean_reversion` and `xgboost`. Every strategy is quiet on both nulls. On a
+  the reversion by `reversion`, `hold_first`, `relative`, `logistic` and
+  `mean_reversion`. `xgboost` found the reversion (gross *t* 3.68) before the
+  synthetic prices were put on the tick grid and misses it after (*t* 2.89):
+  moving prices by a millionth moves its decisions, so its mark on that track
+  is fragile. Every strategy is quiet on both nulls. On a
   single seed, a draft of this board had flagged `xgboost` on the book null
   (gross *t* 3.86 on 42 trades); on three seeds it is quiet (*t* 0.71 on 225).
   The flag was one draw, which is why version 1 scores three.

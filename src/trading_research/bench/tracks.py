@@ -128,15 +128,24 @@ def _cross(null: bool) -> Callable[[Path], Markets]:
 
 
 def _touch_from_log(log_price: pd.Series) -> pd.DataFrame:
-    """A top-of-book on the bar closes: the price, a fixed spread, a fixed size."""
+    """A top-of-book on the bar closes: the price, a fixed spread, a fixed size.
+
+    Prices sit on a tick grid, as a venue's do: a tick of about a millionth of
+    the first price. ``exp`` differs in its last bits between platforms; on the
+    grid those bits round away, so the track is the same bytes on any machine
+    and its fingerprint holds.
+    """
     mid = np.exp(log_price.to_numpy(dtype="float64"))
-    half = HALF_SPREAD_BP * 1e-4
+    exponent = int(np.floor(np.log10(mid[0]))) - 6
+    tick = float(10**exponent) if exponent >= 0 else 1.0 / 10**-exponent
+    mid_ticks = np.rint(mid / tick)
+    half_ticks = np.rint(mid_ticks * HALF_SPREAD_BP * 1e-4)
     return pd.DataFrame(
         {
             "timestamp": pd.DatetimeIndex(log_price.index),
-            "bid_price_0": mid * (1.0 - half),
+            "bid_price_0": (mid_ticks - half_ticks) * tick,
             "bid_size_0": TOUCH_SIZE,
-            "ask_price_0": mid * (1.0 + half),
+            "ask_price_0": (mid_ticks + half_ticks) * tick,
             "ask_size_0": TOUCH_SIZE,
         }
     )

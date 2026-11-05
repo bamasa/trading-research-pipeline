@@ -19,8 +19,8 @@ FROZEN = "2026-11-04"
 FINGERPRINTS: dict[str, str] = {
     "planted-book": "b0c0866966a68715d513ca0b0691b95db997f27852e270b8fc8a7343b0189aad",
     "null-book": "65803b0480263c8587e4e0ccb253d24a7ed245686c426ef34745f2ee19b022bf",
-    "planted-reversion": "7d96db8982524fefc2b9a396aa85d355fa7466a6cd3999e927e5239dc4e4030c",
-    "null-reversion": "db93168e8fc9fc286730cb544892781fffb3bcd7a194b970df1c37bd291dff50",
+    "planted-reversion": "515da5c2ff25bb5cd770aac65c864378984b86096bd762005b1a748562282986",
+    "null-reversion": "d0b5418e848ed25d32e45af9e9b6d604e843e5f6d5c6d71ae31fdd1682fcf5fa",
     "bybit-2024-02": "3a348047e711e2478b78dcd92a039a2066fdef0d65b112f21f0c52d6c5d19d44",
     "bybit-2024-04": "ddb5b3eba54d46e2a626b4e220042b913d0df261a11a596075dc4158e4731c94",
 }

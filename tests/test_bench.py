@@ -213,3 +213,20 @@ def test_fetch_says_what_it_would_download_and_verify_reports_the_data(tmp_path:
     )
     assert checked.exit_code == 0, checked.output
     assert "matches version 1" in checked.output and "not on disk" in checked.output
+
+
+def test_a_synthetic_book_does_not_move_with_the_last_bits_of_exp() -> None:
+    """Platforms differ in exp's last bits; the tick grid rounds them away."""
+    import numpy as np
+    import pandas as pd
+
+    index = pd.date_range("2026-01-01", periods=20_000, freq="5s", tz="UTC")
+    rng = np.random.default_rng(7)
+    log_price = np.log(73.0) + np.cumsum(rng.normal(0.0, 3e-4, len(index)))
+    exact = tracks_module._touch_from_log(pd.Series(log_price, index=index))
+    for ulps in (1, 3):
+        nudged = log_price
+        for _ in range(ulps):
+            nudged = np.nextafter(nudged, np.inf)
+        moved = tracks_module._touch_from_log(pd.Series(nudged, index=index))
+        assert exact.equals(moved), ulps
