@@ -315,3 +315,10 @@ def test_the_fitted_window_reads_only_the_days_before_the_seal(tmp_path: Path) -
     assert fitted_window("bybit-2026-11", tmp_path).fingerprint() == before
     with pytest.raises(FileNotFoundError):
         fitted_window("bybit-2026-11", tmp_path / "elsewhere")
+
+
+def test_the_fitted_days_fingerprint_is_recorded() -> None:
+    from trading_research.bench.manifest import FORWARD_FIT_FINGERPRINT
+
+    assert len(FORWARD_FIT_FINGERPRINT) == 64
+    int(FORWARD_FIT_FINGERPRINT, 16)

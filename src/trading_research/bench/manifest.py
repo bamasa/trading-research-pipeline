@@ -54,6 +54,7 @@ FORWARD_STRATEGIES: dict[tuple[str, str], str] = {
 
 #: sha256 of the forward track's fitted days (9 October to 5 November 2026) as
 #: :func:`trading_research.bench.tracks.fitted_window` grids them, recorded
-#: before the track opens; empty until recorded. Those days ended before the
-#: registration, so they are not sealed; the scored days are not downloaded.
-FORWARD_FIT_FINGERPRINT = ""
+#: on 8 November 2026, before the track opens: 26 instruments, 483,840 rows
+#: each. Those days ended before the registration, so they are not sealed; no
+#: scored day had been downloaded.
+FORWARD_FIT_FINGERPRINT = "6af6b9ab865a92a5f8ec011951912bc68a5a7abb70e72174e1ea8527190f0723"

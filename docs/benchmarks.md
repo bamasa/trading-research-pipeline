@@ -92,7 +92,7 @@ sources
 November `bench` refuses to build it; then it is fetched, read once and
 committed as it comes. Its fitted days ended before it was registered, so
 they are not sealed: `bench fetch` downloads them ahead, and `bench verify`
-checks them against the fingerprint recorded before it opens, so the read
+checks them against the fingerprint recorded on 8 November, so the read
 shows it fitted on the numbers anyone else would download. The scored days
 are not fetched until the track opens.
 
