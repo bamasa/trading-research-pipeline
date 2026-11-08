@@ -279,3 +279,39 @@ def test_the_state_measure_sees_the_planted_reversion_and_not_its_null() -> None
     assert planted < -0.1 and abs(null) < 0.05
     shown = CliRunner().invoke(app, ["bench", "state", "--tracks", "planted-reversion"])
     assert shown.exit_code == 0 and f"{planted:+.4f}" in shown.output
+
+
+def test_the_fitted_window_reads_only_the_days_before_the_seal(tmp_path: Path) -> None:
+    """The fitted days are fetched and fingerprinted early; a scored day is never read."""
+    import pandas as pd
+
+    from trading_research.bench.tracks import FORWARD_SYMBOLS, fitted_days, fitted_window
+
+    days = fitted_days("bybit-2026-11")
+    assert len(days) == 28 and days[0] == date(2026, 10, 9) and days[-1] == date(2026, 11, 5)
+
+    def write(symbol: str, day: date, price: float) -> None:
+        stamps = pd.date_range(pd.Timestamp(day, tz="UTC"), periods=4, freq="6h")
+        frame = pd.DataFrame(
+            {"timestamp": stamps, "bid_price_0": price, "bid_size_0": 1.0,
+             "ask_price_0": price + 0.01, "ask_size_0": 1.0}
+        )  # fmt: skip
+        folder = tmp_path / "forward_2026_11" / symbol
+        folder.mkdir(parents=True, exist_ok=True)
+        frame.to_parquet(folder / f"{day.isoformat()}.parquet")
+
+    for symbol in FORWARD_SYMBOLS[:20]:
+        for day in days:
+            write(symbol, day, 10.0)
+    before = fitted_window("bybit-2026-11", tmp_path).fingerprint()
+    write(FORWARD_SYMBOLS[0], date(2026, 11, 6), 99.0)  # a scored day
+    # and the first snapshot of the scored day, which the last fitted day's archive carries
+    late = tmp_path / "forward_2026_11" / FORWARD_SYMBOLS[0] / "2026-11-05.parquet"
+    frame = pd.read_parquet(late)
+    spill = frame.iloc[[-1]].assign(
+        timestamp=pd.Timestamp("2026-11-06 00:00:01", tz="UTC"), bid_price_0=99.0
+    )
+    pd.concat([frame, spill]).to_parquet(late)
+    assert fitted_window("bybit-2026-11", tmp_path).fingerprint() == before
+    with pytest.raises(FileNotFoundError):
+        fitted_window("bybit-2026-11", tmp_path / "elsewhere")

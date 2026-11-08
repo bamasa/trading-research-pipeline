@@ -90,7 +90,11 @@ first scored day, with the twelve strategies of the board frozen at their
 sources
 ([pre-registration](preregistration/bench_forward_2026_11.md)). Until 21
 November `bench` refuses to build it; then it is fetched, read once and
-committed as it comes.
+committed as it comes. Its fitted days ended before it was registered, so
+they are not sealed: `bench fetch` downloads them ahead, and `bench verify`
+checks them against the fingerprint recorded before it opens, so the read
+shows it fitted on the numbers anyone else would download. The scored days
+are not fetched until the track opens.
 
 The registration also states in advance what the reversion should do. Its
 condition is the index's ten-minute autocorrelation, which `bench state`

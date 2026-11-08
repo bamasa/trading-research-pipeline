@@ -204,16 +204,28 @@ def fetch_cmd(
 ) -> None:
     """Download the recorded tracks' top-of-book from Bybit's free archives; days on disk are kept."""
     from trading_research.bench import TRACKS
-    from trading_research.bench.tracks import RECORDED, recorded_days, today, track_symbols
+    from trading_research.bench.tracks import (
+        RECORDED,
+        fitted_days,
+        recorded_days,
+        today,
+        track_symbols,
+    )
     from trading_research.data.ensure import DataUnavailable, ensure_universe
 
     for name, (folder, *_rest) in RECORDED.items():
         days = recorded_days(name)
         opens = TRACKS[name].opens
         if opens is not None and today() < opens:
-            console.print(f"[bold]{name}[/bold]: sealed until {opens}; fetch it then")
-            continue
-        console.print(f"[bold]{name}[/bold]: {days[0]} to {days[-1]} -> {data / folder}")
+            # The fitted days ended before the track was registered; only the
+            # scored ones are sealed.
+            days = fitted_days(name)
+            console.print(
+                f"[bold]{name}[/bold]: sealed until {opens}; its fitted days only, "
+                f"{days[0]} to {days[-1]} -> {data / folder}"
+            )
+        else:
+            console.print(f"[bold]{name}[/bold]: {days[0]} to {days[-1]} -> {data / folder}")
         try:
             ensure_universe(
                 track_symbols(name), days[0], days[-1], root=data / folder, workers=workers,
@@ -250,14 +262,35 @@ def state_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> 
 def verify_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> None:
     """Fingerprint each track's data and compare it with version 1's; exits 1 on a difference."""
     from trading_research.bench import FINGERPRINTS, VERSION
-    from trading_research.bench.tracks import Sealed
+    from trading_research.bench.manifest import FORWARD_FIT_FINGERPRINT
+    from trading_research.bench.tracks import Sealed, fitted_window
 
     differs = False
     for track in _tracks(tracks):
         try:
             found = track.markets(data).fingerprint()
-        except Sealed as exc:
-            console.print(f"  {track.name:<18} [cyan]sealed[/cyan]: {str(exc)[:120]}")
+        except Sealed:
+            try:
+                fitted = fitted_window(track.name, data).fingerprint()
+            except FileNotFoundError:
+                console.print(f"  {track.name:<18} [cyan]sealed[/cyan], fitted days not on disk")
+                continue
+            if not FORWARD_FIT_FINGERPRINT:
+                console.print(
+                    f"  {track.name:<18} [cyan]sealed[/cyan]; fitted days not fingerprinted "
+                    f"yet: {fitted}"
+                )
+            elif fitted == FORWARD_FIT_FINGERPRINT:
+                console.print(
+                    f"  {track.name:<18} [cyan]sealed[/cyan]; fitted days [green]match the "
+                    f"registration[/green]  {fitted[:16]}"
+                )
+            else:
+                differs = True
+                console.print(
+                    f"  {track.name:<18} [cyan]sealed[/cyan]; fitted days [red]differ[/red]  "
+                    f"found {fitted[:16]}, expected {FORWARD_FIT_FINGERPRINT[:16]}"
+                )
             continue
         except FileNotFoundError as exc:
             console.print(f"  {track.name:<18} [yellow]not on disk[/yellow]: {str(exc)[:120]}")

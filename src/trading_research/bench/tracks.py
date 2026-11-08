@@ -240,38 +240,80 @@ def recorded_present(name: str, data_root: Path) -> list[str]:
     ]
 
 
+def fitted_days(name: str) -> list[date]:
+    """The days a recorded or forward track's strategies are fitted on."""
+    _, first, scored, _ = RECORDED[name]
+    return [first + timedelta(days=k) for k in range((scored - first).days)]
+
+
+def _grids(
+    name: str,
+    data_root: Path,
+    days: list[date],
+    minimum: int,
+    until: pd.Timestamp | None = None,
+) -> tuple[dict[str, pd.DataFrame], str]:
+    """Each instrument with every one of ``days`` on disk, on the grid, and the source line.
+
+    ``until`` drops every snapshot after it: a day's archive ends with the
+    first snapshot of the next day, which on a sealed track is a scored one.
+    """
+    from trading_research.data.grid import to_grid
+
+    folder = RECORDED[name][0]
+    symbols = [
+        s
+        for s in track_symbols(name)
+        if all((data_root / folder / s / f"{d.isoformat()}.parquet").exists() for d in days)
+    ]
+    if len(symbols) < minimum:
+        raise FileNotFoundError(
+            f"{name}: found {len(symbols)} of {len(track_symbols(name))} instruments with "
+            f"every day under {data_root / folder}; {RECORDED_HELP}"
+        )
+    grids = {}
+    for symbol in symbols:
+        files = [data_root / folder / symbol / f"{d.isoformat()}.parquet" for d in days]
+        book = pd.concat(
+            [pd.read_parquet(f, columns=BOOK_COLUMNS) for f in files], ignore_index=True
+        )
+        book["timestamp"] = pd.to_datetime(book["timestamp"], utc=True)
+        if until is not None:
+            book = book[book["timestamp"] <= until]
+        gridded = to_grid(book.sort_values("timestamp"), GRID_SECONDS, label="right")
+        grids[symbol] = gridded.drop_duplicates("timestamp").reset_index(drop=True)
+    dropped = sorted(set(track_symbols(name)) - set(symbols))
+    source = (
+        f"recorded: Bybit linear top-of-book, {len(symbols)} instruments, "
+        f"{days[0]} to {days[-1]}, {GRID_SECONDS} s grid"
+        + (f"; dropped, no archive for every day: {', '.join(dropped)}" if dropped else "")
+    )
+    return grids, source
+
+
 def _recorded(name: str) -> Callable[[Path], Markets]:
     def build(data_root: Path) -> Markets:
-        from trading_research.data.grid import to_grid
-
-        folder, _, scored, _ = RECORDED[name]
-        symbols = recorded_present(name, data_root)
-        if len(symbols) < minimum_instruments(name):
-            raise FileNotFoundError(
-                f"{name}: found {len(symbols)} of {len(track_symbols(name))} instruments with "
-                f"every day under {data_root / folder}; {RECORDED_HELP}"
-            )
-        grids = {}
-        for symbol in symbols:
-            files = [
-                data_root / folder / symbol / f"{d.isoformat()}.parquet"
-                for d in recorded_days(name)
-            ]
-            book = pd.concat(
-                [pd.read_parquet(f, columns=BOOK_COLUMNS) for f in files], ignore_index=True
-            )
-            book["timestamp"] = pd.to_datetime(book["timestamp"], utc=True)
-            gridded = to_grid(book.sort_values("timestamp"), GRID_SECONDS, label="right")
-            grids[symbol] = gridded.drop_duplicates("timestamp").reset_index(drop=True)
-        dropped = sorted(set(track_symbols(name)) - set(symbols))
-        source = (
-            f"recorded: Bybit linear top-of-book, {len(symbols)} instruments, "
-            f"{recorded_days(name)[0]} to {recorded_days(name)[-1]}, {GRID_SECONDS} s grid"
-            + (f"; dropped, no archive for every day: {', '.join(dropped)}" if dropped else "")
-        )
+        scored = RECORDED[name][2]
+        grids, source = _grids(name, data_root, recorded_days(name), minimum_instruments(name))
         return TrackData([Panel(grids, source, start=pd.Timestamp(scored, tz="UTC"))])
 
     return build
+
+
+def fitted_window(name: str, data_root: Path) -> TrackData:
+    """A track's fitted days alone, with no scored row.
+
+    Open on a sealed forward track: its fitted days ended before it was
+    registered, so reading them reads nothing the seal protects. Their
+    fingerprint is frozen with the registration's manifest, so the read can
+    show it fitted on the same numbers anyone else would download.
+    """
+    days = fitted_days(name)
+    seal = pd.Timestamp(RECORDED[name][2].isoformat(), tz="UTC")
+    grids, source = _grids(name, data_root, days, minimum_instruments(name), until=seal)
+    # Past the last row: every row is history, none is scored.
+    end = pd.Timestamp((RECORDED[name][2] + timedelta(days=1)).isoformat(), tz="UTC")
+    return TrackData([Panel(grids, source, start=end)])
 
 
 # --- the panel --------------------------------------------------------------------
