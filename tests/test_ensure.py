@@ -244,3 +244,33 @@ def test_a_venue_that_refuses_funding_raises_when_nothing_is_here(
         ensure_funding(
             "NOPEUSDT", date(2024, 2, 1), date(2024, 2, 2), root=tmp_path, on_progress=None
         )
+
+
+def test_a_universe_day_that_fails_once_is_retried_and_one_that_fails_twice_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import date
+
+    from trading_research.data import ensure
+
+    attempts: dict[tuple[str, date], int] = {}
+
+    def fetch(job: tuple[str, date, Path]) -> tuple[str, date, bool]:
+        symbol, day, root = job
+        attempts[symbol, day] = attempts.get((symbol, day), 0) + 1
+        ok = symbol == "AAA" or (symbol == "BBB" and attempts[symbol, day] > 1)
+        if ok:
+            (root / symbol).mkdir(parents=True, exist_ok=True)
+            (root / symbol / f"{day.isoformat()}.parquet").write_bytes(b"x")
+        return symbol, day, ok
+
+    monkeypatch.setattr(ensure, "_fetch_one_top_of_book", fetch)
+    lines: list[str] = []
+    day = date(2026, 10, 14)
+    usable = ensure.ensure_universe(
+        ["AAA", "BBB", "CCC"], day, day, root=tmp_path, workers=1, on_progress=lines.append
+    )
+    assert set(usable) == {"AAA", "BBB"}
+    assert attempts == {("AAA", day): 1, ("BBB", day): 2, ("CCC", day): 2}
+    assert any("2 instrument-day(s) failed and were retried once" in line for line in lines)
+    assert any("still missing after the retry: CCC 2026-10-14" in line for line in lines)

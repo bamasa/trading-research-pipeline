@@ -107,3 +107,27 @@ the first read's.
 - Nothing about the market from 9 October 2026 on: no archive of the span was
   downloaded. The model that drafted this has general knowledge only to June
   2026, before the span.
+
+## Note, 8 November 2026: the fitted days, fetched before the read
+
+Not an amendment: nothing registered above changes.
+
+- The 728 fitted instrument-days, 9 October to 5 November 2026, were
+  downloaded with `trading-research bench fetch`, which fetches a sealed
+  track's fitted days only. One (OPUSDT, 14 October) failed on the first
+  attempt and was fetched on the second; the fetch now retries a failed day
+  once and names any that fail twice, where it used to leave the gap silent.
+- No scored day was downloaded: no file of 6 November or later exists under
+  the track's folder. A day's archive ends with the next day's first
+  snapshot; the fitted window is cut at 6 November 00:00 UTC, so that
+  snapshot is never read.
+- All 26 instruments have every fitted day, 483,840 rows each on the 5 s
+  grid, with no crossed or missing touch. Their fingerprint,
+  `6af6b9ab865a92a5…`, is in the manifest (`FORWARD_FIT_FINGERPRINT`);
+  `trading-research bench verify` checks a checkout's fitted days against it.
+- For context only, and with no bearing on P1, which is about the scored
+  days: the index's ten-minute autocorrelation over the fitted days is
+  +0.012, close to the 2024-04 track's +0.022, where the reversion lost. The
+  repository found the state not forecastable a day ahead
+  ([`findings.md`](../findings.md#cross-sectional-reversion-at-ten-minutes)),
+  so this is not a forecast of the scored fortnight.

@@ -51,3 +51,10 @@ FORWARD_STRATEGIES: dict[tuple[str, str], str] = {
     ("order_flow", "model"): "a2328577914a8a8e14f32263d376ab784188ebaba691d76026fee313148cc475",
     ("xgboost", "model"): "7c77c93096121ab29cda77ce9dcb6db4e1afa7e9f8ce6d04f71c2c3aa4ab137f",
 }
+
+#: sha256 of the forward track's fitted days (9 October to 5 November 2026) as
+#: :func:`trading_research.bench.tracks.fitted_window` grids them, recorded
+#: on 8 November 2026, before the track opens: 26 instruments, 483,840 rows
+#: each. Those days ended before the registration, so they are not sealed; no
+#: scored day had been downloaded.
+FORWARD_FIT_FINGERPRINT = "6af6b9ab865a92a5f8ec011951912bc68a5a7abb70e72174e1ea8527190f0723"
