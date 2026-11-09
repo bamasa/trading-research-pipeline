@@ -19,6 +19,7 @@ trading-research bench list
 trading-research bench fetch
 trading-research bench verify
 trading-research bench state
+trading-research bench forward      # from 21 November 2026, once
 trading-research bench run reversion
 trading-research bench board
 ```
@@ -102,6 +103,13 @@ measures: −0.1323 on the 2024-02 track's scored span, where the rule paid,
 and +0.0219 on the 2024-04 track's, where it lost. At −0.05 or below on the
 forward fortnight the reversion should be positive after the base fee; above
 −0.02 it should not be.
+
+The read is one command, `trading-research bench forward`, committed on 9
+November, before the track opens. It scores the twelve, refuses if any of
+their sources is not the one registered, decides F1 and P1 by the
+registration's rule (`bench/forward.py`) and writes
+`experiments/results/bench_forward_2026_11.json`. It refuses before 21
+November, and refuses again once that file exists: the track is read once.
 
 ## The scoring rule
 
