@@ -258,6 +258,69 @@ def state_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> 
         console.print(f"  {track.name:<18} index ten-minute autocorrelation {value:+.4f}")
 
 
+FORWARD_OUTPUT = Path("experiments/results/bench_forward_2026_11.json")
+
+
+@bench_app.command("forward")
+def forward_cmd(
+    data: DataOption = Path("data"),
+    output: OutputOption = FORWARD_OUTPUT,
+) -> None:
+    """Read the forward track once: the twelve registered strategies, F1 and P1 as registered.
+
+    Refuses before the track opens, when OUTPUT already exists (the read is
+    done once, and its result is committed as it comes), and when a strategy's
+    source is not the one registered.
+    """
+    import os
+
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from trading_research.bench import TRACKS, MarketCache
+    from trading_research.bench.forward import read
+    from trading_research.bench.manifest import FORWARD_TRACK
+    from trading_research.bench.tracks import today
+
+    track = TRACKS[FORWARD_TRACK]
+    if track.opens is not None and today() < track.opens:
+        err_console.print(
+            f"[cyan]{track.name} is sealed until {track.opens.isoformat()}[/cyan]; nothing was read"
+        )
+        raise typer.Exit(code=2)
+    if output.exists():
+        err_console.print(
+            f"[red]{output} exists: the forward track is read once[/red]. A defect found "
+            "after the read goes in a dated amendment that reports both numbers."
+        )
+        raise typer.Exit(code=2)
+    try:
+        payload = read(MarketCache(data), on_score=_print_score)
+    except (FileNotFoundError, ValueError) as exc:
+        err_console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    console.print(f"data {payload['data_sha256'][:16]}, {payload['instruments']} instruments")
+    fitted = payload["fitted_matches_registration"]
+    console.print(
+        "fitted days " + ("[green]match the registration[/green]" if fitted
+                          else "[red]differ from the registration[/red]")
+    )  # fmt: skip
+    console.print("[bold]F1[/bold]")
+    for name, d in payload["f1"].items():
+        colour = "green" if d["status"] == "passes" else "red"
+        holm = "-" if d["holm_p"] is None else f"{d['holm_p']:.3f}"
+        console.print(
+            f"  {name:<16} [{colour}]{d['status']}[/{colour}]  Holm p {holm}  {d['verdict']}"
+        )
+    p1 = payload["p1"]
+    net = "-" if p1["net_bp"] is None else f"{p1['net_bp']:+.2f} bp"
+    console.print(
+        f"[bold]P1[/bold] state {p1['state']:+.4f}, predicted {p1['predicted'] or 'nothing'}, "
+        f"reversion net {net}: [bold]{p1['status']}[/bold] {p1['why']}"
+    )
+    console.print(f"-> {output}; add data_sha256 to the manifest's FINGERPRINTS")
+
+
 @bench_app.command("verify")
 def verify_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> None:
     """Fingerprint each track's data and compare it with version 1's; exits 1 on a difference."""

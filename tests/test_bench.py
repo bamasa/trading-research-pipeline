@@ -322,3 +322,92 @@ def test_the_fitted_days_fingerprint_is_recorded() -> None:
 
     assert len(FORWARD_FIT_FINGERPRINT) == 64
     int(FORWARD_FIT_FINGERPRINT, 16)
+
+
+def test_f1_counts_all_twelve_in_holm_and_needs_the_pays_verdict() -> None:
+    from trading_research.bench.forward import f1
+
+    def scored(p: float, passed: bool) -> TrackScore:
+        out = TrackScore("bybit-2026-11", "forward", "scored", net_p=p, passed=passed)
+        out.verdict = "pays the base fee" if passed else "nothing beyond chance"
+        return out
+
+    # p = 0.004 alone: Holm over twelve is 0.048, a pass; over one it would be 0.004
+    decided = f1({("reversion", "strategy"): scored(0.004, True)})
+    assert len(decided) == 12
+    assert decided["reversion"]["status"] == "passes"
+    assert decided["reversion"]["holm_p"] == pytest.approx(0.048)
+    assert decided["xgboost"]["status"] == "killed" and decided["xgboost"]["verdict"] == "not read"
+    # 0.005 times twelve is 0.06: killed by the family, though its own verdict pays
+    assert f1({("reversion", "strategy"): scored(0.005, True)})["reversion"]["status"] == "killed"
+    # a small p without the verdict (the placebo or t failed) is killed
+    assert f1({("reversion", "strategy"): scored(0.001, False)})["reversion"]["status"] == "killed"
+
+
+@pytest.mark.parametrize(
+    ("state", "net", "status"),
+    [
+        (-0.08, 3.0, "right"),
+        (-0.08, -3.0, "wrong"),
+        (-0.05, 0.0, "wrong"),
+        (0.01, -3.0, "right"),
+        (0.01, 0.0, "right"),
+        (0.01, 3.0, "wrong"),
+        (-0.03, 3.0, "not tested"),
+        (-0.02, -3.0, "not tested"),
+        (-0.08, math.nan, "not tested"),
+    ],
+)
+def test_p1_is_decided_by_the_registered_thresholds(state: float, net: float, status: str) -> None:
+    from trading_research.bench.forward import p1
+
+    assert p1(state, net)["status"] == status
+
+
+def test_the_forward_read_refuses_strategies_that_are_not_the_registered_ones() -> None:
+    from types import SimpleNamespace
+
+    from trading_research.bench.forward import unfrozen
+    from trading_research.bench.manifest import FORWARD_STRATEGIES
+
+    registered = [get(name, kind) for name, kind in FORWARD_STRATEGIES]
+    assert unfrozen(registered) == []
+    assert unfrozen(registered[1:]) == ["book_imbalance (strategy): registered, not read"]
+    edited = SimpleNamespace(name="book_imbalance", kind="strategy", fingerprint=lambda: "ab" * 32)
+    assert unfrozen([edited, *registered[1:]])[0].startswith("book_imbalance (strategy): source ab")
+    mine = SimpleNamespace(name="mine", kind="strategy", fingerprint=lambda: "")
+    assert unfrozen([*registered, mine]) == ["mine (strategy): not registered"]
+
+
+def test_the_forward_read_is_refused_before_the_track_opens_and_after_it_was_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = CliRunner()
+    output = tmp_path / "forward.json"
+    command = ["bench", "forward", "--data", str(tmp_path), "--output", str(output)]
+    monkeypatch.setattr(tracks_module, "today", lambda: date(2026, 11, 20))
+    sealed = runner.invoke(app, command)
+    assert sealed.exit_code == 2 and "sealed until 2026-11-21" in sealed.output
+    monkeypatch.setattr(tracks_module, "today", lambda: date(2026, 11, 21))
+    missing = runner.invoke(app, command)
+    assert missing.exit_code == 2 and "found 0 of 26" in missing.output
+    assert not output.exists()
+    output.write_text("{}")
+    again = runner.invoke(app, command)
+    assert again.exit_code == 2 and "read once" in again.output
+
+
+def test_the_forward_read_decides_f1_and_p1_on_a_panel_track() -> None:
+    """The same rule on the planted reversion, where the state is known to be negative."""
+    from trading_research.bench.forward import read
+    from trading_research.bench.state import index_autocorrelation
+
+    track = TRACKS["planted-reversion"]
+    payload = read(MarketCache(Path()), specs=[get("reversion", "strategy")], track=track)
+    state = index_autocorrelation(track.markets(Path()))
+    assert payload["p1"]["state"] == pytest.approx(state) and payload["p1"]["state"] < -0.05
+    assert payload["p1"]["predicted"] == "above zero"
+    assert payload["p1"]["status"] in ("right", "wrong")
+    assert len(payload["f1"]) == 12 and payload["fitted_matches_registration"] is None
+    assert [r["name"] for r in payload["rows"]] == ["reversion"]
+    json.dumps(payload)

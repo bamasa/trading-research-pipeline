@@ -131,3 +131,24 @@ Not an amendment: nothing registered above changes.
   repository found the state not forecastable a day ahead
   ([`findings.md`](../findings.md#cross-sectional-reversion-at-ten-minutes)),
   so this is not a forecast of the scored fortnight.
+
+## Note, 9 November 2026: the read as code, before the read
+
+Not an amendment: nothing registered above changes. The three commands under
+*The read, once* are now one, `trading-research bench forward`
+([`bench/forward.py`](../../src/trading_research/bench/forward.py)), committed
+before the track opens, so how the read is decided is fixed before any scored
+number exists.
+
+- It refuses before 21 November; it refuses when
+  `experiments/results/bench_forward_2026_11.json` exists, so it runs once;
+  and it refuses when any of the twelve plugin sources differs from
+  `FORWARD_STRATEGIES`.
+- It scores the twelve on the track, measures the state as `bench state`
+  does, checks the fitted days against `FORWARD_FIT_FINGERPRINT` and writes
+  the board rows, F1 and P1 to that file, with the track's data fingerprint.
+- Two cases the text above leaves implicit, stated now as the code decides
+  them. F1's Holm adjustment counts all twelve (m = 12) even if one is not
+  applicable on the track or makes no trade; such a strategy is killed. P1
+  is **not tested** if the reversion makes no trade on the scored days,
+  since it then has no net per trade to compare.
