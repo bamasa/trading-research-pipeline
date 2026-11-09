@@ -59,15 +59,54 @@ stops if its trades and net per trade do not match the `reversion` card in
   archives; the intraday high printed on spot venues was slightly higher.
 - **A gap.** The two tracks leave out 11 March, so nothing trades that day.
 
+## A kill switch, and what to do after it fires
+
+The regime change could not be forecast a day ahead (the repository's own
+attempt is in [`docs/findings.md`](../../docs/findings.md)). Detecting it from
+the strategy's own results, using only the past, is a different question, and
+[`monitor.py`](monitor.py) answers it with the textbook tool: Page's CUSUM for
+a drop in the mean of the portfolio's hourly net return. Its values are the
+textbook ones, fixed before it was run, not searched: reference value
+k = 0.5 and threshold h = 5 in units of the hourly return's standard
+deviation, which is estimated on the hours before the one tested; the first 72
+hours only estimate it.
+
+| Policy after an alarm | Alarms | Portfolio on 19 April |
+|---|---|---|
+| No monitor | | **−52.0%** |
+| Stop and stay stopped | 15 March 02:00 UTC, 12 hours after the peak | **+10.7%** |
+| Stop, trade on paper, restart when the same CUSUM pointed upwards sees the paper result recover | stop 15 March, restart 19 March, stop 20 March, restart 14 April, stop 14 April | **+1.8%** |
+
+- The monitor raised no alarm in the fortnight that paid. With neighbouring
+  values (k from 0.5 to 1, h from 4 to 8) it fires 6 to 19 hours after the
+  peak and stops between +4.5% and +12.2%; at k = 0.25 with h from 4 to 6 it
+  fires on 6 March,
+  inside the good fortnight, and stops at +5% to +7%. A more sensitive switch
+  costs good days; a duller one costs bad hours.
+- Restarting is the hard part. Both automatic restarts came on a bounce, and
+  together they gave back most of what the stop had kept.
+- This is one episode, known before the monitor was written. The values are
+  the textbook's and their neighbours are shown, but it is not an
+  out-of-sample test of the monitor.
+- The structural-break detector in `validation/structural_breaks.py`, run on
+  the same hourly series with its mean family only and a 120-hour history,
+  raised a falling-mean
+  alarm on 14 March 10:00, four hours before the portfolio's peak; it also
+  raised one on 11 March, when the series is zero because the day is missing,
+  and from 26 March one every two to three days. As a second opinion it is useful; as a
+  switch it fires too often.
+
 ## Rebuild
 
 ```bash
 PYTHONPATH=src python posts/btc_ath_2024/make_data.py --data data
+python posts/btc_ath_2024/monitor.py
 node posts/btc_ath_2024/render.mjs
 ```
 
 The first needs the two tracks' archives (`trading-research bench fetch`) and
-rewrites `data.json` and `numbers.json`; the second needs Chrome and ffmpeg and
+rewrites `data.json` and `numbers.json`; the second writes `monitor.json` from
+`data.json`; the third needs Chrome and ffmpeg and
 writes `artifacts/posts/btc_ath_2024.mp4` (1080 x 1080, 20 s) and a
 self-contained page beside it. The video is drawn frame by frame by the page's
 own `renderAt`, so it is the page, not a screen recording.
