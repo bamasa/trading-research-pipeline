@@ -1,0 +1,37 @@
+{
+  "instruments": 26,
+  "fitted": [
+    "2024-02-01",
+    "2024-02-25"
+  ],
+  "before": {
+    "trades": 3351,
+    "gross_bp_per_trade": 20.91,
+    "net_bp_per_trade": 7.0
+  },
+  "after": {
+    "trades": 12719,
+    "gross_bp_per_trade": 1.42,
+    "net_bp_per_trade": -12.48
+  },
+  "peak": {
+    "at": "2024-03-14T14:00",
+    "equity_pct": 15.3
+  },
+  "below_zero": {
+    "at": "2024-03-16T19:00"
+  },
+  "end": {
+    "at": "2024-04-19T23:00",
+    "equity_pct": -52.0
+  },
+  "btc_high": {
+    "at": "2024-03-14T06:00",
+    "hourly_mid": 73662
+  },
+  "autocorrelation_mean": {
+    "2024-02-26..2024-03-10": -0.113,
+    "2024-03-12..2024-04-05": -0.053,
+    "2024-04-06..2024-04-19": -0.015
+  }
+}
