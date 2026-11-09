@@ -1,0 +1,264 @@
+<title>Same Strategy, Different Market</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tektur:wght@700;900&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one square stage, a social post that plays itself; controls under it. Light by choice: a clean paper-white chart with bitcoin orange and two signal colours. */
+:root {
+  color-scheme: light;
+  --bg: #eef1f7;
+  --stage: #fbfcfe;
+  --fg: #0d1328;
+  --muted: #646d8c;
+  --btc: #f7931a;
+  --line: #d9deea;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  margin: 0;
+  font: 400 15px/1.5 "Onest", system-ui, sans-serif;
+  padding-block: 24px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.stage { width: min(100%, 760px); margin: 0 auto 14px; border-radius: 18px; overflow: hidden; background: var(--stage); box-shadow: 0 24px 60px rgba(30, 40, 80, .14); border: 1px solid var(--line); }
+canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.controls { margin: 0 auto 12px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+button { font: 600 14px/1 "Onest", system-ui, sans-serif; border-radius: 999px; padding: 11px 18px; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--fg); }
+button.primary { background: var(--btc); color: #1a0f00; border-color: var(--btc); }
+button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.note { margin: 0 auto; max-width: 760px; color: var(--muted); font-size: 13px; text-align: center; }
+body.render { padding: 0; }
+body.render .stage { width: 1080px; margin: 0; border-radius: 0; border: 0; box-shadow: none; }
+body.render .controls, body.render .note { display: none; }
+</style>
+
+<div class="stage"><canvas id="c" aria-label="Animation: bitcoin climbs to its all-time high on 14 March 2024 while a strategy frozen on February data gives back everything it earned within two days"></canvas></div>
+<div class="controls">
+  <button class="primary" type="button" id="replay">Replay</button>
+  <button type="button" id="pause">Pause</button>
+</div>
+<p class="note">A backtest on recorded data: hourly BTCUSDT and every trade of the repository's ten-minute cross-sectional reversion on 26 Bybit perpetuals, at Bybit's 5.5 bp taker fee a side with slippage and the spread. Its threshold was fitted on 1–25 February 2024 and never changed. Numbers and method: posts/btc_ath_2024 in trading-research-pipeline.</p>
+
+<script>/*DATA*/</script>
+<script>
+const D = window.POST.data, N = window.POST.numbers;
+const RENDER = /render/.test(location.search);
+if (RENDER) document.body.classList.add("render");
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const S = 1080;
+const COL = { bg: "#fbfcfe", grid: "#e6e9f2", zero: "#b9c0d4", fg: "#0d1328", muted: "#646d8c", btc: "#f7931a", btcText: "#c86a00", win: "#1fa34a", loss: "#e3344b", train: "#3a66f0" };
+const F = { display: '"Tektur", "Arial Black", sans-serif', body: '"Onest", system-ui, sans-serif', mono: '"JetBrains Mono", ui-monospace, monospace' };
+const reduce = !RENDER && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const btc = D.btc.map(([t, v]) => [Date.parse(t + "Z"), v]);
+const eq = D.equity_pct.map(([t, c]) => [Date.parse(t + "Z"), c]);
+const ac = D.autocorrelation.map(([d, v]) => [Date.parse(d + "T12:00Z"), v]);
+const T0 = Date.parse("2024-02-01T00:00Z"), T1 = Date.parse("2024-04-20T00:00Z");
+const FIT_END = Date.parse("2024-02-26T00:00Z");
+const ATH_I = btc.reduce((b, r, i) => r[1] > btc[b][1] ? i : b, 0);
+const ATH_T = btc[ATH_I][0], ATH_V = btc[ATH_I][1];
+const PEAK_I = eq.reduce((b, r, i) => r[1] > eq[b][1] ? i : b, 0);
+const ZERO_T = eq.find((r, i) => i > PEAK_I && r[1] < 0)[0];
+
+// time warp: the story slows around the top and the fall
+const warp = t => 1 + 2.6 * Math.exp(-(((t - ATH_T) / 864e5 - 0.8) ** 2) / 3.2);
+const steps = btc.map(r => r[0]);
+const W = [0]; for (let i = 1; i < steps.length; i++) W.push(W[i - 1] + warp(steps[i]));
+const timeAt = p => {
+  const target = p * W[W.length - 1];
+  let lo = 0, hi = W.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; W[m] <= target ? lo = m : hi = m; }
+  const f = (target - W[lo]) / Math.max(1e-9, W[hi] - W[lo]);
+  return steps[lo] + f * (steps[hi] - steps[lo]);
+};
+
+const L = 72, R = S - 72;
+const X = t => L + (t - T0) / (T1 - T0) * (R - L);
+const P = { top: 300, bot: 560, lo: 40000, hi: 77000 };
+const Yp = v => P.bot - (v - P.lo) / (P.hi - P.lo) * (P.bot - P.top);
+const E = { top: 640, bot: 900, lo: -58, hi: 21 };
+const Ye = v => E.bot - (v - E.lo) / (E.hi - E.lo) * (E.bot - E.top);
+const A = { mid: 952, h: 30 };
+
+const MON = ["Jan", "Feb", "Mar", "Apr"];
+const dlab = t => { const d = new Date(t); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, 2024`; };
+const money = v => "$" + Math.round(v).toLocaleString("en-US");
+const pct = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + "%";
+const bpt = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + " bp";
+const int = v => v.toLocaleString("en-US");
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+function txt(s, x, y, font, color, align = "left", alpha = 1) { ctx.globalAlpha = alpha; ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y); ctx.globalAlpha = 1; }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+function headline(t, done) {
+  if (done) return [["Same strategy. Same threshold.", COL.fg], ["Different market.", COL.loss]];
+  if (t < FIT_END) return [["Fitting the strategy", COL.fg], ["on February 2024", COL.train]];
+  if (t < ATH_T - 12 * 36e5) return [["Frozen.", COL.fg], ["The strategy prints.", COL.win]];
+  if (t < ATH_T + 18 * 36e5) return [["March 14: bitcoin hits", COL.fg], ["an all-time high", COL.btcText]];
+  if (t < ZERO_T) return [["And in two days", COL.fg], ["it gives it all back", COL.loss]];
+  return [["Then it keeps", COL.fg], ["bleeding", COL.loss]];
+}
+
+const PLAY = reduce ? 1 : 15000, HOLD = 5000;
+let lastHead = "", headSinceEl = 0;
+
+function draw(el) {
+  const p = clamp01(el / PLAY), done = el >= PLAY, t = timeAt(p);
+  const w = cv.clientWidth, dpr = RENDER ? 1 : Math.min(devicePixelRatio || 1, 2);
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(w * dpr); }
+  ctx.setTransform(cv.width / S, 0, 0, cv.height / S, 0, 0);
+  const after = t > ATH_T;
+
+  ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, S, S);
+  const tint = after ? clamp01((t - ATH_T) / (2 * 864e5)) : 0;
+  if (tint > 0) { const g = ctx.createRadialGradient(S * .7, S * .8, 40, S * .7, S * .8, 700); g.addColorStop(0, `rgba(227,52,75,${.10 * tint})`); g.addColorStop(1, "rgba(227,52,75,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); }
+  const g2 = ctx.createRadialGradient(S * .3, S * .38, 30, S * .3, S * .38, 620); g2.addColorStop(0, "rgba(247,147,26,.09)"); g2.addColorStop(1, "rgba(247,147,26,0)"); ctx.fillStyle = g2; ctx.fillRect(0, 0, S, S);
+
+  txt("TRADING-RESEARCH-PIPELINE · REAL BYBIT DATA", L, 86, `500 19px ${F.mono}`, COL.muted);
+  txt(dlab(t), R, 86, `700 24px ${F.mono}`, after ? COL.loss : COL.fg, "right");
+  const head = headline(t, done), key = head[0][0] + head[1][0];
+  if (key !== lastHead) { lastHead = key; headSinceEl = el; }
+  const ha = reduce || paused ? 1 : clamp01((el - headSinceEl) / 350);
+  const hy = 158 + (1 - ha) * 14;
+  txt(head[0][0], L, hy, `900 56px ${F.display}`, head[0][1], "left", ha);
+  txt(head[1][0], L, hy + 64, `900 56px ${F.display}`, head[1][1], "left", ha);
+
+  ctx.fillStyle = "rgba(58,102,240,.07)"; ctx.fillRect(X(T0), P.top - 20, X(FIT_END) - X(T0), A.mid + A.h - P.top + 20);
+  txt("FITTING", X(T0) + 12, P.top, `700 16px ${F.mono}`, COL.train);
+  if (t >= FIT_END) {
+    ctx.strokeStyle = COL.train; ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(X(FIT_END), P.top - 20); ctx.lineTo(X(FIT_END), A.mid + A.h); ctx.stroke(); ctx.setLineDash([]);
+    txt("THRESHOLD FROZEN", X(FIT_END) + 10, P.bot - 8, `700 16px ${F.mono}`, COL.train);
+  }
+
+  ctx.lineWidth = 1; ctx.strokeStyle = COL.grid;
+  [45000, 55000, 65000, 75000].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Yp(v)); ctx.lineTo(R, Yp(v)); ctx.stroke(); txt(Math.round(v / 1000) + "k", R, Yp(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"); });
+  txt("BTCUSDT", L, P.bot + 26, `700 17px ${F.mono}`, COL.btcText);
+
+  const pts = btc.filter(r => r[0] <= t);
+  if (pts.length > 1) {
+    const grad = ctx.createLinearGradient(0, P.top, 0, P.bot);
+    grad.addColorStop(0, "rgba(247,147,26,.26)"); grad.addColorStop(1, "rgba(247,147,26,0)");
+    ctx.beginPath(); ctx.moveTo(X(pts[0][0]), P.bot);
+    pts.forEach(r => ctx.lineTo(X(r[0]), Yp(r[1])));
+    ctx.lineTo(X(pts[pts.length - 1][0]), P.bot); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath(); pts.forEach((r, i) => i ? ctx.lineTo(X(r[0]), Yp(r[1])) : ctx.moveTo(X(r[0]), Yp(r[1])));
+    ctx.shadowColor = "rgba(247,147,26,.45)"; ctx.shadowBlur = 10; ctx.strokeStyle = COL.btc; ctx.lineWidth = 3.4; ctx.lineJoin = "round"; ctx.stroke(); ctx.shadowBlur = 0;
+    const last = pts[pts.length - 1];
+    ctx.fillStyle = COL.btc; ctx.beginPath(); ctx.arc(X(last[0]), Yp(last[1]), 7, 0, 7); ctx.fill();
+    if (!done) txt(money(last[1]), Math.min(X(last[0]) + 14, R - 150), Yp(last[1]) - 14, `700 22px ${F.mono}`, COL.btcText);
+  }
+
+  if (t >= ATH_T) {
+    const since = (t - ATH_T) / 36e5;
+    const xa = X(ATH_T), ya = Yp(ATH_V);
+    ctx.strokeStyle = COL.fg; ctx.globalAlpha = .35; ctx.lineWidth = 1.5; ctx.setLineDash([3, 6]);
+    ctx.beginPath(); ctx.moveTo(xa, P.top - 20); ctx.lineTo(xa, A.mid + A.h); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    if (!reduce && since < 40) {
+      for (let k = 0; k < 3; k++) {
+        const r = (since * 6 + k * 40) % 160;
+        ctx.strokeStyle = COL.btc; ctx.globalAlpha = clamp01(1 - r / 160) * .9; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(xa, ya, r, 0, 7); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(xa, ya, 9, 0, 7); ctx.fill();
+    ctx.strokeStyle = COL.btc; ctx.lineWidth = 3; ctx.stroke();
+    const lab = "ALL-TIME HIGH " + money(ATH_V);
+    ctx.font = `700 22px ${F.mono}`; const tw = ctx.measureText(lab).width + 22;
+    const bx = xa - tw - 14, by = ya - 46;
+    ctx.fillStyle = COL.btc; roundRect(bx, by, tw, 36, 8); ctx.fill();
+    txt(lab, bx + 11, by + 25, `700 22px ${F.mono}`, "#1a0f00");
+    if (!reduce && since < 10) { ctx.fillStyle = `rgba(255,214,150,${.28 * (1 - since / 10)})`; ctx.fillRect(0, 0, S, S); }
+  }
+
+  ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
+  [-50, -25, 0, 15].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Ye(v)); ctx.lineTo(R, Ye(v)); ctx.stroke(); txt(v === 0 ? "0%" : pct(v).replace(".0", ""), R, Ye(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"); });
+  ctx.strokeStyle = COL.zero; ctx.beginPath(); ctx.moveTo(L, Ye(0)); ctx.lineTo(R, Ye(0)); ctx.stroke();
+  txt("PORTFOLIO, NET OF FEES · capital split over 26 coins, no leverage", L, E.top - 14, `700 17px ${F.mono}`, COL.muted);
+  const ep = eq.filter(r => r[0] <= t);
+  if (ep.length > 1) {
+    for (const [sign, color] of [[1, "rgba(31,163,74,.18)"], [-1, "rgba(227,52,75,.18)"]]) {
+      ctx.save(); ctx.beginPath();
+      if (sign > 0) ctx.rect(0, 0, S, Ye(0)); else ctx.rect(0, Ye(0), S, S);
+      ctx.clip();
+      ctx.beginPath(); ctx.moveTo(X(ep[0][0]), Ye(0)); ep.forEach(r => ctx.lineTo(X(r[0]), Ye(r[1]))); ctx.lineTo(X(ep[ep.length - 1][0]), Ye(0)); ctx.closePath();
+      ctx.fillStyle = color; ctx.fill(); ctx.restore();
+    }
+    const split = eq[PEAK_I][0];
+    const seg = (filter, color, glow) => {
+      const s = ep.filter(filter); if (s.length < 2) return;
+      ctx.beginPath(); s.forEach((r, i) => i ? ctx.lineTo(X(r[0]), Ye(r[1])) : ctx.moveTo(X(r[0]), Ye(r[1])));
+      ctx.shadowColor = glow; ctx.shadowBlur = 10; ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.lineJoin = "round"; ctx.stroke(); ctx.shadowBlur = 0;
+    };
+    seg(r => r[0] <= split, COL.win, "rgba(31,163,74,.4)");
+    seg(r => r[0] >= split, COL.loss, "rgba(227,52,75,.4)");
+    const last = ep[ep.length - 1], c = last[0] <= split ? COL.win : COL.loss;
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(X(last[0]), Ye(last[1]), 8, 0, 7); ctx.fill();
+    const nearEdge = X(last[0]) > R - 200;
+    txt(pct(last[1]), X(last[0]) + (nearEdge ? -90 : 18), Ye(last[1]) + (nearEdge ? 10 : 11), `700 30px ${F.mono}`, c, nearEdge ? "right" : "left");
+    if (t > eq[PEAK_I][0] + 6 * 36e5) {
+      const xp = X(eq[PEAK_I][0]), yp = Ye(eq[PEAK_I][1]);
+      ctx.fillStyle = COL.win; ctx.beginPath(); ctx.arc(xp, yp, 6, 0, 7); ctx.fill();
+      txt("peak " + pct(eq[PEAK_I][1]), xp - 12, yp - 14, `700 18px ${F.mono}`, COL.win, "right");
+    }
+  } else if (t < FIT_END) {
+    txt("no trades yet: the threshold is being fitted", X(T0) + 12, Ye(0) - 14, `500 18px ${F.body}`, COL.muted);
+  }
+
+  txt("index 10-min autocorrelation, per day · green: moves pull back", L, A.mid - A.h - 10, `500 15px ${F.mono}`, COL.muted);
+  const bw = (X(T0 + 864e5) - X(T0)) * .7;
+  ac.forEach(([tt, v]) => {
+    if (tt - 12 * 36e5 > t) return;
+    ctx.fillStyle = v <= -0.05 ? COL.win : v > -0.02 ? COL.loss : "#aab2c8";
+    const hgt = Math.min(1, Math.abs(v) / 0.2) * A.h;
+    ctx.fillRect(X(tt) - bw / 2, v < 0 ? A.mid - hgt : A.mid, bw, hgt);
+  });
+  ctx.strokeStyle = COL.zero; ctx.beginPath(); ctx.moveTo(L, A.mid); ctx.lineTo(R, A.mid); ctx.stroke();
+  [["2024-02-01", "Feb 1"], ["2024-03-01", "Mar 1"], ["2024-04-01", "Apr 1"]].forEach(([d, s]) => txt(s, X(Date.parse(d + "T00:00Z")), A.mid + A.h + 26, `500 16px ${F.mono}`, COL.muted, "center"));
+
+  if (done) {
+    const k = reduce ? 1 : clamp01((el - PLAY) / 500);
+    const cy = P.top + 40;
+    ctx.globalAlpha = k;
+    ctx.fillStyle = "rgba(255,255,255,.94)"; roundRect(L, cy, R - L, 196, 18); ctx.fill();
+    ctx.strokeStyle = COL.grid; ctx.lineWidth = 2; roundRect(L, cy, R - L, 196, 18); ctx.stroke();
+    ctx.globalAlpha = 1;
+    txt("net per trade", L + 32, cy + 40, `500 19px ${F.mono}`, COL.muted, "left", k);
+    txt(bpt(N.before.net_bp_per_trade), L + 32, cy + 114, `900 64px ${F.display}`, COL.win, "left", k);
+    txt("→", L + 330, cy + 110, `900 54px ${F.display}`, COL.muted, "left", k);
+    txt(bpt(N.after.net_bp_per_trade), L + 410, cy + 114, `900 64px ${F.display}`, COL.loss, "left", k);
+    txt(int(N.before.trades) + " trades · Feb 26 – Mar 10", L + 32, cy + 158, `500 17px ${F.mono}`, COL.muted, "left", k);
+    txt(int(N.after.trades) + " trades · Mar 12 – Apr 19", L + 410, cy + 158, `500 17px ${F.mono}`, COL.muted, "left", k);
+  }
+  txt("Backtest on recorded Bybit data · 26 perpetuals · 10-min cross-sectional reversion", L, S - 50, `500 16px ${F.mono}`, COL.muted);
+  txt("taker fee 5.5 bp a side + 0.5 bp slippage + spread · threshold fitted Feb 1–25, then fixed", L, S - 26, `500 16px ${F.mono}`, COL.muted);
+}
+
+let start = 0, paused = false, pausedAt = 0;
+function frame(now) {
+  const el = paused ? pausedAt : now - start;
+  draw(el);
+  if (!paused) {
+    if (el > PLAY + HOLD && !reduce) start = now;
+    requestAnimationFrame(frame);
+  }
+}
+window.renderAt = el => { draw(el); return true; };
+window.TIMING = { PLAY, HOLD };
+const ready = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve();
+if (RENDER) { ready.then(() => { window.READY = true; }); }
+else {
+  document.getElementById("replay").addEventListener("click", () => { start = performance.now(); lastHead = ""; if (paused) { paused = false; document.getElementById("pause").textContent = "Pause"; requestAnimationFrame(frame); } });
+  document.getElementById("pause").addEventListener("click", e => {
+    if (!paused) { paused = true; pausedAt = performance.now() - start; e.target.textContent = "Resume"; draw(pausedAt); }
+    else { paused = false; start = performance.now() - pausedAt; e.target.textContent = "Pause"; requestAnimationFrame(frame); }
+  });
+  new ResizeObserver(() => { if (paused) draw(pausedAt); }).observe(cv);
+  ready.then(() => { start = performance.now(); requestAnimationFrame(frame); });
+}
+</script>
