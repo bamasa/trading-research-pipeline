@@ -60,7 +60,7 @@
         "holds": 0,
         "breaks": 0,
         "never_paid": 10,
-        "kill_switch_saved_pct_mean": 32.83,
+        "kill_switch_saved_pct_mean": 32.12,
         "kill_switch_helped": 10,
         "stops_before_break": 10
       },
@@ -74,7 +74,7 @@
           "net_bp_before": -12.203406037935505,
           "net_bp_after": -8.842314085835575,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -64.3354284664361,
+          "equity_kill_switch_pct": -64.36839376017824,
           "stop_hours_after_break": -94.0
         },
         {
@@ -86,7 +86,7 @@
           "net_bp_before": -12.817627198611838,
           "net_bp_after": -12.400478652706154,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -67.72419972317763,
+          "equity_kill_switch_pct": -67.89634985176951,
           "stop_hours_after_break": -95.0
         },
         {
@@ -98,8 +98,8 @@
           "net_bp_before": -13.180139837552039,
           "net_bp_after": -11.880538549539217,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -72.02718387987125,
-          "stop_hours_after_break": -96.0
+          "equity_kill_switch_pct": -73.05833146311811,
+          "stop_hours_after_break": -95.0
         },
         {
           "episode": "celsius-2022",
@@ -110,8 +110,8 @@
           "net_bp_before": -12.020325156683631,
           "net_bp_after": -11.880472331667146,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -67.48444860821591,
-          "stop_hours_after_break": -95.0
+          "equity_kill_switch_pct": -68.35120809024113,
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "ftx-2022",
@@ -122,8 +122,8 @@
           "net_bp_before": -12.108233276749164,
           "net_bp_after": -11.381872694533197,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -63.90635891055117,
-          "stop_hours_after_break": -95.0
+          "equity_kill_switch_pct": -64.80155622993136,
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "svb-2023",
@@ -134,8 +134,8 @@
           "net_bp_before": -12.631501601200403,
           "net_bp_after": -12.205950437800876,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -67.2537569784279,
-          "stop_hours_after_break": -96.0
+          "equity_kill_switch_pct": -68.28763026958288,
+          "stop_hours_after_break": -95.0
         },
         {
           "episode": "etf-2024",
@@ -146,8 +146,8 @@
           "net_bp_before": -12.457911148003186,
           "net_bp_after": -12.313010033630288,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -66.03534500586748,
-          "stop_hours_after_break": -96.0
+          "equity_kill_switch_pct": -67.09216863326525,
+          "stop_hours_after_break": -95.0
         },
         {
           "episode": "ath-2024",
@@ -158,7 +158,7 @@
           "net_bp_before": -12.837762962508435,
           "net_bp_after": -12.618320590675385,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -68.73695247429214,
+          "equity_kill_switch_pct": -68.73282263785985,
           "stop_hours_after_break": -95.0
         },
         {
@@ -170,8 +170,8 @@
           "net_bp_before": -12.72387401732778,
           "net_bp_after": -12.438508648421559,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -67.96454187993928,
-          "stop_hours_after_break": -96.0
+          "equity_kill_switch_pct": -68.96600101118347,
+          "stop_hours_after_break": -95.0
         },
         {
           "episode": "election-2024",
@@ -182,8 +182,8 @@
           "net_bp_before": -12.282636784738544,
           "net_bp_after": -12.337358931955333,
           "equity_left_running_pct": -100.0,
-          "equity_kill_switch_pct": -66.23154500525168,
-          "stop_hours_after_break": -96.0
+          "equity_kill_switch_pct": -67.21250205712114,
+          "stop_hours_after_break": -95.0
         }
       ]
     },
@@ -195,7 +195,7 @@
         "holds": 3,
         "breaks": 4,
         "never_paid": 3,
-        "kill_switch_saved_pct_mean": 7.6,
+        "kill_switch_saved_pct_mean": 7.46,
         "kill_switch_helped": 7,
         "stops_before_break": 2
       },
@@ -209,7 +209,7 @@
           "net_bp_before": -9.626415137324726,
           "net_bp_after": -22.63972017670153,
           "equity_left_running_pct": -32.14901538662835,
-          "equity_kill_switch_pct": -23.610178504733447,
+          "equity_kill_switch_pct": -24.934330783960455,
           "stop_hours_after_break": 13.0
         },
         {
@@ -257,7 +257,7 @@
           "net_bp_before": -4.753871130677103,
           "net_bp_after": 0.4808525779964297,
           "equity_left_running_pct": -0.0556964999568651,
-          "equity_kill_switch_pct": -2.132284555829131,
+          "equity_kill_switch_pct": -2.0448953856023557,
           "stop_hours_after_break": 4.0
         },
         {
@@ -305,7 +305,7 @@
           "net_bp_before": 9.217666057258354,
           "net_bp_after": -5.80624274519909,
           "equity_left_running_pct": -3.681756078049728,
-          "equity_kill_switch_pct": 1.4472517518578312,
+          "equity_kill_switch_pct": 1.2111459151881165,
           "stop_hours_after_break": -57.0
         },
         {
@@ -357,7 +357,7 @@
           "net_bp_after": -12.724756261300119,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -94.0
+          "stop_hours_after_break": -93.0
         },
         {
           "episode": "luna-2022",
@@ -381,7 +381,7 @@
           "net_bp_after": -12.750793179101944,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -95.0
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "ftx-2022",
@@ -393,7 +393,7 @@
           "net_bp_after": -13.050166755513095,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -95.0
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "svb-2023",
@@ -405,7 +405,7 @@
           "net_bp_after": -12.60359138750029,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -95.0
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "etf-2024",
@@ -417,7 +417,7 @@
           "net_bp_after": -12.912239254300948,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -95.0
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "ath-2024",
@@ -429,7 +429,7 @@
           "net_bp_after": -13.101653014845533,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -95.0
+          "stop_hours_after_break": -94.0
         },
         {
           "episode": "yen-carry-2024",
@@ -441,7 +441,7 @@
           "net_bp_after": -12.966114720752918,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -96.0
+          "stop_hours_after_break": -95.0
         },
         {
           "episode": "election-2024",
@@ -453,7 +453,7 @@
           "net_bp_after": -12.728234055818412,
           "equity_left_running_pct": -100.0,
           "equity_kill_switch_pct": -100.0,
-          "stop_hours_after_break": -95.0
+          "stop_hours_after_break": -94.0
         }
       ]
     }

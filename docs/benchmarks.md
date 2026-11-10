@@ -253,8 +253,8 @@ From [`experiments/results/bench_regimes`](../experiments/results/bench_regimes/
 
 | strategy | holds | breaks | never paid | kill switch helped | mean kept by the switch |
 |---|--:|--:|--:|--:|--:|
-| `reversion` | 3 | 4 | 3 | 7 of 10 | +7.6% of capital |
-| `relative` | 0 | 0 | 10 | 10 of 10 | +32.8% |
+| `reversion` | 3 | 4 | 3 | 7 of 10 | +7.5% of capital |
+| `relative` | 0 | 0 | 10 | 10 of 10 | +32.1% |
 | `spread` | 0 | 0 | 10 | 0 of 10 | 0.0% |
 
 - **`reversion` is a regime strategy, and the suite shows it.** It paid in the
@@ -268,7 +268,7 @@ From [`experiments/results/bench_regimes`](../experiments/results/bench_regimes/
 - **`relative` and `spread` never paid**, before any break or after: about
   12 bp a trade lost on some 45,000 trades an episode, which empties the
   account within the three weeks. The switch cuts `relative`'s loss to −64%
-  to −72%; `spread` has lost everything before the switch's 72-hour warm-up ends.
+  to −73%; `spread` has lost everything before the switch's 72-hour warm-up ends.
 - **`ath-2024` holds here and breaks in [`posts/btc_ath_2024`](../posts/btc_ath_2024/README.md).**
   The two differ in what they trade (twelve instruments here, the recorded
   tracks' twenty-six there), on what (bars here, the book there), in the fit

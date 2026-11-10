@@ -207,20 +207,30 @@ def score_episode(build: Callable[[], object], ep: Episode, panel: Panel) -> Epi
         decisions[:start] = 0
         hold = int(strategy.horizon)
         filled = _taker(decisions, market, hold, int(getattr(strategy, "cooldown", 0) or 0))
-        exit_at = pd.to_datetime(filled["ts"], utc=True) + np.timedelta64(5 * hold, "s")
-        rows.append(pd.DataFrame({"exit": exit_at, "net_bp": filled["net_bp"].to_numpy()}))
+        stamps = pd.DatetimeIndex(pd.to_datetime(market.frame["timestamp"], utc=True))
+        rows.append(pd.DataFrame({
+            "entry": pd.to_datetime(filled["ts"], utc=True).to_numpy(),
+            "exit": stamps[filled["exit_index"].to_numpy(dtype=np.int64)],
+            "net_bp": filled["net_bp"].to_numpy(),
+        }))  # fmt: skip
     trades = pd.concat(rows, ignore_index=True)
     if trades.empty:
         return EpisodeScore(ep.name, "no trades")
     breaks = pd.Timestamp(ep.breaks)
     before, after = trades[trades["exit"] < breaks], trades[trades["exit"] >= breaks]
-    last_hour = pd.Timestamp(ep.last_day.isoformat(), tz="UTC") + timedelta(hours=23)
-    hours = pd.date_range(panel.start, last_hour, freq="1h")
-    # an hour's return, in % of capital split equally over the instruments, counts
-    # the trades that closed within it: what was known at the hour's end
-    hourly = (trades.set_index("exit")["net_bp"].resample("1h", label="right", closed="right")
-              .sum().reindex(hours, fill_value=0.0) / n / 100.0)  # fmt: skip
-    switch = kill_switch(hourly, warm_up=72)
+    last_hour = pd.Timestamp(ep.last_day.isoformat(), tz="UTC") + timedelta(hours=24)
+    hours = pd.date_range(panel.start + timedelta(hours=1), last_hour, freq="1h")
+
+    # Hours are labelled by their end, in % of capital split equally over the
+    # instruments. The switch decides on the trades that closed in each hour,
+    # what was known at its end; a stop forbids new entries and lets the open
+    # positions run out, so it is credited with the trades opened while live.
+    def by_hour(stamp: str) -> pd.Series:
+        pnl = trades.set_index(stamp)["net_bp"].resample("1h", label="right", closed="right").sum()
+        return pnl.reindex(hours, fill_value=0.0) / n / 100.0
+
+    hourly, opened = by_hour("exit"), by_hour("entry")
+    switch = kill_switch(hourly, warm_up=72, booked=opened)
     stop = switch.first_stop
     out = EpisodeScore(
         ep.name, "", trades_before=len(before), trades_after=len(after),
