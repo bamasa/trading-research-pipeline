@@ -30,29 +30,38 @@ HERE = Path(__file__).parent
 K, H, WARM_UP = TEXTBOOK_K, TEXTBOOK_H, 72
 
 
-def hourly_returns() -> pd.Series:
-    """The portfolio's net return in each hour, in % of capital; an hour without a trade is 0."""
+def hourly_returns() -> tuple[pd.Series, pd.Series]:
+    """Each hour's result in % of capital: of the trades that closed in it, and of those opened in it.
+
+    Hours are labelled by their end. The switch decides on the first, which is
+    what was known at each hour's end; it credits the second while live.
+    """
     data = json.loads((HERE / "data.json").read_text(encoding="utf-8"))
-    equity = pd.Series({pd.Timestamp(t, tz="UTC"): v for t, v in data["equity_pct"]})
-    grid = pd.date_range(equity.index[0], equity.index[-1], freq="1h")
-    equity = equity.reindex(grid).ffill()
-    return equity.diff().fillna(equity.iloc[0])
+    rows = data["hourly_pct"]
+    index = pd.DatetimeIndex([pd.Timestamp(r[0], tz="UTC") for r in rows])
+    closed = pd.Series([r[1] for r in rows], index=index)
+    entered = pd.Series([r[2] for r in rows], index=index)
+    return closed, entered
 
 
-def run(returns: pd.Series, restart: bool) -> tuple[np.ndarray, list[dict[str, object]]]:
+def run(
+    returns: tuple[pd.Series, pd.Series], restart: bool
+) -> tuple[np.ndarray, list[dict[str, object]]]:
     """Equity under the kill switch, and every stop and restart with its hour."""
-    result = kill_switch(returns, k=K, h=H, warm_up=WARM_UP, restart=restart)
+    closed, entered = returns
+    result = kill_switch(closed, k=K, h=H, warm_up=WARM_UP, restart=restart, booked=entered)
     events = [{"event": e.kind, "at": e.at, "equity_pct": e.equity} for e in result.events]
     return result.equity.to_numpy(), events
 
 
 def main() -> None:
     returns = hourly_returns()
+    closed = returns[0]
     iso = "%Y-%m-%dT%H:%M"
-    raw = returns.cumsum().to_numpy()
-    peak_at = returns.index[int(np.argmax(raw))]
+    raw = closed.cumsum().to_numpy()
+    peak_at = closed.index[int(np.argmax(raw))]
     out: dict[str, object] = {"k": K, "h": H, "warm_up_hours": WARM_UP,
-                              "hours": [t.strftime(iso) for t in returns.index],
+                              "hours": [t.strftime(iso) for t in closed.index],
                               "none": np.round(raw, 3).tolist()}  # fmt: skip
     for name, restart in (("stop", False), ("shadow", True)):
         path, events = run(returns, restart)

@@ -95,7 +95,7 @@ def test_the_kill_switch_is_what_the_page_says() -> None:
     assert f"{first['hours_after_peak']} hours after the peak" in text
     assert f"**+{recorded['stop_end_pct']:.1f}%**" in text
     assert f"**+{recorded['shadow_end_pct']:.1f}%**" in text
-    assert len(recorded["shadow_events"]) == 5 and "restart 14 April, stop 14 April" in text
+    assert len(recorded["shadow_events"]) == 3 and "restart 14 April, stop 14 April" in text
 
 
 def test_the_break_detector_finds_what_the_page_says() -> None:

@@ -28,8 +28,8 @@ benchmark's favourable track, chosen after the repository had read it.
 |---|---|
 | 26 February to 10 March | 3,351 trades, +20.9 bp a trade gross, **+7.0 bp** net |
 | 12 March to 19 April | 12,719 trades, +1.4 bp a trade gross, **−12.5 bp** net |
-| Portfolio at its peak | **+15.3%**, 14 March 14:00 UTC |
-| Portfolio below zero again | 16 March 19:00 UTC, 53 hours after the peak |
+| Portfolio at its peak | **+15.3%**, in the hour to 15:00 UTC on 14 March |
+| Portfolio below zero again | in the hour to 20:00 UTC on 16 March, 53 hours after the peak |
 | Portfolio on 19 April | **−52.0%** |
 | BTCUSDT's highest hourly mid | **$73,662**, 14 March 06:00 UTC |
 | Index ten-minute autocorrelation, mean of the daily values | −0.113 (26 Feb to 10 Mar), −0.053 (12 Mar to 5 Apr), −0.015 (6 to 19 Apr) |
@@ -71,25 +71,29 @@ neither was tuned on this episode.
 **The kill switch on the strategy's own results.**
 [`validation/kill_switch.py`](../../src/trading_research/validation/kill_switch.py)
 runs Page's CUSUM, the textbook sequential test for a drop in a mean, on the
-portfolio's hourly net return ([`monitor.py`](monitor.py)). Its values are the
-textbook ones: k = 0.5 and h = 5 in units of the hourly return's standard
-deviation, estimated on the hours before the one tested; the first 72 hours
-only estimate it.
+portfolio's hourly net return ([`monitor.py`](monitor.py)). Each trade counts
+in the hour it closed, when its result was known, and each hour is labelled by
+its end; a decision at an hour's end applies from the next hour. A stop
+forbids new entries and lets the positions already open run to their exits,
+which count. Its values are the textbook ones: k = 0.5 and h = 5 in units of
+the hourly return's standard deviation, estimated on the hours before the one
+tested; the first 72 hours only estimate it.
 
 | Policy after an alarm | Alarms | Portfolio on 19 April |
 |---|---|---|
 | No monitor | | **−52.0%** |
-| Stop and stay stopped | 15 March 02:00 UTC, 12 hours after the peak | **+10.7%** |
-| Stop, trade on paper, restart when the same CUSUM pointed upwards sees the paper result recover | stop 15 March, restart 19 March, stop 20 March, restart 14 April, stop 14 April | **+1.8%** |
+| Stop and stay stopped | 15 March 04:00 UTC, 13 hours after the peak | **+9.4%** |
+| Stop, trade on paper, restart when the same CUSUM pointed upwards sees the paper result recover | stop 15 March, restart 14 April, stop 14 April | **+2.6%** |
 
-- The monitor raised no alarm in the fortnight that paid. With neighbouring
-  values (k from 0.5 to 1, h from 4 to 8) it fires 6 to 19 hours after the
-  peak and stops between +4.5% and +12.2%; at k = 0.25 with h from 4 to 6 it
-  fires on 6 March,
-  inside the good fortnight, and stops at +5% to +7%. A more sensitive switch
-  costs good days; a duller one costs bad hours.
-- Restarting is the hard part. Both automatic restarts came on a bounce, and
-  together they gave back most of what the stop had kept.
+- At its textbook values the monitor raised no alarm in the fortnight that
+  paid. Its neighbours, k from 0.25 to 1 and h from 4 to 8, are less tidy:
+  eight of the twelve stop 13 to 19 hours after the peak and keep +4.5% to
+  +9.4%; three (k = 0.25 with h = 4 or 5, and k = 0.5 with h = 4) stop on 5 or
+  6 March, inside the good fortnight, and keep +5.3% to +7.9%; one (k = 1,
+  h = 8) stops only on 12 April, at −18.5%. None ends near −52%. A more
+  sensitive switch costs good days; a duller one costs bad hours.
+- Restarting is the hard part. The automatic restart came on a bounce on 14
+  April and gave back most of what the stop had kept.
 - This is one episode, known before the monitor was written. The values are
   the textbook's and their neighbours are shown, but it is not an
   out-of-sample test of the monitor.
@@ -107,14 +111,14 @@ null-calibrated setting (history 365, online 90), the dependence family only:
 | 6 February 13:00 | dependence fell | moves reverse more: the strategy's state strengthening |
 | 2 March 00:00 | dependence fell | again |
 | 6 March 05:30 | dependence rose | an early warning; the strategy still earned for a week |
-| 15 March 09:10 | dependence rose | the break: 7 hours after the kill switch, the market stopped pulling back |
+| 15 March 09:10 | dependence rose | again, the morning after the portfolio peaked and about 5 hours after the kill switch |
 | 12 April 20:30 | dependence rose | again |
 
 The kill switch says when to stop; the detector says why. Run on the
 strategy's hourly results instead, with its mean family, the detector is
 sensitive to its setting: at its calibrated 250/60 setting its first
-falling-mean alarm is on 8 March, inside the good fortnight (a stop there
-keeps +6.5%), and with a 120-hour history it is on 13 March 05:00 (+14.0%).
+falling-mean alarm is on 10 March, inside the good fortnight (a stop there
+keeps +6.9%), and with a 120-hour history it is on 7 March (+5.9%).
 Those runs were tried and are reported here; the post uses the CUSUM as the
 switch and the detector on the index as the diagnosis.
 
