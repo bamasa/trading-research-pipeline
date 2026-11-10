@@ -59,17 +59,22 @@ stops if its trades and net per trade do not match the `reversion` card in
   archives; the intraday high printed on spot venues was slightly higher.
 - **A gap.** The two tracks leave out 11 March, so nothing trades that day.
 
-## A kill switch, and what to do after it fires
+## The pipeline catches the break
 
-The regime change could not be forecast a day ahead (the repository's own
-attempt is in [`docs/findings.md`](../../docs/findings.md)). Detecting it from
-the strategy's own results, using only the past, is a different question, and
-[`monitor.py`](monitor.py) answers it with the textbook tool: Page's CUSUM for
-a drop in the mean of the portfolio's hourly net return. Its values are the
-textbook ones, fixed before it was run, not searched: reference value
-k = 0.5 and threshold h = 5 in units of the hourly return's standard
-deviation, which is estimated on the hours before the one tested; the first 72
-hours only estimate it.
+Forecasting a regime change is a problem of its own; the repository's one
+attempt to forecast this one a day ahead failed (a gate on the trailing state
+admitted worse days than it rejected, [`docs/findings.md`](../../docs/findings.md)).
+This post asks the other question: does the pipeline notice, from data it has
+at each moment, that the strategy has broken? Two of its tools answer it, and
+neither was tuned on this episode.
+
+**The kill switch on the strategy's own results.**
+[`validation/kill_switch.py`](../../src/trading_research/validation/kill_switch.py)
+runs Page's CUSUM, the textbook sequential test for a drop in a mean, on the
+portfolio's hourly net return ([`monitor.py`](monitor.py)). Its values are the
+textbook ones: k = 0.5 and h = 5 in units of the hourly return's standard
+deviation, estimated on the hours before the one tested; the first 72 hours
+only estimate it.
 
 | Policy after an alarm | Alarms | Portfolio on 19 April |
 |---|---|---|
@@ -88,25 +93,44 @@ hours only estimate it.
 - This is one episode, known before the monitor was written. The values are
   the textbook's and their neighbours are shown, but it is not an
   out-of-sample test of the monitor.
-- The structural-break detector in `validation/structural_breaks.py`, run on
-  the same hourly series with its mean family only and a 120-hour history,
-  raised a falling-mean
-  alarm on 14 March 10:00, four hours before the portfolio's peak; it also
-  raised one on 11 March, when the series is zero because the day is missing,
-  and from 26 March one every two to three days. As a second opinion it is useful; as a
-  switch it fires too often.
+**The structural-break detector on the market itself.**
+[`validation/structural_breaks.py`](../../src/trading_research/validation/structural_breaks.py),
+from the author's solution to the ADIA Lab Structural Break Challenge, whitens
+a stream by its own history and accumulates the odds of a change family by
+family. Its `dependence` family is the strategy's mechanism: a change in how
+much a ten-minute move depends on the previous one. [`breaks.py`](breaks.py)
+runs it on the index's ten-minute returns with the detector's default,
+null-calibrated setting (history 365, online 90), the dependence family only:
+
+| Alarm | Direction | Reading |
+|---|---|---|
+| 6 February 13:00 | dependence fell | moves reverse more: the strategy's state strengthening |
+| 2 March 00:00 | dependence fell | again |
+| 6 March 05:30 | dependence rose | an early warning; the strategy still earned for a week |
+| 15 March 09:10 | dependence rose | the break: 7 hours after the kill switch, the market stopped pulling back |
+| 12 April 20:30 | dependence rose | again |
+
+The kill switch says when to stop; the detector says why. Run on the
+strategy's hourly results instead, with its mean family, the detector is
+sensitive to its setting: at its calibrated 250/60 setting its first
+falling-mean alarm is on 8 March, inside the good fortnight (a stop there
+keeps +6.5%), and with a 120-hour history it is on 13 March 05:00 (+14.0%).
+Those runs were tried and are reported here; the post uses the CUSUM as the
+switch and the detector on the index as the diagnosis.
 
 ## Rebuild
 
 ```bash
 PYTHONPATH=src python posts/btc_ath_2024/make_data.py --data data
 PYTHONPATH=src python posts/btc_ath_2024/monitor.py
+PYTHONPATH=src python posts/btc_ath_2024/breaks.py
 node posts/btc_ath_2024/render.mjs
 ```
 
 The first needs the two tracks' archives (`trading-research bench fetch`) and
-rewrites `data.json` and `numbers.json`; the second writes `monitor.json` from
-`data.json`; the third needs Chrome and ffmpeg and
+rewrites `data.json` and `numbers.json`; the next two write `monitor.json` and
+`breaks.json` from `data.json` (the second needs the `breaks` extra); the last
+needs Chrome and ffmpeg and
 writes `artifacts/posts/btc_ath_2024.mp4` (1080 x 1080, 20 s) and a
 self-contained page beside it. The video is drawn frame by frame by the page's
 own `renderAt`, so it is the page, not a screen recording.

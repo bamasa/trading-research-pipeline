@@ -49,7 +49,7 @@ const RENDER = /render/.test(location.search);
 if (RENDER) document.body.classList.add("render");
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 const S = 1080;
-const COL = { auto: "#7c4dff", bg: "#fbfcfe", grid: "#e6e9f2", zero: "#b9c0d4", fg: "#0d1328", muted: "#646d8c", btc: "#f7931a", btcText: "#c86a00", win: "#1fa34a", loss: "#e3344b", train: "#3a66f0" };
+const COL = { det: "#0b7fa8", auto: "#7c4dff", bg: "#fbfcfe", grid: "#e6e9f2", zero: "#b9c0d4", fg: "#0d1328", muted: "#646d8c", btc: "#f7931a", btcText: "#c86a00", win: "#1fa34a", loss: "#e3344b", train: "#3a66f0" };
 const F = { display: '"Tektur", "Arial Black", sans-serif', body: '"Onest", system-ui, sans-serif', mono: '"JetBrains Mono", ui-monospace, monospace' };
 const reduce = !RENDER && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -65,6 +65,8 @@ const ZERO_T = eq.find((r, i) => i > PEAK_I && r[1] < 0)[0];
 const MONI = window.POST.monitor;
 const mh = MONI.hours.map(s => Date.parse(s + "Z"));
 const STOP = MONI.stop_events[0], STOP_T = Date.parse(STOP.at + "Z");
+const DET = window.POST.breaks.alarms.map(a => ({ t: Date.parse(a.at + "Z"), dir: a.direction }));
+const DET_T = DET.filter(a => a.dir > 0 && a.t > STOP_T - 864e5)[0].t;
 const RESTART2_T = Date.parse(MONI.shadow_events.filter(e => e.event === "restart").slice(-1)[0].at + "Z");
 
 // time warp: the story slows around the top and the fall
@@ -96,15 +98,24 @@ const int = v => v.toLocaleString("en-US");
 const clamp01 = v => Math.max(0, Math.min(1, v));
 
 function txt(s, x, y, font, color, align = "left", alpha = 1) { ctx.globalAlpha = alpha; ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y); ctx.globalAlpha = 1; }
+// a chart label: a halo of the page colour first, so a line under it never runs through the letters
+function lab(s, x, y, font, color, align = "left", alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha; ctx.font = font; ctx.textAlign = align; ctx.lineJoin = "round"; ctx.setLineDash([]);
+  ctx.strokeStyle = COL.bg; ctx.lineWidth = 7; ctx.strokeText(s, x, y);
+  ctx.fillStyle = color; ctx.fillText(s, x, y);
+  ctx.restore();
+}
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
 function headline(t, done) {
-  if (done) return [["You can't predict a regime change.", COL.fg], ["You can catch it.", COL.win]];
+  if (done) return [["The market changed.", COL.fg], ["The pipeline caught it.", COL.win]];
   if (t < FIT_END) return [["Fitting the strategy", COL.fg], ["on February 2024", COL.train]];
   if (t < ATH_T - 12 * 36e5) return [["Frozen.", COL.fg], ["The strategy prints.", COL.win]];
   if (t < ATH_T + 8 * 36e5) return [["March 14: bitcoin hits", COL.fg], ["an all-time high", COL.btcText]];
   if (t < STOP_T) return [["The strategy peaks.", COL.fg], ["Then it starts to lose.", COL.loss]];
-  if (t < STOP_T + 48 * 36e5) return [[`${STOP.hours_after_peak} hours later, a monitor`, COL.fg], ["pulls the kill switch", COL.win]];
+  if (t < DET_T) return [[`${STOP.hours_after_peak} hours later, a monitor`, COL.fg], ["pulls the kill switch", COL.win]];
+  if (t < DET_T + 60 * 36e5) return [["The break detector says why:", COL.fg], ["the market stopped pulling back", COL.det]];
   if (t < RESTART2_T) return [["Left running,", COL.fg], ["the strategy keeps bleeding", COL.loss]];
   return [["Restarting on a bounce", COL.fg], ["gives most of it back", COL.auto]];
 }
@@ -136,16 +147,16 @@ function draw(el) {
   txt(head[1][0], L, hy + 64, `900 ${hs}px ${F.display}`, head[1][1], "left", ha);
 
   ctx.fillStyle = "rgba(58,102,240,.07)"; ctx.fillRect(X(T0), P.top - 20, X(FIT_END) - X(T0), A.mid + A.h - P.top + 20);
-  txt("FITTING", X(T0) + 12, P.top, `700 16px ${F.mono}`, COL.train);
+  lab("FITTING", X(T0) + 12, P.top, `700 16px ${F.mono}`, COL.train);
   if (t >= FIT_END) {
     ctx.strokeStyle = COL.train; ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(X(FIT_END), P.top - 20); ctx.lineTo(X(FIT_END), A.mid + A.h); ctx.stroke(); ctx.setLineDash([]);
-    txt("THRESHOLD FROZEN", X(FIT_END) + 10, P.bot - 8, `700 16px ${F.mono}`, COL.train);
+    lab("THRESHOLD FROZEN", X(FIT_END) + 10, P.bot - 8, `700 16px ${F.mono}`, COL.train);
   }
 
   ctx.lineWidth = 1; ctx.strokeStyle = COL.grid;
-  [45000, 55000, 65000, 75000].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Yp(v)); ctx.lineTo(R, Yp(v)); ctx.stroke(); txt(Math.round(v / 1000) + "k", R, Yp(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"); });
-  txt("BTCUSDT", L, P.bot + 26, `700 17px ${F.mono}`, COL.btcText);
+  [45000, 55000, 65000, 75000].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Yp(v)); ctx.lineTo(R, Yp(v)); ctx.stroke(); lab(Math.round(v / 1000) + "k", R, Yp(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"); });
+  lab("BTCUSDT", L, P.bot + 26, `700 17px ${F.mono}`, COL.btcText);
 
   const pts = btc.filter(r => r[0] <= t);
   if (pts.length > 1) {
@@ -158,7 +169,7 @@ function draw(el) {
     ctx.shadowColor = "rgba(247,147,26,.45)"; ctx.shadowBlur = 10; ctx.strokeStyle = COL.btc; ctx.lineWidth = 3.4; ctx.lineJoin = "round"; ctx.stroke(); ctx.shadowBlur = 0;
     const last = pts[pts.length - 1];
     ctx.fillStyle = COL.btc; ctx.beginPath(); ctx.arc(X(last[0]), Yp(last[1]), 7, 0, 7); ctx.fill();
-    if (!done) txt(money(last[1]), Math.min(X(last[0]) + 14, R - 150), Yp(last[1]) - 14, `700 22px ${F.mono}`, COL.btcText);
+    if (!done) lab(money(last[1]), Math.min(X(last[0]) + 14, R - 150), Yp(last[1]) - 14, `700 22px ${F.mono}`, COL.btcText);
   }
 
   if (t >= ATH_T) {
@@ -176,18 +187,18 @@ function draw(el) {
     }
     ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(xa, ya, 9, 0, 7); ctx.fill();
     ctx.strokeStyle = COL.btc; ctx.lineWidth = 3; ctx.stroke();
-    const lab = "ALL-TIME HIGH " + money(ATH_V);
-    ctx.font = `700 22px ${F.mono}`; const tw = ctx.measureText(lab).width + 22;
+    const badge = "ALL-TIME HIGH " + money(ATH_V);
+    ctx.font = `700 22px ${F.mono}`; const tw = ctx.measureText(badge).width + 22;
     const bx = xa - tw - 14, by = ya - 46;
     ctx.fillStyle = COL.btc; roundRect(bx, by, tw, 36, 8); ctx.fill();
-    txt(lab, bx + 11, by + 25, `700 22px ${F.mono}`, "#1a0f00");
+    txt(badge, bx + 11, by + 25, `700 22px ${F.mono}`, "#1a0f00");
     if (!reduce && since < 10) { ctx.fillStyle = `rgba(255,214,150,${.28 * (1 - since / 10)})`; ctx.fillRect(0, 0, S, S); }
   }
 
   ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
-  [-50, -25, 0, 15].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Ye(v)); ctx.lineTo(R, Ye(v)); ctx.stroke(); txt(v === 0 ? "0%" : pct(v).replace(".0", ""), R, Ye(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"); });
+  [-50, -25, 0, 15].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Ye(v)); ctx.lineTo(R, Ye(v)); ctx.stroke(); lab(v === 0 ? "0%" : pct(v).replace(".0", ""), R, Ye(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"); });
   ctx.strokeStyle = COL.zero; ctx.beginPath(); ctx.moveTo(L, Ye(0)); ctx.lineTo(R, Ye(0)); ctx.stroke();
-  txt("PORTFOLIO, NET OF FEES · capital split over 26 coins, no leverage", L, E.top - 14, `700 17px ${F.mono}`, COL.muted);
+  lab("PORTFOLIO, NET OF FEES · capital split over 26 coins, no leverage", L, E.top - 26, `700 17px ${F.mono}`, COL.muted);
   const ep = eq.filter(r => r[0] <= t);
   if (ep.length > 1) {
     for (const [sign, color] of [[1, "rgba(31,163,74,.18)"], [-1, "rgba(227,52,75,.18)"]]) {
@@ -210,19 +221,19 @@ function draw(el) {
     const last = ep[ep.length - 1], c = last[0] <= split ? COL.win : COL.loss;
     ctx.fillStyle = c; ctx.globalAlpha = stopped ? .6 : 1; ctx.beginPath(); ctx.arc(X(last[0]), Ye(last[1]), 8, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     const nearEdge = X(last[0]) > R - 200;
-    if (stopped) { if (t > STOP_T + 30 * 36e5) txt(pct(last[1]), X(last[0]) + (nearEdge ? -90 : 18), Ye(last[1]) + 34, `700 24px ${F.mono}`, c, nearEdge ? "right" : "left"); }
-    else txt(pct(last[1]), X(last[0]) + (nearEdge ? -90 : 18), Ye(last[1]) + 11, `700 30px ${F.mono}`, c, nearEdge ? "right" : "left");
+    if (stopped) { if (t > STOP_T + 30 * 36e5) lab(pct(last[1]), X(last[0]) + (nearEdge ? -72 : 18), Ye(last[1]) + (last[1] < -35 ? -16 : 34), `700 24px ${F.mono}`, c, nearEdge ? "right" : "left"); }
+    else lab(pct(last[1]), X(last[0]) + (nearEdge ? -90 : 18), Ye(last[1]) + 11, `700 30px ${F.mono}`, c, nearEdge ? "right" : "left");
     if (stopped) policies(t, el);
     if (t > eq[PEAK_I][0] + 6 * 36e5) {
       const xp = X(eq[PEAK_I][0]), yp = Ye(eq[PEAK_I][1]);
       ctx.fillStyle = COL.win; ctx.beginPath(); ctx.arc(xp, yp, 6, 0, 7); ctx.fill();
-      txt("peak " + pct(eq[PEAK_I][1]), xp - 12, yp - 14, `700 18px ${F.mono}`, COL.win, "right");
+      lab("peak " + pct(eq[PEAK_I][1]), xp - 12, yp - 14, `700 18px ${F.mono}`, COL.win, "right");
     }
   } else if (t < FIT_END) {
-    txt("no trades yet: the threshold is being fitted", X(T0) + 12, Ye(0) - 14, `500 18px ${F.body}`, COL.muted);
+    lab("no trades yet: the threshold is being fitted", X(T0) + 12, Ye(0) - 14, `500 18px ${F.body}`, COL.muted);
   }
 
-  txt("index 10-min autocorrelation, per day · green: moves pull back", L, A.mid - A.h - 10, `500 15px ${F.mono}`, COL.muted);
+  lab("index pullbacks, per day", L + 70, A.mid + A.h + 26, `500 15px ${F.mono}`, COL.muted);
   const bw = (X(T0 + 864e5) - X(T0)) * .7;
   ac.forEach(([tt, v]) => {
     if (tt - 12 * 36e5 > t) return;
@@ -231,7 +242,8 @@ function draw(el) {
     ctx.fillRect(X(tt) - bw / 2, v < 0 ? A.mid - hgt : A.mid, bw, hgt);
   });
   ctx.strokeStyle = COL.zero; ctx.beginPath(); ctx.moveTo(L, A.mid); ctx.lineTo(R, A.mid); ctx.stroke();
-  [["2024-02-01", "Feb 1"], ["2024-03-01", "Mar 1"], ["2024-04-01", "Apr 1"]].forEach(([d, s]) => txt(s, X(Date.parse(d + "T00:00Z")), A.mid + A.h + 26, `500 16px ${F.mono}`, COL.muted, "center"));
+  detectorPins(t);
+  [["2024-02-01", "Feb 1"], ["2024-03-01", "Mar 1"], ["2024-04-01", "Apr 1"]].forEach(([d, s]) => lab(s, X(Date.parse(d + "T00:00Z")), A.mid + A.h + 26, `500 16px ${F.mono}`, COL.muted, "center"));
 
   if (done) {
     const k = reduce ? 1 : clamp01((el - PLAY) / 500);
@@ -239,6 +251,24 @@ function draw(el) {
   }
   txt("Backtest on recorded Bybit data · 26 perps · 10-min reversion · taker 5.5 bp/side + slippage + spread", L, S - 50, `500 15px ${F.mono}`, COL.muted);
   txt(`Kill switch: Page's CUSUM on the strategy's hourly P&L (k = ${MONI.k}, h = ${MONI.h}), past data only`, L, S - 26, `500 15px ${F.mono}`, COL.muted);
+}
+
+// the structural-break detector's alarms on the index: a diamond on the strip's label row
+function detectorPins(t) {
+  const y = A.mid - A.h - 16;
+  DET.forEach(a => {
+    if (a.t > t) return;
+    const x = X(a.t), c = a.dir < 0 ? COL.win : COL.det;
+    ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = c; ctx.globalAlpha = .6; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, y + 8); ctx.lineTo(x, A.mid + A.h); ctx.stroke(); ctx.restore();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 7, y); ctx.closePath(); ctx.fill();
+  });
+  if (t >= DET_T) lab("break detector: pullbacks weaken", X(DET_T) + 14, y + 5, `700 15px ${F.mono}`, COL.det);
+  if (t < DET_T && DET.some(a => a.t <= t)) {
+    const lx = R - 330;
+    ctx.fillStyle = COL.det; ctx.beginPath(); ctx.moveTo(lx, y - 7); ctx.lineTo(lx + 6, y); ctx.lineTo(lx, y + 7); ctx.lineTo(lx - 6, y); ctx.closePath(); ctx.fill();
+    lab("break detector on the index", lx + 14, y + 5, `600 15px ${F.mono}`, COL.det);
+  }
 }
 
 function policies(t, el) {
@@ -250,6 +280,7 @@ function policies(t, el) {
   };
   path(MONI.shadow, COL.auto, 2.6, "rgba(124,77,255,.35)");
   path(MONI.stop, COL.win, 4.5, "rgba(31,163,74,.45)");
+  [-50, -25, 0, 15].forEach(v => lab(v === 0 ? "0%" : pct(v).replace(".0", ""), R, Ye(v) - 6, `500 15px ${F.mono}`, COL.muted, "right"));
   MONI.shadow_events.forEach(e => {
     const te = Date.parse(e.at + "Z"); if (te > t || te === STOP_T) return;
     const xe = X(te), ye = Ye(e.equity_pct);
@@ -257,29 +288,30 @@ function policies(t, el) {
     ctx.beginPath(); ctx.arc(xe, ye, 5.5, 0, 7); ctx.fill(); ctx.stroke();
   });
   const last = Math.max(i0, n - 1);
-  txt(pct(MONI.stop[last]), Math.min(X(mh[last]) + 14, R - 270), Ye(MONI.stop[last]) - 12, `700 28px ${F.mono}`, COL.win);
-  if (Math.abs(MONI.shadow[last] - MONI.stop[last]) > 0.5) txt(pct(MONI.shadow[last]), Math.min(X(mh[last]) + 14, R - 270), Ye(MONI.shadow[last]) + 30, `700 20px ${F.mono}`, COL.auto);
-  // the moment it fires
-  const since = (t - STOP_T) / 36e5, xs = X(STOP_T), ys = Ye(STOP.equity_pct);
-  ctx.strokeStyle = COL.win; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xs, P.bot - 34); ctx.lineTo(xs, ys - 10); ctx.stroke();
-  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(xs, ys, 10, 0, 7); ctx.fill(); ctx.strokeStyle = COL.win; ctx.lineWidth = 4; ctx.stroke();
-  const lab = "KILL SWITCH · " + dlab(STOP_T).replace(", 2024", "") + " 02:00";
-  ctx.font = `700 20px ${F.mono}`; const tw = ctx.measureText(lab).width + 22;
-  const bx = Math.min(xs + 12, R - tw), by = P.bot - 70;
-  ctx.fillStyle = COL.win; roundRect(bx, by, tw, 34, 8); ctx.fill();
-  txt(lab, bx + 11, by + 23, `700 20px ${F.mono}`, "#fff");
-  if (!reduce && since < 8) {
-    for (let k = 0; k < 3; k++) { const r = (since * 9 + k * 30) % 110; ctx.strokeStyle = COL.win; ctx.globalAlpha = clamp01(1 - r / 110); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(xs, ys, r, 0, 7); ctx.stroke(); }
-    ctx.globalAlpha = 1; ctx.fillStyle = `rgba(190,245,205,${.30 * (1 - since / 8)})`; ctx.fillRect(0, 0, S, S);
-  }
+  lab(pct(MONI.stop[last]), Math.min(X(mh[last]) + 14, R - 270), Ye(MONI.stop[last]) - 12, `700 28px ${F.mono}`, COL.win);
+  if (Math.abs(MONI.shadow[last] - MONI.stop[last]) > 0.5) lab(pct(MONI.shadow[last]), Math.min(X(mh[last]) + 14, R - 270), Ye(MONI.shadow[last]) + 30, `700 20px ${F.mono}`, COL.auto);
   // legend, in the empty fitting window of the lower panel
   const items = [[COL.loss, "left running", true], [COL.win, "kill switch, stays off", false], [COL.auto, "kill switch + auto-restart", false]];
   items.forEach(([c, s, dash], j) => {
     const y = Ye(-18) + j * 30;
     ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.globalAlpha = dash ? .6 : 1; if (dash) ctx.setLineDash([8, 6]);
     ctx.beginPath(); ctx.moveTo(L + 12, y); ctx.lineTo(L + 52, y); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
-    txt(s, L + 62, y + 6, `600 16px ${F.body}`, COL.fg);
+    lab(s, L + 62, y + 6, `600 16px ${F.body}`, COL.fg);
   });
+  // the moment it fires
+  const since = (t - STOP_T) / 36e5, xs = X(STOP_T), ys = Ye(STOP.equity_pct);
+  ctx.strokeStyle = COL.win; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xs, P.bot - 34); ctx.lineTo(xs, P.bot + 4); ctx.moveTo(xs, E.top - 4); ctx.lineTo(xs, ys - 10); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(xs, ys, 10, 0, 7); ctx.fill(); ctx.strokeStyle = COL.win; ctx.lineWidth = 4; ctx.stroke();
+  const badge = "KILL SWITCH · " + dlab(STOP_T).replace(", 2024", "") + " 02:00";
+  if (el >= PLAY) return;
+  ctx.font = `700 20px ${F.mono}`; const tw = ctx.measureText(badge).width + 22;
+  const bx = Math.min(xs + 12, R - tw), by = P.bot - 70;
+  ctx.fillStyle = COL.win; roundRect(bx, by, tw, 34, 8); ctx.fill();
+  txt(badge, bx + 11, by + 23, `700 20px ${F.mono}`, "#fff");
+  if (!reduce && since < 8) {
+    for (let k = 0; k < 3; k++) { const r = (since * 9 + k * 30) % 110; ctx.strokeStyle = COL.win; ctx.globalAlpha = clamp01(1 - r / 110); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(xs, ys, r, 0, 7); ctx.stroke(); }
+    ctx.globalAlpha = 1; ctx.fillStyle = `rgba(190,245,205,${.30 * (1 - since / 8)})`; ctx.fillRect(0, 0, S, S);
+  }
 }
 
 function finalCard(k) {

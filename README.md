@@ -67,6 +67,19 @@ instrument — is [one file and one check](#add-a-strategy).
 
 ---
 
+## A strategy breaks, and the pipeline catches it
+
+<a href="posts/btc_ath_2024/README.md"><img alt="The reversion strategy fitted on February 2024: left running it ends at -52.0%, the kill switch keeps +10.7%" src="docs/images/post_btc_ath_2024.png" width="480"></a>
+
+The reversion strategy, fitted on February 2024 and then left alone on 26 Bybit
+perpetuals, peaks at +15.3% on the day bitcoin makes its March 2024 high and
+gives it all back within two days. Two of the pipeline's tools catch the
+break from data available at each hour: the kill switch on the strategy's own
+results stops it 12 hours after the peak (+10.7% kept against −52.0% left
+running), and the structural-break detector on the index flags the market no
+longer pulling back the next morning. Every number is rebuilt by a script and
+checked by a test: [`posts/btc_ath_2024`](posts/btc_ath_2024/README.md).
+
 ## Where it made money
 
 <picture>
