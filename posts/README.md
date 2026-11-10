@@ -14,4 +14,4 @@ that each post's text and animation quote its `numbers.json`.
 
 | Post | What it shows |
 |---|---|
-| [`btc_ath_2024`](btc_ath_2024/README.md) | bitcoin's March 2024 high, and the reversion strategy fitted on February giving back everything within two days |
+| [`btc_ath_2024`](btc_ath_2024/README.md) | bitcoin's March 2024 high, the reversion strategy fitted on February giving back everything within two days, and a textbook kill switch on its own results that stops it 12 hours after the peak |

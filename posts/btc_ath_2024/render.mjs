@@ -20,6 +20,8 @@ const fps = 30;
 const post = {
   data: JSON.parse(readFileSync(join(here, "data.json"), "utf8")),
   numbers: JSON.parse(readFileSync(join(here, "numbers.json"), "utf8")),
+  monitor: JSON.parse(readFileSync(join(here, "monitor.json"), "utf8")),
+  breaks: JSON.parse(readFileSync(join(here, "breaks.json"), "utf8")),
 };
 const page = readFileSync(join(here, "animation.html"), "utf8")
   .replace("<script>/*DATA*/</script>", `<script>window.POST=${JSON.stringify(post)};</script>`);

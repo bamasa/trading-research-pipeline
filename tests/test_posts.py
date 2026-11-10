@@ -64,8 +64,50 @@ def test_the_page_quotes_its_numbers(numbers: dict) -> None:
     assert "two days" in text
 
 
-def test_the_animation_reads_its_numbers_and_says_two_days() -> None:
+def test_the_animation_draws_from_its_files() -> None:
     page = (POST / "animation.html").read_text(encoding="utf-8")
     assert "<script>/*DATA*/</script>" in page
-    assert "N.before.net_bp_per_trade" in page and "N.after.net_bp_per_trade" in page
-    assert '"And in two days"' in page
+    for read in (
+        "N.end.equity_pct",
+        "MONI.stop_end_pct",
+        "MONI.shadow_end_pct",
+        "STOP.hours_after_peak",
+    ):
+        assert read in page, read
+
+
+def test_the_kill_switch_is_what_the_page_says() -> None:
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location("post_monitor", POST / "monitor.py")
+    assert spec and spec.loader
+    monitor = module_from_spec(spec)
+    spec.loader.exec_module(monitor)
+    assert (monitor.K, monitor.H, monitor.WARM_UP) == (0.5, 5.0, 72)
+    recorded = json.loads((POST / "monitor.json").read_text(encoding="utf-8"))
+    returns = monitor.hourly_returns()
+    for name, restart in (("stop", False), ("shadow", True)):
+        path, events = monitor.run(returns, restart)
+        assert round(float(path[-1]), 1) == recorded[f"{name}_end_pct"]
+        assert [e["event"] for e in events] == [e["event"] for e in recorded[f"{name}_events"]]
+    first = recorded["stop_events"][0]
+    text = (POST / "README.md").read_text(encoding="utf-8")
+    assert f"{first['hours_after_peak']} hours after the peak" in text
+    assert f"**+{recorded['stop_end_pct']:.1f}%**" in text
+    assert f"**+{recorded['shadow_end_pct']:.1f}%**" in text
+    assert len(recorded["shadow_events"]) == 5 and "restart 14 April, stop 14 April" in text
+
+
+def test_the_break_detector_finds_what_the_page_says() -> None:
+    pytest.importorskip("structural_break")
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location("post_breaks", POST / "breaks.py")
+    assert spec and spec.loader
+    breaks = module_from_spec(spec)
+    spec.loader.exec_module(breaks)
+    recorded = json.loads((POST / "breaks.json").read_text(encoding="utf-8"))
+    assert breaks.alarms() == recorded["alarms"]
+    text = (POST / "README.md").read_text(encoding="utf-8")
+    assert "| 15 March 09:10 | dependence rose |" in text
+    assert [a["at"] for a in recorded["alarms"]][3] == "2024-03-15T09:10"

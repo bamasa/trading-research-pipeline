@@ -258,6 +258,11 @@ DETECTORS: tuple[Implemented, ...] = (
         "the statistics of a break-detection library on a whitened stream, calibrated on a null",
         "trading_research.validation.structural_breaks:detect_breaks",
     ),
+    Implemented(
+        "kill switch",
+        "a drop in the mean of a strategy's own returns, from the past only; stops it",
+        "trading_research.validation.kill_switch:kill_switch",
+    ),
 )
 
 #: Command groups whose subcommands the catalogue lists with their help.
