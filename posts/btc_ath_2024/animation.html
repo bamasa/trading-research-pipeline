@@ -73,26 +73,38 @@ const PEAK_T = eq[PEAK_I][0], T_END = eq[eq.length - 1][0];
 // The story in scenes. A scene runs the market clock to `to` in `ms`; a scene whose
 // `to` equals the last one's holds the clock still, so a moment can be looked at.
 // Every headline stays up at least 2.5 s.
+const BOUNCE_T = Date.parse("2024-04-10T00:00Z");
+// Long stretches run at one speed, about five market days a second; the clock
+// slows to rest before each held moment and starts from rest after it, with
+// the speed continuous at every join.
 const SCENES = [
-  { to: FIT_END, ms: 3200, head: [["Every strategy is fitted", "fg"], ["to one market regime", "train"]] },
-  { to: ATH_T - 6 * 36e5, ms: 3600, head: [["Fitted on February 2024,", "fg"], ["this one prints money", "win"]] },
-  { to: PEAK_T, ms: 2800, head: [["March 14: bitcoin hits", "fg"], ["an all-time high", "btcText"]] },
+  { to: FIT_END, ms: 5000, ease: "start", head: [["Every strategy is fitted", "fg"], ["to one market regime", "train"]] },
+  { to: ATH_T - 6 * 36e5, ms: 4000, ease: "stop", head: [["Fitted on February 2024,", "fg"], ["this one prints money", "win"]] },
+  { to: PEAK_T, ms: 2800, ease: "both", head: [["March 14: bitcoin hits", "fg"], ["an all-time high", "btcText"]] },
   { to: PEAK_T, ms: 3200, mark: "change", head: [["Right here the regime changes.", "fg"], ["Nothing in the code did.", "loss"]] },
-  { to: STOP_T, ms: 2600, head: [["The same strategy", "fg"], ["starts losing money", "loss"]] },
+  { to: STOP_T, ms: 2600, ease: "both", head: [["The same strategy", "fg"], ["starts losing money", "loss"]] },
   { to: STOP_T, ms: 3200, mark: "stop", head: [["A monitor on its own P&L", "fg"], [`fires ${STOP.hours_after_peak} hours later: stop`, "win"]] },
-  { to: DET_T, ms: 1400, head: [["A monitor on its own P&L", "fg"], [`fires ${STOP.hours_after_peak} hours later: stop`, "win"]] },
+  { to: DET_T, ms: 1600, ease: "both", head: [["A monitor on its own P&L", "fg"], [`fires ${STOP.hours_after_peak} hours later: stop`, "win"]] },
   { to: DET_T, ms: 3200, mark: "detector", head: [["A break detector on the market", "fg"], ["shows why: no more pullbacks", "det"]] },
-  { to: RESTART2_T, ms: 4200, head: [["Left running,", "fg"], ["it keeps bleeding", "loss"]] },
-  { to: T_END, ms: 3000, head: [["Restarting on a bounce", "fg"], ["gives most of it back", "auto"]] },
+  { to: BOUNCE_T, ms: 5500, ease: "start", head: [["Left running,", "fg"], ["it keeps bleeding", "loss"]] },
+  { to: T_END, ms: 2700, ease: "stop", head: [["Restarting on a bounce", "fg"], ["gives most of it back", "auto"]] },
 ];
 const FINAL_HEAD = [["Regimes change.", "fg"], ["Catch the change, then stop.", "win"]];
 let acc = 0, from = T0;
 SCENES.forEach(sc => { sc.from = from; sc.start = acc; acc += sc.ms; from = sc.to; });
-const ease = f => f < .5 ? 4 * f * f * f : 1 - (-2 * f + 2) ** 3 / 2;
+// "start": from rest, speed rising linearly over the first 15%; "stop": the mirror,
+// coming to rest over the last half; "both": from rest to rest (a sine).
+const rise = a => f => (f < a ? f * f / (2 * a) : f - a / 2) / (1 - a / 2);
+const EASE = {
+  lin: f => f,
+  start: rise(0.15),
+  stop: f => 1 - rise(0.5)(1 - f),
+  both: f => (1 - Math.cos(Math.PI * f)) / 2,
+};
 const timeAt = el => {
   const sc = SCENES.find(c => el < c.start + c.ms) || SCENES[SCENES.length - 1];
   const f = clamp01((el - sc.start) / sc.ms);
-  return { t: sc.from + (sc.to - sc.from) * ease(f), scene: sc, into: el - sc.start };
+  return { t: sc.from + (sc.to - sc.from) * (EASE[sc.ease] || EASE.lin)(f), scene: sc, into: el - sc.start };
 };
 
 const L = 72, R = S - 72;
