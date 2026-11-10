@@ -17,6 +17,7 @@ from trading_research.bench.regimes import (
     bar_grid,
     needs_sizes,
     page,
+    ruined,
     summary,
 )
 from trading_research.plugins import get
@@ -73,3 +74,22 @@ def test_the_summary_counts_what_held_what_broke_and_what_the_switch_kept() -> N
     assert s["kill_switch_saved_pct_mean"] == round((0 + 22 + 5) / 3, 2)
     text = page({"reversion": scores})
     assert "| reversion | 3 of 4 | 1 | 1 | 1 | 2 |" in text and "needs the book's sizes" in text
+
+
+def test_an_account_that_has_lost_everything_stays_at_minus_one_hundred() -> None:
+    assert ruined(pd.Series([-50.0, -101.0, -40.0])) == -100.0
+    assert ruined(pd.Series([-50.0, -99.0, -40.0])) == -40.0
+
+
+def test_the_benchmark_page_quotes_the_recorded_suite() -> None:
+    import json
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parent.parent
+    recorded = json.loads((repo / "experiments/results/bench_regimes/regimes.json").read_text())
+    text = (repo / "docs/benchmarks.md").read_text(encoding="utf-8")
+    for row in recorded["rows"]:
+        s = row["summary"]
+        line = (f"| `{row['name']}` | {s['holds']} | {s['breaks']} | {s['never_paid']} | "
+                f"{s['kill_switch_helped']} of {s['episodes']} |")  # fmt: skip
+        assert line in text, line

@@ -176,6 +176,13 @@ class EpisodeScore:
         return {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in out.items()}
 
 
+def ruined(equity: pd.Series) -> float:
+    """The last equity, in %, of an account that stops for good once it has lost everything."""
+    path = equity.to_numpy(dtype=np.float64)
+    gone = np.flatnonzero(path <= -100.0)
+    return -100.0 if len(gone) else float(path[-1])
+
+
 def needs_sizes(strategy: object) -> bool:
     return any("size" in pattern for pattern in tuple(getattr(strategy, "inputs", ()) or ()))
 
@@ -219,8 +226,8 @@ def score_episode(build: Callable[[], object], ep: Episode, panel: Panel) -> Epi
         ep.name, "", trades_before=len(before), trades_after=len(after),
         net_bp_before=float(before["net_bp"].mean()) if len(before) else math.nan,
         net_bp_after=float(after["net_bp"].mean()) if len(after) else math.nan,
-        equity_left_running_pct=float(hourly.sum()),
-        equity_kill_switch_pct=float(switch.equity.iloc[-1]),
+        equity_left_running_pct=ruined(hourly.cumsum()),
+        equity_kill_switch_pct=ruined(switch.equity),
         stop_hours_after_break=None if stop is None
         else round((hours[stop.position] - breaks).total_seconds() / 3600, 1),
     )  # fmt: skip

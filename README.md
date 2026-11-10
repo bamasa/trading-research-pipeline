@@ -58,7 +58,7 @@ shows what is left once it cannot.
 | **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors, and a kill switch that stops a strategy when its own results show the edge is gone | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
-| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy | [benchmark](docs/benchmarks.md) |
+| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
 | **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 

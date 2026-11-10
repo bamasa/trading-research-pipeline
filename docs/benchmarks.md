@@ -235,8 +235,8 @@ twelve liquid perpetuals at Bybit's base taker fee. Two things are reported:
   Page's CUSUM at its textbook values) runs on the strategy's hourly results,
   using only the hours before each decision: when it stops, and what stopping
   keeps against running on. Returns are in % of capital split equally over the
-  instruments and summed, not compounded; a figure below −100% means the
-  account would have been gone.
+  instruments and summed, not compounded; an account that reaches −100% has
+  lost everything and is reported at −100%.
 
 The suite runs on Binance's public one-minute bars, not a book: the
 order-book archives of these dates run to several hundred megabytes an
@@ -246,6 +246,37 @@ instrument measured on the recorded tracks. A strategy that needs the book's
 sizes is reported as not applicable rather than fed invented ones; of the
 board's twelve, `relative`, `reversion` and `spread` run. The suite is outside
 version 1's frozen rule and changes no version-1 verdict.
+
+### What it found
+
+From [`experiments/results/bench_regimes`](../experiments/results/bench_regimes/regimes.md):
+
+| strategy | holds | breaks | never paid | kill switch helped | mean kept by the switch |
+|---|--:|--:|--:|--:|--:|
+| `reversion` | 3 | 4 | 3 | 7 of 10 | +7.6% of capital |
+| `relative` | 0 | 0 | 10 | 10 of 10 | +32.8% |
+| `spread` | 0 | 0 | 10 | 0 of 10 | 0.0% |
+
+- **`reversion` is a regime strategy, and the suite shows it.** It paid in the
+  week before six of the ten breaks. At four it broke (the 2021 top, LUNA,
+  Celsius, the yen carry unwind), net per trade going from +9 to +32 bp before
+  to −6 to −40 bp after; at two it kept paying (the ETF launch, bitcoin's March
+  2024 high). After FTX it turned barely positive (+0.5 bp) from a losing week.
+  Where it broke, the kill switch stopped it 6 to 22 hours after three of the
+  breaks, and 57 hours before the yen carry unwind, when its results had
+  already turned; it kept +0.1% to +1.9% against −3.7% to −15.3% left running.
+- **`relative` and `spread` never paid**, before any break or after: about
+  12 bp a trade lost on some 45,000 trades an episode, which empties the
+  account within the three weeks. The switch cuts `relative`'s loss to −64%
+  to −72%; `spread` has lost everything before the switch's 72-hour warm-up ends.
+- **`ath-2024` holds here and breaks in [`posts/btc_ath_2024`](../posts/btc_ath_2024/README.md).**
+  The two differ in what they trade (twelve instruments here, the recorded
+  tracks' twenty-six there), on what (bars here, the book there), in the fit
+  (22 February to 6 March here, 1 to 25 February there, so a different
+  threshold) and in how long they look (two weeks after the break here, five
+  there). Both are reported as they came out; which a strategy meets depends
+  on choices like these, which is why the suite fixes them for every episode.
+
 
 ## Submitting a result
 
