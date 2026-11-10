@@ -1,24 +1,19 @@
-"""A kill switch on the strategy's own profit and loss, and what to do after it fires.
+"""The post's kill switch: the pipeline's own, run on the strategy's hourly results.
 
-Reads the hourly portfolio equity in ``data.json`` (no archive needed) and
-runs Page's CUSUM, the textbook sequential test for a drop in a mean, on the
-portfolio's hourly net return. Every value was fixed from the textbook before
-it was run: the reference value ``k`` = 0.5 and the threshold ``h`` = 5, in
-units of the hourly return's standard deviation (a test tuned to a one-sigma
-shift, about 930 hours between false alarms on Gaussian noise), estimated on
-the hours before the one being tested; the first 72 hours only estimate it.
-At each hour the monitor reads nothing after that hour.
+Reads the hourly portfolio equity in ``data.json`` (no archive needed) and runs
+:func:`trading_research.validation.kill_switch.kill_switch`, Page's CUSUM for a
+drop in the mean, on the portfolio's hourly net return, at the textbook values
+fixed before it was run: ``k`` = 0.5 and ``h`` = 5 in units of the hourly
+return's standard deviation, estimated on the hours before the one tested; the
+first 72 hours only estimate it. At each hour it reads nothing after that hour.
 
-Two policies after an alarm:
-
-- ``stop``: the strategy stops and stays stopped.
-- ``shadow``: the strategy stops but keeps trading on paper, and goes live
-  again when the same CUSUM, pointed upwards, sees the paper result recover;
-  the downward test then restarts from zero.
+Two policies after an alarm: ``stop`` (stop and stay stopped) and ``shadow``
+(stop, keep trading on paper, and go live again when the same test pointed
+upwards sees the paper result recover).
 
 Writes ``monitor.json``; ``tests/test_posts.py`` checks the README against it.
 
-    python posts/btc_ath_2024/monitor.py
+    PYTHONPATH=src python posts/btc_ath_2024/monitor.py
 """
 
 from __future__ import annotations
@@ -29,8 +24,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from trading_research.validation.kill_switch import TEXTBOOK_H, TEXTBOOK_K, kill_switch
+
 HERE = Path(__file__).parent
-K, H, WARM_UP = 0.5, 5.0, 72
+K, H, WARM_UP = TEXTBOOK_K, TEXTBOOK_H, 72
 
 
 def hourly_returns() -> pd.Series:
@@ -44,27 +41,9 @@ def hourly_returns() -> pd.Series:
 
 def run(returns: pd.Series, restart: bool) -> tuple[np.ndarray, list[dict[str, object]]]:
     """Equity under the kill switch, and every stop and restart with its hour."""
-    x = returns.to_numpy(dtype=np.float64)
-    live, down, up, equity = True, 0.0, 0.0, 0.0
-    path, events = np.empty(len(x)), []
-    for i, value in enumerate(x):
-        if live:
-            equity += value
-        path[i] = equity
-        if i < WARM_UP:
-            continue
-        z = value / float(np.std(x[:i], ddof=1))
-        if live:
-            down = max(0.0, down - z - K)
-            if down > H:
-                live, down, up = False, 0.0, 0.0
-                events.append({"event": "stop", "at": returns.index[i], "equity_pct": equity})
-        elif restart:
-            up = max(0.0, up + z - K)
-            if up > H:
-                live, down, up = True, 0.0, 0.0
-                events.append({"event": "restart", "at": returns.index[i], "equity_pct": equity})
-    return path, events
+    result = kill_switch(returns, k=K, h=H, warm_up=WARM_UP, restart=restart)
+    events = [{"event": e.kind, "at": e.at, "equity_pct": e.equity} for e in result.events]
+    return result.equity.to_numpy(), events
 
 
 def main() -> None:

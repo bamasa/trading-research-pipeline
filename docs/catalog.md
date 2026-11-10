@@ -230,6 +230,7 @@ Add an execution: `trp strategies new NAME --kind execution`.
 |---|---|---|
 | CUSUM | a persistent drift in a standardised statistic, in either direction | `trading_research.validation.changepoint:detect` |
 | structural-break monitors | the statistics of a break-detection library on a whitened stream, calibrated on a null | `trading_research.validation.structural_breaks:detect_breaks` |
+| kill switch | a drop in the mean of a strategy's own returns, from the past only; stops it | `trading_research.validation.kill_switch:kill_switch` |
 
 Run: `trp regimes breaks`.
 
@@ -292,14 +293,15 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2321 test functions in 236 files, by area (the first word of the file name):
+2517 test functions in 271 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
 | agent | 1 | 4 |
-| agents | 7 | 85 |
+| agents | 7 | 89 |
 | allocator | 1 | 26 |
 | api | 1 | 6 |
+| bench | 1 | 28 |
 | binance | 2 | 40 |
 | book | 1 | 6 |
 | bybit | 3 | 37 |
@@ -314,7 +316,7 @@ Start one: `trp study new NAME`.
 | discovery | 2 | 16 |
 | disk | 1 | 6 |
 | ensembles | 1 | 22 |
-| ensure | 1 | 16 |
+| ensure | 1 | 17 |
 | execution | 2 | 30 |
 | exit | 1 | 28 |
 | exits | 1 | 17 |
@@ -329,10 +331,11 @@ Start one: `trp study new NAME`.
 | generated | 1 | 21 |
 | grand | 1 | 17 |
 | information | 1 | 15 |
+| kill | 1 | 5 |
 | leakage | 1 | 26 |
 | maker | 1 | 16 |
 | meta | 1 | 16 |
-| mm | 24 | 246 |
+| mm | 30 | 307 |
 | newey | 1 | 11 |
 | normalise | 1 | 15 |
 | overfitting | 1 | 12 |
@@ -341,8 +344,10 @@ Start one: `trp study new NAME`.
 | placebo | 1 | 24 |
 | plugins | 3 | 33 |
 | positioning | 1 | 10 |
+| posts | 1 | 5 |
 | readme | 1 | 6 |
 | regime | 4 | 50 |
+| replication | 5 | 22 |
 | report | 1 | 13 |
 | retraining | 1 | 41 |
 | reversion | 1 | 15 |
@@ -352,10 +357,11 @@ Start one: `trp study new NAME`.
 | sh | 46 | 341 |
 | sh2025 | 1 | 38 |
 | short | 1 | 5 |
+| showcase | 1 | 1 |
 | significance | 1 | 17 |
 | sim | 1 | 4 |
 | splits | 1 | 32 |
-| spot | 54 | 305 |
+| spot | 74 | 374 |
 | store | 1 | 10 |
 | strategies | 1 | 19 |
 | structural | 1 | 15 |

@@ -100,7 +100,7 @@ hours only estimate it.
 
 ```bash
 PYTHONPATH=src python posts/btc_ath_2024/make_data.py --data data
-python posts/btc_ath_2024/monitor.py
+PYTHONPATH=src python posts/btc_ath_2024/monitor.py
 node posts/btc_ath_2024/render.mjs
 ```
 
