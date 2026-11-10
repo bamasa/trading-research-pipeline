@@ -58,7 +58,7 @@ shows what is left once it cannot.
 | **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors, and a kill switch that stops a strategy when its own results show the edge is gone | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
-| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy | [benchmark](docs/benchmarks.md) |
+| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
 | **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 
@@ -69,13 +69,13 @@ instrument — is [one file and one check](#add-a-strategy).
 
 ## A strategy breaks, and the pipeline catches it
 
-<a href="posts/btc_ath_2024/README.md"><img alt="The reversion strategy fitted on February 2024: left running it ends at -52.0%, the kill switch keeps +10.7%" src="docs/images/post_btc_ath_2024.png" width="480"></a>
+<a href="posts/btc_ath_2024/README.md"><img alt="The reversion strategy fitted on February 2024: left running it ends at -52.0%, the kill switch keeps +9.4%" src="docs/images/post_btc_ath_2024.png" width="480"></a>
 
 The reversion strategy, fitted on February 2024 and then left alone on 26 Bybit
 perpetuals, peaks at +15.3% on the day bitcoin makes its March 2024 high and
 gives it all back within two days. Two of the pipeline's tools catch the
 break from data available at each hour: the kill switch on the strategy's own
-results stops it 12 hours after the peak (+10.7% kept against −52.0% left
+results stops it 13 hours after the peak (+9.4% kept against −52.0% left
 running), and the structural-break detector on the index flags the market no
 longer pulling back the next morning. Every number is rebuilt by a script and
 checked by a test: [`posts/btc_ath_2024`](posts/btc_ath_2024/README.md).

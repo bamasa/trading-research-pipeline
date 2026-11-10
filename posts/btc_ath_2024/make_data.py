@@ -46,9 +46,13 @@ def trades(feb, apr) -> pd.DataFrame:  # type: ignore[no-untyped-def]
             decisions = np.asarray(strategy.decide(market.frame), dtype=np.int64).copy()
             decisions[:skip] = 0
             filled = _taker(decisions, market, int(strategy.horizon), int(strategy.cooldown or 0))
-            rows.append(filled.assign(symbol=symbol)[["ts", "symbol", "gross_bp", "net_bp"]])
+            stamps = pd.DatetimeIndex(pd.to_datetime(market.frame["timestamp"], utc=True))
+            exits = stamps[filled["exit_index"].to_numpy(dtype=np.int64)]
+            rows.append(filled.assign(symbol=symbol, exit=exits)[
+                ["ts", "exit", "symbol", "gross_bp", "net_bp"]])  # fmt: skip
     out = pd.concat(rows, ignore_index=True)
     out["ts"] = pd.to_datetime(out["ts"], utc=True)
+    out["exit"] = pd.to_datetime(out["exit"], utc=True)
     return out.sort_values(["ts", "symbol"], ignore_index=True)
 
 
@@ -90,8 +94,18 @@ def main() -> None:
     # Capital split equally over the instruments, one position at a time in each,
     # no leverage, no compounding: the portfolio's return is the sum of every
     # trade's net bp divided by the number of instruments.
-    t["equity_pct"] = t["net_bp"].cumsum() / n / 100.0
-    hourly = t.set_index("ts")["equity_pct"].resample("1h").last().dropna()
+    # Each hour is labelled by its end. A trade's result counts in the hour it
+    # closed, when it became known; ``entered`` keeps it in the hour it opened,
+    # for a stop that forbids new entries but lets the open ones run out.
+    def by_hour(stamp: str) -> pd.Series:
+        pnl = t.set_index(stamp)["net_bp"] / n / 100.0
+        return pnl.resample("1h", label="right", closed="right").sum()
+
+    closed, entered = by_hour("exit"), by_hour("ts")
+    grid = pd.date_range(min(closed.index[0], entered.index[0]),
+                         max(closed.index[-1], entered.index[-1]), freq="1h")  # fmt: skip
+    closed, entered = closed.reindex(grid, fill_value=0.0), entered.reindex(grid, fill_value=0.0)
+    hourly = closed.cumsum()
     peak_at = hourly.idxmax()
     zero_at = hourly[(hourly.index > peak_at) & (hourly < 0)].index[0]
     btc = pd.concat([p.mids["BTCUSDT"].resample("1h").last().dropna() for p in (feb, apr)])
@@ -124,6 +138,10 @@ def main() -> None:
     }  # fmt: skip
     series = {
         "equity_pct": [[i.strftime(iso), round(float(v), 3)] for i, v in hourly.items()],
+        "hourly_pct": [
+            [i.strftime(iso), round(float(c), 5), round(float(e), 5)]
+            for i, c, e in zip(grid, closed, entered, strict=True)
+        ],
         "btc": [[i.strftime(iso), round(float(v), 1)] for i, v in btc.items()],
         "autocorrelation": [
             [i.strftime("%Y-%m-%d"), round(float(v), 4)] for i, v in autocorr.items()

@@ -74,12 +74,21 @@ def kill_switch(
     h: float = TEXTBOOK_H,
     warm_up: int = 72,
     restart: bool = False,
+    booked: pd.Series | None = None,
 ) -> KillSwitchResult:
     """Run the switch over a strategy's per-period returns (any unit; they are summed).
 
-    ``returns`` is what the strategy earns in each period if it trades; the
-    returned ``equity`` counts only the periods it was live, so a stopped
-    strategy keeps what it had.
+    ``returns`` is what the strategy's trades realised in each period, every
+    trade counted in the period it closed: what was known at the period's end,
+    and all the test reads. A decision taken on period ``i`` applies from
+    period ``i + 1``.
+
+    ``booked``, on the same periods, is the result of the trades *opened* in
+    each period, whenever they close. The returned ``equity`` sums it over the
+    periods the strategy was live: a stop forbids new entries, and the
+    positions already open run to their exits and count. Without ``booked``,
+    ``returns`` stands in for it, which is exact only for trades that open and
+    close within one period.
     """
     if warm_up < 2:
         raise ValueError("warm_up must leave at least two periods to estimate a deviation")
@@ -88,13 +97,16 @@ def kill_switch(
     x = returns.to_numpy(dtype=np.float64)
     if not np.isfinite(x).all():
         raise ValueError("returns must be finite; mark a period without trading as 0")
+    credit = x if booked is None else booked.to_numpy(dtype=np.float64)
+    if len(credit) != len(x) or not np.isfinite(credit).all():
+        raise ValueError("booked must be finite and as long as returns")
     live, down, up, total = True, 0.0, 0.0, 0.0
     equity, is_live = np.empty(len(x)), np.empty(len(x), dtype=bool)
     events: list[Event] = []
     for i, value in enumerate(x):
         is_live[i] = live
         if live:
-            total += value
+            total += credit[i]
         equity[i] = total
         if i < warm_up:
             continue

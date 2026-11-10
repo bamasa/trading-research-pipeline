@@ -258,6 +258,79 @@ def state_cmd(tracks: TracksOption = "all", data: DataOption = Path("data")) -> 
         console.print(f"  {track.name:<18} index ten-minute autocorrelation {value:+.4f}")
 
 
+@bench_app.command("regimes")
+def regimes_cmd(
+    kind: Annotated[str, typer.Option("--kind", "-k", help="strategy, model, or both.")] = "both",
+    names: Annotated[
+        str | None, typer.Option("--names", help="Only these plugins, separated by commas.")
+    ] = None,
+    data: DataOption = Path("data"),
+    output: OutputOption = Path("artifacts/bench"),
+    fetch: Annotated[
+        bool, typer.Option("--fetch", help="Download the episodes' bars first.")
+    ] = False,
+) -> None:
+    """The regime suite: each strategy across ten dated breaks, and whether the kill switch caught them.
+
+    Writes OUTPUT/regimes.json and OUTPUT/regimes.md. Outside version 1's frozen
+    rule; see bench/regimes.py.
+    """
+    import os
+
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from trading_research.bench.regimes import (
+        BARS_ROOT_NAME,
+        EPISODES,
+        PANEL,
+        page,
+        run_suite,
+        summary,
+    )
+    from trading_research.plugins import specs
+
+    if fetch:
+        from trading_research.data.ensure import ensure_bars
+
+        for ep in EPISODES:
+            for symbol in PANEL:
+                ensure_bars(symbol, "1m", ep.fit_start, ep.last_day, root=data / BARS_ROOT_NAME,
+                            market="futures-um", on_progress=None)  # fmt: skip
+            console.print(f"  {ep.name}: bars on disk")
+    kinds = ("strategy", "model") if kind == "both" else (kind,)
+    wanted = {n.strip() for n in names.split(",")} if names else None
+    todo = [s for k in kinds for s in specs(k) if wanted is None or s.name in wanted]
+
+    def show(name: str, score: Any) -> None:
+        if score.status in ("n/a", "no trades"):
+            console.print(
+                f"  [dim]{score.episode:<16} {name:<16} {score.status} {score.reason[:80]}[/dim]"
+            )
+            return
+        colour = {"holds": "green", "breaks": "red"}.get(score.status, "yellow")
+        stop = (
+            "no stop"
+            if score.stop_hours_after_break is None
+            else f"stop {score.stop_hours_after_break:+.0f} h"
+        )
+        console.print(
+            f"  {score.episode:<16} {name:<16} [{colour}]{score.status:<10}[/{colour}] "
+            f"net {score.net_bp_before:+.2f} -> {score.net_bp_after:+.2f} bp, "
+            f"{score.equity_left_running_pct:+.1f}% left running, "
+            f"{score.equity_kill_switch_pct:+.1f}% with the switch ({stop})"
+        )
+
+    results = run_suite(todo, data, on_score=show)
+    output.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "episodes": [{"name": e.name, "breaks": e.breaks.isoformat(), "what": e.what} for e in EPISODES],
+        "rows": [{"name": n, "summary": summary(s), "episodes": [x.as_dict() for x in s]}
+                 for n, s in results.items()],
+    }  # fmt: skip
+    (output / "regimes.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    (output / "regimes.md").write_text(page(results), encoding="utf-8")
+    console.print(f"-> {output / 'regimes.md'}")
+
+
 FORWARD_OUTPUT = Path("experiments/results/bench_forward_2026_11.json")
 
 

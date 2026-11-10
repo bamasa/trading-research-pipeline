@@ -201,6 +201,83 @@ What the board says:
   2024-04 over 163 trades, but its day-clustered *t* is −0.02: a few days carry
   the mean and the other days lose.
 
+## The regime suite
+
+A strategy that pays on one span can still break when the market's regime
+changes under it: the reversion rule, fitted on February 2024, gave back
+everything it had earned within two days of bitcoin's March high
+([`posts/btc_ath_2024`](../posts/btc_ath_2024/README.md)). The regime suite
+asks that question on ten dated, widely reported breaks in crypto markets
+(`trading-research bench regimes`, [`bench/regimes.py`](../src/trading_research/bench/regimes.py)):
+
+| episode | the break |
+|---|---|
+| `china-ban-2021` | 19 May 2021: China's mining and trading crackdown, a 30% intraday crash |
+| `top-2021` | 10 November 2021: bitcoin's 2021 all-time high, the start of the bear market |
+| `luna-2022` | 9 May 2022: TerraUSD loses its peg, LUNA collapses within the week |
+| `celsius-2022` | 13 June 2022: Celsius freezes withdrawals, the 3AC liquidation cascade |
+| `ftx-2022` | 8 November 2022: FTX halts withdrawals and collapses |
+| `svb-2023` | 10 March 2023: Silicon Valley Bank fails, USDC loses its peg |
+| `etf-2024` | 11 January 2024: the US spot bitcoin ETFs start trading |
+| `ath-2024` | 14 March 2024: bitcoin's March 2024 all-time high |
+| `yen-carry-2024` | 5 August 2024: the yen carry-trade unwind |
+| `election-2024` | 6 November 2024: the US election result |
+
+For each, a strategy is fitted on the two weeks before the week before the
+break, frozen, and traded through the week before and the two weeks after, on
+twelve liquid perpetuals at Bybit's base taker fee. Two things are reported:
+
+- **Does it survive?** Its net per trade before and after the break, and a
+  status: *holds* (net after the break above zero), *breaks* (paid before,
+  not after) or *never paid*.
+- **Is the break caught?** The pipeline's kill switch
+  ([`validation/kill_switch.py`](../src/trading_research/validation/kill_switch.py),
+  Page's CUSUM at its textbook values) runs on the strategy's hourly results,
+  using only the hours before each decision: when it stops, and what stopping
+  keeps against running on. Returns are in % of capital split equally over the
+  instruments and summed, not compounded; an account that reaches −100% has
+  lost everything and is reported at −100%.
+
+The suite runs on Binance's public one-minute bars, not a book: the
+order-book archives of these dates run to several hundred megabytes an
+instrument-day. Each bar's close is held for its minute on the five-second
+grid, after the minute has closed, with the touch at a fixed half-spread per
+instrument measured on the recorded tracks. A strategy that needs the book's
+sizes is reported as not applicable rather than fed invented ones; of the
+board's twelve, `relative`, `reversion` and `spread` run. The suite is outside
+version 1's frozen rule and changes no version-1 verdict.
+
+### What it found
+
+From [`experiments/results/bench_regimes`](../experiments/results/bench_regimes/regimes.md):
+
+| strategy | holds | breaks | never paid | kill switch helped | mean kept by the switch |
+|---|--:|--:|--:|--:|--:|
+| `reversion` | 3 | 4 | 3 | 7 of 10 | +7.5% of capital |
+| `relative` | 0 | 0 | 10 | 10 of 10 | +32.1% |
+| `spread` | 0 | 0 | 10 | 0 of 10 | 0.0% |
+
+- **`reversion` is a regime strategy, and the suite shows it.** It paid in the
+  week before six of the ten breaks. At four it broke (the 2021 top, LUNA,
+  Celsius, the yen carry unwind), net per trade going from +9 to +32 bp before
+  to −6 to −40 bp after; at two it kept paying (the ETF launch, bitcoin's March
+  2024 high). After FTX it turned barely positive (+0.5 bp) from a losing week.
+  Where it broke, the kill switch stopped it 6 to 22 hours after three of the
+  breaks, and 57 hours before the yen carry unwind, when its results had
+  already turned; it kept +0.1% to +1.9% against −3.7% to −15.3% left running.
+- **`relative` and `spread` never paid**, before any break or after: about
+  12 bp a trade lost on some 45,000 trades an episode, which empties the
+  account within the three weeks. The switch cuts `relative`'s loss to −64%
+  to −73%; `spread` has lost everything before the switch's 72-hour warm-up ends.
+- **`ath-2024` holds here and breaks in [`posts/btc_ath_2024`](../posts/btc_ath_2024/README.md).**
+  The two differ in what they trade (twelve instruments here, the recorded
+  tracks' twenty-six there), on what (bars here, the book there), in the fit
+  (22 February to 6 March here, 1 to 25 February there, so a different
+  threshold) and in how long they look (two weeks after the break here, five
+  there). Both are reported as they came out; which a strategy meets depends
+  on choices like these, which is why the suite fixes them for every episode.
+
+
 ## Submitting a result
 
 A card is reproducible by construction: the plugin's source sha256, the

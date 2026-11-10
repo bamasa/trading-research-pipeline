@@ -62,3 +62,15 @@ def test_bad_settings_and_missing_returns_are_refused(bad: dict) -> None:
         kill_switch(_returns(0.2, 0.2, 600), **bad)
     with pytest.raises(ValueError, match="finite"):
         kill_switch(pd.Series([0.1, np.nan, 0.2] * 40))
+
+
+def test_a_stop_keeps_the_positions_already_open_and_takes_no_new_ones() -> None:
+    returns = _returns(0.2, -1.0, 300, seed=11)
+    booked = returns.shift(-1).fillna(0.0)  # each period's entries close in the next one
+    result = kill_switch(returns, booked=booked)
+    stop = result.first_stop
+    assert stop is not None
+    kept = booked.iloc[: stop.position + 1].sum()
+    assert result.equity.iloc[-1] == pytest.approx(kept)
+    with pytest.raises(ValueError, match="booked"):
+        kill_switch(returns, booked=booked.iloc[:-1])
