@@ -69,16 +69,30 @@ const DET = window.POST.breaks.alarms.map(a => ({ t: Date.parse(a.at + "Z"), dir
 const DET_T = DET.filter(a => a.dir > 0 && a.t > STOP_T - 864e5)[0].t;
 const RESTART2_T = Date.parse(MONI.shadow_events.filter(e => e.event === "restart").slice(-1)[0].at + "Z");
 
-// time warp: the story slows around the top and the fall
-const warp = t => 1 + 2.6 * Math.exp(-(((t - ATH_T) / 864e5 - 0.8) ** 2) / 3.2);
-const steps = btc.map(r => r[0]);
-const W = [0]; for (let i = 1; i < steps.length; i++) W.push(W[i - 1] + warp(steps[i]));
-const timeAt = p => {
-  const target = p * W[W.length - 1];
-  let lo = 0, hi = W.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; W[m] <= target ? lo = m : hi = m; }
-  const f = (target - W[lo]) / Math.max(1e-9, W[hi] - W[lo]);
-  return steps[lo] + f * (steps[hi] - steps[lo]);
+const PEAK_T = eq[PEAK_I][0], T_END = eq[eq.length - 1][0];
+// The story in scenes. A scene runs the market clock to `to` in `ms`; a scene whose
+// `to` equals the last one's holds the clock still, so a moment can be looked at.
+// Every headline stays up at least 2.5 s.
+const SCENES = [
+  { to: FIT_END, ms: 3200, head: [["Every strategy is fitted", "fg"], ["to one market regime", "train"]] },
+  { to: ATH_T - 6 * 36e5, ms: 3600, head: [["Fitted on February 2024,", "fg"], ["this one prints money", "win"]] },
+  { to: PEAK_T, ms: 2800, head: [["March 14: bitcoin hits", "fg"], ["an all-time high", "btcText"]] },
+  { to: PEAK_T, ms: 3200, mark: "change", head: [["Right here the regime changes.", "fg"], ["Nothing in the code did.", "loss"]] },
+  { to: STOP_T, ms: 2600, head: [["The same strategy", "fg"], ["starts losing money", "loss"]] },
+  { to: STOP_T, ms: 3200, mark: "stop", head: [["A monitor on its own P&L", "fg"], [`fires ${STOP.hours_after_peak} hours later: stop`, "win"]] },
+  { to: DET_T, ms: 1400, head: [["A monitor on its own P&L", "fg"], [`fires ${STOP.hours_after_peak} hours later: stop`, "win"]] },
+  { to: DET_T, ms: 3200, mark: "detector", head: [["A break detector on the market", "fg"], ["shows why: no more pullbacks", "det"]] },
+  { to: RESTART2_T, ms: 4200, head: [["Left running,", "fg"], ["it keeps bleeding", "loss"]] },
+  { to: T_END, ms: 3000, head: [["Restarting on a bounce", "fg"], ["gives most of it back", "auto"]] },
+];
+const FINAL_HEAD = [["Regimes change.", "fg"], ["Catch the change, then stop.", "win"]];
+let acc = 0, from = T0;
+SCENES.forEach(sc => { sc.from = from; sc.start = acc; acc += sc.ms; from = sc.to; });
+const ease = f => f < .5 ? 4 * f * f * f : 1 - (-2 * f + 2) ** 3 / 2;
+const timeAt = el => {
+  const sc = SCENES.find(c => el < c.start + c.ms) || SCENES[SCENES.length - 1];
+  const f = clamp01((el - sc.start) / sc.ms);
+  return { t: sc.from + (sc.to - sc.from) * ease(f), scene: sc, into: el - sc.start };
 };
 
 const L = 72, R = S - 72;
@@ -108,23 +122,23 @@ function lab(s, x, y, font, color, align = "left", alpha = 1) {
 }
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
-function headline(t, done) {
-  if (done) return [["The market changed.", COL.fg], ["The pipeline caught it.", COL.win]];
-  if (t < FIT_END) return [["Fitting the strategy", COL.fg], ["on February 2024", COL.train]];
-  if (t < ATH_T - 12 * 36e5) return [["Frozen.", COL.fg], ["The strategy prints.", COL.win]];
-  if (t < ATH_T + 8 * 36e5) return [["March 14: bitcoin hits", COL.fg], ["an all-time high", COL.btcText]];
-  if (t < STOP_T) return [["The strategy peaks.", COL.fg], ["Then it starts to lose.", COL.loss]];
-  if (t < DET_T) return [[`${STOP.hours_after_peak} hours later, a monitor`, COL.fg], ["pulls the kill switch", COL.win]];
-  if (t < DET_T + 60 * 36e5) return [["The break detector says why:", COL.fg], ["the market stopped pulling back", COL.det]];
-  if (t < RESTART2_T) return [["Left running,", COL.fg], ["the strategy keeps bleeding", COL.loss]];
-  return [["Restarting on a bounce", COL.fg], ["gives most of it back", COL.auto]];
-}
 
-const PLAY = reduce ? 1 : 15000, HOLD = 5000;
+const PLAY = SCENES.reduce((a, c) => a + c.ms, 0), HOLD = 5500;
+let MARK = "", INTO = 0, EL = 0;
+// a ring that breathes while a moment is held
+function pulse(x, y, color, reach = 46) {
+  for (let k = 0; k < 3; k++) {
+    const r = 12 + ((EL * 0.03 + k * reach / 3) % reach);
+    ctx.strokeStyle = color; ctx.globalAlpha = clamp01(1 - (r - 12) / reach) * .9; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
 let lastHead = "", headSinceEl = 0;
 
 function draw(el) {
-  const p = clamp01(el / PLAY), done = el >= PLAY, t = timeAt(p);
+  const done = el >= PLAY || reduce, cur = timeAt(Math.min(el, PLAY - 1)), t = done ? T_END : cur.t;
+  MARK = done ? "" : cur.scene.mark || ""; INTO = cur.into; EL = el;
   const w = cv.clientWidth, dpr = RENDER ? 1 : Math.min(devicePixelRatio || 1, 2);
   if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(w * dpr); }
   ctx.setTransform(cv.width / S, 0, 0, cv.height / S, 0, 0);
@@ -135,9 +149,9 @@ function draw(el) {
   if (tint > 0) { const g = ctx.createRadialGradient(S * .7, S * .8, 40, S * .7, S * .8, 700); g.addColorStop(0, `rgba(227,52,75,${.10 * tint})`); g.addColorStop(1, "rgba(227,52,75,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); }
   const g2 = ctx.createRadialGradient(S * .3, S * .38, 30, S * .3, S * .38, 620); g2.addColorStop(0, "rgba(247,147,26,.09)"); g2.addColorStop(1, "rgba(247,147,26,0)"); ctx.fillStyle = g2; ctx.fillRect(0, 0, S, S);
 
-  txt("TRADING-RESEARCH-PIPELINE · REAL BYBIT DATA", L, 86, `500 19px ${F.mono}`, COL.muted);
+  txt("REGIME CHANGE · REAL BYBIT DATA", L, 86, `500 19px ${F.mono}`, COL.muted);
   txt(dlab(t), R, 86, `700 24px ${F.mono}`, after ? COL.loss : COL.fg, "right");
-  const head = headline(t, done), key = head[0][0] + head[1][0];
+  const head = (done ? FINAL_HEAD : cur.scene.head).map(([s, c]) => [s, COL[c]]), key = head[0][0] + head[1][0];
   if (key !== lastHead) { lastHead = key; headSinceEl = el; }
   const ha = reduce || paused ? 1 : clamp01((el - headSinceEl) / 350);
   const hy = 158 + (1 - ha) * 14;
@@ -179,11 +193,17 @@ function draw(el) {
     ctx.beginPath(); ctx.moveTo(xa, P.top - 20); ctx.lineTo(xa, A.mid + A.h); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     if (!reduce && since < 40) {
       for (let k = 0; k < 3; k++) {
-        const r = (since * 6 + k * 40) % 160;
+        const r = (EL * 0.07 + k * 40) % 160;
         ctx.strokeStyle = COL.btc; ctx.globalAlpha = clamp01(1 - r / 160) * .9; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(xa, ya, r, 0, 7); ctx.stroke();
       }
       ctx.globalAlpha = 1;
+    }
+    if (t >= PEAK_T) {
+      const xc = X(PEAK_T);
+      ctx.strokeStyle = COL.loss; ctx.globalAlpha = .55; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(xc, P.top + 40); ctx.lineTo(xc, A.mid + A.h); ctx.stroke(); ctx.globalAlpha = 1;
+      if (EL < PLAY) lab("REGIME CHANGE", xc - 12, P.bot - 40, `700 17px ${F.mono}`, COL.loss, "right");
     }
     ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(xa, ya, 9, 0, 7); ctx.fill();
     ctx.strokeStyle = COL.btc; ctx.lineWidth = 3; ctx.stroke();
@@ -192,7 +212,7 @@ function draw(el) {
     const bx = xa - tw - 14, by = ya - 46;
     ctx.fillStyle = COL.btc; roundRect(bx, by, tw, 36, 8); ctx.fill();
     txt(badge, bx + 11, by + 25, `700 22px ${F.mono}`, "#1a0f00");
-    if (!reduce && since < 10) { ctx.fillStyle = `rgba(255,214,150,${.28 * (1 - since / 10)})`; ctx.fillRect(0, 0, S, S); }
+    if (!reduce && since < 6) { ctx.fillStyle = `rgba(255,214,150,${.28 * (1 - since / 10)})`; ctx.fillRect(0, 0, S, S); }
   }
 
   ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
@@ -224,6 +244,7 @@ function draw(el) {
     if (stopped) { if (t > STOP_T + 30 * 36e5) lab(pct(last[1]), X(last[0]) + (nearEdge ? -72 : 18), Ye(last[1]) + (last[1] < -35 ? -16 : 34), `700 24px ${F.mono}`, c, nearEdge ? "right" : "left"); }
     else lab(pct(last[1]), X(last[0]) + (nearEdge ? -90 : 18), Ye(last[1]) + 11, `700 30px ${F.mono}`, c, nearEdge ? "right" : "left");
     if (stopped) policies(t, el);
+    if (MARK === "change") pulse(X(PEAK_T), Ye(eq[PEAK_I][1]), COL.loss);
     if (t > eq[PEAK_I][0] + 6 * 36e5) {
       const xp = X(eq[PEAK_I][0]), yp = Ye(eq[PEAK_I][1]);
       ctx.fillStyle = COL.win; ctx.beginPath(); ctx.arc(xp, yp, 6, 0, 7); ctx.fill();
@@ -263,6 +284,7 @@ function detectorPins(t) {
     ctx.beginPath(); ctx.moveTo(x, y + 8); ctx.lineTo(x, A.mid + A.h); ctx.stroke(); ctx.restore();
     ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 7, y); ctx.closePath(); ctx.fill();
   });
+  if (MARK === "detector") pulse(X(DET_T), y, COL.det);
   if (t >= DET_T) lab("break detector: pullbacks weaken", X(DET_T) + 14, y + 5, `700 15px ${F.mono}`, COL.det);
   if (t < DET_T && DET.some(a => a.t <= t)) {
     const lx = R - 330;
@@ -308,9 +330,9 @@ function policies(t, el) {
   const bx = Math.min(xs + 12, R - tw), by = P.bot - 70;
   ctx.fillStyle = COL.win; roundRect(bx, by, tw, 34, 8); ctx.fill();
   txt(badge, bx + 11, by + 23, `700 20px ${F.mono}`, "#fff");
-  if (!reduce && since < 8) {
-    for (let k = 0; k < 3; k++) { const r = (since * 9 + k * 30) % 110; ctx.strokeStyle = COL.win; ctx.globalAlpha = clamp01(1 - r / 110); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(xs, ys, r, 0, 7); ctx.stroke(); }
-    ctx.globalAlpha = 1; ctx.fillStyle = `rgba(190,245,205,${.30 * (1 - since / 8)})`; ctx.fillRect(0, 0, S, S);
+  if (!reduce && MARK === "stop") {
+    pulse(xs, ys, COL.win);
+    if (INTO < 700) { ctx.fillStyle = `rgba(190,245,205,${.30 * (1 - INTO / 700)})`; ctx.fillRect(0, 0, S, S); }
   }
 }
 
