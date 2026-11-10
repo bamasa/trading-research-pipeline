@@ -62,6 +62,13 @@ def daily_autocorrelation(panel, lag: int = 120) -> pd.Series:  # type: ignore[n
     return by_day.apply(lambda g: g["past"].corr(g["next"]) if len(g) > 1000 else np.nan).dropna()
 
 
+def index_ten_minute_returns(panel) -> pd.Series:  # type: ignore[no-untyped-def]
+    """The equal-weighted index's non-overlapping ten-minute log returns over a panel."""
+    log_mid = pd.DataFrame({s: np.log(m) for s, m in panel.mids.items()}).sort_index().ffill()
+    level = pd.Series(index_level(log_mid.to_numpy(dtype=np.float64)), index=log_mid.index)
+    return level.iloc[::120].diff().dropna()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--data", type=Path, default=REPO / "data")
@@ -90,6 +97,8 @@ def main() -> None:
     btc = pd.concat([p.mids["BTCUSDT"].resample("1h").last().dropna() for p in (feb, apr)])
     autocorr = pd.concat([daily_autocorrelation(feb), daily_autocorrelation(apr)])
     autocorr = autocorr[autocorr.index >= pd.Timestamp("2024-02-01", tz="UTC")]
+    index10 = pd.concat([index_ten_minute_returns(feb), index_ten_minute_returns(apr)])
+    index10 = index10[index10.index >= pd.Timestamp("2024-02-01", tz="UTC")]
 
     def span(a: str, b: str) -> float:
         return round(float(autocorr[a:b].mean()), 3)  # type: ignore[misc]
@@ -119,6 +128,7 @@ def main() -> None:
         "autocorrelation": [
             [i.strftime("%Y-%m-%d"), round(float(v), 4)] for i, v in autocorr.items()
         ],
+        "index_10min": [[i.strftime(iso), float(f"{v:.6g}")] for i, v in index10.items()],
     }
     (HERE / "numbers.json").write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
     (HERE / "data.json").write_text(

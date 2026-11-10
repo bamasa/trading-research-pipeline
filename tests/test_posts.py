@@ -96,3 +96,18 @@ def test_the_kill_switch_is_what_the_page_says() -> None:
     assert f"**+{recorded['stop_end_pct']:.1f}%**" in text
     assert f"**+{recorded['shadow_end_pct']:.1f}%**" in text
     assert len(recorded["shadow_events"]) == 5 and "restart 14 April, stop 14 April" in text
+
+
+def test_the_break_detector_finds_what_the_page_says() -> None:
+    pytest.importorskip("structural_break")
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location("post_breaks", POST / "breaks.py")
+    assert spec and spec.loader
+    breaks = module_from_spec(spec)
+    spec.loader.exec_module(breaks)
+    recorded = json.loads((POST / "breaks.json").read_text(encoding="utf-8"))
+    assert breaks.alarms() == recorded["alarms"]
+    text = (POST / "README.md").read_text(encoding="utf-8")
+    assert "| 15 March 09:10 | dependence rose |" in text
+    assert [a["at"] for a in recorded["alarms"]][3] == "2024-03-15T09:10"

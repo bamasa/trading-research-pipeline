@@ -1,0 +1,32 @@
+{
+  "history": 365,
+  "online": 90,
+  "family": "dependence",
+  "alarms": [
+    {
+      "at": "2024-02-06T13:00",
+      "family": "dependence",
+      "direction": -1
+    },
+    {
+      "at": "2024-03-02T00:00",
+      "family": "dependence",
+      "direction": -1
+    },
+    {
+      "at": "2024-03-06T05:30",
+      "family": "dependence",
+      "direction": 1
+    },
+    {
+      "at": "2024-03-15T09:10",
+      "family": "dependence",
+      "direction": 1
+    },
+    {
+      "at": "2024-04-12T20:30",
+      "family": "dependence",
+      "direction": 1
+    }
+  ]
+}
