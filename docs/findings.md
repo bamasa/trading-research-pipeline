@@ -212,6 +212,18 @@ as correct behaviour. Both fixed.
 
 ## Pre-registered
 
+### Pausing the reversion rule on the break detector's alarms (G1)
+
+**Status: killed** ([registration and results](preregistration/regime_gate_2026_11.md)).
+Pausing the rule after the structural-break detector's `+1` dependence alarm on
+the index, and resuming after a `-1`, gained +13.1% of capital over the regime
+suite's ten episodes; random pauses of the same length gained +27% to +60%,
+and the gate beat none of nineteen. Its gain came from pausing two losing
+episodes entirely; where it chose its moments it chose them worse than chance.
+The same verdict as section 27's trailing-state gate, reached with a different
+instrument. G2, the same gate on the forward fortnight, is read after 21
+November 2026.
+
 ### The benchmark's forward fortnight (F1, P1)
 
 **Status: pre-registered, sealed until 21 November 2026.** The twelve

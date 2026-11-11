@@ -94,3 +94,27 @@ state but too early or too frequent to time the rule.
   over different days, so its alarms are not those.
 - No dependence alarm on any other episode, and nothing of the forward
   fortnight's scored days.
+
+## Results of G1, read once 11 November 2026
+
+[`experiments/results/regime_gate_G1.md`](../../experiments/results/regime_gate_G1.md),
+from the code committed before the read (`experiments/regime_gate.py`).
+
+**G1: killed** — a placebo gained as much. The gate gained **+13.07%** of
+capital over the ten episodes and beat **none** of the nineteen placebos, whose
+gains ran from +27.1% to +60.5% (median +43.4%). It helped in 3 of the 10.
+
+- Almost all of the gate's gain came from two episodes, the 2021 top and LUNA,
+  where a `+1` alarm in the fitted days paused the rule for the whole scored
+  span: +10.5% and +15.3% for not trading a losing strategy at all. A pause
+  that covers everything is the same under every shift, so the placebos have
+  it too.
+- Where the alarms fell inside the scored span the gate timed its pauses worse
+  than chance: FTX −11.3%, the ETF launch −7.0%, Celsius −3.0% against
+  placebo medians of +1.1%, −7.3% and +3.1%. It paused the ETF fortnight, which
+  paid, for 81% of its time.
+- As the registration expected: the detector's dependence alarms carry
+  information about the state, and as an on-off switch for the rule they are
+  worse than switching at random for as long.
+
+G2 is unchanged and is read after the forward track's own read.
