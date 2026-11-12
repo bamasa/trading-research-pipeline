@@ -1183,7 +1183,7 @@ added as a plugin is listed the next time the page is written.
 |---|---:|---|
 | Data sources | 8 | a fetcher under `data/` |
 | Synthetic markets | 5 | a generator under `synthetic/` |
-| Strategies | 6 | `trp strategies new NAME` |
+| Strategies | 7 | `trp strategies new NAME` |
 | Models | 29 | `trp strategies new NAME --kind model` |
 | Feature sets | 6 | `trp strategies new NAME --kind features` |
 | Feature filters and checks | 7 | a step in `features/selection.py` |

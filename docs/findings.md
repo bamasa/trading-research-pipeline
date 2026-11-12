@@ -40,6 +40,41 @@ about a market state rather than as a strategy; the rest did not survive at all.
 
 ## Conditional results
 
+### What pays in retrospect: measurements, November 2026
+
+Three measurements on data already read, none a registered result. They say
+where the money was, not that it will be there.
+
+- **Funding carry, always on** ([`experiments/funding_carry_dev.py`](../experiments/funding_carry_dev.py),
+  [results](../experiments/results/funding_carry_dev.md)). Long spot, short the
+  USD-M perpetual, one 10,000 USDT clip a leg, at Binance's Regular fees and the
+  registration's slippage, on the development months of
+  [`funding_carry_2026`](preregistration/funding_carry_2026.md) (2020-01 to
+  2020-11, 2021-07 to 2024-01, 2024-07 to 2025-06). Positive on every range for
+  both coins: on the capital of both legs, unlevered, a year, BTC +12.7%,
+  +4.5% and +4.2%, ETH +31.8%, +4.4% and +2.9%. The funding was positive on
+  82% to 97% of settlements; the basis telescoped to within ±62 USDT. The
+  study's verdict is read on P, in 2027.
+- **Fees do not rescue a taker signal on the book.** On the board's two
+  recorded tracks, every strategy that loses at the base fee still loses at
+  Bybit's cheapest published taker tier (1.5 bp a side), on both tracks; the
+  only positive cells at that tier are the ones already positive at the base
+  fee (`reversion` in February, `ev_gate`'s 163 April trades at a *t* near 0).
+  At a hypothetical zero fee, nine of the twelve stay negative on both tracks:
+  the spread and slippage alone exceed their edge
+  ([`bench_board.json`](../experiments/results/bench_board.json), `net_at`).
+- **The reversion rule with the kill switch inside it**
+  (`reversion_guarded`, [`plugins/builtins/guarded.py`](../src/trading_research/plugins/builtins/guarded.py),
+  [results](../experiments/results/reversion_guarded/)). The rule keeps a paper
+  account of its own trades from the end of its fit and stops opening new ones
+  when Page's CUSUM on it fires. On the two recorded tracks it keeps February
+  (+6.5 bp a trade on 2,347 trades against +7.0 on 3,351) and stops early in
+  April (52 trades against 1,233), turning about −34,000 bp of summed net into
+  about +8,000. On the regime suite's ten breaks its summed result is −8.3% of
+  capital against −91.3% left running, positive in five episodes. Its source is
+  a module of its own, so the forward track's frozen sources are untouched.
+
+
 ### Cross-sectional reversion at ten minutes
 
 **Status: conditional result.** The effect is real and measured; the condition it
