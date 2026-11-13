@@ -1,0 +1,288 @@
+{
+  "result": {
+    "total_pct": 15.841241234450386,
+    "a_year_pct": 7.629569001483216,
+    "worst_drawdown_pct": -0.08986899744526378,
+    "sharpe_monthly": 2.157976104069994,
+    "losing_months": 3,
+    "months": 24
+  },
+  "placebo": [
+    {
+      "total_pct": 4.9298775748126245,
+      "a_year_pct": 2.435285705079493,
+      "worst_drawdown_pct": -1.3753562814716846,
+      "sharpe_monthly": 1.1416258160112556,
+      "losing_months": 8,
+      "months": 24
+    },
+    {
+      "total_pct": 4.268447133829012,
+      "a_year_pct": 2.111922484021922,
+      "worst_drawdown_pct": -1.2862544909905904,
+      "sharpe_monthly": 1.0785074207000764,
+      "losing_months": 8,
+      "months": 24
+    },
+    {
+      "total_pct": 0.5040445793094817,
+      "a_year_pct": 0.25170551133255614,
+      "worst_drawdown_pct": -2.6157184017782775,
+      "sharpe_monthly": 0.15161498303734813,
+      "losing_months": 10,
+      "months": 24
+    },
+    {
+      "total_pct": 3.226565872483156,
+      "a_year_pct": 1.6004753298345387,
+      "worst_drawdown_pct": -0.9142257539226484,
+      "sharpe_monthly": 0.8903107459379521,
+      "losing_months": 11,
+      "months": 24
+    },
+    {
+      "total_pct": 4.7784802450193675,
+      "a_year_pct": 2.3613600168634674,
+      "worst_drawdown_pct": -0.8785831549597001,
+      "sharpe_monthly": 1.5323862398117816,
+      "losing_months": 7,
+      "months": 24
+    },
+    {
+      "total_pct": 5.226008591860909,
+      "a_year_pct": 2.579729280136478,
+      "worst_drawdown_pct": -1.1295116092714164,
+      "sharpe_monthly": 1.0952194583168027,
+      "losing_months": 9,
+      "months": 24
+    },
+    {
+      "total_pct": 3.5490750222081813,
+      "a_year_pct": 1.75906594609061,
+      "worst_drawdown_pct": -1.4699798335109038,
+      "sharpe_monthly": 0.7631050437386565,
+      "losing_months": 10,
+      "months": 24
+    },
+    {
+      "total_pct": 3.678506044250285,
+      "a_year_pct": 1.8226428866636057,
+      "worst_drawdown_pct": -1.4292150869467002,
+      "sharpe_monthly": 0.7745895129426729,
+      "losing_months": 10,
+      "months": 24
+    },
+    {
+      "total_pct": 6.280337036304751,
+      "a_year_pct": 3.0923552142954724,
+      "worst_drawdown_pct": -0.5649399967161073,
+      "sharpe_monthly": 1.1972898577914568,
+      "losing_months": 10,
+      "months": 24
+    },
+    {
+      "total_pct": 2.071593019419482,
+      "a_year_pct": 1.0304869925011673,
+      "worst_drawdown_pct": -1.4795389823711869,
+      "sharpe_monthly": 0.5220974823795617,
+      "losing_months": 12,
+      "months": 24
+    },
+    {
+      "total_pct": 4.0815799647925255,
+      "a_year_pct": 2.0203802996207942,
+      "worst_drawdown_pct": -0.7865793446597436,
+      "sharpe_monthly": 1.1201724464123592,
+      "losing_months": 9,
+      "months": 24
+    },
+    {
+      "total_pct": 3.633615536162571,
+      "a_year_pct": 1.8005970199401977,
+      "worst_drawdown_pct": -0.7389571628643066,
+      "sharpe_monthly": 1.5429462306989752,
+      "losing_months": 9,
+      "months": 24
+    },
+    {
+      "total_pct": 3.922192147498116,
+      "a_year_pct": 1.9422346956834646,
+      "worst_drawdown_pct": -2.321466569977426,
+      "sharpe_monthly": 0.876849046225457,
+      "losing_months": 11,
+      "months": 24
+    },
+    {
+      "total_pct": 5.320165069413929,
+      "a_year_pct": 2.625613308478658,
+      "worst_drawdown_pct": -1.1561263401643762,
+      "sharpe_monthly": 1.2231662445079696,
+      "losing_months": 11,
+      "months": 24
+    },
+    {
+      "total_pct": 5.860410324659271,
+      "a_year_pct": 2.8884883379376225,
+      "worst_drawdown_pct": -1.0109583186033833,
+      "sharpe_monthly": 1.5719192019500912,
+      "losing_months": 7,
+      "months": 24
+    },
+    {
+      "total_pct": 7.1459323638940475,
+      "a_year_pct": 3.511319363581711,
+      "worst_drawdown_pct": -1.098379936614291,
+      "sharpe_monthly": 1.6591817464311378,
+      "losing_months": 7,
+      "months": 24
+    },
+    {
+      "total_pct": 3.6873362915528674,
+      "a_year_pct": 1.8269788865175274,
+      "worst_drawdown_pct": -1.5283750866441403,
+      "sharpe_monthly": 1.0557217473623415,
+      "losing_months": 11,
+      "months": 24
+    },
+    {
+      "total_pct": 7.266954664898884,
+      "a_year_pct": 3.56976135190179,
+      "worst_drawdown_pct": -0.8026161943730292,
+      "sharpe_monthly": 1.5023280183469196,
+      "losing_months": 10,
+      "months": 24
+    },
+    {
+      "total_pct": 2.172237968493196,
+      "a_year_pct": 1.080283917534186,
+      "worst_drawdown_pct": -1.1543833599320985,
+      "sharpe_monthly": 0.6505533206886143,
+      "losing_months": 8,
+      "months": 24
+    }
+  ],
+  "beats_placebos": 19,
+  "status": "positive",
+  "months": [
+    {
+      "month": "2023-07",
+      "return_pct": 0.19169691373207495,
+      "coins": "ETCUSDT"
+    },
+    {
+      "month": "2023-08",
+      "return_pct": 0.04960196105187561,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2023-09",
+      "return_pct": 0.18072487095499076,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2023-10",
+      "return_pct": 0.201671991231707,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2023-11",
+      "return_pct": 0.7691797502675938,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2023-12",
+      "return_pct": 1.7226011110091466,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-01",
+      "return_pct": 1.06885076518771,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-02",
+      "return_pct": 1.482462334058974,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-03",
+      "return_pct": 4.771938195905749,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-04",
+      "return_pct": 1.0351578922257734,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-05",
+      "return_pct": 0.45547978815564827,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-06",
+      "return_pct": 0.6351014057244969,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-07",
+      "return_pct": 0.2966740392775394,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-08",
+      "return_pct": 0.22473321222557305,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-09",
+      "return_pct": 0.1752033746341484,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-10",
+      "return_pct": 0.24737600471470994,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-11",
+      "return_pct": 0.535682864986033,
+      "coins": "FILUSDT"
+    },
+    {
+      "month": "2024-12",
+      "return_pct": 0.4261626651494804,
+      "coins": "DOGEUSDT"
+    },
+    {
+      "month": "2025-01",
+      "return_pct": 0.2832771256100523,
+      "coins": "LINKUSDT"
+    },
+    {
+      "month": "2025-02",
+      "return_pct": -0.015681972111326926,
+      "coins": "LINKUSDT"
+    },
+    {
+      "month": "2025-03",
+      "return_pct": -0.07419866114728543,
+      "coins": "LTCUSDT"
+    },
+    {
+      "month": "2025-04",
+      "return_pct": 0.13987226603767575,
+      "coins": "LTCUSDT"
+    },
+    {
+      "month": "2025-05",
+      "return_pct": 0.16682058799189217,
+      "coins": "LTCUSDT"
+    },
+    {
+      "month": "2025-06",
+      "return_pct": -0.023051283263290014,
+      "coins": "FILUSDT"
+    }
+  ]
+}

@@ -58,3 +58,34 @@ pay less than the round trip and several coins spread the basis's noise. H is
 **positive**, in single digits a year. Choosing by funding beats most random
 placebos on H but not all nineteen, because in a market where most coins' funding
 is positive most of the time, any carry earns.
+
+## Results, read once 13 November 2026
+
+From the code committed before the run (`trp search carry`), in
+[`experiments/results/search_carry`](../../experiments/results/search_carry/):
+`development.json`, `ledger.json` (choice and D's sha256 `8b831780…`, written
+before H was read) and `held_out.json`.
+
+**On D, every one of the sixteen rules was positive**, with monthly Sharpe
+ratios from 1.76 to 1.99 and returns from +11.1% to +19.2% a year. The search
+chose **`top1-lb3-floor_none`**: hold the one coin paying the most funding a
+day over the previous three months, with no floor (Sharpe 1.99 on D, +15.8% a
+year, worst month-end drawdown −0.1%). Its nineteen placebos on D returned
++8.4% to +39.0% over the thirty months, against its +44.3%.
+
+**H: positive.** +15.8% over July 2023 to June 2025, **+7.6% a year**, worst
+month-end drawdown −0.09%, three losing months of twenty-four (each above
+−0.1%). By year: July to December 2023 +3.1%, 2024 +11.9%, January to June
+2025 +0.5%. **Choosing adds:** it beat all nineteen random-pick placebos, which
+returned +0.5% to +7.3%. The coin held was FIL in seventeen of the twenty-four
+months, then LTC, LINK, ETC and DOGE.
+
+Against the expectation stated in advance: H positive and in single digits a
+year, as expected; the choice was **one** coin, not four or eight, and it
+**beat all** nineteen placebos, not most.
+
+- **One coin at a time** concentrates the position's risk: a coin's own
+  events (a delisting, a funding spike against the short, an exchange's
+  failure) are not spread. The replay prices none of them.
+- H was read by the walk-forward replay of a neighbouring rule before this
+  search was written (above); the choice among the sixteen was made on D alone.
