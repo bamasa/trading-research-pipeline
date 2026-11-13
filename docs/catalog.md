@@ -247,6 +247,7 @@ Run: `trp regimes breaks`.
 | `trp search read` | The held-out block, once, through the run's ledger; the verdict as registered. |
 | `trp search run` | Every step in order, the read last. |
 | `trp search status` | Which steps are complete, what each chose, and the ledger's reads. |
+| `trp search carry` | The automatic search for a funding carry: every rule on D, the best chosen, H read once. |
 
 ## Checks against planted answers
 
@@ -293,7 +294,7 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2531 test functions in 274 files, by area (the first word of the file name):
+2534 test functions in 275 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
@@ -305,7 +306,7 @@ Start one: `trp study new NAME`.
 | binance | 2 | 40 |
 | book | 1 | 6 |
 | bybit | 3 | 37 |
-| carry | 1 | 2 |
+| carry | 2 | 5 |
 | catalog | 1 | 6 |
 | changepoint | 1 | 11 |
 | choice | 1 | 23 |
