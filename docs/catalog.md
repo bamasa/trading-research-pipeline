@@ -294,7 +294,7 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2534 test functions in 275 files, by area (the first word of the file name):
+2535 test functions in 275 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
@@ -306,7 +306,7 @@ Start one: `trp study new NAME`.
 | binance | 2 | 40 |
 | book | 1 | 6 |
 | bybit | 3 | 37 |
-| carry | 2 | 5 |
+| carry | 2 | 6 |
 | catalog | 1 | 6 |
 | changepoint | 1 | 11 |
 | choice | 1 | 23 |

@@ -49,3 +49,17 @@ def test_the_search_never_reads_a_protected_month_and_reads_its_held_out_months_
     (tmp_path / "held_out.json").write_text("{}")
     with pytest.raises(FileExistsError, match="read once"):
         search.run(tmp_path, tmp_path)
+
+
+def test_the_post_quotes_the_search_it_ran() -> None:
+    import json
+
+    repo = Path(__file__).resolve().parent.parent
+    held = json.loads((repo / "experiments/results/search_carry/held_out.json").read_text())
+    ledger = json.loads((repo / "experiments/results/search_carry/ledger.json").read_text())
+    text = (repo / "posts/carry_search/README.md").read_text(encoding="utf-8")
+    r = held["result"]
+    assert held["status"] == "positive" and ledger["chosen"] == "top1-lb3-floor_none"
+    assert f"**+{r['total_pct']:.1f}%**" in text and f"**+{r['a_year_pct']:.1f}%**" in text
+    assert f"**{r['worst_drawdown_pct']:.2f}%**".replace("-", "\N{MINUS SIGN}") in text
+    assert f"beat all {held['beats_placebos']} placebos" in text

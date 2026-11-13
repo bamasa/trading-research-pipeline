@@ -67,6 +67,18 @@ instrument — is [one file and one check](#add-a-strategy).
 
 ---
 
+## The pipeline finds a strategy that pays
+
+`trp search carry` searches sixteen ways of running a delta-neutral funding
+carry (long spot, short the perpetual) on seventeen coins, chooses one on
+January 2021 to June 2023 alone, writes the choice to a ledger and reads it
+once on July 2023 to June 2025. It chose the coin paying the most funding over
+the previous three months, and on the held-out months it earned **+15.8%, +7.6%
+a year, worst month-end drawdown −0.09%**, after Binance's base fees, beating
+every placebo that held a random coin instead. A backtest on past data, with
+the held-out months already seen by an earlier replay, and every number rebuilt
+by the command: [`posts/carry_search`](posts/carry_search/README.md).
+
 ## A strategy breaks, and the pipeline catches it
 
 <a href="posts/btc_ath_2024/README.md"><img alt="The reversion strategy fitted on February 2024: left running it ends at -52.0%, the kill switch keeps +9.4%" src="docs/images/post_btc_ath_2024.png" width="480"></a>
