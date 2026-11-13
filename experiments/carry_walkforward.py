@@ -93,8 +93,12 @@ def choose(markets: dict[str, Market], month: pd.Period) -> list[str]:
 def hourly_pnl(mk: Market, q: float, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
     """The carry's result each hour from start to end: funding at settlements, the basis's change."""
     hours = pd.date_range(start, end, freq="1h")
-    spot = mk.spot.reindex(hours).ffill()
-    perp = mk.perp.reindex(hours).ffill()
+    # the last close known at each hour, from the whole history, so an hour the
+    # archive misses carries the price before it rather than a gap
+    spot = mk.spot.reindex(hours, method="ffill")
+    perp = mk.perp.reindex(hours, method="ffill")
+    if spot.isna().any() or perp.isna().any():
+        raise ValueError(f"no price before {start} for a chosen coin")
     basis = q * (spot.diff().fillna(0.0) - perp.diff().fillna(0.0))
     rate = mk.funding.reindex(hours, fill_value=0.0)
     return basis + rate * q * perp
