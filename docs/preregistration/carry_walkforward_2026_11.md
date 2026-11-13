@@ -71,3 +71,35 @@ a flat or slightly negative 2022 as funding fell and some months chose cash.
 A yearly return in single digits over the span, and a worst drawdown of a few
 percent: a carry earns the funding and gives some of it back in basis and fees,
 and the threshold keeps it out of the worst months.
+
+## Results, read once 13 November 2026
+
+[`experiments/results/carry_walkforward/results.md`](../../experiments/results/carry_walkforward/results.md),
+from the code committed before the read. A first run stopped before writing
+anything, on hours the price archive misses; the fix carries the last close
+known from the whole history (committed, then the read).
+
+| | total | a year | worst drawdown, month ends | losing months | months wholly in cash |
+|---|--:|--:|--:|--:|--:|
+| **the rule** | **+47.8%** | **+9.1%** | −0.6% | 10 of 54 | 1 |
+| the rule with the kill switch | +30.3% | +6.1% | −0.4% | 11 | 1 |
+| BTC carry, always on, where readable | +13.9% | +2.9% | −0.1% | 3 | 13 unreadable |
+
+By year: 2021 **+29.7%**, 2022 +0.7%, 2023 +3.5%, 2024 +9.2%, January to June
+2025 +0.2%. The worst month was May 2022 (−0.42%, the LUNA collapse); the best
+four were in the first four months of 2021. The coins chosen most often were
+FIL, LINK, XRP, LTC and DOGE; BTC was rarely among the four highest.
+
+As stated in advance: positive over the span, most of it in 2021, 2022 flat.
+
+- **The kill switch hurt here.** A carry's hourly result is mostly the basis's
+  noise around a steady funding income; the switch read the noise as a lost
+  edge, closed positions that kept paying and paid to reopen them the next
+  month: +30.3% against +47.8%. A kill switch suits a strategy whose edge can
+  vanish within the hour, as the reversion rule's did, not one paid on a
+  schedule.
+- **What this is.** A replay on past data, the choice made each month from the
+  month before alone, at an account's base fees. The drawdown is measured at
+  month ends; within a month the basis moves the position's value further. The
+  perpetual is unlevered, so the capital is twice each position's notional, and
+  the result carries the exchange's own risk, which no backtest prices.

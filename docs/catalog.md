@@ -293,7 +293,7 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2517 test functions in 271 files, by area (the first word of the file name):
+2531 test functions in 274 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
@@ -305,6 +305,7 @@ Start one: `trp study new NAME`.
 | binance | 2 | 40 |
 | book | 1 | 6 |
 | bybit | 3 | 37 |
+| carry | 1 | 2 |
 | catalog | 1 | 6 |
 | changepoint | 1 | 11 |
 | choice | 1 | 23 |
@@ -331,7 +332,7 @@ Start one: `trp study new NAME`.
 | generated | 1 | 21 |
 | grand | 1 | 17 |
 | information | 1 | 15 |
-| kill | 1 | 5 |
+| kill | 1 | 6 |
 | leakage | 1 | 26 |
 | maker | 1 | 16 |
 | meta | 1 | 16 |
@@ -344,9 +345,10 @@ Start one: `trp study new NAME`.
 | placebo | 1 | 24 |
 | plugins | 3 | 33 |
 | positioning | 1 | 10 |
-| posts | 1 | 5 |
+| posts | 1 | 6 |
 | readme | 1 | 6 |
-| regime | 4 | 50 |
+| regime | 5 | 54 |
+| regimes | 1 | 6 |
 | replication | 5 | 22 |
 | report | 1 | 13 |
 | retraining | 1 | 41 |
