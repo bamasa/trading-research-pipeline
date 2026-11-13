@@ -40,6 +40,16 @@ about a market state rather than as a strategy; the rest did not survive at all.
 
 ## Conditional results
 
+### Funding carry, chosen month by month from the past alone
+
+**Status: measurement, read once** ([registration and results](preregistration/carry_walkforward_2026_11.md)).
+Switched on in January 2021 and left to choose each month, from the previous
+month's funding alone, the four of seventeen coins paying the most above the
+round trip's cost, a delta-neutral carry at Binance's base fees would have
+earned **+47.8% to June 2025, +9.1% a year**, with its worst month-end
+drawdown −0.6%; +29.7% of it in 2021, 2022 flat. Always on BTC alone, +13.9%.
+The kill switch, which saves the reversion rule, cost the carry a third of its
+result by closing positions on the basis's noise.
 ### What pays in retrospect: measurements, November 2026
 
 Three measurements on data already read, none a registered result. They say
