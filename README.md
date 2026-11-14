@@ -7,9 +7,13 @@ the execution mode; it registers the condition that would kill the candidate bef
 day is read, reads the held-out block once through a ledger, and states every result net of a
 dated fee. A model or a strategy of your own enters as one file.
 
+Its own search for a funding carry chose a rule on 2021 to mid-2023 and earned +7.6% a year,
+after fees, on the two years it had not chosen on ([the case](#the-pipeline-finds-a-strategy-that-pays)).
+
 ```bash
 trp demo --execution all --verify   # the whole path on a generated market, then the checks
 trp verify all                      # each component against data with a planted answer
+trp search carry                    # the funding-carry search: chosen on D, read once on H
 trp agent demo                      # the research loop through the agent harness, synthetic
 trp catalog                         # everything below, listed from the registries
 trp bench run reversion             # a strategy's card on the benchmark's tracks
@@ -28,10 +32,16 @@ shows what is left once it cannot.
   a dated fee. The condition that would kill each idea is committed before its held-out data
   is read, the held-out data is read once through a ledger, and every result is kept, the
   losses with the rest.
-- **What it found.** One conditional edge: a ten-minute cross-sectional reversion on 26
-  perpetuals, +6.99 bp a trade on its held-out fortnight, gone when the market's state
-  changed. Next to it, a list of ideas that did not survive their fees (makers, market
-  making, model searches, ensembles), each with the number that killed it.
+- **What it found.**
+  - **A strategy that pays after fees on months it never chose on.** `trp search carry`
+    chose a delta-neutral funding carry on 2021 to mid-2023 alone and earned **+7.6% a year**
+    on the two held-out years after it, worst month-end drawdown −0.09%, beating every
+    random-coin placebo ([the case](#the-pipeline-finds-a-strategy-that-pays)).
+  - **One conditional edge** on price: a ten-minute cross-sectional reversion on 26
+    perpetuals, +6.99 bp a trade on its held-out fortnight, gone when the market's state
+    changed; a kill switch inside it limits the damage when it breaks.
+  - **A list of ideas that did not survive their fees** (book signals, makers, market
+    making, model searches, ensembles), each with the number that killed it.
 - **What you can do with it.**
   - Score your own strategy on the [benchmark](docs/benchmarks.md): one file, one command,
     the same card the repository's strategies get, including the fee it would need. The
@@ -51,7 +61,7 @@ shows what is left once it cannot.
 |---|---|---|
 | **Data** | Binance spot, USD-M and COIN-M; Bybit order book, prints, funding and spot book from the free archives; Binance and Bybit websockets recorded forward — each with its download command | [instruments and where to get them](docs/catalog.md#instruments-and-data-where-to-get-them) · [contract](docs/data_contract.md) |
 | **Synthetic markets** | five generators with a planted answer and its null: book days, breaks, a cross-section, order flow, funding | [synthetic](docs/catalog.md#synthetic-and-simulated-markets) · [guide](docs/synthetic.md) |
-| **Strategies** | cross-sectional reversion, relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
+| **Strategies** | funding carry across coins (delta-neutral, chosen by its own search), cross-sectional reversion with or without a kill switch inside it, relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
 | **Models, 29** | linear (logistic, ridge) · trees (XGBoost, LightGBM, random forest, extra trees) · neural networks (TCN, Gaussian TCN) · ensembles, meta-labelling, confidence bounds, rules | [models](docs/catalog.md#models) |
 | **Features and filters** | six feature sets (book, depth, flow, trade statistics, microstructure) · variance, correlation and mutual-information filters, normalisation, a look-ahead check and an information audit | [features](docs/catalog.md#features) · [filters](docs/catalog.md#feature-filters-and-checks) |
 | **Labels, 11** | direction, magnitude, triple barrier, net P&L, smoothed and walked variants | [labels](docs/catalog.md#labels) |
@@ -59,7 +69,7 @@ shows what is left once it cannot.
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors, and a kill switch that stops a strategy when its own results show the edge is gone | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
 | **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
-| **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
+| **Search, studies, paper, agents** | the step-by-step search, the funding-carry search (`trp search carry`), registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 
 Adding one of your own — a model, a strategy, a feature set, a label, an execution or an
