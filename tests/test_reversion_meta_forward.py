@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _script():  # type: ignore[no-untyped-def]
-    spec = importlib.util.spec_from_file_location("m1", ROOT / "experiments/reversion_meta_forward.py")
+    spec = importlib.util.spec_from_file_location(
+        "m1", ROOT / "experiments/reversion_meta_forward.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
