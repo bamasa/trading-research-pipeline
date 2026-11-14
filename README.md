@@ -14,6 +14,8 @@ after fees, on the two years it had not chosen on ([the case](#the-pipeline-find
 trp demo --execution all --verify   # the whole path on a generated market, then the checks
 trp verify all                      # each component against data with a planted answer
 trp search carry                    # the funding-carry search: chosen on D, read once on H
+trp search basis                    # the spot-perp basis search, the same way
+trp search pairs                    # pairs on fifteen real perpetuals, the same way
 trp agent demo                      # the research loop through the agent harness, synthetic
 trp catalog                         # everything below, listed from the registries
 trp bench run reversion             # a strategy's card on the benchmark's tracks
@@ -39,14 +41,21 @@ shows what is left once it cannot.
     random-coin placebo ([the case](#the-pipeline-finds-a-strategy-that-pays)).
   - **One conditional edge** on price: a ten-minute cross-sectional reversion on 26
     perpetuals, +6.99 bp a trade on its held-out fortnight, gone when the market's state
-    changed; a kill switch inside it limits the damage when it breaks.
+    changed; a kill switch inside it limits the damage when it breaks. A model choosing its
+    trades doubled it where it works (+14.3 bp a trade) and did not save it where it does
+    not; nine such variants, boosters to a transformer, are registered on the
+    [forward fortnight](docs/preregistration/reversion_meta_forward_2026_11.md).
+  - **Searches that came back empty-handed, said so**: the spot-perp basis trade times
+    the premium (+9.8% where random timing lost 19%) but the premium stopped spiking, so
+    +0.1% on its held-out years; pairs on real perpetuals lost on every development rule
+    and could not beat random pairs ([findings](docs/findings.md)).
   - **A list of ideas that did not survive their fees** (book signals, makers, market
     making, model searches, ensembles), each with the number that killed it.
 - **What you can do with it.**
   - Score your own strategy on the [benchmark](docs/benchmarks.md): one file, one command,
     the same card the repository's strategies get, including the fee it would need. The
     benchmark is frozen as version 1, its data fingerprinted, and citable ([`CITATION.cff`](CITATION.cff)).
-  - Reuse the parts: data loaders, a market-making simulator, 29 models, and the measures
+  - Reuse the parts: data loaders, a market-making simulator, 34 models, and the measures
     that tell an edge from luck (placebos, Holm, deflated Sharpe, day-clustered *t*).
   - Run the [agent loop](docs/agents.md) that proposes, registers and reviews studies under
     the same rules, or its [skills](docs/skills.md) in your own Claude Code session.
@@ -61,15 +70,15 @@ shows what is left once it cannot.
 |---|---|---|
 | **Data** | Binance spot, USD-M and COIN-M; Bybit order book, prints, funding and spot book from the free archives; Binance and Bybit websockets recorded forward — each with its download command | [instruments and where to get them](docs/catalog.md#instruments-and-data-where-to-get-them) · [contract](docs/data_contract.md) |
 | **Synthetic markets** | five generators with a planted answer and its null: book days, breaks, a cross-section, order flow, funding | [synthetic](docs/catalog.md#synthetic-and-simulated-markets) · [guide](docs/synthetic.md) |
-| **Strategies** | funding carry across coins (delta-neutral, chosen by its own search), cross-sectional reversion with or without a kill switch inside it, relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
-| **Models, 29** | linear (logistic, ridge) · trees (XGBoost, LightGBM, random forest, extra trees) · neural networks (TCN, Gaussian TCN) · ensembles, meta-labelling, confidence bounds, rules | [models](docs/catalog.md#models) |
+| **Strategies** | funding carry across coins (delta-neutral, chosen by its own search), the spot-perp basis trade, cross-sectional reversion with or without a kill switch inside it, the reversion with a model choosing its trades (XGBoost, LightGBM, logistic, transformer, LSTM, GRU, TCN; with or without the kill switch), relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
+| **Models, 34** | linear (logistic, ridge) · trees (XGBoost, LightGBM, random forest, extra trees) · neural networks (TCN, Gaussian TCN, transformer, LSTM, GRU, window MLP, their ensemble) · ensembles, meta-labelling, confidence bounds, rules | [models](docs/catalog.md#models) |
 | **Features and filters** | six feature sets (book, depth, flow, trade statistics, microstructure) · variance, correlation and mutual-information filters, normalisation, a look-ahead check and an information audit | [features](docs/catalog.md#features) · [filters](docs/catalog.md#feature-filters-and-checks) |
 | **Labels, 11** | direction, magnitude, triple barrier, net P&L, smoothed and walked variants | [labels](docs/catalog.md#labels) |
 | **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors, and a kill switch that stops a strategy when its own results show the edge is gone | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
 | **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
-| **Search, studies, paper, agents** | the step-by-step search, the funding-carry search (`trp search carry`), registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
+| **Search, studies, paper, agents** | the step-by-step search, the funding-carry, basis and pairs searches (`trp search carry`, `basis`, `pairs`), registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 
 Adding one of your own — a model, a strategy, a feature set, a label, an execution or an
@@ -1205,8 +1214,8 @@ added as a plugin is listed the next time the page is written.
 |---|---:|---|
 | Data sources | 8 | a fetcher under `data/` |
 | Synthetic markets | 5 | a generator under `synthetic/` |
-| Strategies | 7 | `trp strategies new NAME` |
-| Models | 29 | `trp strategies new NAME --kind model` |
+| Strategies | 15 | `trp strategies new NAME` |
+| Models | 34 | `trp strategies new NAME --kind model` |
 | Feature sets | 6 | `trp strategies new NAME --kind features` |
 | Feature filters and checks | 7 | a step in `features/selection.py` |
 | Labels | 11 | `trp strategies new NAME --kind label` |
