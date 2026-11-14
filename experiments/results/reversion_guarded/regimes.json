@@ -1,0 +1,326 @@
+{
+  "episodes": [
+    {
+      "name": "china-ban-2021",
+      "breaks": "2021-05-19T00:00:00+00:00",
+      "what": "China's mining and trading crackdown; a 30% intraday crash"
+    },
+    {
+      "name": "top-2021",
+      "breaks": "2021-11-10T00:00:00+00:00",
+      "what": "bitcoin's 2021 all-time high and the start of the bear market"
+    },
+    {
+      "name": "luna-2022",
+      "breaks": "2022-05-09T00:00:00+00:00",
+      "what": "TerraUSD loses its peg; LUNA collapses within the week"
+    },
+    {
+      "name": "celsius-2022",
+      "breaks": "2022-06-13T00:00:00+00:00",
+      "what": "Celsius freezes withdrawals; the 3AC liquidation cascade"
+    },
+    {
+      "name": "ftx-2022",
+      "breaks": "2022-11-08T00:00:00+00:00",
+      "what": "FTX halts withdrawals and collapses"
+    },
+    {
+      "name": "svb-2023",
+      "breaks": "2023-03-10T00:00:00+00:00",
+      "what": "Silicon Valley Bank fails; USDC loses its peg over the weekend"
+    },
+    {
+      "name": "etf-2024",
+      "breaks": "2024-01-11T00:00:00+00:00",
+      "what": "the US spot bitcoin ETFs start trading; sell the news"
+    },
+    {
+      "name": "ath-2024",
+      "breaks": "2024-03-14T00:00:00+00:00",
+      "what": "bitcoin's March 2024 all-time high (posts/btc_ath_2024)"
+    },
+    {
+      "name": "yen-carry-2024",
+      "breaks": "2024-08-05T00:00:00+00:00",
+      "what": "the yen carry-trade unwind; a global risk-off crash"
+    },
+    {
+      "name": "election-2024",
+      "breaks": "2024-11-06T00:00:00+00:00",
+      "what": "the US election result; a momentum rally"
+    }
+  ],
+  "rows": [
+    {
+      "name": "reversion",
+      "summary": {
+        "episodes": 10,
+        "scored": 10,
+        "holds": 3,
+        "breaks": 4,
+        "never_paid": 3,
+        "kill_switch_saved_pct_mean": 7.46,
+        "kill_switch_helped": 7,
+        "stops_before_break": 2
+      },
+      "episodes": [
+        {
+          "episode": "china-ban-2021",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 287,
+          "trades_after": 1582,
+          "net_bp_before": -9.626415137324726,
+          "net_bp_after": -22.63972017670153,
+          "equity_left_running_pct": -32.14901538662835,
+          "equity_kill_switch_pct": -24.934330783960455,
+          "stop_hours_after_break": 13.0
+        },
+        {
+          "episode": "top-2021",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 61,
+          "trades_after": 361,
+          "net_bp_before": 31.864237003062897,
+          "net_bp_after": -40.173257153046904,
+          "equity_left_running_pct": -10.465689479219249,
+          "equity_kill_switch_pct": 0.12585756514460256,
+          "stop_hours_after_break": 22.0
+        },
+        {
+          "episode": "luna-2022",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 119,
+          "trades_after": 2226,
+          "net_bp_before": 14.391354524433732,
+          "net_bp_after": -9.0309800298611,
+          "equity_left_running_pct": -15.325325298385993,
+          "equity_kill_switch_pct": 0.14662410589766917,
+          "stop_hours_after_break": 17.0
+        },
+        {
+          "episode": "celsius-2022",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 233,
+          "trades_after": 1320,
+          "net_bp_before": 25.399504253614253,
+          "net_bp_after": -13.676495321500203,
+          "equity_left_running_pct": -10.112407777740122,
+          "equity_kill_switch_pct": 1.921664950221974,
+          "stop_hours_after_break": 6.0
+        },
+        {
+          "episode": "ftx-2022",
+          "status": "holds",
+          "reason": "",
+          "trades_before": 220,
+          "trades_after": 2036,
+          "net_bp_before": -4.753871130677103,
+          "net_bp_after": 0.4808525779964297,
+          "equity_left_running_pct": -0.0556964999568651,
+          "equity_kill_switch_pct": -2.0448953856023557,
+          "stop_hours_after_break": 4.0
+        },
+        {
+          "episode": "svb-2023",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 154,
+          "trades_after": 978,
+          "net_bp_before": -22.854278873240002,
+          "net_bp_after": -3.919540073212415,
+          "equity_left_running_pct": -6.127390948400586,
+          "equity_kill_switch_pct": -2.6105748337647645,
+          "stop_hours_after_break": 71.0
+        },
+        {
+          "episode": "etf-2024",
+          "status": "holds",
+          "reason": "",
+          "trades_before": 181,
+          "trades_after": 186,
+          "net_bp_before": 43.21803443055707,
+          "net_bp_after": 12.88123623522173,
+          "equity_left_running_pct": 8.515311809735062,
+          "equity_kill_switch_pct": 4.713285292015907,
+          "stop_hours_after_break": 16.0
+        },
+        {
+          "episode": "ath-2024",
+          "status": "holds",
+          "reason": "",
+          "trades_before": 47,
+          "trades_after": 84,
+          "net_bp_before": 83.3314703621784,
+          "net_bp_after": 56.610518936995895,
+          "equity_left_running_pct": 7.226552248108366,
+          "equity_kill_switch_pct": 7.226552248108366,
+          "stop_hours_after_break": null
+        },
+        {
+          "episode": "yen-carry-2024",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 315,
+          "trades_after": 1261,
+          "net_bp_before": 9.217666057258354,
+          "net_bp_after": -5.80624274519909,
+          "equity_left_running_pct": -3.681756078049728,
+          "equity_kill_switch_pct": 1.2111459151881165,
+          "stop_hours_after_break": -57.0
+        },
+        {
+          "episode": "election-2024",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 181,
+          "trades_after": 2478,
+          "net_bp_before": -26.357566690676556,
+          "net_bp_after": -12.16774730518978,
+          "equity_left_running_pct": -29.101997827727285,
+          "equity_kill_switch_pct": -2.463304056707914,
+          "stop_hours_after_break": -69.0
+        }
+      ]
+    },
+    {
+      "name": "reversion_guarded",
+      "summary": {
+        "episodes": 10,
+        "scored": 10,
+        "holds": 1,
+        "breaks": 5,
+        "never_paid": 4,
+        "kill_switch_saved_pct_mean": 0.23,
+        "kill_switch_helped": 3,
+        "stops_before_break": 2
+      },
+      "episodes": [
+        {
+          "episode": "china-ban-2021",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 275,
+          "trades_after": 95,
+          "net_bp_before": -12.794299810207363,
+          "net_bp_after": -152.2797919096686,
+          "equity_left_running_pct": -14.987510566021284,
+          "equity_kill_switch_pct": -14.987510566021285,
+          "stop_hours_after_break": 13.0
+        },
+        {
+          "episode": "top-2021",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 61,
+          "trades_after": 59,
+          "net_bp_before": 31.864237003062897,
+          "net_bp_after": -47.77972413929322,
+          "equity_left_running_pct": -0.7294043891928863,
+          "equity_kill_switch_pct": 0.367915149840508,
+          "stop_hours_after_break": 22.0
+        },
+        {
+          "episode": "luna-2022",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 119,
+          "trades_after": 86,
+          "net_bp_before": 14.391354524433732,
+          "net_bp_after": -14.39995647493465,
+          "equity_left_running_pct": 0.39514577630269554,
+          "equity_kill_switch_pct": 0.18659265500107436,
+          "stop_hours_after_break": 17.0
+        },
+        {
+          "episode": "celsius-2022",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 195,
+          "trades_after": 71,
+          "net_bp_before": 21.778824194705688,
+          "net_bp_after": -32.02138161133047,
+          "equity_left_running_pct": 1.6444605196359554,
+          "equity_kill_switch_pct": 1.6444605196359554,
+          "stop_hours_after_break": null
+        },
+        {
+          "episode": "ftx-2022",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 200,
+          "trades_after": 29,
+          "net_bp_before": -2.6211413240174695,
+          "net_bp_after": -47.25130932134783,
+          "equity_left_running_pct": -1.5787635292688176,
+          "equity_kill_switch_pct": -1.1396226464235273,
+          "stop_hours_after_break": 4.0
+        },
+        {
+          "episode": "svb-2023",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 151,
+          "trades_after": 170,
+          "net_bp_before": -24.031497263456014,
+          "net_bp_after": -3.691274248669573,
+          "equity_left_running_pct": -3.5468939242130704,
+          "equity_kill_switch_pct": -3.5468939242130713,
+          "stop_hours_after_break": null
+        },
+        {
+          "episode": "etf-2024",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 159,
+          "trades_after": 59,
+          "net_bp_before": 43.98796790831198,
+          "net_bp_after": -0.43341804599228917,
+          "equity_left_running_pct": 5.807096027256719,
+          "equity_kill_switch_pct": 5.807096027256719,
+          "stop_hours_after_break": null
+        },
+        {
+          "episode": "ath-2024",
+          "status": "holds",
+          "reason": "",
+          "trades_before": 47,
+          "trades_after": 79,
+          "net_bp_before": 83.3314703621784,
+          "net_bp_after": 56.11241692184515,
+          "equity_left_running_pct": 6.957883369873459,
+          "equity_kill_switch_pct": 6.957883369873459,
+          "stop_hours_after_break": null
+        },
+        {
+          "episode": "yen-carry-2024",
+          "status": "breaks",
+          "reason": "",
+          "trades_before": 126,
+          "trades_after": 0,
+          "net_bp_before": 11.897047066028701,
+          "net_bp_after": null,
+          "equity_left_running_pct": 1.2491899419330135,
+          "equity_kill_switch_pct": 1.2111459151881165,
+          "stop_hours_after_break": -57.0
+        },
+        {
+          "episode": "election-2024",
+          "status": "never paid",
+          "reason": "",
+          "trades_before": 126,
+          "trades_after": 7,
+          "net_bp_before": -28.915983621130188,
+          "net_bp_after": -78.6042330002912,
+          "equity_left_running_pct": -3.4947029727203685,
+          "equity_kill_switch_pct": -2.463304056707914,
+          "stop_hours_after_break": -69.0
+        }
+      ]
+    }
+  ]
+}
