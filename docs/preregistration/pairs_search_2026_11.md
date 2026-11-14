@@ -70,3 +70,24 @@ leg; crypto pairs' hourly spreads mean-revert, when they do, by less than
 that within three days, and a pair that was cointegrated last month often is
 not this month. The prior is a gross per trade near zero and a net of about
 the cost below it.
+
+## Results, read once 15 November 2026
+
+[`experiments/results/search_pairs`](../../experiments/results/search_pairs/),
+from the code committed with this registration (`trp search pairs`).
+
+**Killed: a placebo earned as much.** On D every rule lost: −0.7% to −9.7%
+over thirty months, 71 to 90 trades; the search chose the least bad,
+`entry2.5-formation30d` (−0.73%, +9.5 bp net a trade). On H, read once:
+**+0.72% over two years, 30 trades**, +62.0 bp gross and +34.6 bp net a trade
+after costs and funding, worst month-end drawdown −1.41%. Four of the nineteen
+random-pair placebos earned as much or more (up to +4.8%); it beat fifteen.
+
+- **Selection is what keeps it alive.** Holm's correction across 105 pairs
+  lets few through: 30 trades in two years. Every pair traded every week, at a
+  fifth of the capital each (twenty-one times the capital, so not a portfolio
+  anyone would run), loses −29.4 bp a trade on a gross of −3.7: without the
+  screen, the spreads do not revert by more than the four fills cost.
+- As stated in advance, killed; the gross on the chosen pairs was positive,
+  which the prior did not expect, and too thin a sample (30 trades) to be told
+  from the placebos.

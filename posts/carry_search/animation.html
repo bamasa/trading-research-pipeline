@@ -1,0 +1,301 @@
+<title>Two Unseen Years</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tektur:wght@700;900&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* One square stage that plays itself, controls under it. Light: paper-white chart, one warm colour for the pipeline's choice, cool greys for everything else. */
+:root {
+  color-scheme: light;
+  --bg: #eef1f7;
+  --stage: #fbfcfe;
+  --fg: #0d1328;
+  --muted: #646d8c;
+  --pick: #e8590c;
+  --line: #d9deea;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  margin: 0;
+  font: 400 15px/1.5 "Onest", system-ui, sans-serif;
+  padding-block: 24px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.stage { width: min(100%, 760px); margin: 0 auto 14px; border-radius: 18px; overflow: hidden; background: var(--stage); box-shadow: 0 24px 60px rgba(30, 40, 80, .14); border: 1px solid var(--line); }
+canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.controls { margin: 0 auto 12px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+button { font: 600 14px/1 "Onest", system-ui, sans-serif; border-radius: 999px; padding: 11px 18px; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--fg); }
+button.primary { background: var(--pick); color: #fff; border-color: var(--pick); }
+button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.note { margin: 0 auto; max-width: 760px; color: var(--muted); font-size: 13px; text-align: center; }
+body.render { padding: 0; }
+body.render .stage { width: 1080px; margin: 0; border-radius: 0; border: 0; box-shadow: none; }
+body.render .controls, body.render .note { display: none; }
+</style>
+
+<div class="stage"><canvas id="c" aria-label="Animation: a research pipeline replays sixteen ways of running a funding carry on 2021 to mid-2023, seals its choice, and the choice earns 15.8% over the next two years against nineteen random picks that earn 0.5% to 7.3%"></canvas></div>
+<div class="controls">
+  <button class="primary" type="button" id="replay">Replay</button>
+  <button type="button" id="pause">Pause</button>
+</div>
+<p class="note">A backtest on Binance's public archives: a delta-neutral funding carry (long spot, short the perpetual) on 17 coins, at base fees (spot 10 bp, perpetual 5 bp a side) and 2 bp of slippage a leg. The rule was chosen on January 2021 to June 2023 and read once on July 2023 to June 2025. Numbers and method: posts/carry_search in trading-research-pipeline.</p>
+
+<script>/*DATA*/</script>
+<script>
+const D = window.POST.data;
+const RENDER = /render/.test(location.search);
+if (RENDER) document.body.classList.add("render");
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const S = 1080;
+const COL = { bg: "#fbfcfe", grid: "#e6e9f2", zero: "#b9c0d4", fg: "#0d1328", muted: "#646d8c", pick: "#e8590c", pickSoft: "rgba(232,89,12,.16)", rule: "#c3c9d9", placebo: "#8f99b8", win: "#1fa34a", seal: "#3a66f0", spot: "#1fa34a", perp: "#e3344b", fund: "#7c4dff" };
+const F = { display: '"Tektur", "Arial Black", sans-serif', body: '"Onest", system-ui, sans-serif', mono: '"JetBrains Mono", ui-monospace, monospace' };
+const reduce = !RENDER && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// the clock runs in months: 0 is the start of January 2021, 30 the seal (end of June 2023), 54 the end of June 2025
+const SEAL = D.development_months.length, END = SEAL + D.held_out_months.length;
+const RULES = Object.entries(D.rules), CHOSEN = D.rules[D.chosen], HELD = D.held_out, PLAC = D.placebos;
+const R0 = D.result;
+const SCENES = [
+  { to: 0, ms: 4200, mark: "intro", head: [["Funding pays", "fg"], ["whoever is short", "pick"]] },
+  { to: 0, ms: 3600, mark: "intro2", head: [["Hold both legs:", "fg"], ["the price cancels out", "pick"]] },
+  { to: SEAL, ms: 6500, ease: "both", head: [["16 ways to pick coins,", "fg"], ["replayed on 2021–2023", "muted"]] },
+  { to: SEAL, ms: 3800, mark: "seal", head: [["The pipeline picks one", "fg"], ["and seals the choice", "seal"]] },
+  { to: END, ms: 7500, ease: "both", head: [["Then two years", "fg"], ["it had never seen", "pick"]] },
+  { to: END, ms: 4000, mark: "end", head: [[`${pct(R0.total_pct)} on unseen data`, "pick"], [`beats ${D.beats} of 19 random picks`, "fg"]] },
+];
+const FINAL_HEAD = [["Chosen on the past.", "fg"], ["Paid on the unseen.", "pick"]];
+let acc = 0, from = 0;
+SCENES.forEach(sc => { sc.from = from; sc.start = acc; acc += sc.ms; from = sc.to; });
+const EASE = { lin: f => f, both: f => (1 - Math.cos(Math.PI * f)) / 2 };
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const timeAt = el => {
+  const sc = SCENES.find(c => el < c.start + c.ms) || SCENES[SCENES.length - 1];
+  const f = clamp01((el - sc.start) / sc.ms);
+  return { t: sc.from + (sc.to - sc.from) * (EASE[sc.ease] || EASE.lin)(f), scene: sc, into: el - sc.start };
+};
+
+const L = 72, R = S - 72;
+const X = m => L + m / END * (R - L);
+const P = { top: 330, bot: 860, lo: -12, hi: 58 };
+const Y = v => P.bot - (v - P.lo) / (P.hi - P.lo) * (P.bot - P.top);
+function pct(v) { return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + "%"; }
+
+function txt(s, x, y, font, color, align = "left", alpha = 1) { ctx.globalAlpha = alpha; ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y); ctx.globalAlpha = 1; }
+// a chart label with a halo of the page colour, so no line runs through its letters
+function lab(s, x, y, font, color, align = "left", alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha; ctx.font = font; ctx.textAlign = align; ctx.lineJoin = "round"; ctx.setLineDash([]);
+  ctx.strokeStyle = COL.bg; ctx.lineWidth = 7; ctx.strokeText(s, x, y);
+  ctx.fillStyle = color; ctx.fillText(s, x, y);
+  ctx.restore();
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+// a monthly curve whose first point sits at month `m0`, drawn up to month `t`, the last segment interpolated
+function path(points, m0, t) {
+  const n = Math.min(points.length - 1, t - m0);
+  if (n <= 0) return null;
+  const pts = [];
+  for (let k = 0; k <= Math.floor(n); k++) pts.push([X(m0 + k), Y(points[k])]);
+  const f = n - Math.floor(n);
+  if (f > 0 && Math.floor(n) + 1 < points.length) {
+    const a = points[Math.floor(n)], b = points[Math.floor(n) + 1];
+    pts.push([X(m0 + n), Y(a + (b - a) * f)]);
+  }
+  return pts;
+}
+function stroke(pts, color, width, glow) {
+  if (!pts || pts.length < 2) return;
+  ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+  ctx.shadowColor = glow || "rgba(0,0,0,0)"; ctx.shadowBlur = glow ? 10 : 0;
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke(); ctx.shadowBlur = 0;
+}
+function valueAt(points, m0, t) {
+  const n = clamp01((t - m0) / (points.length - 1)) * (points.length - 1), k = Math.floor(n), f = n - k;
+  return k + 1 < points.length ? points[k] + (points[k + 1] - points[k]) * f : points[points.length - 1];
+}
+
+const PLAY = SCENES.reduce((a, c) => a + c.ms, 0), HOLD = 6000;
+let EL = 0;
+function pulse(x, y, color, reach = 46) {
+  for (let k = 0; k < 3; k++) {
+    const r = 12 + ((EL * 0.03 + k * reach / 3) % reach);
+    ctx.strokeStyle = color; ctx.globalAlpha = clamp01(1 - (r - 12) / reach) * .9; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// the trade itself, before any curve: two legs that cancel, and the funding that does not
+function explainer(alpha, second, into) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  const cx = S / 2, y0 = 420;
+  const card = (x, w, title, sub, color) => {
+    ctx.fillStyle = "#fff"; roundRect(x, y0, w, 150, 18); ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 3; roundRect(x, y0, w, 150, 18); ctx.stroke();
+    txt(title, x + w / 2, y0 + 62, `900 34px ${F.display}`, color, "center", alpha);
+    txt(sub, x + w / 2, y0 + 104, `500 20px ${F.mono}`, COL.muted, "center", alpha);
+  };
+  card(L + 20, 380, "SHORT PERP", "the future, sold", COL.perp);
+  card(R - 400, 380, "LONG SPOT", "the coin, bought", COL.spot);
+  // funding: every eight hours the perpetual's longs pay its shorts
+  const k = (EL % 1600) / 1600;
+  for (let j = 0; j < 3; j++) {
+    const f = (k + j / 3) % 1, x = R - 120 - f * (R - L - 360), y = y0 + 230 - Math.sin(f * Math.PI) * 30;
+    ctx.globalAlpha = alpha * Math.sin(f * Math.PI);
+    ctx.fillStyle = COL.fund; ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fill();
+    txt("$", x, y + 7, `700 16px ${F.mono}`, "#fff", "center", alpha * Math.sin(f * Math.PI));
+  }
+  ctx.globalAlpha = alpha;
+  lab("funding, every 8 hours: longs pay shorts", cx, y0 + 300, `700 22px ${F.mono}`, COL.fund, "center", alpha);
+  if (second) {
+    const a2 = clamp01(into / 500) * alpha;
+    // the price moves both legs alike, in opposite directions: their sum stays at zero
+    const move = Math.sin(EL / 450) * 4.2;
+    const show = (x, v, color) => txt(pct(v), x, y0 - 22, `900 40px ${F.display}`, color, "center", a2);
+    show(L + 210, -move, -move >= 0 ? COL.spot : COL.perp);
+    show(R - 210, move, move >= 0 ? COL.spot : COL.perp);
+    txt("+", S / 2, y0 + 92, `900 46px ${F.display}`, COL.muted, "center", a2);
+    lab("price up or down: one leg gains what the other loses", cx, y0 + 352, `600 22px ${F.body}`, COL.fg, "center", a2);
+    lab("what is left is the funding", cx, y0 + 388, `700 24px ${F.body}`, COL.pick, "center", a2);
+  }
+  ctx.restore();
+}
+
+function draw(el) {
+  const done = el >= PLAY || reduce, cur = timeAt(Math.min(el, PLAY - 1)), t = done ? END : cur.t;
+  const mark = done ? "" : cur.scene.mark || "";
+  EL = el;
+  const w = cv.clientWidth, dpr = RENDER ? 1 : Math.min(devicePixelRatio || 1, 2);
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(w * dpr); }
+  ctx.setTransform(cv.width / S, 0, 0, cv.height / S, 0, 0);
+
+  ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, S, S);
+  const g = ctx.createRadialGradient(S * .72, S * .62, 30, S * .72, S * .62, 640); g.addColorStop(0, "rgba(232,89,12,.08)"); g.addColorStop(1, "rgba(232,89,12,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+
+  txt("FUNDING CARRY · CHOSEN BY THE PIPELINE", L, 86, `500 19px ${F.mono}`, COL.muted);
+  const mi = Math.min(END - 1, Math.max(0, Math.floor(t - 1e-9)));
+  const month = mi < SEAL ? D.development_months[mi] : D.held_out_months[mi - SEAL];
+  if (!mark.startsWith("intro")) txt(month, R, 86, `700 24px ${F.mono}`, t > SEAL ? COL.pick : COL.fg, "right");
+  const head = (done ? FINAL_HEAD : cur.scene.head).map(([s, c]) => [s, COL[c]]);
+  const ha = reduce ? 1 : clamp01((el - (done ? PLAY : cur.scene.start)) / 350);
+  const hy = 158 + (1 - ha) * 14;
+  ctx.font = `900 56px ${F.display}`;
+  const hs = Math.min(56, Math.floor(56 * (R - L) / Math.max(ctx.measureText(head[0][0]).width, ctx.measureText(head[1][0]).width)));
+  txt(head[0][0], L, hy, `900 ${hs}px ${F.display}`, head[0][1], "left", ha);
+  txt(head[1][0], L, hy + 64, `900 ${hs}px ${F.display}`, head[1][1], "left", ha);
+
+  const introAlpha = mark === "intro" || mark === "intro2" ? 1 : clamp01(1 - (cur.scene === SCENES[2] ? cur.into / 600 : 1));
+  const chartAlpha = mark.startsWith("intro") ? 0 : clamp01(cur.scene === SCENES[2] ? cur.into / 600 : 1);
+  if (introAlpha > 0) explainer(introAlpha, mark === "intro2" || cur.scene === SCENES[2], mark === "intro2" ? cur.into : 1e9);
+  if (chartAlpha <= 0) { footer(); return; }
+  ctx.save(); ctx.globalAlpha = chartAlpha;
+
+  // the two samples
+  ctx.fillStyle = "rgba(58,102,240,.05)"; ctx.fillRect(X(0), P.top - 24, X(SEAL) - X(0), P.bot - P.top + 24);
+  lab("DEVELOPMENT · the search sees this", X(0) + 12, P.top - 2, `700 16px ${F.mono}`, COL.seal, "left", chartAlpha);
+  if (t >= SEAL) {
+    ctx.fillStyle = COL.pickSoft; ctx.globalAlpha = chartAlpha * .45; ctx.fillRect(X(SEAL), P.top - 24, X(END) - X(SEAL), P.bot - P.top + 24); ctx.globalAlpha = chartAlpha;
+    lab("HELD OUT · read once", X(SEAL) + 12, P.top - 2, `700 16px ${F.mono}`, COL.pick, "left", chartAlpha);
+  }
+  ctx.lineWidth = 1; ctx.strokeStyle = COL.grid;
+  [10, 20, 30, 40, 50].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(R, Y(v)); ctx.stroke(); });
+  ctx.strokeStyle = COL.zero; ctx.beginPath(); ctx.moveTo(L, Y(0)); ctx.lineTo(R, Y(0)); ctx.stroke();
+  [0, 10, 20, 30, 40, 50].forEach(v => lab((v ? "+" : "") + v + "%", L - 8, Y(v) + 5, `500 14px ${F.mono}`, COL.muted, "right", chartAlpha));
+  [["2021", 0], ["2022", 12], ["2023", 24], ["2024", 36], ["2025", 48]].forEach(([s, m]) => lab(s, X(m) + 4, P.bot + 30, `500 16px ${F.mono}`, COL.muted, "left", chartAlpha));
+
+  // act one: sixteen rules on D
+  const sealed = t >= SEAL;
+  RULES.forEach(([name, pts]) => { if (name !== D.chosen) stroke(path(pts, 0, t), sealed ? "#d5dae6" : COL.rule, 2.2); });
+  stroke(path(CHOSEN, 0, t), sealed ? COL.pick : "#a9b1c7", sealed ? 4 : 2.2, sealed ? "rgba(232,89,12,.35)" : null);
+  if (!sealed && t > 0.5) {
+    const top = Math.max(...RULES.map(([, p]) => valueAt(p, 0, t))), bot = Math.min(...RULES.map(([, p]) => valueAt(p, 0, t)));
+    lab(`16 rules: ${pct(bot)} to ${pct(top)}`, Math.min(X(t) + 14, X(SEAL) - 250), Math.max(Y(top) - 26, P.top + 30), `700 18px ${F.mono}`, COL.muted, "left", chartAlpha);
+  }
+
+  // the seal
+  if (sealed) {
+    const xs = X(SEAL);
+    ctx.strokeStyle = COL.seal; ctx.setLineDash([6, 6]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xs, P.top - 24); ctx.lineTo(xs, P.bot); ctx.stroke(); ctx.setLineDash([]);
+    const yc = Y(CHOSEN[CHOSEN.length - 1]);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(xs, yc, 8, 0, 7); ctx.fill(); ctx.strokeStyle = COL.pick; ctx.lineWidth = 3.5; ctx.stroke();
+    lab("chosen, best risk-adjusted: hold the coin", xs - 56, yc - 40, `700 17px ${F.mono}`, COL.pick, "right", chartAlpha);
+    lab(`paying most funding over 3 months · ${pct(CHOSEN[CHOSEN.length - 1])}`, xs - 56, yc - 16, `500 16px ${F.mono}`, COL.pick, "right", chartAlpha);
+    const badge = `SEALED · LEDGER ${D.sha}`;
+    ctx.font = `700 19px ${F.mono}`; const tw = ctx.measureText(badge).width + 22;
+    const bx = xs - tw - 12, by = Y(0) + 16;
+    ctx.fillStyle = COL.seal; roundRect(bx, by, tw, 34, 8); ctx.fill();
+    txt(badge, bx + 11, by + 23, `700 19px ${F.mono}`, "#fff", "left", chartAlpha);
+    if (mark === "seal" && !reduce) pulse(xs, yc, COL.seal);
+  }
+
+  // act two: the chosen rule and nineteen random picks on H, from 0 at the seal
+  if (t > SEAL) {
+    PLAC.forEach(p => stroke(path(p, SEAL, t), "rgba(143,153,184,.55)", 1.8));
+    const hp = path(HELD, SEAL, t);
+    if (hp) {
+      // the area under the choice, so its lead over the placebos reads at a glance
+      ctx.beginPath(); ctx.moveTo(hp[0][0], Y(0)); hp.forEach(([x, y]) => ctx.lineTo(x, y)); ctx.lineTo(hp[hp.length - 1][0], Y(0)); ctx.closePath();
+      ctx.fillStyle = "rgba(232,89,12,.12)"; ctx.fill();
+      stroke(hp, COL.pick, 4.5, "rgba(232,89,12,.45)");
+      const [lx, ly] = hp[hp.length - 1], v = valueAt(HELD, SEAL, t);
+      ctx.fillStyle = COL.pick; ctx.beginPath(); ctx.arc(lx, ly, 8, 0, 7); ctx.fill();
+      const near = lx > R - 170;
+      lab(pct(v), near ? lx - 16 : lx + 16, ly - 14, `700 30px ${F.mono}`, COL.pick, near ? "right" : "left", chartAlpha);
+      const coin = D.coins[Math.min(D.coins.length - 1, Math.max(0, Math.floor(t - SEAL - 1e-9)))];
+      if (!done) lab(`holding ${coin}`, near ? lx - 16 : lx + 16, ly + 22, `600 17px ${F.mono}`, COL.muted, near ? "right" : "left", chartAlpha);
+      const pv = PLAC.map(p => valueAt(p, SEAL, t)), ptop = Math.max(...pv);
+      if (t - SEAL > 2) lab(`19 random picks: ${pct(Math.min(...pv))} to ${pct(ptop)}`, X(SEAL) + 14, Y(0) + 44, `700 17px ${F.mono}`, COL.placebo, "left", chartAlpha);
+      if (mark === "end" && !reduce) pulse(lx, ly, COL.pick);
+    }
+  }
+  ctx.restore();
+  if (done) finalCard(reduce ? 1 : clamp01((el - PLAY) / 500));
+  footer();
+}
+
+function footer() {
+  txt("Backtest on Binance archives · 17 coins · spot 10 bp, perp 5 bp a side + 2 bp slippage a leg", L, S - 50, `500 15px ${F.mono}`, COL.muted);
+  txt("Long spot, short the perpetual, unlevered · monthly returns on the whole capital · not a forecast", L, S - 26, `500 15px ${F.mono}`, COL.muted);
+}
+
+function finalCard(k) {
+  const cy = P.top + 10;
+  ctx.globalAlpha = k;
+  ctx.fillStyle = "rgba(255,255,255,.95)"; roundRect(L, cy, R - L, 210, 18); ctx.fill();
+  ctx.strokeStyle = COL.grid; ctx.lineWidth = 2; roundRect(L, cy, R - L, 210, 18); ctx.stroke();
+  ctx.globalAlpha = 1;
+  txt("July 2023 to June 2025 · two years the search never saw", L + 32, cy + 42, `500 19px ${F.mono}`, COL.muted, "left", k);
+  const cols = [[pct(R0.total_pct), COL.pick, "total"], [pct(R0.a_year_pct), COL.pick, "a year"], ["−" + Math.abs(R0.worst_drawdown_pct).toFixed(2) + "%", COL.fg, "worst drawdown"], [`${D.beats}/19`, COL.fg, "random picks beaten"]];
+  cols.forEach(([v, c, s], j) => {
+    const x = L + 32 + j * 228;
+    txt(v, x, cy + 124, `900 54px ${F.display}`, c, "left", k);
+    txt(s, x, cy + 166, `600 17px ${F.mono}`, COL.muted, "left", k);
+  });
+}
+
+let start = 0, paused = false, pausedAt = 0;
+function frame(now) {
+  const el = paused ? pausedAt : now - start;
+  draw(el);
+  if (!paused) {
+    if (el > PLAY + HOLD && !reduce) start = now;
+    requestAnimationFrame(frame);
+  }
+}
+window.renderAt = el => { draw(el); return true; };
+window.TIMING = { PLAY, HOLD };
+const ready = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve();
+if (RENDER) { ready.then(() => { window.READY = true; }); }
+else {
+  document.getElementById("replay").addEventListener("click", () => { start = performance.now(); if (paused) { paused = false; document.getElementById("pause").textContent = "Pause"; requestAnimationFrame(frame); } });
+  document.getElementById("pause").addEventListener("click", e => {
+    if (!paused) { paused = true; pausedAt = performance.now() - start; e.target.textContent = "Resume"; draw(pausedAt); }
+    else { paused = false; start = performance.now() - pausedAt; e.target.textContent = "Pause"; requestAnimationFrame(frame); }
+  });
+  new ResizeObserver(() => { if (paused) draw(pausedAt); }).observe(cv);
+  ready.then(() => { start = performance.now(); requestAnimationFrame(frame); });
+}
+</script>

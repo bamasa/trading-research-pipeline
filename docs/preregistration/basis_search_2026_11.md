@@ -71,3 +71,23 @@ trip's cost, so the rule will trade seldom: tens of times a year across
 seventeen coins. Most of what it earns will be the funding while it waits,
 which a placebo opening at any hour also earns, so beating all nineteen is
 the hard part.
+
+## Results, read once 15 November 2026
+
+[`experiments/results/search_basis`](../../experiments/results/search_basis/),
+from the code committed with this registration (`trp search basis`).
+
+**Positive, and almost nothing.** On D the search chose `entry30-exit0-w30d`
+(open when the premium is 30 bp above its 30-day median, close when it is back
+at it): **+9.8%** over thirty months on 284 trades, monthly Sharpe 1.25. Its
+nineteen placebos, the same rule on the deviation shifted to random hours, lost
+**−17.3% to −23.2%**: the timing is the edge, and without it the round trips
+eat everything. Ten of the twelve rules were positive on D.
+
+On H, read once: **+0.11% over two years, 5 trades**, worst month-end
+drawdown −0.003%, above all nineteen placebos (−0.14% to −0.24%). The status is
+**positive** by the rule above, and the money is negligible: after mid-2023 the
+perpetual's premium almost never ran 30 bp above its median, so the rule had
+almost nothing to trade. As stated in advance: positive and small; the stated
+reason (the funding while waiting) was wrong, the reason was that the signal
+stopped occurring.

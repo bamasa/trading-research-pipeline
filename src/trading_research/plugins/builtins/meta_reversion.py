@@ -41,6 +41,8 @@ from trading_research.plugins.builtins.guarded import SLIPPAGE_BP, TAKER_BP
 from trading_research.plugins.builtins.strategies import Reversion, _log_panel
 from trading_research.plugins.registry import register_strategy
 
+#: Fewer labelled candidates than this and no model is fitted: the rule trades unfiltered.
+MIN_CANDIDATES = 100
 FEATURES = ("strength", "index_vol", "index_autocorr", "trend", "own_gap", "spread_bp")
 #: What each named variant puts in the model's place; small windows for the
 #: networks, whose sequence is the run of candidates rather than of rows.
@@ -150,16 +152,20 @@ class ReversionMeta(Reversion):
         known = np.isfinite(net)
         x, net = x[known].reset_index(drop=True), net[known]
         y = pd.Series(np.where(net > 0, 1, 0))
-        if len(y) < 100 or y.nunique() < 2:
-            raise ValueError(f"only {len(y)} labelled candidates to fit {self.model_name} on")
+        self.fitted_rows_, self.fitted_profitable_ = len(y), float(y.mean()) if len(y) else 0.0
+        if len(y) < MIN_CANDIDATES or y.nunique() < 2:
+            # too short a history to learn from: the rule's own trades, unfiltered
+            self.model = None
+            return self
         self.model = build_model(self.model_name, **self.model_params)
         self.model.fit(x, y)
         self.cut = float(np.quantile(self._p_profit(x), 1.0 - self.keep))
-        self.fitted_rows_, self.fitted_profitable_ = len(y), float(y.mean())
         return self
 
     def decide(self, frame: pd.DataFrame) -> np.ndarray:
         side = np.asarray(super().decide(frame), dtype=np.int64)
+        if self.model is None:
+            return side.astype(np.int8)
         out = np.zeros(len(frame), dtype=np.int8)
         rows, x = self._candidates(frame)
         if len(rows):
@@ -183,3 +189,42 @@ def _variant(name: str, model: str, params: dict[str, Any]) -> None:
 for _name, (_model, _params) in VARIANTS.items():
     if _name != "reversion_meta":
         _variant(_name, _model, _params)
+
+
+@register_strategy("reversion_meta_guarded")
+class ReversionMetaGuarded(ReversionMeta):
+    """XGBoost choosing the reversion rule's trades, and the kill switch stopping them.
+
+    The model's decisions are kept as a paper account from the end of the fit,
+    as :class:`~trading_research.plugins.builtins.guarded.ReversionGuarded`
+    keeps the rule's; when Page's CUSUM on its hourly results fires, nothing is
+    opened from the hour after. The model picks the trades worth taking while
+    the state holds; the switch stops it when the state goes.
+    """
+
+    live_from: pd.Timestamp | None = None
+    stopped_at: pd.Timestamp | None = None
+
+    def fit(self, history: pd.DataFrame) -> ReversionMetaGuarded:
+        super().fit(history)
+        self.live_from = pd.Timestamp(pd.to_datetime(history["timestamp"], utc=True).iloc[-1])
+        return self
+
+    def decide(self, frame: pd.DataFrame) -> np.ndarray:
+        from trading_research.plugins.builtins.guarded import paper_hourly
+        from trading_research.validation.kill_switch import kill_switch
+
+        raw = np.asarray(super().decide(frame), dtype=np.int64).copy()
+        stamps = pd.DatetimeIndex(pd.to_datetime(frame["timestamp"], utc=True))
+        live = stamps > self.live_from if self.live_from is not None else np.ones(len(raw), bool)
+        if not live.any():
+            return raw.astype(np.int8)
+        watched = frame[live]
+        closed, opened = paper_hourly(raw[live], watched, int(self.horizon), int(self.cooldown))
+        if len(closed) <= 72:
+            return raw.astype(np.int8)
+        stop = kill_switch(closed, warm_up=72, booked=opened).first_stop
+        self.stopped_at = None if stop is None else closed.index[stop.position]
+        if self.stopped_at is not None:
+            raw[stamps > self.stopped_at] = 0
+        return raw.astype(np.int8)

@@ -64,6 +64,22 @@ LINK, ETC and DOGE.
   dollar rises and so does the risk of the short leg being liquidated in a
   spike.
 
+## The animation
+
+A 36-second square video (1080 × 1080): what a carry is, the sixteen rules on
+the development months, the choice sealed in the ledger, then the two held-out
+years with the choice against its nineteen random-coin placebos.
+
+```bash
+PYTHONPATH=src python posts/carry_search/make_data.py --data data   # every curve, checked against the search's files
+node posts/carry_search/render.mjs                                  # artifacts/posts/carry_search.mp4 and .html
+```
+
+`make_data.py` replays the search's rules, its choice and its placebos with
+the same engine and seeds and refuses to write if any total or drawdown differs
+from what `trp search carry` wrote; it chooses nothing. The page draws every
+frame from `data.json`, so the video and the files cannot disagree.
+
 ## LinkedIn text
 
 > **I asked my research pipeline to find a strategy. It found one that paid on two years it never saw.**
