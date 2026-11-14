@@ -40,6 +40,18 @@ about a market state rather than as a strategy; the rest did not survive at all.
 
 ## Conditional results
 
+### The pipeline's own search finds a carry that pays on held-out months
+
+**Status: positive on H, read once** ([registration and results](preregistration/carry_search_2026_11.md)).
+`trp search carry` replayed sixteen ways of choosing a funding carry on January
+2021 to June 2023, all of them positive there, chose the one with the best
+Sharpe ratio (the coin paying the most funding over the previous three months),
+and read it once on July 2023 to June 2025: **+15.8%, +7.6% a year, worst
+month-end drawdown −0.09%**, beating all nineteen placebos that held a random
+coin. The held-out months had been seen by the walk-forward replay of a
+neighbouring rule; the choice was made on the development months alone.
+
+
 ### Funding carry, chosen month by month from the past alone
 
 **Status: measurement, read once** ([registration and results](preregistration/carry_walkforward_2026_11.md)).
