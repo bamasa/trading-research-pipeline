@@ -156,6 +156,15 @@ overshoot rather than at its level, and reading 113 trades as though they could
 settle a 12 bp difference — are the kind that reverse a conclusion rather than
 shade it.
 
+**Nine models choosing the rule's trades, November 2026** ([table](../experiments/results/reversion_meta/README.md)).
+Meta-labelling on six state inputs, on the two recorded tracks where it was
+built: logistic regression and the boosters raise February from +7.0 to +12 to
++18 bp a trade; the transformer, LSTM, GRU and TCN add little. In April every
+one loses, the boosters less than the rule. Only the kill switch stops the
+damage; XGBoost with the switch sums +9,927 bp over both tracks against
++8,056 for the switch alone. All nine are registered on the forward fortnight
+([M1](preregistration/reversion_meta_forward_2026_11.md)).
+
 ---
 
 ## Killed
