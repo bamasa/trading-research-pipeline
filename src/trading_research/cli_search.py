@@ -298,3 +298,47 @@ def carry_cmd(
         err_console.print(f"[red]refused:[/red] {exc}")
         raise typer.Exit(code=2) from exc
     console.print(f"[dim]-> {out}[/dim]")
+
+
+@app.command("basis")
+def basis_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    run: Run = Path("artifacts/search_basis"),
+) -> None:
+    """The automatic search for a spot-perpetual basis trade: every rule on D, the best chosen, H read once.
+
+    Registered in docs/preregistration/basis_search_2026_11.md. Writes
+    development.json, ledger.json and held_out.json under --run.
+    """
+    from trading_research.search_engine.basis import run as run_search
+
+    try:
+        out = run_search(data / "carry_walkforward", run, on_line=_report)
+    except FileExistsError as exc:
+        err_console.print(f"[red]refused:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    console.print(f"[dim]-> {out}[/dim]")
+
+
+@app.command("pairs")
+def pairs_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    run: Run = Path("artifacts/search_pairs"),
+) -> None:
+    """Pairs trading on fifteen real perpetuals: four rules on D, the best chosen, H read once.
+
+    Registered in docs/preregistration/pairs_search_2026_11.md. Writes
+    development.json, ledger.json and held_out.json under --run.
+    """
+    from trading_research.search_engine.pairs import run as run_search
+
+    try:
+        out = run_search(data / "carry_walkforward", run, on_line=_report)
+    except FileExistsError as exc:
+        err_console.print(f"[red]refused:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    console.print(f"[dim]-> {out}[/dim]")

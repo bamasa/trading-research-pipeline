@@ -284,6 +284,7 @@ FAMILIES: dict[str, str] = {
     "trading_research.models.gbm": "gradient-boosted trees",
     "trading_research.models.forests": "tree ensemble",
     "trading_research.models.tcn": "neural network",
+    "trading_research.models.sequence": "neural network",
 }
 
 ADD: dict[str, str] = {
