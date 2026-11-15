@@ -119,3 +119,62 @@ def test_mde_has_80_percent_power_at_the_bar() -> None:
     assert power_at_bar(effect, 2.0, 44) == pytest.approx(0.8, abs=0.001)
     assert power_at_bar(0.0, 2.0, 44) < 0.01
     assert math.isnan(minimum_detectable_effect(2.0, 0))
+
+
+def test_min_track_record_is_where_the_psr_reaches_the_confidence() -> None:
+    from trading_research.evaluation.overfitting import minimum_track_record_length
+
+    rng = np.random.default_rng(7)
+    series = rng.normal(0.2, 1.0, 400)
+    record = minimum_track_record_length(series, threshold=0.0, confidence=0.95)
+    # at exactly MinTRL periods the probabilistic Sharpe ratio is the confidence
+    n = record.minimum
+    spread = 1 - record.skewness * record.sharpe + (record.kurtosis - 1) / 4 * record.sharpe**2
+    z = record.sharpe * math.sqrt(n - 1) / math.sqrt(spread)
+    assert NormalDist().cdf(z) == pytest.approx(0.95)
+    assert record.enough
+    # normal returns: about (1.645 / SR)^2 periods
+    assert n == pytest.approx(
+        1 + (1.6449 / record.sharpe) ** 2 * (1 + record.sharpe**2 / 2), rel=0.1
+    )
+
+
+def test_min_track_record_is_undefined_below_the_threshold() -> None:
+    from trading_research.evaluation.overfitting import minimum_track_record_length
+
+    series = np.random.default_rng(8).normal(-0.1, 1.0, 200)
+    assert math.isnan(minimum_track_record_length(series).minimum)
+    assert not minimum_track_record_length(series).enough
+    assert math.isnan(minimum_track_record_length([1.0, 1.0, 1.0]).minimum)
+
+
+def test_adjusted_p_values_match_the_textbook() -> None:
+    from trading_research.evaluation.overfitting import adjusted_p_values
+
+    p = [0.01, 0.04, 0.03, 0.005]
+    assert adjusted_p_values(p, "bonferroni") == pytest.approx([0.04, 0.16, 0.12, 0.02])
+    # Holm: sorted 0.005, 0.01, 0.03, 0.04 times 4, 3, 2, 1, made monotone
+    assert adjusted_p_values(p, "holm") == pytest.approx([0.03, 0.06, 0.06, 0.02])
+    c = 1 + 1 / 2 + 1 / 3 + 1 / 4
+    bhy = adjusted_p_values(p, "bhy")
+    assert bhy[1] == pytest.approx(0.04 * c)
+    assert bhy[3] == pytest.approx(min(0.005 * 4 * c, 0.01 * 2 * c))
+    with pytest.raises(ValueError):
+        adjusted_p_values(p, "sidak")
+
+
+def test_one_trial_has_no_haircut_and_more_trials_cut_more() -> None:
+    from trading_research.evaluation.overfitting import haircut_sharpe
+
+    one = haircut_sharpe([0.3], periods=60, chosen=0, method="bonferroni")
+    assert one.adjusted_sharpe == pytest.approx(0.3)
+    assert one.haircut == pytest.approx(0.0, abs=1e-12)
+    many = haircut_sharpe([0.3] + [0.0] * 19, periods=60, chosen=0, method="bonferroni")
+    assert many.adjusted_p_value == pytest.approx(min(one.p_value * 20, 1.0))
+    assert 0 < many.haircut < 1
+    holm = haircut_sharpe([0.3] + [0.0] * 19, periods=60, chosen=0, method="holm")
+    assert holm.adjusted_sharpe == pytest.approx(
+        many.adjusted_sharpe
+    )  # the best trial: same as Bonferroni
+    weak = haircut_sharpe([0.05] * 20, periods=60, chosen=0, method="bonferroni")
+    assert weak.adjusted_sharpe == 0.0 and weak.haircut == 1.0
