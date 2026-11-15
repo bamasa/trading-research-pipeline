@@ -1,0 +1,51 @@
+{
+  "month": "2026-11",
+  "rule": "top1-lb3-floor_none",
+  "coin": "DOGEUSDT",
+  "made_at": "2026-11-15T15:44:25Z",
+  "enters_at": "2026-11-15T16:00:00Z",
+  "funding_months": [
+    "2026-08",
+    "2026-09",
+    "2026-10"
+  ],
+  "funding_bp_a_day": {
+    "DOGEUSDT": 1.7788,
+    "ETCUSDT": 1.7005,
+    "LINKUSDT": 1.6289,
+    "BTCUSDT": 1.6045,
+    "LTCUSDT": 1.4985,
+    "ADAUSDT": 1.433,
+    "FILUSDT": 1.3101,
+    "AVAXUSDT": 1.2688,
+    "ETHUSDT": 1.266,
+    "XRPUSDT": 1.2006,
+    "DOTUSDT": 1.1587,
+    "SOLUSDT": 1.0987,
+    "XLMUSDT": 1.0441,
+    "BNBUSDT": 1.03,
+    "BCHUSDT": 0.9241,
+    "ATOMUSDT": -0.5268,
+    "TRXUSDT": -3.5471
+  },
+  "coins_read": [
+    "ADAUSDT",
+    "ATOMUSDT",
+    "AVAXUSDT",
+    "BCHUSDT",
+    "BNBUSDT",
+    "BTCUSDT",
+    "DOGEUSDT",
+    "DOTUSDT",
+    "ETCUSDT",
+    "ETHUSDT",
+    "FILUSDT",
+    "LINKUSDT",
+    "LTCUSDT",
+    "SOLUSDT",
+    "TRXUSDT",
+    "XLMUSDT",
+    "XRPUSDT"
+  ],
+  "source_sha256": "3e0472c52b834c3e69370737e2c842b41efbe844467fa41f1240271d53d773bd"
+}
