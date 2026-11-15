@@ -16,6 +16,7 @@ trp verify all                      # each component against data with a planted
 trp search carry                    # the funding-carry search: chosen on D, read once on H
 trp search basis                    # the spot-perp basis search, the same way
 trp search pairs                    # pairs on fifteen real perpetuals, the same way
+trp search carry-live               # the carry's coin written down before each month, scored after
 trp agent demo                      # the research loop through the agent harness, synthetic
 trp catalog                         # everything below, listed from the registries
 trp bench run reversion             # a strategy's card on the benchmark's tracks
@@ -38,7 +39,10 @@ shows what is left once it cannot.
   - **A strategy that pays after fees on months it never chose on.** `trp search carry`
     chose a delta-neutral funding carry on 2021 to mid-2023 alone and earned **+7.6% a year**
     on the two held-out years after it, worst month-end drawdown −0.09%, beating every
-    random-coin placebo ([the case](#the-pipeline-finds-a-strategy-that-pays)).
+    random-coin placebo ([the case](#the-pipeline-finds-a-strategy-that-pays)). Against the
+    size of its search the carry holds and the choice among its sixteen rules does not
+    (PBO 0.69); the coin is now committed before each month to a public
+    [journal](docs/preregistration/carry_live_2026_11.md).
   - **One conditional edge** on price: a ten-minute cross-sectional reversion on 26
     perpetuals, +6.99 bp a trade on its held-out fortnight, gone when the market's state
     changed; a kill switch inside it limits the damage when it breaks. A model choosing its
@@ -97,6 +101,17 @@ a year, worst month-end drawdown −0.09%**, after Binance's base fees, beating
 every placebo that held a random coin instead. A backtest on past data, with
 the held-out months already seen by an earlier replay, and every number rebuilt
 by the command: [`posts/carry_search`](posts/carry_search/README.md).
+
+What the choice is worth against the sixteen rules it was chosen from
+([`carry_overfitting`](experiments/results/carry_overfitting/README.md)):
+after Harvey and Liu's haircut its Sharpe ratio on the development months is
+1.40 of 1.99, but the probability of backtest overfitting is 0.69, and on the
+held-out months all sixteen rules are positive while the chosen one ranks
+14th. The carry is the edge; which of the sixteen rules runs it is not. So the
+test that remains is the future: `trp search carry-live`, run by a GitHub
+workflow on the first days of every month, commits the rule's coin to the
+`journal` branch before the month and its score after
+([registration, L1 and L2](docs/preregistration/carry_live_2026_11.md)).
 
 ## A strategy breaks, and the pipeline catches it
 

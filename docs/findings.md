@@ -51,6 +51,17 @@ month-end drawdown −0.09%**, beating all nineteen placebos that held a random
 coin. The held-out months had been seen by the walk-forward replay of a
 neighbouring rule; the choice was made on the development months alone.
 
+Against the size of the search, measured after
+([`carry_overfitting`](../experiments/results/carry_overfitting/README.md)):
+the carry survives it and the choice among the sixteen does not. Harvey and
+Liu's Holm haircut leaves a Sharpe ratio of 1.40 of the 1.99 on the
+development months, and the deflated Sharpe ratio and the minimum track record
+pass with room; but PBO is **0.69**, and replaying all sixteen on the
+held-out months puts the chosen rule 14th of 16 by Sharpe ratio while all
+sixteen are positive. The edge is the carry, not the rule. The rule's coin is
+now written down before each month in a public journal
+([L1, L2](preregistration/carry_live_2026_11.md)).
+
 
 ### A basis trade that times the premium, and the premium that stopped
 
@@ -309,6 +320,16 @@ episodes entirely; where it chose its moments it chose them worse than chance.
 The same verdict as section 27's trailing-state gate, reached with a different
 instrument. G2, the same gate on the forward fortnight, is read after 21
 November 2026.
+
+### The carry search's choice on the future (L1, L2)
+
+**Status: pre-registered, read in December 2027** ([registration](preregistration/carry_live_2026_11.md)).
+The search's rule writes its coin down before each month on the repository's
+`journal` branch and scores it after; November 2026's pick is DOGEUSDT,
+committed on 15 November. On December 2026 to November 2027: L1 passes if the
+twelve months compound to a gain with a probabilistic Sharpe ratio above zero
+of 0.95; L2 passes if the coin held out-earns the seventeen coins' average in
+10 of the 12 months. Expected: L1 passes, L2 killed.
 
 ### The benchmark's forward fortnight (F1, P1)
 
