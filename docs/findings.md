@@ -52,6 +52,16 @@ coin. The held-out months had been seen by the walk-forward replay of a
 neighbouring rule; the choice was made on the development months alone.
 
 
+### A basis trade that times the premium, and the premium that stopped
+
+**Status: positive on H, read once, and negligible** ([registration and results](preregistration/basis_search_2026_11.md)).
+`trp search basis` opens the carry only when the perpetual trades unusually
+far above spot and closes when the premium comes back. On January 2021 to June
+2023 the chosen rule made **+9.8%** on 284 trades where the same rule at random
+hours lost about −19%: the timing is real. On July 2023 to June 2025 it made
+**+0.11% on 5 trades**, above all nineteen placebos: the premium spikes it
+trades almost stopped occurring.
+
 ### Funding carry, chosen month by month from the past alone
 
 **Status: measurement, read once** ([registration and results](preregistration/carry_walkforward_2026_11.md)).
@@ -146,9 +156,28 @@ overshoot rather than at its level, and reading 113 trades as though they could
 settle a 12 bp difference — are the kind that reverse a conclusion rather than
 shade it.
 
+**Nine models choosing the rule's trades, November 2026** ([table](../experiments/results/reversion_meta/README.md)).
+Meta-labelling on six state inputs, on the two recorded tracks where it was
+built: logistic regression and the boosters raise February from +7.0 to +12 to
++18 bp a trade; the transformer, LSTM, GRU and TCN add little. In April every
+one loses, the boosters less than the rule. Only the kill switch stops the
+damage; XGBoost with the switch sums +9,927 bp over both tracks against
++8,056 for the switch alone. All nine are registered on the forward fortnight
+([M1](preregistration/reversion_meta_forward_2026_11.md)).
+
 ---
 
 ## Killed
+
+### Pairs trading on fifteen real perpetuals
+
+**Status: killed** ([registration and results](preregistration/pairs_search_2026_11.md)).
+The pairs tools, until then checked only on planted data, on every pair of
+fifteen Binance perpetuals, the most cointegrated chosen each week under Holm's
+correction. Every rule lost on the development months; the least bad made
++0.72% on the held-out two years on 30 trades, and four of nineteen random-pair
+placebos made as much. Traded without the screen, every pair every week, the
+gross is −3.7 bp a trade against 28 bp of fills.
 
 ### Trading rarely to escape the cost floor
 

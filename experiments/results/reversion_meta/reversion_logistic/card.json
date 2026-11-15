@@ -1,0 +1,71 @@
+{
+  "name": "reversion_logistic",
+  "kind": "strategy",
+  "origin": "built-in",
+  "params": {},
+  "sha256": "ef04d8107e9a1f20bccdf1c0fa2f3a2ab25bf2242ef33caedd0afe6e62030938",
+  "version": "1",
+  "code": "0.1.0 da1b1d4",
+  "scores": [
+    {
+      "track": "bybit-2024-02",
+      "kind": "recorded",
+      "status": "scored",
+      "reason": "",
+      "instruments": 26,
+      "groups": 1,
+      "data_sha256": "3a348047e711e2478b78dcd92a039a2066fdef0d65b112f21f0c52d6c5d19d44",
+      "trades": 1663,
+      "clusters": 14,
+      "cluster_unit": "day",
+      "gross_bp": 32.55152777839755,
+      "cost_bp": 14.428163723577736,
+      "net_bp": 18.123364054819817,
+      "gross_t": 3.185250051686546,
+      "net_t": 1.9170888408370923,
+      "net_p": 0.03873394856840606,
+      "placebo": 1.0,
+      "breakeven_taker_bp": 14.561682027409907,
+      "net_at": {
+        "base": 18.123364054819813,
+        "vip1": 21.123364054819813,
+        "pro6_g1": 26.123364054819813,
+        "none (hypothetical)": 29.123364054819813
+      },
+      "verdict": "positive after the fee, not distinguishable from chance",
+      "passed": false,
+      "seconds": 263.5,
+      "data": "matches"
+    },
+    {
+      "track": "bybit-2024-04",
+      "kind": "recorded",
+      "status": "scored",
+      "reason": "",
+      "instruments": 26,
+      "groups": 1,
+      "data_sha256": "ddb5b3eba54d46e2a626b4e220042b913d0df261a11a596075dc4158e4731c94",
+      "trades": 936,
+      "clusters": 9,
+      "cluster_unit": "day",
+      "gross_bp": -25.57501773103419,
+      "cost_bp": 14.880110571108286,
+      "net_bp": -40.455128302142484,
+      "gross_t": -0.9522966812828592,
+      "net_t": -1.4691426751687842,
+      "net_p": 0.9100062729535845,
+      "placebo": 0.05263157894736842,
+      "breakeven_taker_bp": -14.727564151071238,
+      "net_at": {
+        "base": -40.45512830214248,
+        "vip1": -37.45512830214248,
+        "pro6_g1": -32.45512830214248,
+        "none (hypothetical)": -29.455128302142477
+      },
+      "verdict": "nothing beyond chance",
+      "passed": false,
+      "seconds": 233.3,
+      "data": "matches"
+    }
+  ]
+}

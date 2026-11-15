@@ -69,7 +69,15 @@ Planted answers to test a strategy on before any real day: each has a null with 
 | `hold_first` | built-in | The hold-first rule on a model's class probabilities, thresholds set from a trade rate. |
 | `relative` | built-in | Long the most depressed name and short the most extended: the traded leg's sign. |
 | `reversion` | built-in | Trade against the peers' index move, the frozen ten-minute reversion rule. |
+| `reversion_gru` | built-in | The reversion rule's side, ``gru`` deciding whether to take the trade. |
 | `reversion_guarded` | built-in | The frozen reversion rule, stopped by the kill switch on its own paper results. |
+| `reversion_lightgbm` | built-in | The reversion rule's side, ``lightgbm`` deciding whether to take the trade. |
+| `reversion_logistic` | built-in | The reversion rule's side, ``logistic`` deciding whether to take the trade. |
+| `reversion_lstm` | built-in | The reversion rule's side, ``lstm`` deciding whether to take the trade. |
+| `reversion_meta` | built-in | The reversion rule's side, a model's decision whether to take the trade (XGBoost by default). |
+| `reversion_meta_guarded` | built-in | XGBoost choosing the reversion rule's trades, and the kill switch stopping them. |
+| `reversion_tcn` | built-in | The reversion rule's side, ``tcn`` deciding whether to take the trade. |
+| `reversion_transformer` | built-in | The reversion rule's side, ``transformer`` deciding whether to take the trade. |
 | `spread` | built-in | The pair against its first peer: a hedge and a mean-reverting residual fitted on history. |
 
 Pairs trading:
@@ -98,13 +106,18 @@ Add one: `trp strategies new NAME`, then `trp strategies check NAME`.
 | `blend` | ensemble (average) | Average of order_flow, logistic |
 | `ensemble` | ensemble (average) | Average of logistic, xgboost |
 | `ensemble_all` | ensemble (average) | Average of logistic, xgboost, tcn |
+| `ensemble_deep` | ensemble (average) | Average of tcn, transformer, lstm, gru |
 | `xgboost` | gradient-boosted trees | XGBoost multi-class classifier over the feature frame. |
 | `logistic` | linear | Multinomial logistic regression on standardised features. |
 | `meta_model_model` | meta-labelled | Meta-labelled: logistic picks the side, xgboost decides |
 | `meta_rule_model` | meta-labelled | Meta-labelled: order_flow picks the side, logistic decides |
 | `meta_rule_tree` | meta-labelled | Meta-labelled: order_flow picks the side, xgboost decides |
+| `gru` | neural network | A gated recurrent unit network read forward through the window. |
+| `lstm` | neural network | A long short-term memory network read forward through the window. |
+| `mlp` | neural network | The window flattened into one vector, two dense layers: the order-blind control. |
 | `tcn` | neural network | Causal dilated convolutional classifier over a window of past rows. |
 | `tcn_gaussian` | neural network | Causal dilated network predicting a move in bp and the log of its variance. |
+| `transformer` | neural network | Causal self-attention encoder over a window of past rows. |
 | `ridge` | regression | Linear, regularised. The regression counterpart of the logistic baseline. |
 | `xgboost_regressor` | regression | Gradient boosting on the basis-point target. |
 | `breakout` | rule (fitted to nothing) | Trade a move that clears the recent range. |
@@ -249,6 +262,8 @@ Run: `trp regimes breaks`.
 | `trp search run` | Every step in order, the read last. |
 | `trp search status` | Which steps are complete, what each chose, and the ledger's reads. |
 | `trp search carry` | The automatic search for a funding carry: every rule on D, the best chosen, H read once. |
+| `trp search basis` | The automatic search for a spot-perpetual basis trade: every rule on D, the best chosen, H read once. |
+| `trp search pairs` | Pairs trading on fifteen real perpetuals: four rules on D, the best chosen, H read once. |
 
 ## Checks against planted answers
 
@@ -295,7 +310,7 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2537 test functions in 276 files, by area (the first word of the file name):
+2558 test functions in 281 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
@@ -303,6 +318,7 @@ Start one: `trp study new NAME`.
 | agents | 7 | 89 |
 | allocator | 1 | 26 |
 | api | 1 | 6 |
+| basis | 1 | 6 |
 | bench | 1 | 28 |
 | binance | 2 | 40 |
 | book | 1 | 6 |
@@ -343,7 +359,7 @@ Start one: `trp study new NAME`.
 | newey | 1 | 11 |
 | normalise | 1 | 15 |
 | overfitting | 1 | 12 |
-| pairs | 3 | 34 |
+| pairs | 4 | 39 |
 | paper | 5 | 30 |
 | placebo | 1 | 24 |
 | plugins | 3 | 33 |
@@ -355,10 +371,11 @@ Start one: `trp study new NAME`.
 | replication | 5 | 22 |
 | report | 1 | 13 |
 | retraining | 1 | 41 |
-| reversion | 1 | 15 |
+| reversion | 2 | 17 |
 | schema | 1 | 13 |
 | screen | 1 | 11 |
-| search | 9 | 82 |
+| search | 10 | 84 |
+| sequence | 1 | 6 |
 | sh | 46 | 341 |
 | sh2025 | 1 | 38 |
 | short | 1 | 5 |

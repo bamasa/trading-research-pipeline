@@ -338,6 +338,12 @@ MODELS = {
     "random_forest": "trading_research.models.forests:RandomForest",
     "extra_trees": "trading_research.models.forests:ExtraTrees",
     "lightgbm": "trading_research.models.forests:LightGBMBaseline",
+    # More sequence models over the same windows, fitted by the TCN's loop:
+    # causal self-attention, two recurrences, and the order-blind control.
+    "transformer": "trading_research.models.sequence:TransformerClassifier",
+    "lstm": "trading_research.models.sequence:LSTMClassifier",
+    "gru": "trading_research.models.sequence:GRUClassifier",
+    "mlp": "trading_research.models.sequence:WindowMLP",
 }
 
 #: Which models can be fitted on which kind of target. A classifier handed a
@@ -352,6 +358,8 @@ ENSEMBLES = {
     "ensemble_all": ("logistic", "xgboost", "tcn"),
     # Rules and models in one average, rather than compared with each other.
     "blend": ("order_flow", "logistic"),
+    # Every sequence model averaged: each errs on a different view of the window.
+    "ensemble_deep": ("tcn", "transformer", "lstm", "gru"),
 }
 
 #: Models that predict an edge *and* their uncertainty about it, so the trade
