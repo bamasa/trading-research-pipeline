@@ -1,0 +1,38 @@
+# Each alert reads a series `trp prod` serves on /metrics.
+groups:
+  - name: trp
+    rules:
+      - alert: StrategyHalted
+        expr: trp_strategy_state == 2
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $labels.strategy }} halted; the reason is in supervisor.json and /health"
+      - alert: StrategyReduced
+        expr: trp_strategy_state == 1
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.strategy }} reduced after a regime break"
+      - alert: DriftNearThreshold
+        expr: trp_drift_statistic > 0.8 * trp_drift_threshold
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.strategy }} is earning well below its backtest"
+      - alert: FeedStale
+        expr: trp_feed_age_seconds > 10
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "no book row for {{ $labels.strategy }} in {{ $value }} s"
+      - alert: PortfolioDrawdown
+        expr: trp_portfolio_drawdown > 0
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: "portfolio below its peak by {{ $value }} for half an hour"
+      - alert: TrpDown
+        expr: up{job="trp"} == 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "the trp process does not answer /metrics"

@@ -1,0 +1,24 @@
+# The deployment as two services: the supervised strategies and a Prometheus that
+# scrapes them and evaluates the alert rules. From the repository root:
+#   docker compose -f deploy/docker-compose.yml up --build
+services:
+  trp:
+    build: ..
+    command: ["run", "/config/deployment.yaml", "--minutes", "1440", "--run-dir", "/app/runs/current"]
+    volumes:
+      - ./deployment.example.yaml:/config/deployment.yaml:ro
+      - ./runs:/app/runs
+      - ./data:/app/data
+    ports:
+      - "9108:9108"
+    restart: on-failure
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - trp

@@ -1,0 +1,9 @@
+.git
+.venv
+data
+runs
+artifacts
+experiments/results/*.parquet
+experiments/results/reversion_trades.csv
+**/__pycache__
+.coverage*
