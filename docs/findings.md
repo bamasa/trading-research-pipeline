@@ -40,6 +40,84 @@ about a market state rather than as a strategy; the rest did not survive at all.
 
 ## Conditional results
 
+### The pipeline's own search finds a carry that pays on held-out months
+
+**Status: positive on H, read once** ([registration and results](preregistration/carry_search_2026_11.md)).
+`trp search carry` replayed sixteen ways of choosing a funding carry on January
+2021 to June 2023, all of them positive there, chose the one with the best
+Sharpe ratio (the coin paying the most funding over the previous three months),
+and read it once on July 2023 to June 2025: **+15.8%, +7.6% a year, worst
+month-end drawdown −0.09%**, beating all nineteen placebos that held a random
+coin. The held-out months had been seen by the walk-forward replay of a
+neighbouring rule; the choice was made on the development months alone.
+
+Against the size of the search, measured after
+([`carry_overfitting`](../experiments/results/carry_overfitting/README.md)):
+the carry survives it and the choice among the sixteen does not. Harvey and
+Liu's Holm haircut leaves a Sharpe ratio of 1.40 of the 1.99 on the
+development months, and the deflated Sharpe ratio and the minimum track record
+pass with room; but PBO is **0.69**, and replaying all sixteen on the
+held-out months puts the chosen rule 14th of 16 by Sharpe ratio while all
+sixteen are positive. The edge is the carry, not the rule. The rule's coin is
+now written down before each month in a public journal
+([L1, L2](preregistration/carry_live_2026_11.md)).
+
+
+### A basis trade that times the premium, and the premium that stopped
+
+**Status: positive on H, read once, and negligible** ([registration and results](preregistration/basis_search_2026_11.md)).
+`trp search basis` opens the carry only when the perpetual trades unusually
+far above spot and closes when the premium comes back. On January 2021 to June
+2023 the chosen rule made **+9.8%** on 284 trades where the same rule at random
+hours lost about −19%: the timing is real. On July 2023 to June 2025 it made
+**+0.11% on 5 trades**, above all nineteen placebos: the premium spikes it
+trades almost stopped occurring.
+
+### Funding carry, chosen month by month from the past alone
+
+**Status: measurement, read once** ([registration and results](preregistration/carry_walkforward_2026_11.md)).
+Switched on in January 2021 and left to choose each month, from the previous
+month's funding alone, the four of seventeen coins paying the most above the
+round trip's cost, a delta-neutral carry at Binance's base fees would have
+earned **+47.8% to June 2025, +9.1% a year**, with its worst month-end
+drawdown −0.6%; +29.7% of it in 2021, 2022 flat. Always on BTC alone, +13.9%.
+The kill switch, which saves the reversion rule, cost the carry a third of its
+result by closing positions on the basis's noise.
+### What pays in retrospect: measurements, November 2026
+
+Three measurements on data already read, none a registered result. They say
+where the money was, not that it will be there.
+
+- **Funding carry, always on** ([`experiments/funding_carry_dev.py`](../experiments/funding_carry_dev.py),
+  [results](../experiments/results/funding_carry_dev.md)). Long spot, short the
+  USD-M perpetual, one 10,000 USDT clip a leg, at Binance's Regular fees and the
+  registration's slippage, on the development months of
+  [`funding_carry_2026`](preregistration/funding_carry_2026.md) (2020-01 to
+  2020-11, 2021-07 to 2024-01, 2024-07 to 2025-06). Positive on every range for
+  both coins: on the capital of both legs, unlevered, a year, BTC +12.7%,
+  +4.5% and +4.2%, ETH +31.8%, +4.4% and +2.9%. The funding was positive on
+  82% to 97% of settlements; the basis telescoped to within ±62 USDT. The
+  study's verdict is read on P, in 2027.
+- **Fees do not rescue a taker signal on the book.** On the board's two
+  recorded tracks, every strategy that loses at the base fee still loses at
+  Bybit's cheapest published taker tier (1.5 bp a side), on both tracks; the
+  only positive cells at that tier are the ones already positive at the base
+  fee (`reversion` in February, `ev_gate`'s 163 April trades at a *t* near 0).
+  At a hypothetical zero fee, nine of the twelve stay negative on both tracks:
+  the spread and slippage alone exceed their edge
+  ([`bench_board.json`](../experiments/results/bench_board.json), `net_at`).
+- **The reversion rule with the kill switch inside it**
+  (`reversion_guarded`, [`plugins/builtins/guarded.py`](../src/trading_research/plugins/builtins/guarded.py),
+  [results](../experiments/results/reversion_guarded/)). The rule keeps a paper
+  account of its own trades from the end of its fit and stops opening new ones
+  when Page's CUSUM on it fires. On the two recorded tracks it keeps February
+  (+6.5 bp a trade on 2,347 trades against +7.0 on 3,351) and stops early in
+  April (52 trades against 1,233), turning about −34,000 bp of summed net into
+  about +8,000. On the regime suite's ten breaks its summed result is −8.3% of
+  capital against −91.3% left running, positive in five episodes. Its source is
+  a module of its own, so the forward track's frozen sources are untouched.
+
+
 ### Cross-sectional reversion at ten minutes
 
 **Status: conditional result.** The effect is real and measured; the condition it
@@ -89,9 +167,28 @@ overshoot rather than at its level, and reading 113 trades as though they could
 settle a 12 bp difference — are the kind that reverse a conclusion rather than
 shade it.
 
+**Nine models choosing the rule's trades, November 2026** ([table](../experiments/results/reversion_meta/README.md)).
+Meta-labelling on six state inputs, on the two recorded tracks where it was
+built: logistic regression and the boosters raise February from +7.0 to +12 to
++18 bp a trade; the transformer, LSTM, GRU and TCN add little. In April every
+one loses, the boosters less than the rule. Only the kill switch stops the
+damage; XGBoost with the switch sums +9,927 bp over both tracks against
++8,056 for the switch alone. All nine are registered on the forward fortnight
+([M1](preregistration/reversion_meta_forward_2026_11.md)).
+
 ---
 
 ## Killed
+
+### Pairs trading on fifteen real perpetuals
+
+**Status: killed** ([registration and results](preregistration/pairs_search_2026_11.md)).
+The pairs tools, until then checked only on planted data, on every pair of
+fifteen Binance perpetuals, the most cointegrated chosen each week under Holm's
+correction. Every rule lost on the development months; the least bad made
++0.72% on the held-out two years on 30 trades, and four of nineteen random-pair
+placebos made as much. Traded without the screen, every pair every week, the
+gross is −3.7 bp a trade against 28 bp of fills.
 
 ### Trading rarely to escape the cost floor
 
@@ -211,6 +308,41 @@ as correct behaviour. Both fixed.
 ---
 
 ## Pre-registered
+
+### Pausing the reversion rule on the break detector's alarms (G1)
+
+**Status: killed** ([registration and results](preregistration/regime_gate_2026_11.md)).
+Pausing the rule after the structural-break detector's `+1` dependence alarm on
+the index, and resuming after a `-1`, gained +13.1% of capital over the regime
+suite's ten episodes; random pauses of the same length gained +27% to +60%,
+and the gate beat none of nineteen. Its gain came from pausing two losing
+episodes entirely; where it chose its moments it chose them worse than chance.
+The same verdict as section 27's trailing-state gate, reached with a different
+instrument. G2, the same gate on the forward fortnight, is read after 21
+November 2026.
+
+### The carry search's choice on the future (L1, L2)
+
+**Status: pre-registered, read in December 2027** ([registration](preregistration/carry_live_2026_11.md)).
+The search's rule writes its coin down before each month on the repository's
+`journal` branch and scores it after; November 2026's pick is DOGEUSDT,
+committed on 15 November. On December 2026 to November 2027: L1 passes if the
+twelve months compound to a gain with a probabilistic Sharpe ratio above zero
+of 0.95; L2 passes if the coin held out-earns the seventeen coins' average in
+10 of the 12 months. Expected: L1 passes, L2 killed.
+
+### The benchmark's forward fortnight (F1, P1)
+
+**Status: pre-registered, sealed until 21 November 2026.** The twelve
+strategies of the benchmark's version-1 board, frozen at their sources, scored
+on Bybit's 26 perpetuals from 6 to 19 November 2026, days that had not
+happened when the track was registered on 5 November
+([registration](preregistration/bench_forward_2026_11.md)). F1: a strategy
+passes if it pays the base taker fee with a day-clustered *t* of 2 and a Holm
+*p* below 0.05 over the twelve; the prior is that none does. P1, the
+reversion's condition stated in advance: at an index ten-minute
+autocorrelation of −0.05 or below on the fortnight its net is positive, above
+−0.02 it is not.
 
 ### Market making: the causal state gate (H2.3)
 

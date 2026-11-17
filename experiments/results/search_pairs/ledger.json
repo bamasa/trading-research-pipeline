@@ -1,0 +1,14 @@
+{
+  "chosen": "entry2.5-formation30d",
+  "rule": {
+    "formation": 720,
+    "trading": 168,
+    "entry_z": 2.5,
+    "exit_z": 0.5,
+    "stop_z": 4.0,
+    "max_hold": 72,
+    "gate_p": null,
+    "lags": 1
+  },
+  "development_sha256": "aa619807ebf321bc7385b15b70e030b22c8d6897ac20013932d2a298d692a9bc"
+}

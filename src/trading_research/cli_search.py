@@ -276,3 +276,92 @@ def status_cmd(run: Run = DEFAULT_RUN) -> None:
     reads = search.status().get("held-out reads")
     if reads:
         console.print(f"held-out reads recorded in the ledger: {reads}")
+
+
+@app.command("carry")
+def carry_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    run: Run = Path("artifacts/search_carry"),
+) -> None:
+    """The automatic search for a funding carry: every rule on D, the best chosen, H read once.
+
+    Registered in docs/preregistration/carry_search_2026_11.md. Writes
+    development.json, ledger.json and held_out.json under --run.
+    """
+    from trading_research.search_engine.carry import run as run_search
+
+    try:
+        out = run_search(data / "carry_walkforward", run, on_line=_report)
+    except FileExistsError as exc:
+        err_console.print(f"[red]refused:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    console.print(f"[dim]-> {out}[/dim]")
+
+
+@app.command("carry-live")
+def carry_live_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    journal: Annotated[
+        Path,
+        typer.Option("--journal", help="The journal's folder: one pick and one score a month."),
+    ] = Path("journal/carry"),
+) -> None:
+    """The carry search's choice on the future: this month's coin written down, past months scored.
+
+    Registered in docs/preregistration/carry_live_2026_11.md. Does what is due:
+    scores every picked month that is over, then picks the current month from the
+    previous three months' funding if it has no pick yet. Never rewrites an entry.
+    """
+    from trading_research.live.carry_journal import binance_loader, step
+
+    for line in step(journal, binance_loader(data / "carry_live")) or ["nothing due"]:
+        _report(line)
+    console.print(f"[dim]-> {journal / 'README.md'}[/dim]")
+
+
+@app.command("basis")
+def basis_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    run: Run = Path("artifacts/search_basis"),
+) -> None:
+    """The automatic search for a spot-perpetual basis trade: every rule on D, the best chosen, H read once.
+
+    Registered in docs/preregistration/basis_search_2026_11.md. Writes
+    development.json, ledger.json and held_out.json under --run.
+    """
+    from trading_research.search_engine.basis import run as run_search
+
+    try:
+        out = run_search(data / "carry_walkforward", run, on_line=_report)
+    except FileExistsError as exc:
+        err_console.print(f"[red]refused:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    console.print(f"[dim]-> {out}[/dim]")
+
+
+@app.command("pairs")
+def pairs_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    run: Run = Path("artifacts/search_pairs"),
+) -> None:
+    """Pairs trading on fifteen real perpetuals: four rules on D, the best chosen, H read once.
+
+    Registered in docs/preregistration/pairs_search_2026_11.md. Writes
+    development.json, ledger.json and held_out.json under --run.
+    """
+    from trading_research.search_engine.pairs import run as run_search
+
+    try:
+        out = run_search(data / "carry_walkforward", run, on_line=_report)
+    except FileExistsError as exc:
+        err_console.print(f"[red]refused:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    console.print(f"[dim]-> {out}[/dim]")

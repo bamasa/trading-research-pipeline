@@ -106,8 +106,8 @@ REFUSALS = [
     ("executor", "git remote add origin", "git remote is not read-only"),
     ("executor", "src/trading_research/spot/ledger.py", "does not write"),
     ("executor", "src/trading_research/pipeline/short_horizon/statuses.py", "does not write"),
-    ("executor", "--start 2026-09-01", "touches spot_2026:H"),
-    ("executor", "--start 2031-08-01", "touches synth_carry:H"),
+    ("executor", "--start 2026-09-01", "spot_2026:H"),  # among every block that holds the day
+    ("executor", "--start 2031-08-01", "synth_carry:H"),
     ("executor", f"{demo.ENTRY} open H", "needs the owner's grant"),
     ("executor", f"{demo.ENTRY} read H", "needs its open entry committed"),
     ("registrar", "git commit", "not read-only"),

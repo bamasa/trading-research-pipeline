@@ -579,7 +579,7 @@ class ToolPolicy:
         s = self.study
         doc = self.repo / "docs" / "preregistration" / f"{s}.md"
         frozen = (self.repo / "docs" / f"{s}_code_freeze.md").exists() or (
-            doc.exists() and "Frozen configuration sha256:" in doc.read_text()
+            doc.exists() and FROZEN_LINE.search(doc.read_text()) is not None
         )
         if self.role == "registrar":
             if frozen:
@@ -644,6 +644,8 @@ def pattern_problem(tool: str, rel: str, pattern: str) -> str | None:
 
 
 CODE = re.compile(r"```[^\n]*\n(.*?)```|`([^`\n]+)`", re.DOTALL)
+# The D amendment's line, with its hash: the prose that describes the line does not freeze.
+FROZEN_LINE = re.compile(r"^Frozen configuration sha256: `[0-9a-f]{64}`\s*$", re.M)
 NAMES_A_COMMAND = re.compile(
     r"(PYTHONPATH=\S+ )?(uv run (--no-sync )?)?(\.venv/bin/)?"
     r"(trading-research(\s|$)|python3? -m (experiments\.|agents\.|pytest(\s|$))|pytest(\s|$))"

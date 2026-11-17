@@ -1,6 +1,6 @@
 """Every name :func:`trading_research.pipeline.stages.build_model` knows, as a model plugin.
 
-The sixteen single models of ``stages.MODELS`` and the named combinations
+The twenty single models of ``stages.MODELS`` and the named combinations
 (``ENSEMBLES``, ``UNCERTAIN``, ``META``, ``COMPOSITES``) are each registered
 under their own name. The adapter builds the model with ``build_model``, so the
 object fitted is exactly what ``trading-research train --model <name>`` fits, and
@@ -43,6 +43,7 @@ RULE_INPUTS: dict[str, tuple[str, ...]] = {
 CHECK_PARAMS: dict[str, dict[str, Any]] = {
     "tcn": {"max_epochs": 3},
     "tcn_gaussian": {"epochs": 2},
+    **{n: {"max_epochs": 3} for n in ("transformer", "lstm", "gru", "mlp", "ensemble_deep")},
 }
 
 #: One line for each named combination, which has no class of its own.

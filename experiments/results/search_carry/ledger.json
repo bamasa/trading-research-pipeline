@@ -1,0 +1,9 @@
+{
+  "chosen": "top1-lb3-floor_none",
+  "rule": {
+    "slots": 1,
+    "lookback": 3,
+    "threshold_bp_a_day": 0.0
+  },
+  "development_sha256": "8b831780c239efd9326b65e9beef29b0c68f58fc5fa419f77a4c677f6a416154"
+}

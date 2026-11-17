@@ -12,10 +12,19 @@ Reported beside every number the development period produces, gating nothing:
 * the **probability of backtest overfitting** by combinatorially symmetric
   cross-validation (Bailey, Borwein, Lopez de Prado and Zhu, 2017): split the
   days into blocks, choose on every half of the blocks, and count how often
-  the choice ranks below the median on the other half (:func:`cscv_pbo`).
+  the choice ranks below the median on the other half (:func:`cscv_pbo`);
+* the **minimum track record length** (Bailey and Lopez de Prado, 2012): how
+  many periods a series with this Sharpe ratio, skewness and kurtosis needs
+  before its Sharpe ratio is above a threshold at a given confidence
+  (:func:`minimum_track_record_length`);
+* the **Harvey-Liu haircut** (Harvey and Liu, 2015): each trial's Sharpe ratio
+  turned into a p-value, the p-values adjusted for the number of trials by
+  Bonferroni, Holm or Benjamini-Hochberg-Yekutieli, and turned back into the
+  Sharpe ratio that adjusted p-value would need (:func:`haircut_sharpe`).
 
-Sharpe ratios here are per day, not annualised; the trial count and the
-variance of Sharpe ratios across trials are in the same unit.
+Sharpe ratios here are per period (a day unless said otherwise), not
+annualised; the trial count and the variance of Sharpe ratios across trials
+are in the same unit.
 """
 
 from __future__ import annotations
@@ -211,3 +220,129 @@ def cscv_pbo_of_means(returns: np.ndarray, blocks: int = CSCV_BLOCKS) -> Pbo:
         return int(np.argmax(values[days].mean(axis=0))), every
 
     return cscv_pbo(values.shape[0], choose, lambda days: values[days].mean(axis=0), blocks)
+
+
+def _moments(array: np.ndarray) -> tuple[float, float, float]:
+    """Sharpe ratio (sample sd), population skewness and kurtosis of a finite series."""
+    sd = float(array.std(ddof=1))
+    population = float(array.std(ddof=0))
+    centred = array - array.mean()
+    return (float(array.mean() / sd), float(np.mean(centred**3) / population**3),
+            float(np.mean(centred**4) / population**4))  # fmt: skip
+
+
+@dataclass(frozen=True)
+class TrackRecord:
+    """How long a series has to run before its Sharpe ratio clears a threshold."""
+
+    periods: int
+    sharpe: float
+    skewness: float
+    kurtosis: float
+    #: The Sharpe ratio to beat, per period.
+    threshold: float
+    confidence: float
+    #: Periods needed, NaN when the Sharpe ratio is at or below the threshold.
+    minimum: float
+
+    @property
+    def enough(self) -> bool:
+        return math.isfinite(self.minimum) and self.periods >= self.minimum
+
+
+def minimum_track_record_length(
+    values: np.ndarray | pd.Series | list[float],
+    threshold: float = 0.0,
+    confidence: float = 0.95,
+) -> TrackRecord:
+    """The minimum track record length of a series.
+
+    ``1 + (1 - skew * SR + (kurt - 1) / 4 * SR^2) * (z / (SR - SR*))^2`` with
+    ``z`` the normal quantile at ``confidence`` and ``SR*`` the threshold, both
+    per period: the length at which the probabilistic Sharpe ratio against
+    ``SR*`` reaches ``confidence``. NaN when the Sharpe ratio does not exceed
+    the threshold, with fewer than three periods or no dispersion.
+    """
+    array = np.asarray(values, dtype=np.float64)
+    array = array[np.isfinite(array)]
+    n = len(array)
+    if n < 3 or float(array.std(ddof=1)) <= 0:
+        return TrackRecord(n, math.nan, math.nan, math.nan, threshold, confidence, math.nan)
+    sharpe, skew, kurt = _moments(array)
+    spread = 1.0 - skew * sharpe + (kurt - 1.0) / 4.0 * sharpe**2
+    if sharpe <= threshold or spread <= 0:
+        return TrackRecord(n, sharpe, skew, kurt, threshold, confidence, math.nan)
+    z = _NORMAL.inv_cdf(confidence)
+    minimum = 1.0 + spread * (z / (sharpe - threshold)) ** 2
+    return TrackRecord(n, sharpe, skew, kurt, threshold, confidence, minimum)
+
+
+HAIRCUT_METHODS = ("bonferroni", "holm", "bhy")
+
+
+def adjusted_p_values(p: np.ndarray | list[float], method: str) -> np.ndarray:
+    """Family-wise (Bonferroni, Holm) or false-discovery (BHY) adjusted p-values, in input order."""
+    values = np.asarray(p, dtype=np.float64)
+    m = len(values)
+    order = np.argsort(values)
+    ranked = values[order]
+    if method == "bonferroni":
+        adjusted = np.minimum(ranked * m, 1.0)
+    elif method == "holm":
+        adjusted = np.minimum(np.maximum.accumulate(ranked * (m - np.arange(m))), 1.0)
+    elif method == "bhy":
+        c = float(np.sum(1.0 / np.arange(1, m + 1)))
+        raw = ranked * m * c / np.arange(1, m + 1)
+        adjusted = np.minimum(np.minimum.accumulate(raw[::-1])[::-1], 1.0)
+    else:
+        raise ValueError(f"unknown method {method!r}; expected one of {HAIRCUT_METHODS}")
+    out = np.empty(m)
+    out[order] = adjusted
+    return out
+
+
+@dataclass(frozen=True)
+class Haircut:
+    """One trial's Sharpe ratio before and after adjusting for the trials beside it."""
+
+    method: str
+    trials: int
+    periods: int
+    sharpe: float
+    p_value: float
+    adjusted_p_value: float
+    #: The per-period Sharpe ratio the adjusted p-value corresponds to, 0 when it is 1.
+    adjusted_sharpe: float
+
+    @property
+    def haircut(self) -> float:
+        """The share of the Sharpe ratio taken away: 0 keeps it, 1 removes it all."""
+        return 1.0 - self.adjusted_sharpe / self.sharpe if self.sharpe > 0 else math.nan
+
+
+def haircut_sharpe(
+    sharpes: np.ndarray | list[float], periods: int, chosen: int, method: str = "holm"
+) -> Haircut:
+    """Harvey and Liu's haircut Sharpe ratio of trial ``chosen`` among ``sharpes``.
+
+    Each per-period Sharpe ratio is a t-statistic ``SR * sqrt(T)`` over the same
+    ``periods``; its two-sided p-value is adjusted for all the trials by
+    ``method`` and turned back into the Sharpe ratio it would take,
+    ``z(1 - p_adj / 2) / sqrt(T)``. Returns are taken as independent over
+    time; Harvey and Liu's autocorrelation correction is not applied.
+    """
+    values = np.asarray(sharpes, dtype=np.float64)
+    t = values * math.sqrt(periods)
+    p = np.array([2.0 * _NORMAL.cdf(-abs(x)) for x in t])
+    adjusted = adjusted_p_values(p, method)
+    pa = float(adjusted[chosen])
+    if pa <= 0.0:  # beyond float precision: nothing to take away
+        sharpe_adj = abs(float(values[chosen]))
+    elif pa < 1.0:
+        sharpe_adj = _NORMAL.inv_cdf(1.0 - pa / 2.0) / math.sqrt(periods)
+    else:
+        sharpe_adj = 0.0
+    if values[chosen] < 0:
+        sharpe_adj = -sharpe_adj
+    return Haircut(method, len(values), periods, float(values[chosen]), float(p[chosen]), pa,
+                   float(sharpe_adj))  # fmt: skip

@@ -501,3 +501,31 @@ def test_the_run_directory_names_no_machine_and_logs_usage_and_calendar(repo: Pa
         calendar = json.loads((run / f"{stem}.calendar.json").read_text())
         assert any(r.endswith("synth_carry:H") for r in calendar["ranges"])
     assert audit.scan(run) == []
+
+
+def test_a_resumed_run_appends_the_owners_answers_to_the_brief_and_logs_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agents.workflows import research_loop as rl
+
+    seen: list[str] = []
+
+    class Loop:
+        def __init__(self, repo: Path, study: str, brief: str, *a: object, **kw: object) -> None:
+            seen.append(brief)
+
+        async def run(self) -> dict[str, str]:
+            return {"status": "stopped"}
+
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "run.json").write_text(json.dumps({"study": "s", "brief": "The brief.", "grants": []}))
+    monkeypatch.setattr(rl, "ready_to_run", lambda: None)
+    monkeypatch.setattr(rl, "ResearchLoop", Loop)
+    monkeypatch.setattr(rl, "SdkRunner", lambda _repo: None)
+    assert rl.main(["run", "--resume", str(run), "--brief", "Clip: 10,000 USDT."]) == 3
+    assert seen[0].startswith("The brief.\n\n## The owner, ") and seen[0].endswith(
+        "Clip: 10,000 USDT.\n"
+    )
+    meta = json.loads((run / "run.json").read_text())
+    assert meta["brief"] == seen[0] and meta["resumes"][-1]["answers"] == "Clip: 10,000 USDT."

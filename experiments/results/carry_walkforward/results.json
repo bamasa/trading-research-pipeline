@@ -1,0 +1,1040 @@
+{
+ "plain": {
+  "total_pct": 47.811686076660195,
+  "cagr_pct": 9.071945642876255,
+  "worst_drawdown_pct": -0.6497470514753467,
+  "months_in_cash": 1,
+  "losing_months": 10
+ },
+ "kill_switch": {
+  "total_pct": 30.316562873454146,
+  "cagr_pct": 6.0609396415722605,
+  "worst_drawdown_pct": -0.44718463199941993,
+  "months_in_cash": 1,
+  "losing_months": 11
+ },
+ "yearly_pct": {
+  "2021": 29.69,
+  "2022": 0.67,
+  "2023": 3.55,
+  "2024": 9.21,
+  "2025": 0.2
+ },
+ "months": [
+  {
+   "month": "2021-01",
+   "return_pct": 3.4529987976007157,
+   "equity": 1.0345299879760073,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-02",
+   "return_pct": 7.101207822203655,
+   "equity": 1.107994112405202,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-03",
+   "return_pct": 3.1938014516436755,
+   "equity": 1.1433812444513258,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-04",
+   "return_pct": 5.94301130155331,
+   "equity": 1.211332521028909,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-05",
+   "return_pct": 1.6447433406119476,
+   "equity": 1.2312558320011988,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-06",
+   "return_pct": 0.15546204525953988,
+   "equity": 1.2331699675000052,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-07",
+   "return_pct": 0.20385594228437212,
+   "equity": 1.2356838577572202,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-08",
+   "return_pct": 1.2953073813694331,
+   "equity": 1.25168976197714,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-09",
+   "return_pct": 0.9836073400519242,
+   "equity": 1.2640014743506258,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-10",
+   "return_pct": 1.4273413406808062,
+   "equity": 1.2820430899408473,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-11",
+   "return_pct": 1.024365826510313,
+   "equity": 1.295175901235338,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2021-12",
+   "return_pct": 0.13594015698888945,
+   "equity": 1.2969365653887597,
+   "coins": 4,
+   "year": "2021"
+  },
+  {
+   "month": "2022-01",
+   "return_pct": 0.1904602985122396,
+   "equity": 1.2994067146427135,
+   "coins": 4,
+   "year": "2022"
+  },
+  {
+   "month": "2022-02",
+   "return_pct": 0.6561553430920442,
+   "equity": 1.3079328412293385,
+   "coins": 4,
+   "year": "2022"
+  },
+  {
+   "month": "2022-03",
+   "return_pct": 0.007098770997661777,
+   "equity": 1.3080256883865407,
+   "coins": 1,
+   "year": "2022"
+  },
+  {
+   "month": "2022-04",
+   "return_pct": -0.09166139621154173,
+   "equity": 1.30682673377776,
+   "coins": 4,
+   "year": "2022"
+  },
+  {
+   "month": "2022-05",
+   "return_pct": -0.4223328543423243,
+   "equity": 1.3013075751316878,
+   "coins": 4,
+   "year": "2022"
+  },
+  {
+   "month": "2022-06",
+   "return_pct": -0.06468069834188823,
+   "equity": 1.3004658803045168,
+   "coins": 1,
+   "year": "2022"
+  },
+  {
+   "month": "2022-07",
+   "return_pct": -0.07220875803276472,
+   "equity": 1.299526830043709,
+   "coins": 1,
+   "year": "2022"
+  },
+  {
+   "month": "2022-08",
+   "return_pct": 0.08872156500760593,
+   "equity": 1.3006797905850176,
+   "coins": 4,
+   "year": "2022"
+  },
+  {
+   "month": "2022-09",
+   "return_pct": 0.1081091240023786,
+   "equity": 1.302085944112695,
+   "coins": 3,
+   "year": "2022"
+  },
+  {
+   "month": "2022-10",
+   "return_pct": 0.18737225990119624,
+   "equity": 1.304525691972035,
+   "coins": 3,
+   "year": "2022"
+  },
+  {
+   "month": "2022-11",
+   "return_pct": 0.09725985279772656,
+   "equity": 1.3057944717397554,
+   "coins": 4,
+   "year": "2022"
+  },
+  {
+   "month": "2022-12",
+   "return_pct": -0.01193068137178397,
+   "equity": 1.3056386815619618,
+   "coins": 2,
+   "year": "2022"
+  },
+  {
+   "month": "2023-01",
+   "return_pct": 0.38569414826643,
+   "equity": 1.3106744535542494,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-02",
+   "return_pct": 0.3817528323059018,
+   "equity": 1.3156779904030027,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-03",
+   "return_pct": 0.20258509883478126,
+   "equity": 1.3183433579602082,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-04",
+   "return_pct": 0.333507998766269,
+   "equity": 1.3227401385102093,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-05",
+   "return_pct": 0.19937455184125277,
+   "equity": 1.3253773457333884,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-06",
+   "return_pct": 0.16355317672658903,
+   "equity": 1.3275450424859498,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-07",
+   "return_pct": 0.3021271754222196,
+   "equity": 1.3315559168252704,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-08",
+   "return_pct": 0.13434246075159792,
+   "equity": 1.333344761810217,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-09",
+   "return_pct": 0.05737745414875783,
+   "equity": 1.3341098010895696,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-10",
+   "return_pct": 0.018926887063270056,
+   "equity": 1.3343623065449217,
+   "coins": 2,
+   "year": "2023"
+  },
+  {
+   "month": "2023-11",
+   "return_pct": 0.5962079778037633,
+   "equity": 1.3423178810693488,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2023-12",
+   "return_pct": 0.724893980313239,
+   "equity": 1.3520482625858887,
+   "coins": 4,
+   "year": "2023"
+  },
+  {
+   "month": "2024-01",
+   "return_pct": 0.6665963587536394,
+   "equity": 1.3610609670728782,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-02",
+   "return_pct": 1.1892636631998286,
+   "equity": 1.377247570588272,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-03",
+   "return_pct": 3.048152218100572,
+   "equity": 1.4192281729598948,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-04",
+   "return_pct": 0.5711257546681776,
+   "equity": 1.4273337505731754,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-05",
+   "return_pct": 0.3205424208974807,
+   "equity": 1.4319089607315494,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-06",
+   "return_pct": 0.4782241136853504,
+   "equity": 1.438756694667789,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-07",
+   "return_pct": 0.24359524836874377,
+   "equity": 1.442261437611587,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-08",
+   "return_pct": 0.04596078832463328,
+   "equity": 1.4429243123380155,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-09",
+   "return_pct": -0.019097190490906163,
+   "equity": 1.4426487543334487,
+   "coins": 1,
+   "year": "2024"
+  },
+  {
+   "month": "2024-10",
+   "return_pct": 0.23200143281475027,
+   "equity": 1.4459957201139866,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-11",
+   "return_pct": 0.8160069076344373,
+   "equity": 1.457795145074215,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2024-12",
+   "return_pct": 1.2887626605230895,
+   "equity": 1.47658266457085,
+   "coins": 4,
+   "year": "2024"
+  },
+  {
+   "month": "2025-01",
+   "return_pct": 0.2955545917490238,
+   "equity": 1.4809467724369592,
+   "coins": 4,
+   "year": "2025"
+  },
+  {
+   "month": "2025-02",
+   "return_pct": -0.06505149877581863,
+   "equity": 1.4799833943654168,
+   "coins": 4,
+   "year": "2025"
+  },
+  {
+   "month": "2025-03",
+   "return_pct": -0.0686466483773818,
+   "equity": 1.478967435368643,
+   "coins": 2,
+   "year": "2025"
+  },
+  {
+   "month": "2025-04",
+   "return_pct": -0.039114725298307486,
+   "equity": 1.4783889413190472,
+   "coins": 0,
+   "year": "2025"
+  },
+  {
+   "month": "2025-05",
+   "return_pct": 0.09730818722967872,
+   "equity": 1.4798275347980487,
+   "coins": 3,
+   "year": "2025"
+  },
+  {
+   "month": "2025-06",
+   "return_pct": -0.019435484969296025,
+   "equity": 1.478116860766602,
+   "coins": 4,
+   "year": "2025"
+  }
+ ],
+ "months_kill_switch": [
+  {
+   "month": "2021-01",
+   "return_pct": 1.7214720346514372,
+   "equity": 1.0172147203465143,
+   "coins": 4
+  },
+  {
+   "month": "2021-02",
+   "return_pct": 2.073969083460615,
+   "equity": 1.0383114391589114,
+   "coins": 4
+  },
+  {
+   "month": "2021-03",
+   "return_pct": 1.9262154905365674,
+   "equity": 1.0583115549400035,
+   "coins": 4
+  },
+  {
+   "month": "2021-04",
+   "return_pct": 5.354898686852067,
+   "equity": 1.1149830664982894,
+   "coins": 4
+  },
+  {
+   "month": "2021-05",
+   "return_pct": 1.4726805124998306,
+   "equity": 1.1314032048362828,
+   "coins": 4
+  },
+  {
+   "month": "2021-06",
+   "return_pct": 0.15317671150905443,
+   "equity": 1.133136251059359,
+   "coins": 4
+  },
+  {
+   "month": "2021-07",
+   "return_pct": 0.2078667124805084,
+   "equity": 1.135491664132361,
+   "coins": 4
+  },
+  {
+   "month": "2021-08",
+   "return_pct": -0.2984831343963736,
+   "equity": 1.132102413022449,
+   "coins": 4
+  },
+  {
+   "month": "2021-09",
+   "return_pct": 0.6111464322539215,
+   "equity": 1.1390212165290963,
+   "coins": 4
+  },
+  {
+   "month": "2021-10",
+   "return_pct": 1.2993553726186449,
+   "equity": 1.1538211499013333,
+   "coins": 4
+  },
+  {
+   "month": "2021-11",
+   "return_pct": 1.0070454295981068,
+   "equity": 1.165440653057151,
+   "coins": 4
+  },
+  {
+   "month": "2021-12",
+   "return_pct": 0.08517909953887084,
+   "equity": 1.1664333649110852,
+   "coins": 4
+  },
+  {
+   "month": "2022-01",
+   "return_pct": 0.22462062024883306,
+   "equity": 1.1690534147701377,
+   "coins": 4
+  },
+  {
+   "month": "2022-02",
+   "return_pct": 0.2935702524228301,
+   "equity": 1.172485407830836,
+   "coins": 4
+  },
+  {
+   "month": "2022-03",
+   "return_pct": 0.06089710234811121,
+   "equity": 1.1731994174696594,
+   "coins": 1
+  },
+  {
+   "month": "2022-04",
+   "return_pct": -0.09147045059955997,
+   "equity": 1.1721262866760684,
+   "coins": 4
+  },
+  {
+   "month": "2022-05",
+   "return_pct": -0.25143035847869255,
+   "equity": 1.1691792053516559,
+   "coins": 4
+  },
+  {
+   "month": "2022-06",
+   "return_pct": -0.0326928572063603,
+   "equity": 1.1687969672635639,
+   "coins": 1
+  },
+  {
+   "month": "2022-07",
+   "return_pct": -0.0722039255039625,
+   "equity": 1.1679530499720283,
+   "coins": 1
+  },
+  {
+   "month": "2022-08",
+   "return_pct": 0.08872156620643748,
+   "equity": 1.1689892762105194,
+   "coins": 4
+  },
+  {
+   "month": "2022-09",
+   "return_pct": 0.07803495254040567,
+   "equity": 1.1699014964374128,
+   "coins": 3
+  },
+  {
+   "month": "2022-10",
+   "return_pct": 0.14710753208546473,
+   "equity": 1.1716225096566528,
+   "coins": 3
+  },
+  {
+   "month": "2022-11",
+   "return_pct": -0.0021780585044161127,
+   "equity": 1.1715969910329416,
+   "coins": 4
+  },
+  {
+   "month": "2022-12",
+   "return_pct": 0.04424458281188742,
+   "equity": 1.1721153592338607,
+   "coins": 2
+  },
+  {
+   "month": "2023-01",
+   "return_pct": 0.0803283058612555,
+   "equity": 1.1730568996446729,
+   "coins": 4
+  },
+  {
+   "month": "2023-02",
+   "return_pct": 0.22029419096358432,
+   "equity": 1.1756410758512876,
+   "coins": 4
+  },
+  {
+   "month": "2023-03",
+   "return_pct": 0.16780166294361,
+   "equity": 1.1776138211268143,
+   "coins": 4
+  },
+  {
+   "month": "2023-04",
+   "return_pct": 0.32798407769420324,
+   "equity": 1.1814762069568365,
+   "coins": 4
+  },
+  {
+   "month": "2023-05",
+   "return_pct": 0.19495417263560236,
+   "equity": 1.1837795441209957,
+   "coins": 4
+  },
+  {
+   "month": "2023-06",
+   "return_pct": 0.05510713397963461,
+   "equity": 1.184431891100398,
+   "coins": 4
+  },
+  {
+   "month": "2023-07",
+   "return_pct": 0.3091870260434423,
+   "equity": 1.1880940008400014,
+   "coins": 4
+  },
+  {
+   "month": "2023-08",
+   "return_pct": 0.14564556863076597,
+   "equity": 1.1898244071033928,
+   "coins": 4
+  },
+  {
+   "month": "2023-09",
+   "return_pct": 0.014487571077646786,
+   "equity": 1.1899967837600711,
+   "coins": 4
+  },
+  {
+   "month": "2023-10",
+   "return_pct": 0.045821828506630434,
+   "equity": 1.19054206204556,
+   "coins": 2
+  },
+  {
+   "month": "2023-11",
+   "return_pct": 0.3844235121352789,
+   "equity": 1.1951187856539234,
+   "coins": 4
+  },
+  {
+   "month": "2023-12",
+   "return_pct": 1.0323577957706538,
+   "equity": 1.2074566876063413,
+   "coins": 4
+  },
+  {
+   "month": "2024-01",
+   "return_pct": 0.5587880699672453,
+   "equity": 1.214203811526707,
+   "coins": 4
+  },
+  {
+   "month": "2024-02",
+   "return_pct": 1.0086517632474763,
+   "equity": 1.2264508996810892,
+   "coins": 4
+  },
+  {
+   "month": "2024-03",
+   "return_pct": 2.5194720497497034,
+   "equity": 1.257350987302458,
+   "coins": 4
+  },
+  {
+   "month": "2024-04",
+   "return_pct": 0.4981506408414478,
+   "equity": 1.2636144893033314,
+   "coins": 4
+  },
+  {
+   "month": "2024-05",
+   "return_pct": 0.29424769366387543,
+   "equity": 1.267332645794909,
+   "coins": 4
+  },
+  {
+   "month": "2024-06",
+   "return_pct": 0.4888400677447767,
+   "equity": 1.2735278755591646,
+   "coins": 4
+  },
+  {
+   "month": "2024-07",
+   "return_pct": 0.2442142458574806,
+   "equity": 1.2766380120562462,
+   "coins": 4
+  },
+  {
+   "month": "2024-08",
+   "return_pct": 0.04642512699399075,
+   "equity": 1.277230692874597,
+   "coins": 4
+  },
+  {
+   "month": "2024-09",
+   "return_pct": -0.01872617986398774,
+   "equity": 1.2769915163577712,
+   "coins": 1
+  },
+  {
+   "month": "2024-10",
+   "return_pct": 0.12436134931357504,
+   "equity": 1.2785796002381336,
+   "coins": 4
+  },
+  {
+   "month": "2024-11",
+   "return_pct": 0.6335244869161022,
+   "equity": 1.2866797150903562,
+   "coins": 4
+  },
+  {
+   "month": "2024-12",
+   "return_pct": 1.1842096829494073,
+   "equity": 1.301916700865002,
+   "coins": 4
+  },
+  {
+   "month": "2025-01",
+   "return_pct": 0.31563979119865393,
+   "equity": 1.3060260680211928,
+   "coins": 4
+  },
+  {
+   "month": "2025-02",
+   "return_pct": -0.06775920399284856,
+   "equity": 1.3051411151535626,
+   "coins": 4
+  },
+  {
+   "month": "2025-03",
+   "return_pct": -0.10957431358561863,
+   "equity": 1.3037110157353093,
+   "coins": 2
+  },
+  {
+   "month": "2025-04",
+   "return_pct": -0.023433885414061727,
+   "equity": 1.3034055055897513,
+   "coins": 0
+  },
+  {
+   "month": "2025-05",
+   "return_pct": 0.09730818722967874,
+   "equity": 1.3046738258594925,
+   "coins": 3
+  },
+  {
+   "month": "2025-06",
+   "return_pct": -0.01943548496929602,
+   "equity": 1.3031656287345414,
+   "coins": 4
+  }
+ ],
+ "chosen": {
+  "2021-01": [
+   "BNBUSDT",
+   "BCHUSDT",
+   "LTCUSDT",
+   "ADAUSDT"
+  ],
+  "2021-02": [
+   "XLMUSDT",
+   "XRPUSDT",
+   "LINKUSDT",
+   "ATOMUSDT"
+  ],
+  "2021-03": [
+   "FILUSDT",
+   "XLMUSDT",
+   "XRPUSDT",
+   "DOTUSDT"
+  ],
+  "2021-04": [
+   "AVAXUSDT",
+   "XLMUSDT",
+   "ATOMUSDT",
+   "ADAUSDT"
+  ],
+  "2021-05": [
+   "AVAXUSDT",
+   "XLMUSDT",
+   "XRPUSDT",
+   "ATOMUSDT"
+  ],
+  "2021-06": [
+   "XRPUSDT",
+   "DOTUSDT",
+   "LTCUSDT",
+   "XLMUSDT"
+  ],
+  "2021-07": [
+   "XLMUSDT",
+   "LINKUSDT",
+   "ATOMUSDT",
+   "XRPUSDT"
+  ],
+  "2021-08": [
+   "XLMUSDT",
+   "BCHUSDT",
+   "ATOMUSDT",
+   "SOLUSDT"
+  ],
+  "2021-09": [
+   "DOGEUSDT",
+   "AVAXUSDT",
+   "XLMUSDT",
+   "XRPUSDT"
+  ],
+  "2021-10": [
+   "SOLUSDT",
+   "XLMUSDT",
+   "AVAXUSDT",
+   "DOGEUSDT"
+  ],
+  "2021-11": [
+   "DOGEUSDT",
+   "ADAUSDT",
+   "ATOMUSDT",
+   "FILUSDT"
+  ],
+  "2021-12": [
+   "ATOMUSDT",
+   "DOGEUSDT",
+   "ADAUSDT",
+   "XRPUSDT"
+  ],
+  "2022-01": [
+   "ATOMUSDT",
+   "BCHUSDT",
+   "LINKUSDT",
+   "BTCUSDT"
+  ],
+  "2022-02": [
+   "BCHUSDT",
+   "LINKUSDT",
+   "XRPUSDT",
+   "XLMUSDT"
+  ],
+  "2022-03": [
+   "LINKUSDT"
+  ],
+  "2022-04": [
+   "LINKUSDT",
+   "SOLUSDT",
+   "XRPUSDT",
+   "DOGEUSDT"
+  ],
+  "2022-05": [
+   "LINKUSDT",
+   "BCHUSDT",
+   "FILUSDT",
+   "TRXUSDT"
+  ],
+  "2022-06": [
+   "BTCUSDT"
+  ],
+  "2022-07": [
+   "XLMUSDT"
+  ],
+  "2022-08": [
+   "LINKUSDT",
+   "LTCUSDT",
+   "BTCUSDT",
+   "DOGEUSDT"
+  ],
+  "2022-09": [
+   "DOGEUSDT",
+   "FILUSDT",
+   "LTCUSDT"
+  ],
+  "2022-10": [
+   "FILUSDT",
+   "DOGEUSDT",
+   "LINKUSDT"
+  ],
+  "2022-11": [
+   "FILUSDT",
+   "DOGEUSDT",
+   "BTCUSDT",
+   "LTCUSDT"
+  ],
+  "2022-12": [
+   "LINKUSDT",
+   "LTCUSDT"
+  ],
+  "2023-01": [
+   "XLMUSDT",
+   "LINKUSDT",
+   "ETHUSDT",
+   "BTCUSDT"
+  ],
+  "2023-02": [
+   "DOGEUSDT",
+   "FILUSDT",
+   "ETHUSDT",
+   "AVAXUSDT"
+  ],
+  "2023-03": [
+   "FILUSDT",
+   "LINKUSDT",
+   "ETCUSDT",
+   "AVAXUSDT"
+  ],
+  "2023-04": [
+   "ETCUSDT",
+   "DOGEUSDT",
+   "LINKUSDT",
+   "LTCUSDT"
+  ],
+  "2023-05": [
+   "FILUSDT",
+   "LINKUSDT",
+   "AVAXUSDT",
+   "DOGEUSDT"
+  ],
+  "2023-06": [
+   "ETCUSDT",
+   "FILUSDT",
+   "LINKUSDT",
+   "LTCUSDT"
+  ],
+  "2023-07": [
+   "LTCUSDT",
+   "BTCUSDT",
+   "ETCUSDT",
+   "LINKUSDT"
+  ],
+  "2023-08": [
+   "FILUSDT",
+   "LINKUSDT",
+   "XRPUSDT",
+   "LTCUSDT"
+  ],
+  "2023-09": [
+   "LINKUSDT",
+   "FILUSDT",
+   "BTCUSDT",
+   "ETCUSDT"
+  ],
+  "2023-10": [
+   "FILUSDT",
+   "DOGEUSDT"
+  ],
+  "2023-11": [
+   "XRPUSDT",
+   "FILUSDT",
+   "LINKUSDT",
+   "LTCUSDT"
+  ],
+  "2023-12": [
+   "FILUSDT",
+   "DOGEUSDT",
+   "BNBUSDT",
+   "ETCUSDT"
+  ],
+  "2024-01": [
+   "FILUSDT",
+   "ETCUSDT",
+   "XRPUSDT",
+   "AVAXUSDT"
+  ],
+  "2024-02": [
+   "FILUSDT",
+   "ETCUSDT",
+   "AVAXUSDT",
+   "DOGEUSDT"
+  ],
+  "2024-03": [
+   "ETCUSDT",
+   "FILUSDT",
+   "SOLUSDT",
+   "ADAUSDT"
+  ],
+  "2024-04": [
+   "FILUSDT",
+   "AVAXUSDT",
+   "SOLUSDT",
+   "XRPUSDT"
+  ],
+  "2024-05": [
+   "ETCUSDT",
+   "FILUSDT",
+   "SOLUSDT",
+   "LTCUSDT"
+  ],
+  "2024-06": [
+   "ETCUSDT",
+   "FILUSDT",
+   "LTCUSDT",
+   "XRPUSDT"
+  ],
+  "2024-07": [
+   "FILUSDT",
+   "XRPUSDT",
+   "LTCUSDT",
+   "SOLUSDT"
+  ],
+  "2024-08": [
+   "ETHUSDT",
+   "FILUSDT",
+   "XRPUSDT",
+   "ADAUSDT"
+  ],
+  "2024-09": [
+   "FILUSDT"
+  ],
+  "2024-10": [
+   "LINKUSDT",
+   "ADAUSDT",
+   "FILUSDT",
+   "XRPUSDT"
+  ],
+  "2024-11": [
+   "XRPUSDT",
+   "ETHUSDT",
+   "LTCUSDT",
+   "LINKUSDT"
+  ],
+  "2024-12": [
+   "DOGEUSDT",
+   "ETHUSDT",
+   "LINKUSDT",
+   "XRPUSDT"
+  ],
+  "2025-01": [
+   "ETCUSDT",
+   "LINKUSDT",
+   "LTCUSDT",
+   "FILUSDT"
+  ],
+  "2025-02": [
+   "ADAUSDT",
+   "ETCUSDT",
+   "ETHUSDT",
+   "FILUSDT"
+  ],
+  "2025-03": [
+   "LTCUSDT",
+   "BTCUSDT"
+  ],
+  "2025-04": [],
+  "2025-05": [
+   "LINKUSDT",
+   "FILUSDT",
+   "LTCUSDT"
+  ],
+  "2025-06": [
+   "ETCUSDT",
+   "ETHUSDT",
+   "XRPUSDT",
+   "TRXUSDT"
+  ]
+ },
+ "btc_carry_always_on": {
+  "total_pct": 13.852196547181105,
+  "cagr_pct": 2.924866933472403,
+  "worst_drawdown_pct": -0.11448976945567235,
+  "months_in_cash": 13,
+  "losing_months": 3
+ },
+ "btc_spot_first_last": [
+  34727.83,
+  107146.5
+ ]
+}

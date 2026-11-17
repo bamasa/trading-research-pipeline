@@ -1,0 +1,130 @@
+{
+  "top1-lb1-floor_cost": {
+    "total_pct": 9.509682976992217,
+    "a_year_pct": 4.646874285375691,
+    "worst_drawdown_pct": -0.3363401325210402,
+    "sharpe_monthly": 2.2746842998085572,
+    "losing_months": 5,
+    "months": 24
+  },
+  "top1-lb1-floor_none": {
+    "total_pct": 9.521178421181364,
+    "a_year_pct": 4.652366634100247,
+    "worst_drawdown_pct": -0.2925666406977889,
+    "sharpe_monthly": 2.2801641016681287,
+    "losing_months": 4,
+    "months": 24
+  },
+  "top1-lb3-floor_cost": {
+    "total_pct": 15.841241234450386,
+    "a_year_pct": 7.629569001483216,
+    "worst_drawdown_pct": -0.08986899744526378,
+    "sharpe_monthly": 2.157976104069994,
+    "losing_months": 3,
+    "months": 24
+  },
+  "top1-lb3-floor_none": {
+    "total_pct": 15.841241234450386,
+    "a_year_pct": 7.629569001483216,
+    "worst_drawdown_pct": -0.08986899744526378,
+    "sharpe_monthly": 2.157976104069994,
+    "losing_months": 3,
+    "months": 24
+  },
+  "top2-lb1-floor_cost": {
+    "total_pct": 12.849888770868567,
+    "a_year_pct": 6.2308282801506465,
+    "worst_drawdown_pct": -0.20590846140582375,
+    "sharpe_monthly": 2.138618271301039,
+    "losing_months": 4,
+    "months": 24
+  },
+  "top2-lb1-floor_none": {
+    "total_pct": 12.946186814996775,
+    "a_year_pct": 6.276143520075461,
+    "worst_drawdown_pct": -0.1376398163678294,
+    "sharpe_monthly": 2.1601170069042532,
+    "losing_months": 4,
+    "months": 24
+  },
+  "top2-lb3-floor_cost": {
+    "total_pct": 15.078613925522744,
+    "a_year_pct": 7.274700617397545,
+    "worst_drawdown_pct": -0.0055234723997821256,
+    "sharpe_monthly": 2.4398170428319403,
+    "losing_months": 1,
+    "months": 24
+  },
+  "top2-lb3-floor_none": {
+    "total_pct": 15.20845433357836,
+    "a_year_pct": 7.335201277855896,
+    "worst_drawdown_pct": 0.0,
+    "sharpe_monthly": 2.467398400510399,
+    "losing_months": 0,
+    "months": 24
+  },
+  "top4-lb1-floor_cost": {
+    "total_pct": 11.276150916893645,
+    "a_year_pct": 5.48751154373377,
+    "worst_drawdown_pct": -0.17271594169271376,
+    "sharpe_monthly": 2.329787216701011,
+    "losing_months": 5,
+    "months": 24
+  },
+  "top4-lb1-floor_none": {
+    "total_pct": 11.936788156872735,
+    "a_year_pct": 5.800183438816742,
+    "worst_drawdown_pct": -0.06506527095403447,
+    "sharpe_monthly": 2.5137597273519714,
+    "losing_months": 1,
+    "months": 24
+  },
+  "top4-lb3-floor_cost": {
+    "total_pct": 13.878416989187015,
+    "a_year_pct": 6.713830869848825,
+    "worst_drawdown_pct": -0.020893413595002297,
+    "sharpe_monthly": 2.701855800735707,
+    "losing_months": 2,
+    "months": 24
+  },
+  "top4-lb3-floor_none": {
+    "total_pct": 14.212783474924207,
+    "a_year_pct": 6.870381058048158,
+    "worst_drawdown_pct": 0.0,
+    "sharpe_monthly": 2.8070016339516943,
+    "losing_months": 0,
+    "months": 24
+  },
+  "top8-lb1-floor_cost": {
+    "total_pct": 13.682781769824137,
+    "a_year_pct": 6.622127989373827,
+    "worst_drawdown_pct": -0.08945568752402044,
+    "sharpe_monthly": 2.3318572019916948,
+    "losing_months": 4,
+    "months": 24
+  },
+  "top8-lb1-floor_none": {
+    "total_pct": 14.713425285833747,
+    "a_year_pct": 7.104353452991696,
+    "worst_drawdown_pct": -0.005336272559597344,
+    "sharpe_monthly": 2.591336238999202,
+    "losing_months": 1,
+    "months": 24
+  },
+  "top8-lb3-floor_cost": {
+    "total_pct": 14.14910895346171,
+    "a_year_pct": 6.840586367476331,
+    "worst_drawdown_pct": -0.012577399482205376,
+    "sharpe_monthly": 2.818154806167875,
+    "losing_months": 1,
+    "months": 24
+  },
+  "top8-lb3-floor_none": {
+    "total_pct": 14.850642767010648,
+    "a_year_pct": 7.168392153195358,
+    "worst_drawdown_pct": 0.0,
+    "sharpe_monthly": 3.032476471326454,
+    "losing_months": 0,
+    "months": 24
+  }
+}

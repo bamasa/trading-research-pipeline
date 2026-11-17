@@ -25,4 +25,7 @@ Modules, in the order data flows through them:
 ``page``      the run's page, tables and manifest
 
 The commands are ``trading-research paper replay | run | record | status | parity``.
+
+Beside the paper account, ``carry_journal`` writes the carry search's choice
+down before each month and scores it after (``trading-research search carry-live``).
 """

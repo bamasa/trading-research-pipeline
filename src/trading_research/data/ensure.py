@@ -274,12 +274,30 @@ def ensure_universe(
         return plans
 
     done = 0
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        for future in as_completed([pool.submit(_fetch_one_top_of_book, job) for job in jobs]):
-            future.result()
+    failed: list[tuple[str, date, Path]] = []
+    if workers == 1:
+        for job in jobs:
             done += 1
-            if on_progress and done % 25 == 0:
-                on_progress(f"  {done}/{len(jobs)} instrument-day(s)")
+            if not _fetch_one_top_of_book(job)[2]:
+                failed.append(job)
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_fetch_one_top_of_book, job): job for job in jobs}
+            for future in as_completed(futures):
+                _, _, ok = future.result()
+                done += 1
+                if not ok:
+                    failed.append(futures[future])
+                if on_progress and done % 25 == 0:
+                    on_progress(f"  {done}/{len(jobs)} instrument-day(s)")
+    # A download that fails once (a dropped connection) is tried once more, here;
+    # one that fails twice is named, never left as a silent gap.
+    still = [job for job in failed if not _fetch_one_top_of_book(job)[2]]
+    if on_progress and failed:
+        on_progress(f"  {len(failed)} instrument-day(s) failed and were retried once")
+    if on_progress and still:
+        names = ", ".join(f"{symbol} {day}" for symbol, day, _ in sorted(still))
+        on_progress(f"  still missing after the retry: {names}")
 
     refreshed = {s: plan(s, start, end, root) for s in symbols}
     usable = {s: p for s, p in refreshed.items() if p.present}

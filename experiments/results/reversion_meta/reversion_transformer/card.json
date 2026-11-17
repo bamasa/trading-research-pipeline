@@ -1,0 +1,71 @@
+{
+  "name": "reversion_transformer",
+  "kind": "strategy",
+  "origin": "built-in",
+  "params": {},
+  "sha256": "ef04d8107e9a1f20bccdf1c0fa2f3a2ab25bf2242ef33caedd0afe6e62030938",
+  "version": "1",
+  "code": "0.1.0 c79188c",
+  "scores": [
+    {
+      "track": "bybit-2024-02",
+      "kind": "recorded",
+      "status": "scored",
+      "reason": "",
+      "instruments": 26,
+      "groups": 1,
+      "data_sha256": "3a348047e711e2478b78dcd92a039a2066fdef0d65b112f21f0c52d6c5d19d44",
+      "trades": 2107,
+      "clusters": 14,
+      "cluster_unit": "day",
+      "gross_bp": 25.67713583063921,
+      "cost_bp": 15.02763886882941,
+      "net_bp": 10.649496961809797,
+      "gross_t": 3.456337327651327,
+      "net_t": 1.5014113895540162,
+      "net_p": 0.07857163346788254,
+      "placebo": 1.0,
+      "breakeven_taker_bp": 10.8247484809049,
+      "net_at": {
+        "base": 10.649496961809799,
+        "vip1": 13.649496961809799,
+        "pro6_g1": 18.6494969618098,
+        "none (hypothetical)": 21.6494969618098
+      },
+      "verdict": "positive after the fee, not distinguishable from chance",
+      "passed": false,
+      "seconds": 261.3,
+      "data": "matches"
+    },
+    {
+      "track": "bybit-2024-04",
+      "kind": "recorded",
+      "status": "scored",
+      "reason": "",
+      "instruments": 26,
+      "groups": 1,
+      "data_sha256": "ddb5b3eba54d46e2a626b4e220042b913d0df261a11a596075dc4158e4731c94",
+      "trades": 859,
+      "clusters": 9,
+      "cluster_unit": "day",
+      "gross_bp": -36.865822889328186,
+      "cost_bp": 15.048621766206887,
+      "net_bp": -51.914444655535085,
+      "gross_t": -1.1846457386641733,
+      "net_t": -1.5347388247160016,
+      "net_p": 0.9183025915916175,
+      "placebo": 0.0,
+      "breakeven_taker_bp": -20.457222327767536,
+      "net_at": {
+        "base": -51.91444465553507,
+        "vip1": -48.91444465553507,
+        "pro6_g1": -43.91444465553507,
+        "none (hypothetical)": -40.91444465553507
+      },
+      "verdict": "nothing beyond chance",
+      "passed": false,
+      "seconds": 257.2,
+      "data": "matches"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import functools
 import io
 import json
 import operator
+import sys
 import zipfile
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -66,9 +67,12 @@ def test_replay_workers_follow_the_measured_peak() -> None:
 
 
 def test_peak_memory_is_measured_in_a_fresh_process() -> None:
-    # b"x" * n writes every byte, so the pages are resident on any platform.
+    # b"x" * n writes every byte, so the pages are resident on any platform. On Linux
+    # ru_maxrss survives exec, so a spawned process starts at this process's peak and
+    # only an allocation above that peak shows; macOS starts the child afresh.
+    floor = 0 if sys.platform == "darwin" else sf.peak_rss_bytes()
     small = fs.measure_peak_rss(operator.mul, b"x", 1_000)
-    large = fs.measure_peak_rss(operator.mul, b"x", 300_000_000)
+    large = fs.measure_peak_rss(operator.mul, b"x", floor + 300_000_000)
     assert large - small > 250_000_000
 
 

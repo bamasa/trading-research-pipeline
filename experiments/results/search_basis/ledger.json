@@ -1,0 +1,11 @@
+{
+  "chosen": "entry30-exit0-w30d",
+  "rule": {
+    "entry_bp": 30.0,
+    "exit_bp": 0.0,
+    "window_days": 30,
+    "slots": 4,
+    "max_hold_hours": 336
+  },
+  "development_sha256": "125810ee98886acf2ee0685beac972375bab5e86add900340016166a7425de71"
+}

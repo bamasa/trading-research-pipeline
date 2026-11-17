@@ -148,14 +148,7 @@ class TCNBaseline(Model):
         device = torch.device(
             self.device or ("mps" if torch.backends.mps.is_available() else "cpu")
         )
-        self.net_ = _build_net(
-            n_features=values.shape[1],
-            n_classes=len(self.classes_),
-            channels=self.channels,
-            levels=self.levels,
-            kernel_size=self.kernel_size,
-            dropout=self.dropout,
-        ).to(device)
+        self.net_ = self._network(values.shape[1], len(self.classes_)).to(device)
 
         weight = None
         if self.balance_classes:
@@ -213,6 +206,22 @@ class TCNBaseline(Model):
             self.net_.load_state_dict(best_state)
         self.fitted_ = True
         return self
+
+    def _network(self, n_features: int, n_classes: int) -> Any:
+        """The network mapping ``(batch, features, window)`` to class logits.
+
+        The one thing :mod:`trading_research.models.sequence` changes: the
+        windows, the scaling, the tail validation and the training loop stay
+        this class's, so every architecture is fitted the same way.
+        """
+        return _build_net(
+            n_features=n_features,
+            n_classes=n_classes,
+            channels=self.channels,
+            levels=self.levels,
+            kernel_size=self.kernel_size,
+            dropout=self.dropout,
+        )
 
     # ------------------------------------------------------------------
     def predict_proba(self, x: pd.DataFrame) -> np.ndarray:

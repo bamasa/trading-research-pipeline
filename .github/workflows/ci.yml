@@ -28,20 +28,18 @@ jobs:
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync mypy
 
+  # One Python, the one in .python-version; the coverage report is `make cov`,
+  # locally, since measuring it roughly doubles the suite's time on a runner.
   test:
-    name: tests (py${{ matrix.python-version }})
+    name: tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras --python ${{ matrix.python-version }}
-      - run: uv run --no-sync pytest --cov --cov-branch --cov-config=pyproject.toml --cov-report=term-missing
+      - run: uv sync --all-extras
+      - run: uv run --no-sync pytest
 
   demo:
     name: end-to-end demo

@@ -258,6 +258,11 @@ DETECTORS: tuple[Implemented, ...] = (
         "the statistics of a break-detection library on a whitened stream, calibrated on a null",
         "trading_research.validation.structural_breaks:detect_breaks",
     ),
+    Implemented(
+        "kill switch",
+        "a drop in the mean of a strategy's own returns, from the past only; stops it",
+        "trading_research.validation.kill_switch:kill_switch",
+    ),
 )
 
 PRODUCTION: tuple[Implemented, ...] = (
@@ -317,6 +322,7 @@ FAMILIES: dict[str, str] = {
     "trading_research.models.gbm": "gradient-boosted trees",
     "trading_research.models.forests": "tree ensemble",
     "trading_research.models.tcn": "neural network",
+    "trading_research.models.sequence": "neural network",
 }
 
 ADD: dict[str, str] = {

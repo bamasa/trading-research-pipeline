@@ -1,0 +1,12 @@
+{
+ "reads": [
+  {
+   "block": "H",
+   "commit": "38cf3556a0201dfae6d229e97938056fab53ef1c",
+   "configuration_sha256": "219b5aa02b8769cb85831f963c2d5839656693ce0f67452a4f01bc113a3d604a",
+   "opened_utc": "2026-10-27T21:13:53+00:00",
+   "second_read": false,
+   "results_sha256": "b19a334ab2d6e3b37333229b04f2aab87b7324b4978ccf32c3b19caadeb16d89"
+  }
+ ]
+}

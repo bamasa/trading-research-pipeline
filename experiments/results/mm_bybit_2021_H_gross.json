@@ -1,0 +1,46 @@
+{
+ "days": 84,
+ "primaries": {
+  "F": {
+   "adverse_bp_per_fill": -2.7621423975702517,
+   "cell": "l2|vle0.33",
+   "clip_notional_median_usdt": 420.5675,
+   "flatten_cost_bp_per_fill": 0.006327114034445394,
+   "funding_bp_per_fill": -0.0026644138987892934,
+   "gross_bp_per_fill": -5.128729407711424,
+   "gross_mean_y": -76.77683421120783,
+   "gross_share_days_positive": 0.0,
+   "gross_usdt_per_day": -354.3927466295463,
+   "inventory_bp_per_fill": -2.5874777854965125,
+   "making_bp_per_fill": -2.5385872083161223,
+   "net_bp_per_fill": -2.6353542720687866,
+   "net_usdt_per_day": -182.1017184911535,
+   "passive_turnover_usdt": 58043597.8395,
+   "rebate_bp_per_fill": 2.4999999999999996,
+   "spread_bp_per_fill": 0.2235551892541294,
+   "taker_fees_bp_per_fill": 0.0066248643573627326
+  },
+  "S0": {
+   "adverse_bp_per_fill": -4.4615414224828776,
+   "cell": "l0|none",
+   "clip_notional_median_usdt": 420.5675,
+   "flatten_cost_bp_per_fill": 0.003382001945328093,
+   "funding_bp_per_fill": -0.00029572758827616977,
+   "gross_bp_per_fill": -5.188377334370515,
+   "gross_mean_y": -441.61977792467275,
+   "gross_share_days_positive": 0.0,
+   "gross_usdt_per_day": -1858.9329020498508,
+   "inventory_bp_per_fill": -1.436959338606572,
+   "making_bp_per_fill": -3.751122268175667,
+   "net_bp_per_fill": -2.6919745463171703,
+   "net_usdt_per_day": -964.5019498638388,
+   "passive_turnover_usdt": 300961849.3585,
+   "rebate_bp_per_fill": 2.5,
+   "spread_bp_per_fill": 0.7104191543072115,
+   "taker_fees_bp_per_fill": 0.0035972119466557363
+  }
+ },
+ "results_sha256": "b19a334ab2d6e3b37333229b04f2aab87b7324b4978ccf32c3b19caadeb16d89",
+ "source": "the H read's row file (data/mm_bybit_2021/H_rows.parquet, not committed), summed; nothing re-run",
+ "source_sha256": "9c80476d9a9f80497da24d8b0d077f393d691444455680822546b82ce3d444bd"
+}

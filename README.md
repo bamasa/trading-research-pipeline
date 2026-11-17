@@ -7,12 +7,64 @@ the execution mode; it registers the condition that would kill the candidate bef
 day is read, reads the held-out block once through a ledger, and states every result net of a
 dated fee. A model or a strategy of your own enters as one file; what passes runs supervised.
 
+Its own search for a funding carry chose a rule on 2021 to mid-2023 and earned +7.6% a year,
+after fees, on the two years it had not chosen on ([the case](#the-pipeline-finds-a-strategy-that-pays)).
+
 ```bash
 trp demo --execution all --verify   # the whole path on a generated market, then the checks
 trp verify all                      # each component against data with a planted answer
+trp search carry                    # the funding-carry search: chosen on D, read once on H
+trp search basis                    # the spot-perp basis search, the same way
+trp search pairs                    # pairs on fifteen real perpetuals, the same way
+trp search carry-live               # the carry's coin written down before each month, scored after
 trp agent demo                      # the research loop through the agent harness, synthetic
 trp catalog                         # everything below, listed from the registries
+trp bench run reversion             # a strategy's card on the benchmark's tracks
 ```
+
+---
+
+## Why it exists
+
+Most backtests that look profitable are not. The parameters were chosen on the data that
+scored them, the fee was left out or set to a tier nobody has, and the ideas that lost were
+never written down. This repository is built so that none of that can happen quietly, and it
+shows what is left once it cannot.
+
+- **What it gives you.** One path from free public data (Bybit, Binance) to a verdict net of
+  a dated fee. The condition that would kill each idea is committed before its held-out data
+  is read, the held-out data is read once through a ledger, and every result is kept, the
+  losses with the rest.
+- **What it found.**
+  - **A strategy that pays after fees on months it never chose on.** `trp search carry`
+    chose a delta-neutral funding carry on 2021 to mid-2023 alone and earned **+7.6% a year**
+    on the two held-out years after it, worst month-end drawdown −0.09%, beating every
+    random-coin placebo ([the case](#the-pipeline-finds-a-strategy-that-pays)). Against the
+    size of its search the carry holds and the choice among its sixteen rules does not
+    (PBO 0.69); the coin is now committed before each month to a public
+    [journal](docs/preregistration/carry_live_2026_11.md).
+  - **One conditional edge** on price: a ten-minute cross-sectional reversion on 26
+    perpetuals, +6.99 bp a trade on its held-out fortnight, gone when the market's state
+    changed; a kill switch inside it limits the damage when it breaks. A model choosing its
+    trades doubled it where it works (+14.3 bp a trade) and did not save it where it does
+    not; nine such variants, boosters to a transformer, are registered on the
+    [forward fortnight](docs/preregistration/reversion_meta_forward_2026_11.md).
+  - **Searches that came back empty-handed, said so**: the spot-perp basis trade times
+    the premium (+9.8% where random timing lost 19%) but the premium stopped spiking, so
+    +0.1% on its held-out years; pairs on real perpetuals lost on every development rule
+    and could not beat random pairs ([findings](docs/findings.md)).
+  - **A list of ideas that did not survive their fees** (book signals, makers, market
+    making, model searches, ensembles), each with the number that killed it.
+- **What you can do with it.**
+  - Score your own strategy on the [benchmark](docs/benchmarks.md): one file, one command,
+    the same card the repository's strategies get, including the fee it would need. The
+    benchmark is frozen as version 1, its data fingerprinted, and citable ([`CITATION.cff`](CITATION.cff)).
+  - Reuse the parts: data loaders, a market-making simulator, 34 models, and the measures
+    that tell an edge from luck (placebos, Holm, deflated Sharpe, day-clustered *t*).
+  - Run the [agent loop](docs/agents.md) that proposes, registers and reviews studies under
+    the same rules, or its [skills](docs/skills.md) in your own Claude Code session.
+  - Read the [findings](docs/findings.md) before spending a month on an idea already killed
+    here.
 
 ---
 
@@ -22,14 +74,15 @@ trp catalog                         # everything below, listed from the registri
 |---|---|---|
 | **Data** | Binance spot, USD-M and COIN-M; Bybit order book, prints, funding and spot book from the free archives; Binance and Bybit websockets recorded forward — each with its download command | [instruments and where to get them](docs/catalog.md#instruments-and-data-where-to-get-them) · [contract](docs/data_contract.md) |
 | **Synthetic markets** | five generators with a planted answer and its null: book days, breaks, a cross-section, order flow, funding | [synthetic](docs/catalog.md#synthetic-and-simulated-markets) · [guide](docs/synthetic.md) |
-| **Strategies** | cross-sectional reversion, relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
-| **Models, 29** | linear (logistic, ridge) · trees (XGBoost, LightGBM, random forest, extra trees) · neural networks (TCN, Gaussian TCN) · ensembles, meta-labelling, confidence bounds, rules | [models](docs/catalog.md#models) |
+| **Strategies** | funding carry across coins (delta-neutral, chosen by its own search), the spot-perp basis trade, cross-sectional reversion with or without a kill switch inside it, the reversion with a model choosing its trades (XGBoost, LightGBM, logistic, transformer, LSTM, GRU, TCN; with or without the kill switch), relative value, pairs (cointegration screen, walk-forward on both legs), an expected-value gate, hold-first, book imbalance | [strategies](docs/catalog.md#strategies) · [pairs](docs/pairs.md) |
+| **Models, 34** | linear (logistic, ridge) · trees (XGBoost, LightGBM, random forest, extra trees) · neural networks (TCN, Gaussian TCN, transformer, LSTM, GRU, window MLP, their ensemble) · ensembles, meta-labelling, confidence bounds, rules | [models](docs/catalog.md#models) |
 | **Features and filters** | six feature sets (book, depth, flow, trade statistics, microstructure) · variance, correlation and mutual-information filters, normalisation, a look-ahead check and an information audit | [features](docs/catalog.md#features) · [filters](docs/catalog.md#feature-filters-and-checks) |
 | **Labels, 11** | direction, magnitude, triple barrier, net P&L, smoothed and walked variants | [labels](docs/catalog.md#labels) |
 | **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
-| **Regimes** | CUSUM and structural-break monitors | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
-| **Search, studies, paper, agents** | the step-by-step search, registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
+| **Regimes** | CUSUM and structural-break monitors, and a kill switch that stops a strategy when its own results show the edge is gone | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
+| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
+| **Search, studies, paper, agents** | the step-by-step search, the funding-carry, basis and pairs searches (`trp search carry`, `basis`, `pairs`), registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Production** | frozen strategies as one portfolio: models pinned by sha256, a balancer across strategies, drift, regime-break and feed monitors, automatic halts, `/health`, `/ready` and Prometheus `/metrics`, a Docker image and alert rules; the broker is paper | [production](docs/production.md) · [components](docs/catalog.md#production) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |
 
@@ -37,6 +90,42 @@ Adding one of your own — a model, a strategy, a feature set, a label, an execu
 instrument — is [one file and one check](#add-a-strategy).
 
 ---
+
+## The pipeline finds a strategy that pays
+
+`trp search carry` searches sixteen ways of running a delta-neutral funding
+carry (long spot, short the perpetual) on seventeen coins, chooses one on
+January 2021 to June 2023 alone, writes the choice to a ledger and reads it
+once on July 2023 to June 2025. It chose the coin paying the most funding over
+the previous three months, and on the held-out months it earned **+15.8%, +7.6%
+a year, worst month-end drawdown −0.09%**, after Binance's base fees, beating
+every placebo that held a random coin instead. A backtest on past data, with
+the held-out months already seen by an earlier replay, and every number rebuilt
+by the command: [`posts/carry_search`](posts/carry_search/README.md).
+
+What the choice is worth against the sixteen rules it was chosen from
+([`carry_overfitting`](experiments/results/carry_overfitting/README.md)):
+after Harvey and Liu's haircut its Sharpe ratio on the development months is
+1.40 of 1.99, but the probability of backtest overfitting is 0.69, and on the
+held-out months all sixteen rules are positive while the chosen one ranks
+14th. The carry is the edge; which of the sixteen rules runs it is not. So the
+test that remains is the future: `trp search carry-live`, run by a GitHub
+workflow on the first days of every month, commits the rule's coin to the
+`journal` branch before the month and its score after
+([registration, L1 and L2](docs/preregistration/carry_live_2026_11.md)).
+
+## A strategy breaks, and the pipeline catches it
+
+<a href="posts/btc_ath_2024/README.md"><img alt="The reversion strategy fitted on February 2024: left running it ends at -52.0%, the kill switch keeps +9.4%" src="docs/images/post_btc_ath_2024.png" width="480"></a>
+
+The reversion strategy, fitted on February 2024 and then left alone on 26 Bybit
+perpetuals, peaks at +15.3% on the day bitcoin makes its March 2024 high and
+gives it all back within two days. Two of the pipeline's tools catch the
+break from data available at each hour: the kill switch on the strategy's own
+results stops it 13 hours after the peak (+9.4% kept against −52.0% left
+running), and the structural-break detector on the index flags the market no
+longer pulling back the next morning. Every number is rebuilt by a script and
+checked by a test: [`posts/btc_ath_2024`](posts/btc_ath_2024/README.md).
 
 ## Where it made money
 
@@ -63,8 +152,8 @@ Every number net of the fee in its row; what each does not establish is in the l
 
 Not positive after a fee anywhere: direction from one instrument's own book — rules, logistic,
 XGBoost and the TCN neural network on BTC, XRP and XMR — the spot maker, the 2021 BTCUSDT maker,
-and two replications of the author's 2025 research. The 2025 short-horizon search has its
-held-out blocks still unread. Every registered study:
+and two replications of the author's 2025 research. The 2025 short-horizon search read its
+first held-out block on 4 November 2026 and lost. Every registered study:
 
 | Study, held-out block read once | Fee a side, bp | Held-out result, net of the fee | Status |
 |---|---|---|---|
@@ -74,7 +163,7 @@ held-out blocks still unread. Every registered study:
 | Maker, Bybit BTCUSDT perpetual, 8 Apr–30 Jun 2021 | maker −2.5, taker 7.5 | −2.69 bp per fill, 0 of 84 days positive | killed¹ |
 | Spot taker, Binance BTC/FDUSD and Bybit BTCUSDT, 8 Aug–21 Oct 2026 | 0/10 and 10/10 | −17.35, −19.43, −19.28 bp a trade | killed |
 | Spot maker, Binance BTC/FDUSD, 8 Aug–21 Oct 2026 | maker 0, taker 10 | −2.35, −2.88, −2.79 bp per fill | killed¹ |
-| Short-horizon search, Bybit BTCUSDT perpetual, 2025 | maker 2.0, taker 5.5 | held-out blocks not read | development complete |
+| Short-horizon search, Bybit BTCUSDT perpetual, July–August 2025 | maker 2.0, taker 5.5 | S25 −10.08 bp a trade (gross +0.46 per side against the 5.5 fee), S25-Z −1.04 | killed |
 
 ¹ uncalibrated fill rule. Details in [Registered studies](#registered-studies).
 
@@ -448,7 +537,7 @@ beside it, as a reference.
 | Market making, round 1 ([registration](docs/preregistration/market_making.md)) | Bybit BICOUSDT perpetual | 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | H1, H2.1, H2.2, H3 | touch quoter −5.00 bp of turnover; the comparison quoter S1 −7.50; every strategy negative under every cancellation rule and latency | all four killed |
 | Market making, round 2 ([registration](docs/preregistration/market_making_round2.md)) | Bybit ALICE, ALGO, JTO, ZEC, GALA, CAKE perpetuals | 26 Feb–9 Mar 2024 | maker 2.0, taker 5.5 | B1, B2, B3a, B3b, B4 | B1 −0.067 USDT per 100 USDT of clip a day; the positive nets at the 0 bp and −1 bp maker tiers are inventory (K-dir) | all five killed |
 | Maker at the 2021 fees | Bybit BTCUSDT perpetual | 8 Apr–30 Jun 2021 | maker −2.5, taker 7.5 | S0, F | S0 −2.69 bp per fill (−227.27 USDT per 100 USDT of clip a day), 0 of 84 days positive; F not admitted on D (−2.64) | killed; uncalibrated fill rule |
-| Short-horizon search, 2025 | Bybit BTCUSDT perpetual | H 8 Jul–20 Aug 2025, then F and P | maker 2.0, taker 5.5 | S25, S-C, S-R, S-P, S-M, S25-Z | development complete; the held-out blocks are not read, so no number is a result | waiting for H |
+| Short-horizon search, 2025 | Bybit BTCUSDT perpetual | H 8 Jul–20 Aug 2025, then F and P | maker 2.0, taker 5.5 | S25, S-C, S-R, S-P, S-M, S25-Z | H read once on 4 November 2026: S25 −10.08 bp a trade (gross +0.46 per side against the 5.5 fee), S25-Z −1.04; the four hand-run slots not admitted on D | S25 and S25-Z killed by K1; F and P not read |
 | Spot taker, 2026 | Binance BTC/FDUSD; Bybit BTCUSDT spot | 8 Aug–21 Oct 2026 | Binance Regular 0 / 10; Bybit non-VIP 10 / 10 | S25-PF, S25-BB, S25-T | S25-PF −17.35, S25-BB −19.43, S25-T −19.28 bp a trade | all killed by K1; P not read |
 | Spot maker, 2026 | Binance BTC/FDUSD | 8 Aug–21 Oct 2026 | maker 0, taker flatten 10 | MK-S, MK-Q, MK-SQ | MK-S −2.35, MK-Q −2.88, MK-SQ −2.79 bp per fill | all killed by K1; uncalibrated fill rule |
 
@@ -1053,6 +1142,9 @@ Four rules hold everywhere, each a test that fails rather than a caveat:
 | [`extending.md`](docs/extending.md) | Plugins: the five kinds, the decorator, the conformance checks |
 | [`paper_trading.md`](docs/paper_trading.md) | The paper loop, the parity guarantee, the kill switch |
 | [`agents.md`](docs/agents.md) | The agent harness: roles, policy, logs, each rule with its test |
+| [`benchmarks.md`](docs/benchmarks.md) | The benchmark: seven fixed tracks, a sealed forward one among them, one scoring rule, the board of every strategy and the fee each would need |
+| [`benchmarks_sota.md`](docs/benchmarks_sota.md) | The benchmark against the published ones (FI-2010, LOBCAST, LOB-Bench, TradeMaster, FinRL-Meta, QuantBench, FinTSB, G-Research): what each scores, what was taken, what version 2 needs |
+| [`skills.md`](docs/skills.md) | The skills for an interactive session: how to call one, which fits each stage of a study, where a language model helps and where it leaks |
 | [`limitations.md`](docs/limitations.md) | What this does not establish |
 | [`preregistration/`](docs/preregistration/) | Every registered study, committed before its held-out data was fetched |
 | [`results.md`](docs/results.md) | Every experiment, numbered, with the script that produced it |
@@ -1170,14 +1262,14 @@ added as a plugin is listed the next time the page is written.
 |---|---:|---|
 | Data sources | 8 | a fetcher under `data/` |
 | Synthetic markets | 5 | a generator under `synthetic/` |
-| Strategies | 6 | `trp strategies new NAME` |
-| Models | 29 | `trp strategies new NAME --kind model` |
+| Strategies | 15 | `trp strategies new NAME` |
+| Models | 34 | `trp strategies new NAME --kind model` |
 | Feature sets | 6 | `trp strategies new NAME --kind features` |
 | Feature filters and checks | 7 | a step in `features/selection.py` |
 | Labels | 11 | `trp strategies new NAME --kind label` |
 | Executions | 4 | `trp strategies new NAME --kind execution` |
 | Evaluation measures | 14 | a function under `evaluation/` |
-| Regime detectors | 2 | a detector under `validation/` |
+| Regime detectors | 3 | a detector under `validation/` |
 | Registered studies | 2 | `trp study new NAME` |
 | Production components | 7 | a module under `production/` |
 
