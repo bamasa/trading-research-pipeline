@@ -154,7 +154,7 @@ let lastHead = "", headSinceEl = 0;
 function draw(el) {
   const done = el >= PLAY || reduce, cur = timeAt(Math.min(el, PLAY - 1)), t = done ? T_END : cur.t;
   MARK = done ? "" : cur.scene.mark || ""; INTO = cur.into; EL = el;
-  const w = cv.clientWidth, dpr = RENDER ? 1 : Math.min(devicePixelRatio || 1, 2);
+  const w = cv.clientWidth, dpr = RENDER ? 2 : Math.min(devicePixelRatio || 1, 2);
   if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(w * dpr); }
   ctx.setTransform(cv.width / S, 0, 0, cv.height / S, 0, 0);
   const after = t > ATH_T;
