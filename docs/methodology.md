@@ -128,6 +128,61 @@ fourteen days.
 applied unchanged to test. Choosing it on test is the most common way a
 short-horizon result is overstated.
 
+## What a search's best result is worth
+
+A search that scores many rules and keeps the best reports the best of many
+draws, which is higher than any one rule's skill. Every search here reports,
+beside its choice, what the size of the search takes away
+([`evaluation/overfitting.py`](../src/trading_research/evaluation/overfitting.py)):
+
+- **N_eff**, the independent trials among those scored, from their returns'
+  mean pairwise correlation;
+- the **deflated Sharpe ratio** (Bailey and López de Prado, 2014): the
+  probability that the choice's Sharpe ratio is above the best that N_eff
+  rules of no skill would show;
+- the **probability of backtest overfitting** by combinatorially symmetric
+  cross-validation (Bailey, Borwein, López de Prado and Zhu, 2017): choose on
+  every half of the blocks, rank the choice on the other half, count how often
+  it falls below the median;
+- the **minimum track record length** (Bailey and López de Prado, 2012): how
+  many periods a series with this Sharpe ratio, skewness and kurtosis needs
+  before its Sharpe ratio is above a threshold at 95%;
+- **Harvey and Liu's haircut** (2015): each rule's Sharpe ratio as a
+  *t*-statistic, its *p*-value adjusted by Bonferroni, Holm or
+  Benjamini–Hochberg–Yekutieli over every rule scored, and turned back into
+  the Sharpe ratio that adjusted *p* would need.
+
+They answer different questions and disagree usefully. On the carry search
+([`carry_overfitting`](../experiments/results/carry_overfitting/README.md))
+the deflated Sharpe ratio, the minimum track record and the haircut all
+pass the chosen rule with room, because the whole family carries; PBO is
+0.69, because among sixteen rules whose Sharpe ratios differ by hundredths the
+best one is a coin toss. Neither is the held-out read, which is the test; they
+say what the development number was worth before it.
+
+**Compared with an independent protocol.** Gençay (2026), *What survives
+honest evaluation?* ([arXiv:2608.27734](https://arxiv.org/abs/2608.27734)),
+evaluates LLM-proposed equity and ETF strategies by a protocol close to this
+one: a design period and an evaluation period opened once, every trial
+logged in a ledger and the deflated Sharpe ratio indexed to its count, PBO on
+the design data, random-weight placebos, cost stress. Two of its points are
+taken here. Its planted look-ahead oracle passes the deflated Sharpe ratio
+and PBO with ease, so statistics cannot replace a structural guard against
+leakage; here that guard is the causal feature contract, the purge and the
+refusal of a second held-out read in code, not in a promise. And it
+reports a power calculation before claiming an edge, which is what the
+minimum track record length now does for the carry journal's horizon.
+Where this repository goes further: the held-out read is refused by the
+command a second time rather than asserted, placebos are drawn from the
+rule's own candidates (random coins, shifted signals, random pairs) rather
+than one random-weight archetype, families are Holm-corrected, and the
+carry's choice is now also tested on months that had not happened when it
+was written down ([the carry journal](preregistration/carry_live_2026_11.md)).
+Where it does not: like that paper, it has no data-snooping test across the
+whole history of searches run on the same years (White's reality check,
+Hansen's SPA, Romano–Wolf), and the trial count is per search, not per
+project.
+
 ## How often to retrain
 
 The walk-forward above fits a model once per fold and uses it for a whole test

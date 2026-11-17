@@ -1,0 +1,65 @@
+# The carry journal: the carry search's choice written down before each month
+# and scored after it, committed to the `journal` branch so each entry carries
+# a timestamp from before the month it is about. Registered in
+# docs/preregistration/carry_live_2026_11.md.
+#
+# Binance publishes a month's funding a few hours into the next month, so the
+# job runs several times on the first days of every month; a run with nothing
+# due changes nothing. On a pull request touching the journal it runs once into
+# an empty folder, downloading the real archives, and commits nothing.
+name: carry journal
+
+on:
+  schedule:
+    - cron: "15 10,16,22 1-5 * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/carry-journal.yml"
+      - "src/trading_research/live/carry_journal.py"
+      - "src/trading_research/strategies/carry.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: carry-journal
+  cancel-in-progress: false
+
+jobs:
+  journal:
+    name: carry journal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        if: github.event_name != 'pull_request'
+        with:
+          ref: journal
+          path: journal-branch
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - name: Score what is over, pick this month
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            folder="$RUNNER_TEMP/journal/carry"
+          else
+            folder="journal-branch/carry"
+          fi
+          uv run --no-sync trading-research search carry-live --data "$RUNNER_TEMP/data" --journal "$folder"
+          cat "$folder/README.md"
+      - name: Commit to the journal branch
+        if: github.event_name != 'pull_request'
+        working-directory: journal-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add carry
+          if git diff --cached --quiet; then
+            echo "nothing due"
+          else
+            git commit -m "Carry journal: $(ls carry/*.json | tail -1 | xargs basename), $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push origin HEAD:journal
+          fi

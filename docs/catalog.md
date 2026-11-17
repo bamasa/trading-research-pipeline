@@ -262,6 +262,7 @@ Run: `trp regimes breaks`.
 | `trp search run` | Every step in order, the read last. |
 | `trp search status` | Which steps are complete, what each chose, and the ledger's reads. |
 | `trp search carry` | The automatic search for a funding carry: every rule on D, the best chosen, H read once. |
+| `trp search carry-live` | The carry search's choice on the future: this month's coin written down, past months scored. |
 | `trp search basis` | The automatic search for a spot-perpetual basis trade: every rule on D, the best chosen, H read once. |
 | `trp search pairs` | Pairs trading on fifteen real perpetuals: four rules on D, the best chosen, H read once. |
 
@@ -310,7 +311,7 @@ Start one: `trp study new NAME`.
 
 ## Test cases
 
-2558 test functions in 281 files, by area (the first word of the file name):
+2568 test functions in 282 files, by area (the first word of the file name):
 
 | area | files | tests |
 |---|---|---|
@@ -323,7 +324,7 @@ Start one: `trp study new NAME`.
 | binance | 2 | 40 |
 | book | 1 | 6 |
 | bybit | 3 | 37 |
-| carry | 2 | 6 |
+| carry | 3 | 12 |
 | catalog | 1 | 6 |
 | changepoint | 1 | 11 |
 | choice | 1 | 23 |
@@ -358,7 +359,7 @@ Start one: `trp study new NAME`.
 | mm | 30 | 307 |
 | newey | 1 | 11 |
 | normalise | 1 | 15 |
-| overfitting | 1 | 12 |
+| overfitting | 1 | 16 |
 | pairs | 4 | 39 |
 | paper | 5 | 30 |
 | placebo | 1 | 24 |

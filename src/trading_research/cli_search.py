@@ -300,6 +300,29 @@ def carry_cmd(
     console.print(f"[dim]-> {out}[/dim]")
 
 
+@app.command("carry-live")
+def carry_live_cmd(
+    data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
+        "data"
+    ),
+    journal: Annotated[
+        Path,
+        typer.Option("--journal", help="The journal's folder: one pick and one score a month."),
+    ] = Path("journal/carry"),
+) -> None:
+    """The carry search's choice on the future: this month's coin written down, past months scored.
+
+    Registered in docs/preregistration/carry_live_2026_11.md. Does what is due:
+    scores every picked month that is over, then picks the current month from the
+    previous three months' funding if it has no pick yet. Never rewrites an entry.
+    """
+    from trading_research.live.carry_journal import binance_loader, step
+
+    for line in step(journal, binance_loader(data / "carry_live")) or ["nothing due"]:
+        _report(line)
+    console.print(f"[dim]-> {journal / 'README.md'}[/dim]")
+
+
 @app.command("basis")
 def basis_cmd(
     data: Annotated[Path, typer.Option("--data", help="Where Binance's archives are kept.")] = Path(
