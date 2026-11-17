@@ -1,4 +1,6 @@
-// Renders the post's animation to artifacts/posts/btc_ath_2024.mp4 (1080 x 1080, 30 fps)
+// Renders the post's animation to artifacts/posts/btc_ath_2024.mp4 (2160 x 2160, 30 fps;
+// the page's 1080-pixel layout drawn at twice its resolution, so that lines and
+// text stay sharp on a high-density screen and after a platform rescales it)
 // and writes the self-contained page next to it, artifacts/posts/btc_ath_2024.html.
 //
 //   node posts/btc_ath_2024/render.mjs
@@ -63,7 +65,7 @@ chrome.kill();
 
 const video = join(out, "btc_ath_2024.mp4");
 const ff = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-framerate", String(fps), "-i", join(frames, "f_%05d.png"),
-  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "slow", "-movflags", "+faststart", video], { stdio: "inherit" });
+  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-tune", "animation", "-crf", "16", "-preset", "slow", "-movflags", "+faststart", video], { stdio: "inherit" });
 rmSync(work, { recursive: true, force: true });
 if (ff.status !== 0) process.exit(ff.status ?? 1);
 console.log(`${n} frames -> ${video}`);
