@@ -119,3 +119,31 @@ coefficient should be positive and `reversal`'s among the highest.
 
 The sources are frozen by sha256 in `experiments/xs_deep_forward.py` by a code
 freeze amendment committed before 30 November 2026.
+
+## Amendment, 20 November 2026: code freeze
+
+The study's code is [`src/trading_research/xs_deep/`](../../src/trading_research/xs_deep/__init__.py),
+written after the registration above and at its settings. Its six sources are frozen by
+sha256 in [`experiments/xs_deep_forward.py`](../../experiments/xs_deep_forward.py) (`FROZEN`);
+the read refuses if any differs, and refuses before 15 December 2026.
+
+One implementation detail the registration did not fix: the causal convolutions are written
+as their taps and one linear map instead of `torch.nn.Conv1d`. It is the same function (a test
+checks the two agree), about ten times faster on the CPU this ran on. Nothing else departs
+from the registration.
+
+### What was seen on development, after the code was written
+
+The walk-forward replay on the recorded 2024 spans
+([`experiments/results/xs_deep/`](../../experiments/results/xs_deep/README.md)), 51 scored days,
+a measurement:
+
+- every ranker's mean daily coefficient is positive, from +0.015 (`tcn`) to +0.032 (`ridge`);
+  `xs_transformer` +0.021;
+- `xs_transformer` minus `ridge`: −0.010 a day (*t* −3.2); `xs_transformer` minus `tcn`:
+  +0.006 (*t* +2.1);
+- gross per leg between −0.06 and +0.27 bp against a cost of about 12.8 bp; every net about
+  −12.5 to −12.9 bp.
+
+None of this changes a setting, a block or a status. The expected outcome stands: X1 all
+killed, X2 and X3 killed. On these numbers X2 now leans killed with more confidence, X3 less.

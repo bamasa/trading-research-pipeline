@@ -41,7 +41,14 @@ SOURCES = tuple(
     for name in ("__init__", "panel", "features", "rankers", "nets", "evaluate")
 )
 #: sha256 of each source at the code freeze; written by its amendment.
-FROZEN: dict[str, str] = {}
+FROZEN: dict[str, str] = {
+    "src/trading_research/xs_deep/__init__.py": "07afed5122323e8085451daa8a0437fdb4b3f352306b09c151e41ac6ae77506e",
+    "src/trading_research/xs_deep/panel.py": "c36d3df34b4530a626fec4f27532b5335911a849db7bf0720a87ed1ec1d937ce",
+    "src/trading_research/xs_deep/features.py": "99f4922b980fd6015de819e2b54bddc70f36584613397d2fb226987b458ab433",
+    "src/trading_research/xs_deep/rankers.py": "d34594e1a7559617da9afb5d8f7eaddbb8d10ef4aa3b9779873c667831f1f0ac",
+    "src/trading_research/xs_deep/nets.py": "6afd32f16939f853f9f3023a0119ac13ad93dd089405d8cc61051f09e5143510",
+    "src/trading_research/xs_deep/evaluate.py": "650327ea856cee973779caefac375dbd6a8b84aeb9ce9ae6df68357532bcd3d0",
+}
 
 
 def today() -> date:

@@ -31,3 +31,7 @@ def test_the_blocks_are_the_registrations() -> None:
     assert (fwd.FIT_LAST - fwd.FIT_FIRST).days + 1 == 14
     assert (fwd.SCORED_LAST - fwd.SCORED_FIRST).days + 1 == 14
     assert date(2026, 11, 30) == fwd.SCORED_FIRST and fwd.OPENS > fwd.SCORED_LAST
+
+
+def test_the_study_sources_are_the_frozen_ones() -> None:
+    assert fwd.unfrozen() == []

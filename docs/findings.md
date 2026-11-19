@@ -331,6 +331,22 @@ twelve months compound to a gain with a probabilistic Sharpe ratio above zero
 of 0.95; L2 passes if the coin held out-earns the seventeen coins' average in
 10 of the 12 months. Expected: L1 passes, L2 killed.
 
+### Machine learning and deep learning on the cross-section (X1, X2, X3)
+
+**Status: pre-registered, sealed until 15 December 2026** ([registration](preregistration/xs_deep_forward_2026_12.md)).
+Six rankers of the 26 perpetuals' next ten minutes, every ten minutes, long
+the top three and short the bottom three: the reversal rule, ridge, LightGBM,
+an MLP, a TCN reading each instrument's last hour, and a transformer that puts
+the same encoder under attention across all 26 instruments at once, the first
+model here to see the whole cross-section at the moment of the decision.
+Fitted on 16 to 29 November 2026, scored on 30 November to 13 December. X1: a
+ranker pays its taker cost (Holm over six); X2: the transformer's daily
+coefficient beats ridge's; X3: it beats the TCN's. Expected: all killed. On the
+2024 replay ([measurement](../experiments/results/xs_deep/README.md)) every
+ranker orders the instruments better than chance on 75% to 92% of days, ridge
+best (+0.032), the transformer below it (*t* −3.2) and above the TCN (*t*
++2.1); gross per leg is a fraction of a basis point against a cost of 12.8.
+
 ### The benchmark's forward fortnight (F1, P1)
 
 **Status: pre-registered, sealed until 21 November 2026.** The twelve
