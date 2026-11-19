@@ -27,7 +27,14 @@ KIND = {
     "tcn": "DL",
     "xs_transformer": "DL",
 }
-COLOR = {"rule": "#8a8a8a", "ML": "#2f6db5", "DL": "#d9622b"}
+LINE = {
+    "reversal": ("#8a8a8a", "-", 1.6),
+    "ridge": ("#1f4e9c", "-", 2.0),
+    "lightgbm": ("#7fa6d9", "-", 1.6),
+    "mlp": ("#f0a070", "-", 1.6),
+    "tcn": ("#d9622b", "--", 1.8),
+    "xs_transformer": ("#b8321a", "-", 2.8),
+}
 
 
 def load(data: Path) -> pd.DataFrame:
@@ -87,6 +94,38 @@ def score_correlation(data: Path) -> pd.DataFrame:
     return corr
 
 
+def extremes(data: Path, spans: tuple[str, ...]) -> dict[str, dict[str, dict[str, float]]]:
+    """Half the relative return of the top minus the bottom, for the 3 legs and for fifths.
+
+    The coefficient weighs every rank alike; the legs sit at the two ends. The
+    two numbers side by side say whether the order that holds on average holds
+    where the trades are.
+    """
+    from trading_research.xs_deep import features, panel
+
+    frames = {s: features.build(panel.read(data / "xs_deep" / f"panel_{s}.npz")) for s in spans}
+    out = {}
+    for n in NAMES:
+        z = np.load(data / "xs_deep" / "dev" / f"{n}.npz")
+        legs: dict[str, list[float]] = {sp: [] for sp in spans}
+        fifths: dict[str, list[float]] = {sp: [] for sp in spans}
+        for key in (k for k in z.files if k.endswith("_scores")):
+            span = key.split("_")[0]
+            frame = frames[span]
+            for t, sc in zip(z[key.replace("_scores", "_bars")], z[key], strict=True):
+                ok = np.flatnonzero(np.isfinite(sc))
+                order = ok[np.argsort(sc[ok], kind="stable")]
+                q = len(order) // 5
+                y = frame.target[t]
+                legs[span].append((y[order[-LEGS:]].mean() - y[order[:LEGS]].mean()) / 2)
+                fifths[span].append((y[order[-q:]].mean() - y[order[:q]].mean()) / 2)
+        out[n] = {
+            "legs_bp": {sp: float(np.mean(v)) for sp, v in legs.items()},
+            "fifths_bp": {sp: float(np.mean(v)) for sp, v in fifths.items()},
+        }
+    return out
+
+
 def figure(day: pd.DataFrame, stats: dict[str, dict[str, Any]], path: Path) -> None:
     import matplotlib
 
@@ -97,10 +136,9 @@ def figure(day: pd.DataFrame, stats: dict[str, dict[str, Any]], path: Path) -> N
     fig, (left, right) = plt.subplots(1, 2, figsize=(13, 5.2), dpi=160, width_ratios=[1.5, 1])
     for n in NAMES:
         d = day[day["ranker"] == n].sort_values("day")
-        x = np.arange(len(d))
-        width = 2.6 if n == "xs_transformer" else 1.4
-        left.plot(x, d["ic"].cumsum(), "-", lw=width, color=COLOR[KIND[n]],
-                  alpha=1.0 if n in ("xs_transformer", "ridge", "reversal") else 0.55, label=n)  # fmt: skip
+        color, style, width = LINE[n]
+        label = f"{n} ({KIND[n]})"
+        left.plot(np.arange(len(d)), d["ic"].cumsum(), style, lw=width, color=color, label=label)
     first_span = day[(day["ranker"] == NAMES[0])].sort_values("day")
     split = int((first_span["span"] == first_span["span"].iloc[0]).sum())
     left.axvline(split - 0.5, color="#bbbbbb", lw=1, ls="--")
@@ -121,12 +159,14 @@ def figure(day: pd.DataFrame, stats: dict[str, dict[str, Any]], path: Path) -> N
     y = np.arange(len(names))[::-1]
     gross = [stats[n]["gross_bp"] for n in names]
     cost = [stats[n]["cost_bp"] for n in names]
-    right.barh(y, gross, color=[COLOR[KIND[n]] for n in names], height=0.55)
+    right.barh(y, gross, color=[LINE[n][0] for n in names], height=0.55)
+    for yi, g in zip(y, gross, strict=True):
+        right.text(max(g, 0) + 0.3, yi, f"{g:+.2f}", va="center", fontsize=8, color="#333333")
     right.scatter(cost, y, marker="|", s=400, color="#222222", zorder=3, label="cost of a leg")
     right.set_yticks(y, names)
     right.axvline(0, color="#444444", lw=0.8)
     right.set_title("gross per leg vs its cost, bp", loc="left", fontsize=10)
-    right.legend(frameon=False, fontsize=8, loc="lower right")
+    right.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.75, 1.0))
     for ax in (left, right):
         ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
@@ -178,14 +218,25 @@ data, not the study's result**, which is read once on 30 November to 13 December
 *t* over the {stats[best]["days"]} scored days. IC: Spearman correlation across instruments of the
 ranking and the next ten minutes' relative return.
 
-- **Ranking quality.** The highest mean daily coefficient is `{best}`'s, {_fmt(stats[best]["ic"], 4)}.
-  `xs_transformer` minus `ridge`: {_fmt(diffs["xs_transformer-ridge"]["mean"], 4)} a day
-  (*t* {_fmt(diffs["xs_transformer-ridge"]["t"])}); `xs_transformer` minus `tcn`:
+- **Every ranker orders the instruments better than chance.** All six have a positive mean
+  daily coefficient on both spans, on {min(s["ic_days_positive"] for s in stats.values()):.0%} to
+  {max(s["ic_days_positive"] for s in stats.values()):.0%} of days. The highest is `{best}`'s,
+  {_fmt(stats[best]["ic"], 4)}.
+- **The networks do not beat the linear model.** `xs_transformer` minus `ridge`:
+  {_fmt(diffs["xs_transformer-ridge"]["mean"], 4)} a day (*t* {_fmt(diffs["xs_transformer-ridge"]["t"])}).
+  **Reading the other instruments helps a network:** `xs_transformer` minus `tcn`,
   {_fmt(diffs["xs_transformer-tcn"]["mean"], 4)} (*t* {_fmt(diffs["xs_transformer-tcn"]["t"])}).
-  These are X2 and X3's quantities, measured here, read on the test block only.
-- **Cost.** {cost_line}
-- **By span.** Mean daily IC on February to March against March to April:
-  {"; ".join(f"`{n}` {_fmt(s['by_span_ic'].get('2024-02', float('nan')), 3)} / {_fmt(s['by_span_ic'].get('2024-04', float('nan')), 3)}" for n, s in stats.items())}.
+  These are X2's and X3's quantities; their statuses are read on the test block only.
+- **The order holds in ranks, not in basis points.** Half the relative return of the top three minus
+  the bottom three, against the same for the top and bottom fifths, bp, February to March |
+  March to April: {"; ".join(f"`{n}` {_fmt(s['legs_bp']['2024-02'])} vs {_fmt(s['fifths_bp']['2024-02'])} | {_fmt(s['legs_bp']['2024-04'])} vs {_fmt(s['fifths_bp']['2024-04'])}" for n, s in stats.items())}.
+  A coefficient of two or three hundredths across instruments whose ten-minute relative returns
+  spread by about 25 to 35 bp is worth a fraction of a basis point at the ends. In February to
+  March the three legs at each end earned less than the fifths, and the networks' lost: the
+  largest moves, where the legs sit, are the ones that did not reverse.
+- **Cost.** {cost_line} The cost is about fifty times the best gross.
+- **By span.** Mean daily IC, February to March | March to April:
+  {"; ".join(f"`{n}` {_fmt(s['by_span_ic'].get('2024-02', float('nan')), 3)} | {_fmt(s['by_span_ic'].get('2024-04', float('nan')), 3)}" for n, s in stats.items())}.
 
 Rank correlation of the rankers' scores, mean over decision times:
 
@@ -206,6 +257,9 @@ def report(data: Path, out: Path) -> None:
         "xs_transformer-tcn": difference(day, "xs_transformer", "tcn"),
     }
     corr = score_correlation(data)
+    ends = extremes(data, tuple(sorted(set(day["span"]))))
+    for n in NAMES:
+        stats[n].update(ends[n])
     day.to_csv(out / "daily.csv", index=False, float_format="%.6g")
     payload = {"rankers": stats, "differences": diffs, "score_correlation": corr.round(4).to_dict()}
     (out / "summary.json").write_text(json.dumps(payload, indent=2, default=float) + "\n")
