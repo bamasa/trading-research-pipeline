@@ -117,7 +117,7 @@ whose funding is often negative, so shorts pay it. **W2: killed for all five.**
 The models should mostly learn the volatility ranking, and 95 weeks resolve
 only a large difference.
 
-## Amendment, 21 November 2026: what development showed, and one fault
+## Amendment, 20 November 2026: what development showed, and one fault
 
 **A fault, corrected before the freeze.** The span's last Monday has no next Monday's open in the
 data, so the book held nothing that week and counted it as a week with no return. Such a week is
