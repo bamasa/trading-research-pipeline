@@ -54,6 +54,7 @@ def figure(r: dict[str, Any], path: Path) -> None:
         right.text(v + (0.002 if v >= 0 else -0.002), yi, f"{v:+.3f}", va="center",
                    ha="left" if v >= 0 else "right", fontsize=8)  # fmt: skip
     right.axvline(0, color="#444444", lw=0.8)
+    right.margins(x=0.25)
     right.set_yticks(y, names)
     right.set_title("mean weekly rank corr. with next week", loc="left", fontsize=10)
     for ax in (left, right):

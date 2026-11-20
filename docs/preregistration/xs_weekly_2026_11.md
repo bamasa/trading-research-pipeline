@@ -143,3 +143,28 @@ modules among them; `fetch-heldout` and `read` refuse if any differs, and each s
 written once. H's last decision with a next Monday in the archives is 19 October 2026: the
 monthly archive for November 2026 is not published, so the week from 26 October has no outcome
 and is skipped, as on D.
+
+## Results, read once 20 November 2026
+
+From the frozen code, by `experiments/xs_weekly.py read --study gross`, after the freeze above was
+committed; the result is [`experiments/results/xs_weekly_heldout/`](../../experiments/results/xs_weekly_heldout/README.md)
+(`result.json`). H: 94 weeks, 6 January 2025 to 19 October 2026.
+
+**W1: killed for all five.** Mean weekly net return: `mlp` +0.63% a week (*t* +1.05, Holm *p*
+0.75), `ridge` *t* +0.73, `lightgbm` +0.41, `xs_transformer` +0.20, `tcn` −0.87; every Holm *p*
+above 0.7.
+
+**W2: killed for all five.** Weekly net minus `low_vol`'s: *t* −1.17 (`tcn`) to +1.19 (`mlp`,
+Holm *p* 0.59).
+
+Beside, with no status. Totals: `momentum` +154.2% (Sharpe 1.21, worst drawdown −35%), `mlp`
++60.1%, `ridge` +27.9%, `lightgbm` +3.3%, `xs_transformer` −8.6%, `low_vol` −9.8%, `tcn` −52.4%,
+`reversal` −78.8%. The models ranked the coins better than on D (rank correlation +0.148 to
++0.174, against +0.056 to +0.089) and their price result was large (+93% to +195%), but the short
+side paid the volatile coins' negative funding again (−97% to −141% of the account). Every model
+lost from January 2025 to June 2026 (−26% to −70%) and made all its total in the sixteen weeks
+from July 2026 (+58% to +116%). `momentum` made +256% before July 2026 and −29% after, and +18%
+without its three best weeks (+34%, +28%, +26%).
+
+Against the expectation stated in advance: W1 killed, though the tree models were expected the
+likeliest to pass; W2 killed, as expected.

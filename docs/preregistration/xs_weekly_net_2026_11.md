@@ -57,3 +57,29 @@ The `funding` rule made **+90.2%** (+20.2% a year, Sharpe 0.93, worst drawdown �
 
 None of this changes a setting, a block or a status. The expected outcome stands; N1 now leans
 killed for all five.
+
+## Results, read once 20 November 2026
+
+From the frozen code, by `experiments/xs_weekly.py read --study net`, after the freeze recorded in
+[`xs_weekly_2026_11`](xs_weekly_2026_11.md) was committed; the result is
+[`experiments/results/xs_weekly_net_heldout/`](../../experiments/results/xs_weekly_net_heldout/README.md)
+(`result.json`). H: 94 weeks, 6 January 2025 to 19 October 2026.
+
+**N1: killed for all five.** Every model's mean weekly net return is positive, none significantly:
+`lightgbm` and `mlp` *t* +1.69 (Holm *p* 0.235), `xs_transformer` +0.95, `tcn` +0.89, `ridge`
++0.88 (Holm *p* 0.515).
+
+**N2: killed for all five.** Weekly net minus `momentum`'s: *t* −0.72 to −0.14, every Holm *p* 1.
+
+Beside, with no status. Totals: `momentum` +154.2%, `mlp` +134.0% (+60% a year, Sharpe 1.26, worst
+drawdown −47%), `lightgbm` +122.0% (Sharpe 1.26, −41%), `xs_transformer` +46.7%, `ridge` +41.6%,
+`tcn` +38.3%, `low_vol` −9.8%, `funding` −9.9%. Fitting on the net return cut the models' funding
+drag from −97% to −141% in `xs_weekly` to −9% to −44%, and every model ended above its `xs_weekly`
+twin. But the gain is not spread over H: from January 2025 to June 2026 every model was flat or
+lost (`lightgbm` −0.7%, `mlp` −9.3%, the others −27% to −35%), and from July to October 2026 all
+made +90% to +158%. The `funding` rule, +90% on D, made −9.9%: its funding paid +155%, its price
+lost −135%.
+
+Against the expectation stated in advance: N1 killed for all five, where one or two were expected
+possible; N2 killed for all five, as expected. Sixteen good weeks at the end of a 94-week block are
+not evidence of an edge; a forward read on weeks after October 2026 is what would be.
