@@ -180,6 +180,21 @@ damage; XGBoost with the switch sums +9,927 bp over both tracks against
 
 ## Killed
 
+### Machine learning choosing the carry's coin (C1, C2)
+
+**Status: killed, read once 20 November 2026** ([registration and results](preregistration/carry_ml_2026_11.md)).
+Ridge, LightGBM and an MLP, refitted monthly on eleven features of each coin's
+funding, basis and price, forecasting next month's funding and holding the
+coin they rank first, against the carry search's rule (the coin with the most
+funding over the last three months). On July 2025 to July 2026, thirteen months
+no study had read, fifteen coins: every model chose worse (C1, *t* −1.9 to
+−3.8) and forecast worse (C2, rank correlation 0.46 to 0.62 against the
+rule's 0.68). The rule made +1.5%, the models −0.7% to +0.7%, and nineteen
+random-coin placebos all lost (−3.7% to −1.4%). The same order held on the
+development months, 2022 to mid-2025. Funding is persistent enough that its
+three-month mean is the forecast to beat, and a model fitted on a few hundred
+coin-months changes coin more often and pays for it.
+
 ### Pairs trading on fifteen real perpetuals
 
 **Status: killed** ([registration and results](preregistration/pairs_search_2026_11.md)).
@@ -330,21 +345,6 @@ committed on 15 November. On December 2026 to November 2027: L1 passes if the
 twelve months compound to a gain with a probabilistic Sharpe ratio above zero
 of 0.95; L2 passes if the coin held out-earns the seventeen coins' average in
 10 of the 12 months. Expected: L1 passes, L2 killed.
-
-### Machine learning choosing the carry's coin (C1, C2)
-
-**Status: killed, read once 20 November 2026** ([registration and results](preregistration/carry_ml_2026_11.md)).
-Ridge, LightGBM and an MLP, refitted monthly on eleven features of each coin's
-funding, basis and price, forecasting next month's funding and holding the
-coin they rank first, against the carry search's rule (the coin with the most
-funding over the last three months). On July 2025 to July 2026, thirteen months
-no study had read, fifteen coins: every model chose worse (C1, *t* −1.9 to
-−3.8) and forecast worse (C2, rank correlation 0.46 to 0.62 against the
-rule's 0.68). The rule made +1.5%, the models −0.7% to +0.7%, and nineteen
-random-coin placebos all lost (−3.7% to −1.4%). The same order held on the
-development months, 2022 to mid-2025. Funding is persistent enough that its
-three-month mean is the forecast to beat, and a model fitted on a few hundred
-coin-months changes coin more often and pays for it.
 
 ### Machine learning and deep learning on the cross-section (X1, X2, X3)
 
