@@ -114,3 +114,25 @@ higher on all fifteen coins on average, by 0.36 to 1.29 bp a day, so the rule wa
 Binance and short on Bybit. The nineteen random-direction placebos lost −4.9% to −1.6%.
 
 None of this changes a setting, a block or a status. The expected outcome is unchanged.
+
+## Results, read once 20 November 2026
+
+From the frozen code, by `experiments/xvenue_funding.py read`, after the freeze above was
+committed; the result is [`experiments/results/xvenue_funding_heldout/`](../../experiments/results/xvenue_funding_heldout/README.md)
+(`result.json`). H: July 2025 to July 2026, fifteen coins on both venues.
+
+**V1: killed.** Mean +0.041% a month, *t* +1.76, one-sided *p* 0.052, against 0.05.
+
+**V2: passes.** The rule's +0.50% is above all nineteen random-direction placebos (−1.08% to
+−0.22%).
+
+Beside, with no status: +0.50% over the thirteen months (+0.46% a year, Sharpe 1.69, worst
+month-end drawdown −0.16%, seven losing months); funding +0.83%, price gap +0.01%, cost −0.31%;
+one month with nothing held. July to November 2025 paid +0.70% on two to four pairs, all long
+Binance and short Bybit; from December 2025 the spreads narrowed (XLM −0.95 bp a day to LINK
++0.22 over H, against −0.36 to −1.29 on D), fewer coins cleared the cost, and every month after
+November lost a few hundredths of a percent.
+
+Against the expectation stated in advance: V1 killed, as expected, though by less than expected;
+V2 passes, as expected. The spread's sign is persistent; its size, on these coins in 2026, no
+longer pays two venues' round trip.

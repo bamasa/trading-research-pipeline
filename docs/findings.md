@@ -40,6 +40,20 @@ about a market state rather than as a strategy; the rest did not survive at all.
 
 ## Conditional results
 
+### The funding spread between Binance and Bybit
+
+**Status: V1 killed, V2 passes, read once 20 November 2026** ([registration and results](preregistration/xvenue_funding_2026_11.md)).
+The same coin's perpetual short on the venue whose last three months'
+funding was higher and long on the other, up to four of fifteen coins, a
+taker on both. Bybit's funding was the higher on every coin on average, by
+0.4 to 1.3 bp a day in 2022 to mid-2025, where the rule made +3.0% (a
+measurement). On July 2025 to July 2026, read once: **+0.50%**, mean +0.041%
+a month with *p* 0.052 (V1 killed by the margin); above all nineteen
+random-direction placebos (V2 passes). The direction is real and persistent;
+from December 2025 the spreads narrowed below what two venues' round trip
+costs. A maker on either leg, or a cheaper fee tier, is the obvious next
+question; neither is tested here.
+
 ### The pipeline's own search finds a carry that pays on held-out months
 
 **Status: positive on H, read once** ([registration and results](preregistration/carry_search_2026_11.md)).
