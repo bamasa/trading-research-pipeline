@@ -110,7 +110,7 @@ those studies' numbers is not measured here.
 January 2022 to June 2025 ([`experiments/results/xvenue_funding/`](../../experiments/results/xvenue_funding/README.md)),
 a measurement: **+3.0%** (+0.85% a year, Sharpe 0.94, worst month-end drawdown −1.1%); funding
 +4.7%, price gap +0.2%, cost −1.8%; mean +0.072% a month, *t* +1.76. Bybit's funding was the
-higher on all fifteen coins on average, by 0.4 to 1.3 bp a day, so the rule was mostly long on
-Binance and short on Bybit. The nineteen random-direction placebos lost −4.9% to −0.9%.
+higher on all fifteen coins on average, by 0.36 to 1.29 bp a day, so the rule was mostly long on
+Binance and short on Bybit. The nineteen random-direction placebos lost −4.9% to −1.6%.
 
 None of this changes a setting, a block or a status. The expected outcome is unchanged.
