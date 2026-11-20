@@ -1,0 +1,254 @@
+{
+  "months": [
+    "2025-07",
+    "2025-08",
+    "2025-09",
+    "2025-10",
+    "2025-11",
+    "2025-12",
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
+    "2026-07"
+  ],
+  "summary": {
+    "total_pct": 0.5025137883265973,
+    "a_year_pct": 0.46376939072547696,
+    "worst_drawdown_pct": -0.1598662365534964,
+    "sharpe_monthly": 1.6937275420098177,
+    "losing_months": 7,
+    "months": 13
+  },
+  "monthly": [
+    {
+      "month": "2025-07",
+      "return_pct": 0.10507,
+      "funding_pct": 0.12324,
+      "price_pct": 0.01808,
+      "cost_pct": -0.03625,
+      "pairs": "XLMUSDT-,BNBUSDT-"
+    },
+    {
+      "month": "2025-08",
+      "return_pct": 0.1322,
+      "funding_pct": 0.14551,
+      "price_pct": -0.0133,
+      "cost_pct": -0.0,
+      "pairs": "XLMUSDT-,BNBUSDT-"
+    },
+    {
+      "month": "2025-09",
+      "return_pct": 0.16968,
+      "funding_pct": 0.17032,
+      "price_pct": 0.0175,
+      "cost_pct": -0.01813,
+      "pairs": "XLMUSDT-,ATOMUSDT-,BNBUSDT-"
+    },
+    {
+      "month": "2025-10",
+      "return_pct": 0.18149,
+      "funding_pct": 0.21211,
+      "price_pct": -0.01249,
+      "cost_pct": -0.01813,
+      "pairs": "ATOMUSDT-,XLMUSDT-,TRXUSDT-,BNBUSDT-"
+    },
+    {
+      "month": "2025-11",
+      "return_pct": 0.10832,
+      "funding_pct": 0.08881,
+      "price_pct": 0.01951,
+      "cost_pct": -0.0,
+      "pairs": "ATOMUSDT-,TRXUSDT-,XLMUSDT-,BNBUSDT-"
+    },
+    {
+      "month": "2025-12",
+      "return_pct": -0.05851,
+      "funding_pct": -0.00751,
+      "price_pct": -0.01042,
+      "cost_pct": -0.04059,
+      "pairs": "TRXUSDT-,ATOMUSDT-"
+    },
+    {
+      "month": "2026-01",
+      "return_pct": -0.02862,
+      "funding_pct": 0.01179,
+      "price_pct": 0.00097,
+      "cost_pct": -0.04138,
+      "pairs": "LINKUSDT+"
+    },
+    {
+      "month": "2026-02",
+      "return_pct": -0.01872,
+      "funding_pct": 0.02417,
+      "price_pct": 0.0082,
+      "cost_pct": -0.05109,
+      "pairs": "AVAXUSDT-,FILUSDT-"
+    },
+    {
+      "month": "2026-03",
+      "return_pct": -0.02446,
+      "funding_pct": 0.00683,
+      "price_pct": -0.01421,
+      "cost_pct": -0.01708,
+      "pairs": "AVAXUSDT-"
+    },
+    {
+      "month": "2026-04",
+      "return_pct": -0.01598,
+      "funding_pct": 0.0,
+      "price_pct": 0.0,
+      "cost_pct": -0.01598,
+      "pairs": ""
+    },
+    {
+      "month": "2026-05",
+      "return_pct": -0.00403,
+      "funding_pct": 0.01513,
+      "price_pct": -0.00104,
+      "cost_pct": -0.01812,
+      "pairs": "DOTUSDT-"
+    },
+    {
+      "month": "2026-06",
+      "return_pct": 0.00665,
+      "funding_pct": 0.00768,
+      "price_pct": -0.00104,
+      "cost_pct": -0.0,
+      "pairs": "DOTUSDT-"
+    },
+    {
+      "month": "2026-07",
+      "return_pct": -0.01629,
+      "funding_pct": 0.03541,
+      "price_pct": -0.00309,
+      "cost_pct": -0.04861,
+      "pairs": "XLMUSDT-,BCHUSDT-"
+    }
+  ],
+  "split_pct": {
+    "funding_pct": 0.8334786856952989,
+    "price_pct": 0.00867076610047951,
+    "cost_pct": -0.3053471965630564
+  },
+  "months_empty": 1,
+  "monthly_mean": {
+    "mean": 0.04129248117174784,
+    "t": 1.762887518280591,
+    "p": 0.05167171478992383,
+    "months": 13
+  },
+  "placebo_total_pct": [
+    -1.0823094103756037,
+    -1.0251895880747486,
+    -1.0148731391704136,
+    -0.9657171501349038,
+    -0.9030723830955267,
+    -0.8811501853327353,
+    -0.8439499349209068,
+    -0.8093644298729941,
+    -0.7515712070497393,
+    -0.6506700988038627,
+    -0.6484252316325878,
+    -0.6249741292170041,
+    -0.5896193772210734,
+    -0.5557240252372586,
+    -0.5333845048604902,
+    -0.5317926347160773,
+    -0.38177576049713835,
+    -0.34272507013327624,
+    -0.21951962973846273
+  ],
+  "spread_bp_a_day": {
+    "BNBUSDT": {
+      "mean": -0.5800147130114885,
+      "mean_abs": 0.5996126617294372,
+      "months_above_cost": 5
+    },
+    "SOLUSDT": {
+      "mean": -0.3084990744006871,
+      "mean_abs": 0.3540945593505198,
+      "months_above_cost": 0
+    },
+    "XRPUSDT": {
+      "mean": -0.25441560893530085,
+      "mean_abs": 0.43033490953436737,
+      "months_above_cost": 0
+    },
+    "ADAUSDT": {
+      "mean": -0.03138263158064996,
+      "mean_abs": 0.443457411984193,
+      "months_above_cost": 0
+    },
+    "DOGEUSDT": {
+      "mean": -0.004887905005591151,
+      "mean_abs": 0.2627582107867665,
+      "months_above_cost": 0
+    },
+    "DOTUSDT": {
+      "mean": -0.39220543904631716,
+      "mean_abs": 0.3949050163920482,
+      "months_above_cost": 2
+    },
+    "LINKUSDT": {
+      "mean": 0.21594747162334155,
+      "mean_abs": 0.33108053605055326,
+      "months_above_cost": 1
+    },
+    "LTCUSDT": {
+      "mean": 0.053473896059076424,
+      "mean_abs": 0.20516947406763816,
+      "months_above_cost": 0
+    },
+    "AVAXUSDT": {
+      "mean": -0.4934152803390998,
+      "mean_abs": 0.5595482786117303,
+      "months_above_cost": 2
+    },
+    "ATOMUSDT": {
+      "mean": -0.8135179698316206,
+      "mean_abs": 0.8135179698316206,
+      "months_above_cost": 4
+    },
+    "TRXUSDT": {
+      "mean": -0.6616544960134044,
+      "mean_abs": 0.6616544960134044,
+      "months_above_cost": 3
+    },
+    "BCHUSDT": {
+      "mean": -0.4049409965076365,
+      "mean_abs": 0.538278357790982,
+      "months_above_cost": 1
+    },
+    "ETCUSDT": {
+      "mean": 0.3244276086346273,
+      "mean_abs": 0.3464996822132226,
+      "months_above_cost": 0
+    },
+    "FILUSDT": {
+      "mean": -0.06851447132312696,
+      "mean_abs": 0.31547688378404753,
+      "months_above_cost": 1
+    },
+    "XLMUSDT": {
+      "mean": -0.9524996125412255,
+      "mean_abs": 0.9524996125412255,
+      "months_above_cost": 6
+    }
+  },
+  "V1": {
+    "mean": 0.04129248117174784,
+    "t": 1.762887518280591,
+    "p": 0.05167171478992383,
+    "months": 13,
+    "status": "killed"
+  },
+  "V2": {
+    "beats": 19,
+    "of": 19,
+    "status": "passes"
+  },
+  "read_at": "2026-11-20T11:49:14Z"
+}
