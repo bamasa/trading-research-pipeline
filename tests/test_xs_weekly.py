@@ -87,3 +87,22 @@ def test_a_planted_cross_section_is_ranked_and_a_null_is_not() -> None:
         picks = list(rankers.walk(f, "ridge", mondays))
         out[strength] = portfolio.book(f, picks)["ic"].mean()
     assert out[0.9] > 0.05 and abs(out[0.0]) < 0.05
+
+
+def test_the_net_target_takes_the_funding_a_long_pays_and_the_funding_rule_goes_long_the_paid() -> (
+    None
+):
+    from trading_research.xs_weekly import net
+
+    p = planted(0.0)
+    p.funding_bp[:, 4] = 50.0  # longs of coin 4 pay 50 bp a day
+    p.funding_bp[:, 6] = -50.0  # shorts of coin 6 pay
+    f = features.build(p)
+    g = net.net(f)
+    t = 400
+    u = f.universe[t]
+    after = f.gross[t] - f.funding_week[t] / 1e4
+    np.testing.assert_allclose(g.target[t, u], after[u] - after[u].mean())
+    ((_, idx, s),) = net.walk(f, "funding", np.array([t]))
+    order = idx[np.argsort(s)]
+    assert order[0] == 4 and order[-1] == 6

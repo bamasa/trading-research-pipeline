@@ -27,20 +27,28 @@ import numpy as np
 import pandas as pd
 
 from trading_research.data import binance_monthly
-from trading_research.xs_weekly import EXCLUDED, features, panel, portfolio
-from trading_research.xs_weekly.rankers import MODELS, NAMES, walk
+from trading_research.xs_weekly import EXCLUDED, features, panel, portfolio, rankers
+from trading_research.xs_weekly import net as net_study
+from trading_research.xs_weekly.rankers import MODELS
+
+#: Each study: its rankers, its walk, the rule its models are compared with, its keys and folders.
+STUDIES: dict[str, dict[str, Any]] = {
+    "gross": {"names": rankers.NAMES, "walk": rankers.walk, "baseline": "low_vol",
+              "keys": ("W1", "W2"), "out": "xs_weekly"},
+    "net": {"names": net_study.NAMES, "walk": net_study.walk, "baseline": "momentum",
+            "keys": ("N1", "N2"), "out": "xs_weekly_net"},
+}  # fmt: skip
 
 ROOT = Path(__file__).resolve().parents[1]
 D_MONTHS = [str(m) for m in pd.period_range("2020-01", "2024-12", freq="M")]
 H_MONTHS = [str(m) for m in pd.period_range("2025-01", "2026-10", freq="M")]
 D_FIRST, D_LAST = "2021-07-05", "2024-12-30"
 H_FIRST, H_LAST = "2025-01-06", "2026-10-26"
-OUT_DEV = ROOT / "experiments" / "results" / "xs_weekly"
-OUT_H = ROOT / "experiments" / "results" / "xs_weekly_heldout"
+RESULTS = ROOT / "experiments" / "results"
 SOURCES = tuple(
     f"src/trading_research/{p}.py"
     for p in ("data/binance_monthly", "xs_weekly/__init__", "xs_weekly/panel", "xs_weekly/features",
-              "xs_weekly/rankers", "xs_weekly/portfolio", "xs_deep/rankers", "xs_deep/nets",
+              "xs_weekly/rankers", "xs_weekly/portfolio", "xs_weekly/net", "xs_deep/rankers", "xs_deep/nets",
               "xs_deep/features")
 )  # fmt: skip
 #: sha256 of each source at the code freeze; written by its amendment.
@@ -98,22 +106,21 @@ def mondays(p: panel.Panel, first: str, last: str) -> np.ndarray:
     return np.flatnonzero(keep)
 
 
-def run_one(root: Path, phase: str, name: str) -> None:
+def run_one(root: Path, phase: str, name: str, study: str) -> None:
     p = panel.read(panel_path(root, phase))
     frame = features.build(p)
     first, last = (D_FIRST, D_LAST) if phase == "dev" else (H_FIRST, H_LAST)
-    picks = list(walk(frame, name, mondays(p, first, last)))
-    out = root / phase / f"{name}.npz"
+    picks = list(STUDIES[study]["walk"](frame, name, mondays(p, first, last)))
+    out = root / study / phase / f"{name}.npz"
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, days=np.array([t for t, _, _ in picks]),
                         coins=np.stack([c for _, c, _ in picks]), scores=np.stack([s for _, _, s in picks]))  # fmt: skip
 
 
-def run_all(root: Path, phase: str) -> None:
-    build_panel(root, phase)
+def run_all(root: Path, phase: str, study: str) -> None:
     procs = []
-    for name in NAMES:
-        cmd = [sys.executable, "-m", "experiments.xs_weekly", "run-one", "--phase", phase,
+    for name in STUDIES[study]["names"]:
+        cmd = [sys.executable, "-m", "experiments.xs_weekly", "run-one", "--phase", phase, "--study", study,
                "--ranker", name, "--data", str(root.parent)]  # fmt: skip
         procs.append(subprocess.Popen(cmd, cwd=ROOT))
         if len(procs) == 3:  # three at a time
@@ -126,23 +133,27 @@ def run_all(root: Path, phase: str) -> None:
             raise SystemExit(f"{pr.args} failed")
 
 
-def measure(root: Path, phase: str) -> dict[str, Any]:
+def measure(root: Path, phase: str, study: str) -> dict[str, Any]:
     p = panel.read(panel_path(root, phase))
     frame = features.build(p)
+    if study == "net":
+        frame = net_study.net(frame)
+    names, baseline = STUDIES[study]["names"], STUDIES[study]["baseline"]
     books = {}
-    for name in NAMES:
-        z = np.load(root / phase / f"{name}.npz")
+    for name in names:
+        z = np.load(root / study / phase / f"{name}.npz")
         picks = list(zip(z["days"].tolist(), z["coins"], z["scores"], strict=True))
         books[name] = portfolio.book(frame, picks).set_index("day")
     common = sorted(set.intersection(*(set(b.index) for b in books.values())))
     books = {n: b.loc[common] for n, b in books.items()}
-    base = books["low_vol"]["net"].to_numpy()
+    base = books[baseline]["net"].to_numpy()
     return {
         "weeks": [str(p.days[d].date()) for d in common],
         "summary": {n: portfolio.summary(b) for n, b in books.items()},
         "weekly_net": {n: b["net"].round(6).tolist() for n, b in books.items()},
         "net": {n: portfolio.one_sided(b["net"].to_numpy()) for n, b in books.items()},
-        "minus_low_vol": {
+        "baseline": baseline,
+        "minus_baseline": {
             n: portfolio.one_sided(books[n]["net"].to_numpy() - base) for n in MODELS
         },
         "universe_size": float(frame.universe[common].sum(axis=1).mean()),
@@ -163,41 +174,48 @@ def main() -> None:
     )
     parser.add_argument("--data", type=Path, default=Path("data"))
     parser.add_argument("--phase", choices=("dev", "heldout"), default="dev")
-    parser.add_argument("--ranker", choices=NAMES)
+    parser.add_argument("--ranker")
+    parser.add_argument("--study", choices=tuple(STUDIES), default="gross")
     a = parser.parse_args()
     root = a.data / "xs_weekly"
     if a.command == "fetch-dev":
         print(fetch(root, D_MONTHS), flush=True)
     elif a.command == "run-one":
-        run_one(root, a.phase, a.ranker)
-    elif a.command == "dev":
-        run_all(root, "dev")
-        OUT_DEV.mkdir(parents=True, exist_ok=True)
-        (OUT_DEV / "development.json").write_text(
-            json.dumps(measure(root, "dev"), indent=2, default=float) + "\n"
-        )
+        run_one(root, a.phase, a.ranker, a.study)
     elif a.command == "check":
         bad = unfrozen()
         print("frozen sources match" if not bad else f"differ: {', '.join(bad)}")
+    elif a.command == "dev":
+        out = RESULTS / STUDIES[a.study]["out"]
+        if not panel_path(root, "dev").exists():
+            build_panel(root, "dev")
+        run_all(root, "dev", a.study)
+        out.mkdir(parents=True, exist_ok=True)
+        r = measure(root, "dev", a.study)
+        (out / "development.json").write_text(json.dumps(r, indent=2, default=float) + "\n")
     else:
         if bad := unfrozen():
             raise SystemExit(f"not the frozen sources: {', '.join(bad)}")
         if a.command == "fetch-heldout":
             print(fetch(root, H_MONTHS), flush=True)
             return
-        if (OUT_H / "result.json").exists():
+        out = RESULTS / (STUDIES[a.study]["out"] + "_heldout")
+        if (out / "result.json").exists():
             raise SystemExit("already read; the result is written once")
-        run_all(root, "heldout")
-        r = measure(root, "heldout")
-        for key, table in (("W1", "net"), ("W2", "minus_low_vol")):
+        if not panel_path(root, "heldout").exists():
+            build_panel(root, "heldout")
+        run_all(root, "heldout", a.study)
+        r = measure(root, "heldout", a.study)
+        k1, k2 = STUDIES[a.study]["keys"]
+        for key, table in ((k1, "net"), (k2, "minus_baseline")):
             adj = holm({n: r[table][n]["p"] for n in MODELS})
             r[key] = {n: {**r[table][n], "p_holm": adj[n],
                           "status": "passes" if r[table][n]["mean"] > 0 and adj[n] < 0.05 else "killed"}
                       for n in MODELS}  # fmt: skip
         r["read_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        OUT_H.mkdir(parents=True, exist_ok=True)
-        (OUT_H / "result.json").write_text(json.dumps(r, indent=2, default=float) + "\n")
-        print(json.dumps({k: r[k] for k in ("W1", "W2")}, indent=1, default=float))
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "result.json").write_text(json.dumps(r, indent=2, default=float) + "\n")
+        print(json.dumps({k: r[k] for k in (k1, k2)}, indent=1, default=float))
 
 
 if __name__ == "__main__":

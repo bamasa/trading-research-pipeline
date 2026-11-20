@@ -1805,7 +1805,8 @@
       "weeks": 182
     }
   },
-  "minus_low_vol": {
+  "baseline": "low_vol",
+  "minus_baseline": {
     "ridge": {
       "mean": -0.000201693193820148,
       "t": -0.07883570926083071,
