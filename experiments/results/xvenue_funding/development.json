@@ -1,0 +1,502 @@
+{
+  "months": [
+    "2022-01",
+    "2022-02",
+    "2022-03",
+    "2022-04",
+    "2022-05",
+    "2022-06",
+    "2022-07",
+    "2022-08",
+    "2022-09",
+    "2022-10",
+    "2022-11",
+    "2022-12",
+    "2023-01",
+    "2023-02",
+    "2023-03",
+    "2023-04",
+    "2023-05",
+    "2023-06",
+    "2023-07",
+    "2023-08",
+    "2023-09",
+    "2023-10",
+    "2023-11",
+    "2023-12",
+    "2024-01",
+    "2024-02",
+    "2024-03",
+    "2024-04",
+    "2024-05",
+    "2024-06",
+    "2024-07",
+    "2024-08",
+    "2024-09",
+    "2024-10",
+    "2024-11",
+    "2024-12",
+    "2025-01",
+    "2025-02",
+    "2025-03",
+    "2025-04",
+    "2025-05",
+    "2025-06"
+  ],
+  "summary": {
+    "total_pct": 3.0174279661370207,
+    "a_year_pct": 0.8529885767194711,
+    "worst_drawdown_pct": -1.083601546418811,
+    "sharpe_monthly": 0.9428201871671219,
+    "losing_months": 12,
+    "months": 42
+  },
+  "monthly": [
+    {
+      "month": "2022-01",
+      "return_pct": -0.08624,
+      "funding_pct": -0.02103,
+      "price_pct": 0.0073,
+      "cost_pct": -0.07251,
+      "pairs": "ETCUSDT-,FILUSDT-,LINKUSDT-,AVAXUSDT-"
+    },
+    {
+      "month": "2022-02",
+      "return_pct": -0.99822,
+      "funding_pct": 0.10769,
+      "price_pct": -1.04266,
+      "cost_pct": -0.06326,
+      "pairs": "FILUSDT-,BNBUSDT-,ETCUSDT-,ATOMUSDT-"
+    },
+    {
+      "month": "2022-03",
+      "return_pct": 1.14144,
+      "funding_pct": 0.17949,
+      "price_pct": 1.06484,
+      "cost_pct": -0.1029,
+      "pairs": "XLMUSDT+,BNBUSDT-,DOGEUSDT-,DOTUSDT-"
+    },
+    {
+      "month": "2022-04",
+      "return_pct": 0.30545,
+      "funding_pct": 0.07424,
+      "price_pct": 0.2701,
+      "cost_pct": -0.03889,
+      "pairs": "TRXUSDT-,DOTUSDT-,BNBUSDT-,DOGEUSDT-"
+    },
+    {
+      "month": "2022-05",
+      "return_pct": -0.19517,
+      "funding_pct": -0.08771,
+      "price_pct": -0.036,
+      "cost_pct": -0.07146,
+      "pairs": "DOTUSDT-,TRXUSDT-,LTCUSDT-,FILUSDT-"
+    },
+    {
+      "month": "2022-06",
+      "return_pct": 0.24562,
+      "funding_pct": 0.29331,
+      "price_pct": 0.02232,
+      "cost_pct": -0.07002,
+      "pairs": "DOTUSDT-,TRXUSDT+,ATOMUSDT-,FILUSDT-"
+    },
+    {
+      "month": "2022-07",
+      "return_pct": 0.11858,
+      "funding_pct": 0.11229,
+      "price_pct": 0.00628,
+      "cost_pct": -0.0,
+      "pairs": "TRXUSDT+,DOTUSDT-,ATOMUSDT-,FILUSDT-"
+    },
+    {
+      "month": "2022-08",
+      "return_pct": 0.01709,
+      "funding_pct": 0.02829,
+      "price_pct": -0.0112,
+      "cost_pct": -0.0,
+      "pairs": "TRXUSDT+,DOTUSDT-,ATOMUSDT-,FILUSDT-"
+    },
+    {
+      "month": "2022-09",
+      "return_pct": 0.11465,
+      "funding_pct": 0.1317,
+      "price_pct": 0.0147,
+      "cost_pct": -0.03175,
+      "pairs": "DOTUSDT-,FILUSDT-,ATOMUSDT-,DOGEUSDT-"
+    },
+    {
+      "month": "2022-10",
+      "return_pct": 0.06093,
+      "funding_pct": 0.14159,
+      "price_pct": -0.01496,
+      "cost_pct": -0.0657,
+      "pairs": "DOTUSDT-,BCHUSDT-,XRPUSDT-,DOGEUSDT-"
+    },
+    {
+      "month": "2022-11",
+      "return_pct": 0.13011,
+      "funding_pct": 0.2146,
+      "price_pct": -0.02945,
+      "cost_pct": -0.05504,
+      "pairs": "DOTUSDT-,BCHUSDT-,XRPUSDT-,XLMUSDT-"
+    },
+    {
+      "month": "2022-12",
+      "return_pct": 0.32434,
+      "funding_pct": 0.35089,
+      "price_pct": 0.00619,
+      "cost_pct": -0.03273,
+      "pairs": "DOTUSDT-,ATOMUSDT-,BCHUSDT-,XRPUSDT-"
+    },
+    {
+      "month": "2023-01",
+      "return_pct": 0.00266,
+      "funding_pct": 0.07169,
+      "price_pct": -0.03803,
+      "cost_pct": -0.031,
+      "pairs": "DOTUSDT-,BCHUSDT-,ETCUSDT-,ATOMUSDT-"
+    },
+    {
+      "month": "2023-02",
+      "return_pct": 0.24617,
+      "funding_pct": 0.25336,
+      "price_pct": 0.03418,
+      "cost_pct": -0.04137,
+      "pairs": "DOTUSDT-,BCHUSDT-,SOLUSDT-,ETCUSDT-"
+    },
+    {
+      "month": "2023-03",
+      "return_pct": 0.17886,
+      "funding_pct": 0.25054,
+      "price_pct": -0.02962,
+      "cost_pct": -0.04206,
+      "pairs": "BCHUSDT-,DOTUSDT-,SOLUSDT-,XRPUSDT-"
+    },
+    {
+      "month": "2023-04",
+      "return_pct": 0.08924,
+      "funding_pct": 0.1316,
+      "price_pct": 0.00156,
+      "cost_pct": -0.04392,
+      "pairs": "BCHUSDT-,DOTUSDT-,ATOMUSDT-,SOLUSDT-"
+    },
+    {
+      "month": "2023-05",
+      "return_pct": -0.01146,
+      "funding_pct": 0.05132,
+      "price_pct": -0.02734,
+      "cost_pct": -0.03543,
+      "pairs": "BCHUSDT-,DOTUSDT-,ATOMUSDT-,BNBUSDT+"
+    },
+    {
+      "month": "2023-06",
+      "return_pct": -0.04185,
+      "funding_pct": 0.00614,
+      "price_pct": 0.01002,
+      "cost_pct": -0.05801,
+      "pairs": "BCHUSDT-,BNBUSDT+,XLMUSDT-,TRXUSDT-"
+    },
+    {
+      "month": "2023-07",
+      "return_pct": 0.22516,
+      "funding_pct": 0.28325,
+      "price_pct": 0.00554,
+      "cost_pct": -0.06362,
+      "pairs": "BNBUSDT+,XLMUSDT-,TRXUSDT-,XRPUSDT-"
+    },
+    {
+      "month": "2023-08",
+      "return_pct": 0.18475,
+      "funding_pct": 0.19476,
+      "price_pct": 0.01689,
+      "cost_pct": -0.0269,
+      "pairs": "BNBUSDT+,XLMUSDT-,TRXUSDT-"
+    },
+    {
+      "month": "2023-09",
+      "return_pct": 0.13539,
+      "funding_pct": 0.19734,
+      "price_pct": -0.00713,
+      "cost_pct": -0.05483,
+      "pairs": "BNBUSDT+,XLMUSDT-,BCHUSDT-,AVAXUSDT-"
+    },
+    {
+      "month": "2023-10",
+      "return_pct": 0.13254,
+      "funding_pct": 0.14058,
+      "price_pct": -0.00804,
+      "cost_pct": -0.0,
+      "pairs": "BNBUSDT+,BCHUSDT-,XLMUSDT-,AVAXUSDT-"
+    },
+    {
+      "month": "2023-11",
+      "return_pct": 0.07372,
+      "funding_pct": 0.08047,
+      "price_pct": -0.00675,
+      "cost_pct": -0.0,
+      "pairs": "BCHUSDT-,BNBUSDT+,XLMUSDT-,AVAXUSDT-"
+    },
+    {
+      "month": "2023-12",
+      "return_pct": -0.00315,
+      "funding_pct": 0.03661,
+      "price_pct": 0.02167,
+      "cost_pct": -0.06143,
+      "pairs": "BCHUSDT-,BNBUSDT+"
+    },
+    {
+      "month": "2024-01",
+      "return_pct": 0.12593,
+      "funding_pct": 0.19124,
+      "price_pct": 0.00581,
+      "cost_pct": -0.07111,
+      "pairs": "BCHUSDT-,XRPUSDT-,ADAUSDT-,ATOMUSDT-"
+    },
+    {
+      "month": "2024-02",
+      "return_pct": -0.04599,
+      "funding_pct": -0.01154,
+      "price_pct": -0.00087,
+      "cost_pct": -0.03358,
+      "pairs": "BCHUSDT-,BNBUSDT-,XRPUSDT-,ADAUSDT-"
+    },
+    {
+      "month": "2024-03",
+      "return_pct": -0.23951,
+      "funding_pct": -0.14424,
+      "price_pct": -0.02116,
+      "cost_pct": -0.07411,
+      "pairs": "BCHUSDT-,BNBUSDT-,ATOMUSDT-,AVAXUSDT-"
+    },
+    {
+      "month": "2024-04",
+      "return_pct": 0.20423,
+      "funding_pct": 0.28802,
+      "price_pct": -0.00479,
+      "cost_pct": -0.07899,
+      "pairs": "TRXUSDT-,BCHUSDT-,BNBUSDT-,ETCUSDT+"
+    },
+    {
+      "month": "2024-05",
+      "return_pct": -0.02617,
+      "funding_pct": 0.04637,
+      "price_pct": 0.01715,
+      "cost_pct": -0.08968,
+      "pairs": "TRXUSDT-,ETCUSDT+,DOGEUSDT-"
+    },
+    {
+      "month": "2024-06",
+      "return_pct": -0.05562,
+      "funding_pct": -0.03997,
+      "price_pct": 0.00632,
+      "cost_pct": -0.02197,
+      "pairs": "TRXUSDT-,ETCUSDT+"
+    },
+    {
+      "month": "2024-07",
+      "return_pct": -0.0358,
+      "funding_pct": 0.06846,
+      "price_pct": -0.01912,
+      "cost_pct": -0.08514,
+      "pairs": "BNBUSDT-,ATOMUSDT-,BCHUSDT-"
+    },
+    {
+      "month": "2024-08",
+      "return_pct": 0.00122,
+      "funding_pct": 0.02132,
+      "price_pct": -0.00093,
+      "cost_pct": -0.01917,
+      "pairs": "BNBUSDT-,ATOMUSDT-"
+    },
+    {
+      "month": "2024-09",
+      "return_pct": 0.03668,
+      "funding_pct": 0.04025,
+      "price_pct": 0.00873,
+      "cost_pct": -0.01229,
+      "pairs": "BNBUSDT-"
+    },
+    {
+      "month": "2024-10",
+      "return_pct": 0.04393,
+      "funding_pct": 0.04586,
+      "price_pct": -0.00193,
+      "cost_pct": -0.0,
+      "pairs": "BNBUSDT-"
+    },
+    {
+      "month": "2024-11",
+      "return_pct": -0.01925,
+      "funding_pct": 0.0,
+      "price_pct": -0.00129,
+      "cost_pct": -0.01796,
+      "pairs": ""
+    },
+    {
+      "month": "2024-12",
+      "return_pct": 0.18978,
+      "funding_pct": 0.21506,
+      "price_pct": 0.01097,
+      "cost_pct": -0.03625,
+      "pairs": "BNBUSDT-,TRXUSDT-"
+    },
+    {
+      "month": "2025-01",
+      "return_pct": 0.1066,
+      "funding_pct": 0.18023,
+      "price_pct": 0.00333,
+      "cost_pct": -0.07696,
+      "pairs": "BNBUSDT-,ATOMUSDT-,DOGEUSDT-,FILUSDT-"
+    },
+    {
+      "month": "2025-02",
+      "return_pct": 0.12878,
+      "funding_pct": 0.18152,
+      "price_pct": -0.01721,
+      "cost_pct": -0.03553,
+      "pairs": "BNBUSDT-,ATOMUSDT-,DOGEUSDT-,SOLUSDT-"
+    },
+    {
+      "month": "2025-03",
+      "return_pct": 0.06378,
+      "funding_pct": 0.05871,
+      "price_pct": 0.00507,
+      "cost_pct": -0.0,
+      "pairs": "BNBUSDT-,ATOMUSDT-,SOLUSDT-,DOGEUSDT-"
+    },
+    {
+      "month": "2025-04",
+      "return_pct": 0.0424,
+      "funding_pct": 0.0764,
+      "price_pct": -0.00647,
+      "cost_pct": -0.02752,
+      "pairs": "BNBUSDT-,TRXUSDT-,ATOMUSDT-,SOLUSDT-"
+    },
+    {
+      "month": "2025-05",
+      "return_pct": 0.07971,
+      "funding_pct": 0.13996,
+      "price_pct": -6e-05,
+      "cost_pct": -0.06019,
+      "pairs": "TRXUSDT-,BNBUSDT-,AVAXUSDT-,XLMUSDT-"
+    },
+    {
+      "month": "2025-06",
+      "return_pct": 0.03091,
+      "funding_pct": 0.07907,
+      "price_pct": -0.01003,
+      "cost_pct": -0.03812,
+      "pairs": "XLMUSDT-,BNBUSDT-"
+    }
+  ],
+  "split_pct": {
+    "funding_pct": 4.659740307487771,
+    "price_pct": 0.20390664313090215,
+    "cost_pct": -1.84144409470564
+  },
+  "months_empty": 1,
+  "monthly_mean": {
+    "mean": 0.07195721085507216,
+    "t": 1.763855058856725,
+    "p": 0.042603531488942914,
+    "months": 42
+  },
+  "placebo_total_pct": [
+    -4.897204020087587,
+    -4.732665447459095,
+    -4.713317329604239,
+    -4.52939230391316,
+    -4.440910531242093,
+    -4.214933561086287,
+    -3.9995760429359484,
+    -3.919578736773055,
+    -3.834975591354084,
+    -3.6466352099026267,
+    -3.629446047908347,
+    -3.5269779186631656,
+    -3.4405741089339914,
+    -3.3818904580170894,
+    -3.381764002748744,
+    -3.3426547724962785,
+    -2.6204770335536365,
+    -2.283638577770797,
+    -1.5660010194405771
+  ],
+  "spread_bp_a_day": {
+    "BNBUSDT": {
+      "mean": -0.7263356476058456,
+      "mean_abs": 1.4324710483419,
+      "months_above_cost": 29
+    },
+    "SOLUSDT": {
+      "mean": -0.6843868155271583,
+      "mean_abs": 0.9880109740854163,
+      "months_above_cost": 16
+    },
+    "XRPUSDT": {
+      "mean": -0.8212629546960601,
+      "mean_abs": 0.8978158722696298,
+      "months_above_cost": 17
+    },
+    "ADAUSDT": {
+      "mean": -0.621318767543886,
+      "mean_abs": 0.6924737568885649,
+      "months_above_cost": 7
+    },
+    "DOGEUSDT": {
+      "mean": -0.8536990031916968,
+      "mean_abs": 0.8891002965555677,
+      "months_above_cost": 16
+    },
+    "DOTUSDT": {
+      "mean": -1.2620291383645303,
+      "mean_abs": 1.324017471407149,
+      "months_above_cost": 18
+    },
+    "LINKUSDT": {
+      "mean": -0.4310675743367965,
+      "mean_abs": 0.4971446714830134,
+      "months_above_cost": 2
+    },
+    "LTCUSDT": {
+      "mean": -0.3588411349642634,
+      "mean_abs": 0.5249612015310845,
+      "months_above_cost": 9
+    },
+    "AVAXUSDT": {
+      "mean": -0.657153184936324,
+      "mean_abs": 0.7646273231572009,
+      "months_above_cost": 11
+    },
+    "ATOMUSDT": {
+      "mean": -1.1425176907636736,
+      "mean_abs": 1.1438523999569195,
+      "months_above_cost": 25
+    },
+    "TRXUSDT": {
+      "mean": -0.5123314231546504,
+      "mean_abs": 1.168105674412939,
+      "months_above_cost": 23
+    },
+    "BCHUSDT": {
+      "mean": -1.2929565827748475,
+      "mean_abs": 1.3079982346876429,
+      "months_above_cost": 22
+    },
+    "ETCUSDT": {
+      "mean": -0.5053837367387926,
+      "mean_abs": 0.7897339096472161,
+      "months_above_cost": 11
+    },
+    "FILUSDT": {
+      "mean": -0.9017053313980011,
+      "mean_abs": 0.9666595489713178,
+      "months_above_cost": 16
+    },
+    "XLMUSDT": {
+      "mean": -0.6249169545010103,
+      "mean_abs": 0.8772571734596455,
+      "months_above_cost": 15
+    }
+  }
+}
