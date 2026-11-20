@@ -116,3 +116,21 @@ Against it: the short side holds the most volatile coins, which squeeze, and
 whose funding is often negative, so shorts pay it. **W2: killed for all five.**
 The models should mostly learn the volatility ranking, and 95 weeks resolve
 only a large difference.
+
+## Amendment, 21 November 2026: what development showed, and one fault
+
+**A fault, corrected before the freeze.** The span's last Monday has no next Monday's open in the
+data, so the book held nothing that week and counted it as a week with no return. Such a week is
+now skipped (`portfolio.book`); no other number moved.
+
+**What was seen on development** ([`experiments/results/xs_weekly/`](../../experiments/results/xs_weekly/README.md)),
+182 weeks from July 2021 to December 2024, a measurement. Every ranker but `momentum` orders the
+coins with a positive mean weekly rank correlation (+0.056 to +0.089), and most models' price
+result is positive (`lightgbm` +56.8%); but the book's short side holds the most volatile coins,
+whose funding is negative, so the shorts pay it: funding −28% to −40% of the account, fees −18% to
+−20%. Totals: `momentum` +43.3% (+10.8% a year, worst drawdown −49%), `lightgbm` −3.2%, the other
+models −38% to −61%, `low_vol` −45.5%.
+
+None of this changes a setting, a block or a status of this study. A study whose target is the
+return net of funding is registered apart, as a successor:
+[`xs_weekly_net_2026_11`](xs_weekly_net_2026_11.md).

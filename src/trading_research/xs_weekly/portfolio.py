@@ -28,6 +28,8 @@ def book(frame: Frame, picks: list[tuple[int, np.ndarray, np.ndarray]]) -> pd.Da
     for t, idx, s in picks:
         ok = np.isfinite(s) & (idx >= 0) & np.isfinite(frame.gross[t, np.maximum(idx, 0)])
         c, sc = idx[ok], s[ok]
+        if len(c) < 2 * LEGS:
+            continue  # a week whose outcome is not in the data yet (the span's last)
         order = np.argsort(sc, kind="stable")
         side = {int(x): -1 for x in c[order[:LEGS]]} | {int(x): 1 for x in c[order[-LEGS:]]}
         changed = len([k for k in held if side.get(k) != held[k]])
