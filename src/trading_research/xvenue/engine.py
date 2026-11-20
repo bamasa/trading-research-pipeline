@@ -108,7 +108,10 @@ def replay(
         chosen = dict(chooser(month) if chooser else choose(venues, month))
         cost = price = funding = 0.0
         for coin in [c for c in held if chosen.get(c) != held[c][0]]:
-            cost += leg_cost(venues[coin], held.pop(coin)[1], start)
+            sign, q = held.pop(coin)
+            # Closed at this month's first hour: marked to it from the last one.
+            price += float(hourly(venues[coin], q, sign, start, start, carried=True)["price"].sum())
+            cost += leg_cost(venues[coin], q, start)
         for coin, sign in chosen.items():
             v = venues[coin]
             carried = coin in held

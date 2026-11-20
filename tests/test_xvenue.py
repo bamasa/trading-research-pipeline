@@ -118,3 +118,14 @@ def test_a_pair_carried_across_months_is_marked_without_a_gap() -> None:
     assert out["price_pct"].sum() - flat["price_pct"].sum() == pytest.approx(
         5.0 / engine.SLOTS / 2, rel=0.02
     )
+
+
+def test_a_pair_closed_at_a_month_start_is_marked_to_that_hour() -> None:
+    flat_price = pd.Series(10.0, index=HOURS)
+    v0 = venues(4.0, 1)
+    v = engine.Venues(flat_price, v0.binance_funding, flat_price, v0.bybit_funding)
+    step = pd.Series(1.0, index=HOURS).where(pd.Timestamp("2022-03-01", tz="UTC") > HOURS, 1.05)
+    jumped = engine.Venues(v.binance, v.binance_funding, v.bybit * step, v.bybit_funding)
+    picks = {pd.Period("2022-02", "M"): [("X", 1)], pd.Period("2022-03", "M"): []}
+    out = engine.replay({"X": jumped}, list(picks), chooser=lambda m: picks[m])
+    assert out["price_pct"].sum() == pytest.approx(5.0 / engine.SLOTS / 2, rel=0.02)
