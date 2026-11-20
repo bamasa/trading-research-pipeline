@@ -104,5 +104,6 @@ def test_the_net_target_takes_the_funding_a_long_pays_and_the_funding_rule_goes_
     after = f.gross[t] - f.funding_week[t] / 1e4
     np.testing.assert_allclose(g.target[t, u], after[u] - after[u].mean())
     ((_, idx, s),) = net.walk(f, "funding", np.array([t]))
-    order = idx[np.argsort(s)]
+    ok = np.isfinite(s)
+    order = idx[ok][np.argsort(s[ok])]
     assert order[0] == 4 and order[-1] == 6
