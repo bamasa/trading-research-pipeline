@@ -41,10 +41,10 @@ def figure(r: dict[str, Any], path: Path, span: str) -> None:
     lo, hi = min(r["placebo_total_pct"]), max(r["placebo_total_pct"])
     left.axhspan(lo, hi, color="#e6e6e6", zorder=0, label="19 random coins, final")
     left.axhline(0, color="#444444", lw=0.8)
-    ticks = list(range(0, len(months), max(1, len(months) // 7)))
+    ticks = list(range(0, len(months), max(2, len(months) // 6)))
     left.set_xticks([t + 1 for t in ticks], [months[t] for t in ticks], fontsize=8)
     left.set_title(f"one-coin carry, account return %, {span}", loc="left", fontsize=10)
-    left.legend(frameon=False, fontsize=8, loc="upper left")
+    left.legend(frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.09), ncol=3)
     y = np.arange(len(NAMES))[::-1]
     q = [r["forecast_quality"][n]["mean"] for n in NAMES]
     right.barh(y, q, color=[LINE[n][0] for n in NAMES], height=0.55)

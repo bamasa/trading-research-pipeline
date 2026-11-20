@@ -133,3 +133,30 @@ The walk-forward replay, January 2022 to June 2025, 42 months
 
 None of this changes a setting, a block or a status. The expected outcome stands, and on these
 numbers C1 and C2 lean killed with more confidence than when it was written.
+
+## Results, read once 20 November 2026
+
+From the frozen code, by `experiments/carry_ml.py read`, after the code freeze above was
+committed; the result is [`experiments/results/carry_ml_heldout/`](../../experiments/results/carry_ml_heldout/README.md)
+(`result.json`). H: July 2025 to July 2026, thirteen months, fifteen coins, every day of every
+coin on disk.
+
+**C1: killed for all three.** The month's return minus `rule_lb3`'s: `ridge` −0.076% (*t* −3.81),
+`lightgbm` −0.169% (*t* −3.54), `mlp` −0.061% (*t* −1.86); every Holm *p* 1.0.
+
+**C2: killed for all three.** Forecast correlation minus `rule_lb3`'s: `ridge` −0.061 (*t* −1.74),
+`lightgbm` −0.226 (*t* −3.43), `mlp` −0.104 (*t* −2.45).
+
+Beside, with no status:
+
+- `rule_lb3` +1.5% over the thirteen months (+1.4% a year, Sharpe 3.9, worst month-end drawdown
+  −0.03%, two losing months), holding LTC, XRP, ADA, then LINK from January 2026; `rule_lb1`
+  +0.9%; `ridge` +0.5%, `mlp` +0.7%, `lightgbm` −0.7%;
+- forecast correlation: `rule_lb3` 0.68, `rule_lb1` 0.65, `ridge` 0.62, `mlp` 0.58, `lightgbm` 0.46;
+- the models held `rule_lb3`'s coin in 8% to 15% of months;
+- the nineteen random-coin placebos all lost, −3.7% to −1.4%: on H, choosing by funding is what
+  keeps the carry positive.
+
+Against the expectation stated in advance: C1 and C2 killed, as expected; `rule_lb3` positive in
+low single digits a year, as expected. The level is a quarter of D's: funding was lower on these
+months for every coin.
