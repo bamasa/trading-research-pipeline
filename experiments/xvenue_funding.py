@@ -42,7 +42,11 @@ SOURCES = (
     "src/trading_research/data/bybit_klines.py",
 )
 #: sha256 of each source at the code freeze; written by its amendment.
-FROZEN: dict[str, str] = {}
+FROZEN: dict[str, str] = {
+    "src/trading_research/xvenue/__init__.py": "1916ce4a48784a924842800de33f55a04972c28b76dcc897dc1388bc82a62bb0",
+    "src/trading_research/xvenue/engine.py": "51a0eb0298ac16efddb62f70366025d7ebb3dc616afee69d442dbd09a0af6415",
+    "src/trading_research/data/bybit_klines.py": "eea252dde3e5f255fee4d1f7f2be7f7cfbf5798cd792c9afbe144d7c6676495d",
+}
 
 
 def unfrozen() -> list[str]:
