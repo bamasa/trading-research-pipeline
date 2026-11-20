@@ -30,6 +30,21 @@ KLINE_COLUMNS = ("open_time", "open", "high", "low", "close", "volume", "close_t
                  "quote_volume", "count", "taker_buy_volume", "taker_buy_quote_volume", "ignore")  # fmt: skip
 
 
+def _get(address: str, timeout: float) -> bytes:
+    """GET with :data:`ATTEMPTS` tries on network errors; an HTTP error other than these raises."""
+    for attempt in range(ATTEMPTS):
+        try:
+            with urllib.request.urlopen(address, timeout=timeout) as r:
+                return bytes(r.read())
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, OSError):
+            if attempt == ATTEMPTS - 1:
+                raise
+            time.sleep(2**attempt)
+    raise AssertionError("unreachable")
+
+
 def list_symbols(timeout: float = 30.0) -> list[str]:
     """Every symbol with a monthly kline archive, delisted ones included."""
     prefix = "data/futures/um/monthly/klines/"
@@ -37,12 +52,18 @@ def list_symbols(timeout: float = 30.0) -> list[str]:
     marker = ""
     while True:
         url = f"{BUCKET}?delimiter=/&prefix={prefix}" + (f"&marker={marker}" if marker else "")
-        with urllib.request.urlopen(url, timeout=timeout) as r:
-            body = r.read().decode()
+        body = _get(url, timeout).decode()
         out += re.findall(rf"<Prefix>{prefix}([^/]+)/</Prefix>", body)
         if "<IsTruncated>true" not in body:
             return out
         marker = re.findall(r"<NextMarker>([^<]+)", body)[0]
+
+
+def listed_months(symbol: str, timeout: float = 30.0) -> list[str]:
+    """The months the archive has daily klines for, as ``YYYY-MM``."""
+    prefix = f"data/futures/um/monthly/klines/{symbol}/1d/"
+    body = _get(f"{BUCKET}?prefix={prefix}", timeout).decode()
+    return sorted(set(re.findall(rf"{symbol}-1d-(\d{{4}}-\d{{2}})\.zip<", body)))
 
 
 def url(kind: str, symbol: str, month: str) -> str:
