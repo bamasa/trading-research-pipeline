@@ -209,6 +209,23 @@ development months, 2022 to mid-2025. Funding is persistent enough that its
 three-month mean is the forecast to beat, and a model fitted on a few hundred
 coin-months changes coin more often and pays for it.
 
+### Machine learning and deep learning ranking a hundred perpetuals a week (W1, W2, N1, N2)
+
+**Status: killed, read once 20 November 2026** ([registration](preregistration/xs_weekly_2026_11.md),
+[successor](preregistration/xs_weekly_net_2026_11.md)). Ridge, LightGBM, an MLP, a TCN and a
+cross-sectional transformer rank the hundred most traded Binance USDT perpetuals (delisted ones
+kept) every Monday; long the top ten, short the bottom ten, at taker fees with funding. Fitted on
+the week's return, the short side paid the volatile coins' negative funding and every model lost
+on 2021 to 2024; fitted on the return net of funding (the successor, registered after that
+measurement), they still lost there, and a cross-sectional funding rule made +90%. On January 2025
+to October 2026, 94 weeks no study had read: no model's weekly return was significantly positive
+(W1, N1: best Holm *p* 0.235) or above the rule it was compared with (W2, N2). The net-target
+models all ended positive (+38% to +134%; `lightgbm` and `mlp` Sharpe 1.26), but all of it came in
+the last sixteen weeks: from January 2025 to June 2026 every one was flat or lost. The funding
+rule lost (−9.9%); 28-day momentum made +154%, almost all before July 2026 and from three weeks.
+The models rank the coins (rank correlation +0.10 to +0.17 on H); what they rank is not yet a
+reliable trade at these costs.
+
 ### Pairs trading on fifteen real perpetuals
 
 **Status: killed** ([registration and results](preregistration/pairs_search_2026_11.md)).
