@@ -41,7 +41,12 @@ SOURCES = tuple(
     f"src/trading_research/carry_ml/{n}.py" for n in ("__init__", "features", "models", "evaluate")
 )
 #: sha256 of each source at the code freeze; written by its amendment.
-FROZEN: dict[str, str] = {}
+FROZEN: dict[str, str] = {
+    "src/trading_research/carry_ml/__init__.py": "66c8eac6cec71d631ec4ed5781a1c972c91cb506ed6a194b844b97edc1f254d4",
+    "src/trading_research/carry_ml/features.py": "9b5cd92d52e926c1e37a1b112c088b14984fc8b9e33d344d5fe96dc4414d2588",
+    "src/trading_research/carry_ml/models.py": "c7b37fac970bc57baf92bdb0d00ca5a50c3f7693abbd11c7f8b3841310a21475",
+    "src/trading_research/carry_ml/evaluate.py": "fa40d88d7777729736e019030028703bbde23b1bd6e91464e5c248f6ebcb65b2",
+}
 
 
 def readable(coin: str, month: pd.Period) -> bool:

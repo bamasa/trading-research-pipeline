@@ -109,3 +109,27 @@ mean is already a good forecast; the models have a few hundred to a thousand
 rows. They should mostly hold the rule's coin, and thirteen months resolve
 only a large difference. **`rule_lb3` positive on H**, low single digits a
 year; any carry earns when funding is mostly positive.
+
+## Amendment, 20 November 2026: code freeze, before H is fetched
+
+The study's code is [`src/trading_research/carry_ml/`](../../src/trading_research/carry_ml/__init__.py),
+written after the registration above and at its settings; the replay and the read are
+[`experiments/carry_ml.py`](../../experiments/carry_ml.py). The four sources are frozen by sha256
+there (`FROZEN`): `fetch` and `read` refuse if any differs, and `read` writes its result once.
+Nothing departs from the registration.
+
+### What was seen on development, after the code was written
+
+The walk-forward replay, January 2022 to June 2025, 42 months
+([`experiments/results/carry_ml/`](../../experiments/results/carry_ml/README.md)), a measurement:
+
+- `rule_lb3` +19.8% (+5.3% a year, Sharpe 1.91, worst month-end drawdown −0.1%); `rule_lb1`
+  +11.8%; `ridge` +8.9%, `lightgbm` +5.0%, `mlp` +7.1%, with drawdowns of −3% to −5%;
+- forecast correlation: `rule_lb3` 0.71, `rule_lb1` 0.69, `ridge` 0.61, `lightgbm` 0.52,
+  `mlp` 0.52; every model's difference from `rule_lb3` negative with *t* from −3.5 to −6.3;
+- the models hold `rule_lb3`'s coin in 14% to 29% of months and change coin 29 to 35 times
+  against its 12;
+- nineteen random-coin placebos: −1.6% to +4.5%.
+
+None of this changes a setting, a block or a status. The expected outcome stands, and on these
+numbers C1 and C2 lean killed with more confidence than when it was written.
