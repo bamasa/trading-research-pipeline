@@ -66,9 +66,18 @@ def choose(venues: dict[str, Venues], month: pd.Period) -> list[Pair]:
     return [(c, 1 if ok[c] > 0 else -1) for c in ranked]
 
 
-def hourly(v: Venues, q: float, sign: int, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-    """A pair's result each hour, split into the price gap and the funding."""
-    hours = pd.date_range(start, end, freq="1h")
+def hourly(
+    v: Venues, q: float, sign: int, start: pd.Timestamp, end: pd.Timestamp, *, carried: bool = False
+) -> pd.DataFrame:
+    """A pair's result each hour, split into the price gap and the funding.
+
+    A pair ``carried`` from the month before also earns the price change from
+    the last hour of that month into this one's first, so a position held
+    across months is marked without a gap. An hour a venue has no bar repeats
+    its last price; the change is booked when its bars resume.
+    """
+    first = start - pd.offsets.Hour(1) if carried else start
+    hours = pd.date_range(first, end, freq="1h")
     pb = v.binance.reindex(hours, method="ffill")
     py = v.bybit.reindex(hours, method="ffill")
     if pb.isna().any() or py.isna().any():
@@ -77,7 +86,8 @@ def hourly(v: Venues, q: float, sign: int, start: pd.Timestamp, end: pd.Timestam
     ry = v.bybit_funding.reindex(hours, fill_value=0.0)
     gap = q * (py.diff().fillna(0.0) - pb.diff().fillna(0.0))
     funding = q * (rb * pb - ry * py)
-    return pd.DataFrame({"price": sign * gap, "funding": sign * funding})
+    out = pd.DataFrame({"price": sign * gap, "funding": sign * funding})
+    return out.iloc[1:] if carried else out
 
 
 def leg_cost(v: Venues, q: float, at: pd.Timestamp) -> float:
@@ -101,11 +111,12 @@ def replay(
             cost += leg_cost(venues[coin], held.pop(coin)[1], start)
         for coin, sign in chosen.items():
             v = venues[coin]
-            if coin not in held:
+            carried = coin in held
+            if not carried:
                 q = equity / SLOTS / 2 / float(v.binance.asof(start))  # type: ignore[arg-type]
                 held[coin] = (sign, q)
                 cost += leg_cost(v, q, start)
-            h = hourly(v, held[coin][1], sign, start, end)
+            h = hourly(v, held[coin][1], sign, start, end, carried=carried)
             price, funding = price + float(h["price"].sum()), funding + float(h["funding"].sum())
         pnl = price + funding - cost
         rows.append({"month": str(month), "return_pct": pnl / equity * 100,

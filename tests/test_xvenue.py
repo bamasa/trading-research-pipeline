@@ -103,3 +103,18 @@ def test_the_kline_pager_covers_the_span_once(tmp_path: Path) -> None:
         "XUSDT", date(2022, 1, 1), date(2022, 3, 31), tmp_path, opener=opener
     )
     assert len(asked) == 3  # every day on disk: nothing fetched again
+
+
+def test_a_pair_carried_across_months_is_marked_without_a_gap() -> None:
+    flat_price = pd.Series(10.0, index=HOURS)
+    v0 = venues(4.0, 1)
+    v = engine.Venues(flat_price, v0.binance_funding, flat_price, v0.bybit_funding)
+    step = pd.Series(1.0, index=HOURS).where(pd.Timestamp("2022-03-01", tz="UTC") > HOURS, 1.05)
+    jumped = engine.Venues(v.binance, v.binance_funding, v.bybit * step, v.bybit_funding)
+    months = pd.period_range("2022-02", "2022-03", freq="M")
+    out = engine.replay({"X": jumped}, months, chooser=lambda _m: [("X", 1)])
+    flat = engine.replay({"X": v}, months, chooser=lambda _m: [("X", 1)])
+    # Long Bybit, whose price steps up 5% at the month's first hour: the step is earned.
+    assert out["price_pct"].sum() - flat["price_pct"].sum() == pytest.approx(
+        5.0 / engine.SLOTS / 2, rel=0.02
+    )
