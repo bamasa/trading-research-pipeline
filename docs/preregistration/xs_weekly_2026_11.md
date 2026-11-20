@@ -134,3 +134,12 @@ models −38% to −61%, `low_vol` −45.5%.
 None of this changes a setting, a block or a status of this study. A study whose target is the
 return net of funding is registered apart, as a successor:
 [`xs_weekly_net_2026_11`](xs_weekly_net_2026_11.md).
+
+## Amendment, 20 November 2026: code freeze, before H is fetched
+
+The sources of this study and of its successor, `xs_weekly_net_2026_11`, are frozen by sha256 in
+[`experiments/xs_weekly.py`](../../experiments/xs_weekly.py) (`FROZEN`), `xs_deep`'s three
+modules among them; `fetch-heldout` and `read` refuse if any differs, and each study's result is
+written once. H's last decision with a next Monday in the archives is 19 October 2026: the
+monthly archive for November 2026 is not published, so the week from 26 October has no outcome
+and is skipped, as on D.

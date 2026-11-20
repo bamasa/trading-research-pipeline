@@ -107,3 +107,9 @@ def test_the_net_target_takes_the_funding_a_long_pays_and_the_funding_rule_goes_
     ok = np.isfinite(s)
     order = idx[ok][np.argsort(s[ok])]
     assert order[0] == 4 and order[-1] == 6
+
+
+def test_the_study_sources_are_the_frozen_ones() -> None:
+    from experiments import xs_weekly
+
+    assert xs_weekly.unfrozen() == []

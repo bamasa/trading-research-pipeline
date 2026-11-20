@@ -43,3 +43,17 @@ carry studies; but the week's price move is far noisier than its funding and
 the models may not learn to weigh the two. **N2: killed for all five.** On D
 `momentum` made +43%, mostly from its funding (+30%), and 95 weeks resolve only
 a large difference.
+
+## Amendment, 20 November 2026: what development showed
+
+The development replay, 182 weeks from July 2021 to December 2024
+([`experiments/results/xs_weekly_net/`](../../experiments/results/xs_weekly_net/README.md)), a
+measurement, by the code frozen below. Fitting on the net return cut the models' funding drag
+(from −28% to −40% in `xs_weekly` to −19% to +1%) but not their losses: totals −24.5%
+(`lightgbm`) to −48.8% (`tcn`), with fees of −18% to −21% at a turnover of 140% to 163% a week.
+The `funding` rule made **+90.2%** (+20.2% a year, Sharpe 0.93, worst drawdown −25.6%; funding
++64.8%, price +16.3%, fees −7.8%); `momentum` +43.3%. Every model's weekly net minus
+`momentum`'s is negative (*t* −0.78 to −1.16).
+
+None of this changes a setting, a block or a status. The expected outcome stands; N1 now leans
+killed for all five.

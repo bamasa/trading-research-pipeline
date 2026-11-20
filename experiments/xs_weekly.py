@@ -52,7 +52,18 @@ SOURCES = tuple(
               "xs_deep/features")
 )  # fmt: skip
 #: sha256 of each source at the code freeze; written by its amendment.
-FROZEN: dict[str, str] = {}
+FROZEN: dict[str, str] = {
+    "src/trading_research/data/binance_monthly.py": "015dfa3de0e5e70d86fa55734e79927514bb016e72986eabf211aa5c7a924b40",
+    "src/trading_research/xs_weekly/__init__.py": "3759852c500cc7db7e01570539262623375401965aedc696f3fd2d0bcb1dcfa5",
+    "src/trading_research/xs_weekly/panel.py": "488a10c0037bac49842f9f4477518355c6d5b3ba051126fe4db833b9174a3e8a",
+    "src/trading_research/xs_weekly/features.py": "5101964ba0c0d3aa6e0b4db6fb0ebb064786171d2459bf722bcf5d8ef5c89aee",
+    "src/trading_research/xs_weekly/rankers.py": "3ead61c5f592a8a9f6cdf6fe06f18ded911d0195dd5723be25763384b75c1132",
+    "src/trading_research/xs_weekly/portfolio.py": "dfd028e3e2dd5e277d188940cd36662f5c0c192ddac467f8ae953f563ab441c0",
+    "src/trading_research/xs_weekly/net.py": "c3ce42284bb719e1379aed72b1d23f0dd51f91c4ddd1c13ecb24a57899a13d8e",
+    "src/trading_research/xs_deep/rankers.py": "d34594e1a7559617da9afb5d8f7eaddbb8d10ef4aa3b9779873c667831f1f0ac",
+    "src/trading_research/xs_deep/nets.py": "6afd32f16939f853f9f3023a0119ac13ad93dd089405d8cc61051f09e5143510",
+    "src/trading_research/xs_deep/features.py": "99f4922b980fd6015de819e2b54bddc70f36584613397d2fb226987b458ab433",
+}
 
 
 def unfrozen() -> list[str]:
