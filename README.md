@@ -47,8 +47,13 @@ shows what is left once it cannot.
     perpetuals, +6.99 bp a trade on its held-out fortnight, gone when the market's state
     changed; a kill switch inside it limits the damage when it breaks. A model choosing its
     trades doubled it where it works (+14.3 bp a trade) and did not save it where it does
-    not; nine such variants, boosters to a transformer, are registered on the
-    [forward fortnight](docs/preregistration/reversion_meta_forward_2026_11.md).
+    not; on the sealed [forward fortnight](docs/preregistration/reversion_meta_forward_2026_11.md)
+    of November 2026 nine such variants, boosters to a transformer, all raised its gross and
+    all lost after the fee (best −0.49 bp a trade).
+  - **A sealed forward test, read once**: the benchmark's twelve strategies, frozen on
+    5 November 2026 and scored on 6 to 19 November, all killed (net −9.4 to −16.4 bp a
+    trade); the reversion's state prediction fell between its thresholds, not tested; the
+    break-detector gate never paused ([results](docs/preregistration/bench_forward_2026_11.md#results-read-once-21-november-2026)).
   - **Searches that came back empty-handed, said so**: the spot-perp basis trade times
     the premium (+9.8% where random timing lost 19%) but the premium stopped spiking, so
     +0.1% on its held-out years; pairs on real perpetuals lost on every development rule
@@ -81,7 +86,7 @@ shows what is left once it cannot.
 | **Executions and backtests** | taker, event taker, passive entry, maker; a market-making simulator; exit and retrain searches | [executions](docs/catalog.md#executions-and-backtests) · [assumptions](docs/execution_assumptions.md) |
 | **Evaluation, 14 measures** | day-clustered and Newey–West *t*, deflated Sharpe, PBO, Holm, placebos, kill conditions, minimum detectable effect, fee ladder, headroom | [evaluation](docs/catalog.md#evaluation-how-a-result-is-judged) · [methodology](docs/methodology.md) |
 | **Regimes** | CUSUM and structural-break monitors, and a kill switch that stops a strategy when its own results show the edge is gone | [detectors](docs/catalog.md#regime-and-structural-break-detectors) |
-| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a sealed forward fortnight of November 2026), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
+| **Benchmark** | seven fixed tracks (planted edges, their nulls, two recorded Bybit spans, a forward fortnight of November 2026, sealed until it was read), one scoring rule with placebos and a fee ladder, a card for any strategy, and a regime suite of ten dated market breaks with the kill switch | [benchmark](docs/benchmarks.md) |
 | **Search, studies, paper, agents** | the step-by-step search, the funding-carry, basis and pairs searches (`trp search carry`, `basis`, `pairs`), registered studies, paper trading on live streams, the agent harness | [search](docs/catalog.md#the-automatic-search) · [paper](docs/paper_trading.md) · [agents](docs/agents.md) |
 | **Production** | frozen strategies as one portfolio: models pinned by sha256, a balancer across strategies, drift, regime-break and feed monitors, automatic halts, `/health`, `/ready` and Prometheus `/metrics`, a Docker image and alert rules; the broker is paper | [production](docs/production.md) · [components](docs/catalog.md#production) |
 | **Tests** | every test file, with what it covers | [test cases](docs/catalog.md#test-cases) |

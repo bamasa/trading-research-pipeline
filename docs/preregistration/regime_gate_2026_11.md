@@ -118,3 +118,25 @@ gains ran from +27.1% to +60.5% (median +43.4%). It helped in 3 of the 10.
   worse than switching at random for as long.
 
 G2 is unchanged and is read after the forward track's own read.
+
+## Results of G2, read once 21 November 2026
+
+[`experiments/results/regime_gate_G2.json`](../../experiments/results/regime_gate_G2.json),
+from the code committed before the read (`experiments/regime_gate.py --forward`),
+after the forward track's own read was committed.
+
+**G2: killed** — the gate's gain is not positive: **D = 0.00%**, and all
+nineteen placebos are 0.00% too.
+
+- The detector raised **one** dependence alarm on the forward track, a `-1`
+  (moves reverse more) at 19:50 UTC on 9 November 2026, and none in the fitted
+  days. A `-1` resumes a rule that was never paused, so the gate paused for
+  **0%** of the scored time and traded exactly as the ungated rule.
+- The ungated rule lost **−3.83%** of capital split over the 26 instruments on
+  the fortnight; the gate kept every bit of that loss.
+- By the registered rule this is *killed*, not *not tested*: the clause for
+  *not tested* is "no alarm in the fortnight or the fitted days", and there
+  was one. Stated plainly, the fortnight did not test the gate's timing at all:
+  it never had to decide to stop. What it shows is narrower and still a
+  failure: in a fortnight where the rule lost, the detector's only reading was
+  that the market had started reverting *more*.

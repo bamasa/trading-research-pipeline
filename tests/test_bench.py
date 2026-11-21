@@ -175,7 +175,8 @@ def test_every_track_has_a_frozen_fingerprint_and_a_card_says_whether_it_matches
     from trading_research.bench import data_check
     from trading_research.bench.manifest import FINGERPRINTS, FORWARD_TRACK, VERSION
 
-    assert VERSION == "1" and set(FINGERPRINTS) == set(TRACKS) - {FORWARD_TRACK}
+    # The forward track's fingerprint was recorded by its one read, 21 November 2026.
+    assert VERSION == "1" and set(FINGERPRINTS) == set(TRACKS) and FORWARD_TRACK in FINGERPRINTS
     same = TrackScore("null-book", "synthetic", "scored", data_sha256=FINGERPRINTS["null-book"])
     other = TrackScore("null-book", "synthetic", "scored", data_sha256="0" * 64)
     assert data_check(same) == "matches" and data_check(other) == "differs"

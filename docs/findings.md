@@ -187,8 +187,12 @@ built: logistic regression and the boosters raise February from +7.0 to +12 to
 +18 bp a trade; the transformer, LSTM, GRU and TCN add little. In April every
 one loses, the boosters less than the rule. Only the kill switch stops the
 damage; XGBoost with the switch sums +9,927 bp over both tracks against
-+8,056 for the switch alone. All nine are registered on the forward fortnight
-([M1](preregistration/reversion_meta_forward_2026_11.md)).
++8,056 for the switch alone. On the forward fortnight, 6 to 19 November 2026,
+read once ([M1](preregistration/reversion_meta_forward_2026_11.md)): **all
+nine killed**, every Holm *p* 1.000. Every model raised the rule's gross from
++3.1 to between +5.2 and +15.1 bp a trade and lost less than its −12.2 bp net,
+none paid the fee; logistic regression came closest at −0.49 bp, the kill
+switch alone was worst at −29.5 bp.
 
 ---
 
@@ -338,17 +342,19 @@ as correct behaviour. Both fixed.
 
 ## Pre-registered
 
-### Pausing the reversion rule on the break detector's alarms (G1)
+### Pausing the reversion rule on the break detector's alarms (G1, G2)
 
-**Status: killed** ([registration and results](preregistration/regime_gate_2026_11.md)).
-Pausing the rule after the structural-break detector's `+1` dependence alarm on
+**Status: killed twice** ([registration and results](preregistration/regime_gate_2026_11.md)).
+G1: pausing the rule after the structural-break detector's `+1` dependence alarm on
 the index, and resuming after a `-1`, gained +13.1% of capital over the regime
 suite's ten episodes; random pauses of the same length gained +27% to +60%,
 and the gate beat none of nineteen. Its gain came from pausing two losing
 episodes entirely; where it chose its moments it chose them worse than chance.
 The same verdict as section 27's trailing-state gate, reached with a different
-instrument. G2, the same gate on the forward fortnight, is read after 21
-November 2026.
+instrument. G2, the forward fortnight, read once 21 November 2026: killed with
+a gain of exactly 0.00%. The detector's only alarm was a `-1` (moves reverse
+more) on 9 November, so the gate never paused and kept all of the rule's
+−3.83% loss; the fortnight never asked it to decide.
 
 ### The carry search's choice on the future (L1, L2)
 
@@ -378,16 +384,17 @@ best (+0.032), the transformer below it (*t* −3.2) and above the TCN (*t*
 
 ### The benchmark's forward fortnight (F1, P1)
 
-**Status: pre-registered, sealed until 21 November 2026.** The twelve
-strategies of the benchmark's version-1 board, frozen at their sources, scored
-on Bybit's 26 perpetuals from 6 to 19 November 2026, days that had not
-happened when the track was registered on 5 November
-([registration](preregistration/bench_forward_2026_11.md)). F1: a strategy
-passes if it pays the base taker fee with a day-clustered *t* of 2 and a Holm
-*p* below 0.05 over the twelve; the prior is that none does. P1, the
-reversion's condition stated in advance: at an index ten-minute
-autocorrelation of −0.05 or below on the fortnight its net is positive, above
-−0.02 it is not.
+**Status: F1 killed, P1 not tested; read once 21 November 2026** ([registration and results](preregistration/bench_forward_2026_11.md)).
+The twelve strategies of the benchmark's version-1 board, frozen at their
+sources, scored on Bybit's 26 perpetuals from 6 to 19 November 2026, days that
+had not happened when the track was registered on 5 November. F1 (pays the
+base taker fee, day-clustered *t* of 2, Holm *p* below 0.05 over the twelve):
+**all twelve killed**, every Holm *p* 1.000, net per trade from −9.4 bp
+(`xgboost`) to −16.4 bp (`breakout`); six show a gross edge above their
+placebos, at most +4.5 bp against a cost of about 14. P1 (the reversion's
+condition, stated in advance): **not tested**, the fortnight's index ten-minute
+autocorrelation was −0.0237, between the two thresholds; the reversion lost
+−12.19 bp a trade on 816 trades.
 
 ### Market making: the causal state gate (H2.3)
 

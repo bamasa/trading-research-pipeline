@@ -19,7 +19,7 @@ trading-research bench list
 trading-research bench fetch
 trading-research bench verify
 trading-research bench state
-trading-research bench forward      # from 21 November 2026, once
+trading-research bench forward      # read once, 21 November 2026; refuses now
 trading-research bench run reversion
 trading-research bench board
 ```
@@ -62,7 +62,7 @@ rule (`plugins/model_strategy.py`).
 | `null-reversion` | synthetic | The same universe with the transients replaced by a random walk of the same variance | nothing distinguishable from zero |
 | `bybit-2024-02` | recorded | Bybit top-of-book for 26 USDT perpetuals; fitted 1–25 February, scored 26 February to 10 March 2024: the fortnight where the ten-minute reversion paid (index autocorrelation about −0.10) | a rule betting on short reversion does its best here |
 | `bybit-2024-04` | recorded | The same instruments; fitted 12 March to 5 April, scored 6 to 19 April 2024, after the state changed (autocorrelation near zero) | the same rule loses or stands aside; a rule that only works in one state shows it here |
-| `bybit-2026-11` | forward | The same instruments (POL for MATIC); fitted 9 October to 5 November, scored 6 to 19 November 2026: days that had not happened when the track was registered. Sealed until 21 November, then read once | nothing is expected; an edge after costs shows here, where nothing could be fitted to it |
+| `bybit-2026-11` | forward | The same instruments (POL for MATIC); fitted 9 October to 5 November, scored 6 to 19 November 2026: days that had not happened when the track was registered. Sealed until 21 November, then read once: all twelve killed ([results](preregistration/bench_forward_2026_11.md#results-read-once-21-november-2026)) | nothing is expected; an edge after costs shows here, where nothing could be fitted to it |
 
 The synthetic tracks are generated from fixed seeds, so anyone gets the same
 numbers without a download; a test checks two of their fingerprints against

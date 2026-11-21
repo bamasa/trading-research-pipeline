@@ -23,10 +23,12 @@ FINGERPRINTS: dict[str, str] = {
     "null-reversion": "d0b5418e848ed25d32e45af9e9b6d604e843e5f6d5c6d71ae31fdd1682fcf5fa",
     "bybit-2024-02": "3a348047e711e2478b78dcd92a039a2066fdef0d65b112f21f0c52d6c5d19d44",
     "bybit-2024-04": "ddb5b3eba54d46e2a626b4e220042b913d0df261a11a596075dc4158e4731c94",
+    "bybit-2026-11": "224d6545ce7d2d373c108bcec884d79b3d69d375c63867916e3ec61152b959c4",
 }
 
-#: The forward track, registered before its first scored day. Its data has no
-#: fingerprint yet: the days had not happened. The first read records one.
+#: The forward track, registered before its first scored day. Its data had no
+#: fingerprint then: the days had not happened. The first read, 21 November
+#: 2026, recorded it above.
 FORWARD_TRACK = "bybit-2026-11"
 FORWARD_REGISTERED = "2026-11-05"
 

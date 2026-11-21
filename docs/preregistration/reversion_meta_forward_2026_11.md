@@ -76,3 +76,43 @@ need about three. Beside the statuses: if the fortnight's index reverts
 (P1's state at or below −0.05), the model-chosen variants above the plain
 rule's net per trade; if it does not, everything negative, the guarded ones
 least.
+
+## Results of M1, read once 21 November 2026
+
+[`experiments/results/reversion_meta_forward_2026_11.json`](../../experiments/results/reversion_meta_forward_2026_11.json),
+from `experiments/reversion_meta_forward.py` after the forward track's own read
+was committed. All five frozen sources matched their registered sha256.
+
+**M1: all nine killed**, as expected. Every Holm-adjusted *p* is 1.000 and no
+net per trade at the base fee is above zero. The index's ten-minute
+autocorrelation on the fortnight was −0.0237 (P1 *not tested*), neither
+the reverting state nor clearly the flat one.
+
+| strategy | trades | gross bp | net bp | day-clustered *t* | placebo | break-even fee, bp a side |
+|---|---:|---:|---:|---:|---:|---:|
+| plain `reversion` (the track's read) | 816 | +3.13 | −12.19 | −1.38 | 63% | −0.60 |
+| `reversion_logistic` | 554 | +15.13 | **−0.49** | +0.02 | 100% | +5.25 |
+| `reversion_meta_guarded` | 226 | +12.31 | −3.18 | −0.70 | 95% | +3.91 |
+| `reversion_gru` | 561 | +11.24 | −4.08 | −0.22 | 100% | +3.46 |
+| `reversion_lightgbm` | 683 | +10.35 | −5.07 | −0.57 | 95% | +2.96 |
+| `reversion_lstm` | 553 | +9.48 | −6.13 | −0.46 | 100% | +2.44 |
+| `reversion_tcn` | 725 | +6.05 | −9.54 | −1.09 | 84% | +0.73 |
+| `reversion_meta` (XGBoost) | 683 | +5.75 | −9.68 | −0.94 | 84% | +0.66 |
+| `reversion_transformer` | 701 | +5.23 | −10.23 | −1.23 | 84% | +0.39 |
+| `reversion_guarded` | 159 | −13.87 | −29.48 | −1.22 | 0% | −9.24 |
+
+Against the expectation stated beside the statuses:
+
+- **Everything negative: right.**
+- **Every model-chosen variant above the plain rule's −12.19 bp: true for all
+  eight.** Their gross rose from +3.1 to between +5.2 and +15.1 bp a trade:
+  the models did pick the better half of the rule's trades on days they had
+  never seen. Not by enough to pay a 14 bp round trip, and with 13 days no
+  difference is far from noise (best *t* +0.02).
+- **"The guarded ones least": wrong for the plain switch.** `reversion_guarded`
+  was the worst of all, −29.48 bp on 159 trades: the switch stopped the rule
+  and restarted it at the wrong moments. With XGBoost choosing the trades the
+  switch was the second best, −3.18 bp, but that is one ordering on one
+  fortnight.
+- The simplest model did best: logistic regression came within half a basis
+  point of break-even, the transformer was the weakest of the models.

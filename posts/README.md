@@ -16,3 +16,4 @@ that each post's text and animation quote its `numbers.json`.
 |---|---|
 | [`btc_ath_2024`](btc_ath_2024/README.md) | bitcoin's March 2024 high, the reversion strategy fitted on February giving back everything within two days, and a textbook kill switch on its own results that stops it 12 hours after the peak |
 | [`carry_search`](carry_search/README.md) | the pipeline's own search finds a funding carry on 2021 to mid-2023 and it pays on the held-out two years after: +7.6% a year |
+| [`forward_2026_11`](forward_2026_11/README.md) | the benchmark's sealed forward fortnight, 6 to 19 November 2026, read once: twelve strategies frozen before the days happened, a gate and nine model variants registered before the data was downloaded, and all of them killed; text only so far, [`tests/test_forward_post.py`](../tests/test_forward_post.py) checks it against the three result files |
