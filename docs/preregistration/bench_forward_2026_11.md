@@ -152,3 +152,23 @@ number exists.
   applicable on the track or makes no trade; such a strategy is killed. P1
   is **not tested** if the reversion makes no trade on the scored days,
   since it then has no net per trade to compare.
+
+## Results, read once 21 November 2026
+
+[`experiments/results/bench_forward_2026_11.json`](../../experiments/results/bench_forward_2026_11.json),
+written by `trading-research bench forward` at 09:34 UTC from commit
+`fa0ad13`. All 26 instruments have all 14 scored days; the fitted days match
+`FORWARD_FIT_FINGERPRINT`; the track's data fingerprint, `224d6545ce7d2d37…`,
+is now in the manifest's `FINGERPRINTS`.
+
+**F1: all twelve killed**, as the prior said. Every Holm-adjusted *p* is 1.000.
+No strategy's net per trade at the base fee is above zero: from −9.4 bp
+(`xgboost`, 1,389 trades) to −16.4 bp (`breakout`, 993 trades). Six show *an
+edge, smaller than the fee* (gross above the placebos, from +0.55 to +4.48 bp a
+trade, against a cost of about 14 bp); six show *nothing beyond chance*. Only
+`xgboost` would break even below the base fee, at +0.81 bp a side.
+
+**P1: not tested.** The index's ten-minute autocorrelation on the scored days
+was **−0.0237**, between −0.05 and −0.02, where nothing was predicted.
+`reversion` made 816 trades at −12.19 bp net (gross +3.13 bp, clustered *t*
+−1.38), for the record and with no status.
